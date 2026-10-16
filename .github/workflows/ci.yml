@@ -10,9 +10,14 @@ on:
         description: "Smoke-test the installers of this earlier run (run id); skips verify and package"
         required: false
         default: ""
+      extra_env:
+        description: "Extra environment for the app in smoke tests, e.g. WEBKIT_DISABLE_DMABUF_RENDERER=1"
+        required: false
+        default: ""
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # Pushes to a PR replace each other; manual smoke-only runs never cancel anything.
+  group: ci-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || 'push' }}
   cancel-in-progress: true
 
 permissions:
@@ -261,13 +266,17 @@ jobs:
 
       - name: Smoke test (Windows, macOS)
         if: runner.os != 'Linux'
+        env:
+          LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }}
         run: node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke
 
       - name: Smoke test (Linux, X11 + session bus + window manager)
         if: runner.os == 'Linux'
         env:
-          # Run the app under gdb so a crash leaves a backtrace in the log.
+          # Run the app under gdb so a crash leaves a (symbolized) backtrace in the log.
           LJ_SMOKE_GDB: "1"
+          DEBUGINFOD_URLS: https://debuginfod.ubuntu.com
+          LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }}
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c \
             'openbox & sleep 2; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'

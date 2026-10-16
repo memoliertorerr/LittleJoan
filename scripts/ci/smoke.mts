@@ -34,7 +34,15 @@ if (!app || !existsSync(app)) {
 mkdirSync(out, { recursive: true });
 const logPath = join(out, startedOnly ? "smoke-started-only.log" : "smoke.log");
 rmSync(logPath, { force: true });
-const env = { ...process.env, LITTLEJOAN_SMOKE_LOG: logPath };
+// LJ_SMOKE_EXTRA_ENV="KEY=VALUE KEY2=VALUE2" adds variables to the app's environment (CI
+// experiments, e.g. WebKitGTK renderer switches); it is recorded in the summary.
+const extraEnv = Object.fromEntries(
+  (process.env.LJ_SMOKE_EXTRA_ENV ?? "")
+    .split(/\s+/)
+    .filter((pair) => pair.includes("="))
+    .map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]),
+);
+const env = { ...process.env, ...extraEnv, LITTLEJOAN_SMOKE_LOG: logPath };
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
@@ -205,7 +213,10 @@ function serve(): Promise<Server> {
 function launch(): ChildProcess {
   const underGdb = os === "linux" && process.env.LJ_SMOKE_GDB === "1";
   const [command, args] = underGdb
-    ? ["gdb", ["-q", "-batch", "-ex", "run", "-ex", "bt 40", "-ex", "thread apply all bt 8", "--args", app as string]]
+    ? [
+        "gdb",
+        ["-q", "-batch", "-ex", "set debuginfod enabled on", "-ex", "run", "-ex", "bt 40", "-ex", "thread apply all bt 8", "--args", app as string],
+      ]
     : [app as string, []];
   const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
@@ -284,10 +295,18 @@ const helpersAfter = helperSamples["60s"] ?? helperCount();
 writeFileSync(join(out, "helpers-after-hibernate.txt"), helperListing());
 console.log(`hibernating after a page: ${afterMb} MB resident, ${afterOwnMb} MB own, helpers ${JSON.stringify(helperSamples)}`);
 
-await forward(["--show"]);
-await waitFor("second window-created", (e) => count(e, "window-created") > 1, 20_000);
-await forward(["--hide"]);
-await waitFor("second hibernated", (e) => count(e, "hibernated") > 1, 20_000);
+// Two more summon/hibernate cycles: helper counts that grow per cycle would mean webviews leak.
+const helpersPerCycle: number[] = [helpersAfter];
+for (const cycle of [2, 3]) {
+  await forward(["--show"]);
+  await waitFor(`window-created #${cycle}`, (e) => count(e, "window-created") >= cycle, 20_000);
+  await sleep(1500);
+  await forward(["--hide"]);
+  await waitFor(`hibernated #${cycle}`, (e) => count(e, "hibernated") >= cycle, 20_000);
+  await sleep(10_000);
+  helpersPerCycle.push(helperCount());
+}
+console.log(`webview helpers after each hibernate: ${JSON.stringify(helpersPerCycle)}`);
 
 child.kill();
 server.close();
@@ -299,7 +318,8 @@ const summary = {
   app,
   memoryMb: { hibernatingAtStart: idleMb, withSmokePage: shownMb, hibernatingAfterPage: afterMb },
   ownMemoryMb: { hibernatingAtStart: idleOwnMb, withSmokePage: shownOwnMb, hibernatingAfterPage: afterOwnMb },
-  webviewHelpers: { atStart: helpersBefore, withPage: helpersShown, afterHibernate: helperSamples },
+  webviewHelpers: { atStart: helpersBefore, withPage: helpersShown, afterHibernate: helperSamples, afterEachCycle: helpersPerCycle },
+  extraEnv,
   codecs: parseCodecs(lastTitle(log, "LJ-SMOKE ready")),
   fullscreen: { page: pageFullscreen, window: count(log, "fullscreen", "true") > 0 },
   shortcut: log.find((e) => e.event.startsWith("shortcut-"))?.event ?? "none",
