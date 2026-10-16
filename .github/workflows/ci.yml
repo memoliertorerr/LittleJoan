@@ -14,6 +14,10 @@ on:
         description: "Extra environment for the app in smoke tests, e.g. WEBKIT_DISABLE_DMABUF_RENDERER=1"
         required: false
         default: ""
+      linux_runner:
+        description: "Linux smoke runner (the .deb is built on ubuntu-22.04 and also installs on ubuntu-24.04)"
+        required: false
+        default: ubuntu-22.04
       linux_plain_webkit_check:
         description: "Linux smoke: also click fullscreen in a bare WebKitGTK window (no Tauri), to isolate engine crashes"
         type: boolean
@@ -222,7 +226,7 @@ jobs:
           - name: macos
             os: macos-latest
           - name: linux
-            os: ubuntu-22.04
+            os: ${{ inputs.linux_runner || 'ubuntu-22.04' }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
