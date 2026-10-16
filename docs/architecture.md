@@ -19,7 +19,9 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
 package.json, package-lock.json   npm scripts (verify, icons, dev); all JS tooling is local
 tsconfig.json                      strict TS for ui/, scripts/, tests/, config files
 vite.config.mts                    UI build: root ui/, output dist/ (embedded into the binary)
-vitest.config.mts                  TS unit tests: ui/**, scripts/**, tests/** *.test.ts
+vitest.config.mts                  TS unit tests: ui/**, scripts/**, tests/** *.test.ts — each
+                                   *.test.ts sits next to the module it tests (Rust tests are
+                                   #[cfg(test)] modules inside each .rs file)
 eslint.config.mjs                  typescript-eslint recommended (type-checked)
 rust-toolchain.toml                pinned Rust (minimal profile + rustfmt + clippy)
 scripts/env.sh                     source first: keeps caches/toolchains/temp/dev data in .cache/

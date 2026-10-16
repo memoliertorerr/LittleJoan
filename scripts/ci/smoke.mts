@@ -118,12 +118,47 @@ for t in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
   console.log("clicked the screen centre");
 }
 
-/** Resident memory of `pid` in MB. */
+/** Resident memory of `pid` in MB (working set on Windows, RSS elsewhere). */
 function memoryMb(pid: number): number {
   if (os === "win32") {
     return Number(powershell(`[math]::Round((Get-Process -Id ${pid}).WorkingSet64 / 1MB, 1)`).trim()) || -1;
   }
   return Math.round((Number(run("ps", ["-o", "rss=", "-p", String(pid)]).trim()) / 1024) * 10) / 10 || -1;
+}
+
+/**
+ * Memory that is the app's own, in MB — RSS also counts shared system libraries: private bytes
+ * on Windows, Pss on Linux (/proc/<pid>/smaps_rollup), the physical footprint on macOS.
+ */
+function ownMemoryMb(pid: number): number {
+  if (os === "win32") {
+    return Number(powershell(`[math]::Round((Get-Process -Id ${pid}).PrivateMemorySize64 / 1MB, 1)`).trim()) || -1;
+  }
+  if (os === "linux") {
+    const rollup = existsSync(`/proc/${pid}/smaps_rollup`) ? readFileSync(`/proc/${pid}/smaps_rollup`, "utf8") : "";
+    const pss = /^Pss:\s+(\d+) kB/m.exec(rollup)?.[1];
+    return pss ? Math.round((Number(pss) / 1024) * 10) / 10 : -1;
+  }
+  const footprint = /Footprint:\s+([\d.]+)\s*(KB|MB|GB)/i.exec(run("footprint", ["-p", String(pid)]));
+  if (!footprint?.[1] || !footprint[2]) {
+    return -1;
+  }
+  const scale: Record<string, number> = { KB: 1 / 1024, MB: 1, GB: 1024 };
+  return Math.round(Number(footprint[1]) * (scale[footprint[2].toUpperCase()] ?? 1) * 10) / 10;
+}
+
+/** A listing of the webview helper processes, for the artifact. */
+function helperListing(): string {
+  if (os === "win32") {
+    return powershell(
+      `Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Select-Object ProcessId, ParentProcessId, WorkingSetSize | Format-Table -AutoSize | Out-String -Width 200`,
+    );
+  }
+  const pattern = os === "darwin" ? "com.apple.WebKit" : "WebKit";
+  return run("ps", ["-axo", "pid,ppid,rss,etime,command"])
+    .split("\n")
+    .filter((line, index) => index === 0 || line.includes(pattern))
+    .join("\n");
 }
 
 /** How many webview engine helper processes are running. */
@@ -166,12 +201,26 @@ function serve(): Promise<Server> {
   return new Promise((done) => server.listen(0, "127.0.0.1", () => done(server)));
 }
 
+/** Launches the app; with LJ_SMOKE_GDB=1 (Linux) it runs under gdb so a crash prints a backtrace. */
 function launch(): ChildProcess {
-  const child = spawn(app as string, [], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const underGdb = os === "linux" && process.env.LJ_SMOKE_GDB === "1";
+  const [command, args] = underGdb
+    ? ["gdb", ["-q", "-batch", "-ex", "run", "-ex", "bt 40", "-ex", "thread apply all bt 8", "--args", app as string]]
+    : [app as string, []];
+  const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
   child.stderr?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
-  child.on("exit", (code) => console.log(`app exited with ${code}`));
+  child.on("exit", (code, signal) => console.log(`app exited with code ${code} signal ${signal}`));
   return child;
+}
+
+/** The pid of the app itself (under gdb, the debuggee is gdb's child). */
+function appPid(child: ChildProcess): number {
+  if (os === "linux" && process.env.LJ_SMOKE_GDB === "1") {
+    const found = run("pgrep", ["-n", "-x", "little-joan"]).trim();
+    return Number(found) || -1;
+  }
+  return child.pid ?? -1;
 }
 
 if (startedOnly) {
@@ -184,13 +233,14 @@ if (startedOnly) {
 const server = await serve();
 const port = (server.address() as AddressInfo).port;
 const child = launch();
-const pid = child.pid ?? -1;
 
 await waitFor("started + shortcut", (e) => count(e, "started") > 0 && (count(e, "shortcut-registered") > 0 || count(e, "shortcut-failed") > 0));
 await sleep(3000);
+const pid = appPid(child);
 const idleMb = memoryMb(pid);
+const idleOwnMb = ownMemoryMb(pid);
 const helpersBefore = helperCount();
-console.log(`hibernating at start: ${idleMb} MB, ${helpersBefore} webview helpers`);
+console.log(`hibernating at start: ${idleMb} MB resident, ${idleOwnMb} MB own, ${helpersBefore} webview helpers`);
 screenshot("hibernating.png");
 
 await forward(["--show"]);
@@ -203,7 +253,9 @@ await forward(["--show", `http://127.0.0.1:${port}/smoke.html`]);
 await waitFor("smoke page ready", (e) => lastTitle(e, "LJ-SMOKE ready") !== undefined, 30_000);
 await sleep(1500);
 const shownMb = memoryMb(pid);
+const shownOwnMb = ownMemoryMb(pid);
 const helpersShown = helperCount();
+writeFileSync(join(out, "helpers-with-page.txt"), helperListing());
 screenshot("page.png");
 
 clickCentre();
@@ -218,10 +270,19 @@ screenshot("fullscreen.png");
 
 await forward(["--hide"]);
 await waitFor("hibernated", (e) => count(e, "hibernated") > 0, 20_000);
-await sleep(8000);
+// Engines may keep helper processes briefly after the last view closes; sample for a minute.
+const helperSamples: Record<string, number> = {};
+let waited = 0;
+for (const at of [2, 10, 30, 60]) {
+  await sleep((at - waited) * 1000);
+  waited = at;
+  helperSamples[`${at}s`] = helperCount();
+}
 const afterMb = memoryMb(pid);
-const helpersAfter = helperCount();
-console.log(`hibernating after a page: ${afterMb} MB, ${helpersAfter} webview helpers`);
+const afterOwnMb = ownMemoryMb(pid);
+const helpersAfter = helperSamples["60s"] ?? helperCount();
+writeFileSync(join(out, "helpers-after-hibernate.txt"), helperListing());
+console.log(`hibernating after a page: ${afterMb} MB resident, ${afterOwnMb} MB own, helpers ${JSON.stringify(helperSamples)}`);
 
 await forward(["--show"]);
 await waitFor("second window-created", (e) => count(e, "window-created") > 1, 20_000);
@@ -237,7 +298,8 @@ const summary = {
   os,
   app,
   memoryMb: { hibernatingAtStart: idleMb, withSmokePage: shownMb, hibernatingAfterPage: afterMb },
-  webviewHelpers: { atStart: helpersBefore, withPage: helpersShown, afterHibernate: helpersAfter },
+  ownMemoryMb: { hibernatingAtStart: idleOwnMb, withSmokePage: shownOwnMb, hibernatingAfterPage: afterOwnMb },
+  webviewHelpers: { atStart: helpersBefore, withPage: helpersShown, afterHibernate: helperSamples },
   codecs: parseCodecs(lastTitle(log, "LJ-SMOKE ready")),
   fullscreen: { page: pageFullscreen, window: count(log, "fullscreen", "true") > 0 },
   shortcut: log.find((e) => e.event.startsWith("shortcut-"))?.event ?? "none",

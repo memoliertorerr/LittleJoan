@@ -1208,6 +1208,18 @@ it ready once CI is green, tell the user exactly what to check and where, then s
 > Things a step noticed but were out of its own scope. Kept here so they don't get buried in
 > per-step notes. Strike through when genuinely handled; don't silently delete lines.
 
+- **First-run discoverability** (surfaced by LJ3). Hibernating from the very first launch means a
+  new user sees only a tray icon — and on GNOME without the AppIndicator extension, nothing at
+  all. Option: when no `settings.json` exists yet, show the window once with the shortcut hint.
+  Not done: the brief says "hibernates by default"; this is the user's call.
+- **Start at login** (surfaced by LJ8's README). Without it the shortcut is dead after a reboot
+  until the user launches the app; already designed under Later — the most useful next step.
+- **macOS menu page items are always enabled** (surfaced by LJ7). The menu bar is hidden
+  (Accessory app), so only the key equivalents matter, and they do nothing without a page. The
+  tray items do track page state.
+- **Downloads use each engine's default** (surfaced by LJ4). WebView2 saves to Downloads with its
+  own UI; WKWebView and WebKitGTK ignore downloads unless the app handles them. Designed under
+  Later.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -1236,6 +1248,19 @@ Populated from real friction, not speculation:
 - **rustup's auto-install is deprecated.** `rustup show active-toolchain` still installs a
   missing toolchain but warns that this will stop; `scripts/setup-rust.sh` uses
   `rustup toolchain install` (reads rust-toolchain.toml).
+- **Scripted text edits fail silently after rustfmt rewraps a line.** A Python `replace` on
+  `build.rs` matched nothing in LJ6 (rustfmt had reflowed it), and only tauri-build's
+  "Permission allow-get-settings not found" revealed it. Scripted edits now assert that their
+  anchor exists.
+- **tauri-codegen 2.7 does not add the IPC origins to a custom CSP** (checked in its source):
+  without `connect-src ipc: http://ipc.localhost`, IPC falls back to postMessage after a CSP
+  violation. `tauri.conf.json` lists them explicitly.
+- **`Manager::get_window` is behind Tauri's `unstable` feature;** lifecycle code uses
+  `get_webview_window` everywhere (LJ3).
+- **`tauri://` URLs have an opaque origin in the `url` crate,** so `a.origin() == b.origin()` is
+  always false for the macOS/Linux app origin; compare scheme/host/port (`keys::is_app_url`).
+- **Installer file names contain a space** (`Little Joan_0.1.0_x64-setup.exe`,
+  `Little Joan_0.1.0_amd64.deb`): quote them in scripts and docs.
 - **Google Translate's proxy picks the UI language from the requester's IP** (`_x_tr_hl=it`
   came back from a plain request), so the translate URL passes `hl=<lang>` too.
 

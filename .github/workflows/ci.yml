@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      installers_from_run:
+        description: "Smoke-test the installers of this earlier run (run id); skips verify and package"
+        required: false
+        default: ""
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -12,6 +17,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,6 +25,7 @@ env:
 jobs:
   verify:
     name: verify (${{ matrix.os }})
+    if: ${{ !inputs.installers_from_run }}
     strategy:
       fail-fast: false
       matrix:
@@ -189,7 +196,10 @@ jobs:
   smoke:
     name: smoke (${{ matrix.name }})
     needs: package
-    timeout-minutes: 25
+    # Normally after package; with installers_from_run, on its own against that run's installers.
+    if: ${{ always() && (needs.package.result == 'success' || inputs.installers_from_run) }}
+    # Linux mirrors were seen taking 20 minutes to deliver WebKitGTK.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -215,6 +225,8 @@ jobs:
         with:
           name: little-joan-${{ matrix.name }}
           path: installers
+          run-id: ${{ inputs.installers_from_run || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Install (Windows, NSIS installer, silent)
         if: runner.os == 'Windows'
@@ -244,7 +256,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11
+          sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11 gdb
           echo "APP=$(command -v little-joan)" >> "$GITHUB_ENV"
 
       - name: Smoke test (Windows, macOS)
@@ -253,6 +265,9 @@ jobs:
 
       - name: Smoke test (Linux, X11 + session bus + window manager)
         if: runner.os == 'Linux'
+        env:
+          # Run the app under gdb so a crash leaves a backtrace in the log.
+          LJ_SMOKE_GDB: "1"
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c \
             'openbox & sleep 2; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
