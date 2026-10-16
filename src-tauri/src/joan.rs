@@ -13,12 +13,14 @@ use tauri::{
 };
 use url::Url;
 
+use crate::keys;
 use crate::navigation;
 use crate::platform;
 use crate::settings::{self, MIN_HEIGHT, MIN_WIDTH};
 use crate::smoke;
 use crate::state;
 use crate::toggle::{self, Action, Command, WindowState};
+use crate::tray;
 
 pub const LABEL: &str = "joan";
 
@@ -86,9 +88,13 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
             let _ = window.set_title(title);
             smoke::log("title", title);
         })
-        .on_page_load(|_window, payload| {
+        .on_page_load(|window, payload| {
             if payload.event() == PageLoadEvent::Finished {
-                smoke::log("page-loaded", payload.url().as_str());
+                let url = payload.url();
+                let web_page = !keys::is_app_url(&keys::app_origin(), url)
+                    && navigation::is_external_openable(url);
+                tray::set_page_items_enabled(window.app_handle(), web_page);
+                smoke::log("page-loaded", url.as_str());
             }
         })
         // target=_blank and window.open go to the default browser (web URLs only).
@@ -157,7 +163,10 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
                 remember_size(app, &webview_window);
             }
         }
-        WindowEvent::Destroyed => smoke::log("hibernated", ""),
+        WindowEvent::Destroyed => {
+            tray::set_page_items_enabled(window.app_handle(), false);
+            smoke::log("hibernated", "");
+        }
         WindowEvent::Resized(_) if smoke::enabled() => {
             let fullscreen = window.is_fullscreen().unwrap_or(false);
             if WAS_FULLSCREEN.swap(fullscreen, Ordering::Relaxed) != fullscreen {

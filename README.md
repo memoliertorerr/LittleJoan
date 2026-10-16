@@ -27,6 +27,8 @@ affiliated with or endorsed by The Browser Company.
   | Go somewhere else | Ctrl+L | Cmd+L |
   | Reload | Ctrl+R, F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
+  | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
+  | Open the page in your browser | tray menu | Cmd+Shift+O |
 
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,
@@ -35,6 +37,13 @@ affiliated with or endorsed by The Browser Company.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`
   talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
+
+## Translate
+
+**Translate Page** (tray menu, or Ctrl/Cmd+Shift+T) shows the current page through Google
+Translate's web proxy, in the language chosen in Settings (English by default). This sends the
+page's address to Google, and the translated page is served from `translate.goog`. Pages that
+need you to be signed in usually can't be translated this way.
 
 ## Settings
 
