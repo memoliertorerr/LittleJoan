@@ -94,6 +94,15 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   deadlock on Windows. A lifecycle mutex keeps two quick presses from creating two windows.
 - The window opens centred in the work area of the monitor under the mouse cursor, at the last
   size the user left it (logical pixels, saved on close unless fullscreen/maximized/minimized).
+- **Every close goes through the same path.** The close button, Cmd+W / Alt+F4
+  (`CloseRequested` is prevented and turned into `--hide`), Esc on the start page, the shortcut,
+  and `--hide` all end in `joan::destroy`: remember the size, release the page, destroy the
+  window.
+- **Releasing the page on macOS:** WKWebView's page processes were measured outliving a
+  destroyed window by minutes (which would also let a video's audio keep playing). On macOS
+  the window is hidden at once, navigated to `about:blank`, and destroyed 400 ms later; CI then
+  sees the `WebContent` processes gone within 30 s and no growth across summon cycles. WebView2
+  and WebKitGTK release theirs on destroy without help.
 - **Single instance:** `tauri-plugin-single-instance` forwards a second launch's arguments to
   the running app (`--toggle`, `--show [url]`, `--hide`; no flags = `--show`). On Linux it
   needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
@@ -287,6 +296,31 @@ and pushes to `main`:
   `--hide`, summon and hide again, then check the log order, single-instance forwarding, window
   fullscreen (Windows, Linux), and that no webview helper processes outlive the window.
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`), the log, and
-  `summary.json` (memory, helper counts, codecs) are uploaded as `smoke-<os>`. Linux runs under
-  `xvfb-run` + `dbus-run-session` (single-instance needs a session bus) with openbox (fullscreen
-  needs a window manager); the AppImage gets a launch check.
+  `summary.json` (memory — resident and the app's own: private bytes / private dirty /
+  physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs)
+  are uploaded as `smoke-<os>`. Linux runs under `xvfb-run` + `dbus-run-session`
+  (single-instance needs a session bus) with openbox, and under gdb so a crash leaves a
+  backtrace; the AppImage gets a launch check.
+- **Smoke-only reruns** (manual `workflow_dispatch`, for diagnosing without rebuilding):
+  `installers_from_run` (smoke the installers of an earlier run; skips verify and package),
+  `extra_env` (e.g. `WEBKIT_DISABLE_DMABUF_RENDERER=1`), `linux_runner` (`ubuntu-24.04`),
+  `linux_window_manager` (`none`), `linux_plain_webkit_check` (repeat the fullscreen click in a
+  bare WebKitGTK window built with PyGObject — no Tauri — to tell engine crashes from ours).
+
+  ```bash
+  gh workflow run ci.yml --repo memoliertorerr/LittleJoan --ref <branch> \
+    -f installers_from_run=<run id> -f linux_plain_webkit_check=true
+  ```
+
+### Measured in CI (v0.1)
+
+| | Windows (WebView2) | macOS (WKWebView) | Linux (WebKitGTK 2.50.4, Xvfb) |
+|---|---|---|---|
+| Hibernating at start: resident / own | 12.8 MB / 2.2 MB private | 66 MB / 11 MB footprint | 103 MB / 21.7 MB private dirty |
+| Webview helpers while a page is open | 6 `msedgewebview2.exe` | 3 `WebContent` (+ GPU, Networking) | 1 `WebKitWebProcess` |
+| Helpers after hibernating | 0 (within 2 s) | 0 (within 30 s, after the macOS release step) | 0 |
+| Element fullscreen | window fullscreen ✔ | own Space ✔ | **engine abort** (see the plan's Landmines) |
+| Codecs (H.264 / VP9 / AV1 via MSE) | ✔ / ✔ / ✔ | ✔ / ✔ / ✔ | ✔ / ✔ / ✔ |
+
+Resident memory counts shared system libraries (WebKit is large); the "own" column is what the
+app itself holds.

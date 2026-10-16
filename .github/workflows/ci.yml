@@ -15,9 +15,9 @@ on:
         required: false
         default: ""
       linux_runner:
-        description: "Linux smoke runner (the .deb is built on ubuntu-22.04 and also installs on ubuntu-24.04)"
+        description: "Linux smoke runner (the .deb is built on ubuntu-22.04 and installs on both)"
         required: false
-        default: ubuntu-22.04
+        default: ubuntu-24.04
       linux_plain_webkit_check:
         description: "Linux smoke: also click fullscreen in a bare WebKitGTK window (no Tauri), to isolate engine crashes"
         type: boolean
@@ -225,8 +225,11 @@ jobs:
             os: windows-latest
           - name: macos
             os: macos-latest
+          # Ubuntu 22.04's current WebKitGTK (2.50.4) aborts when any page enters element
+          # fullscreen — reproduced with a bare WebKitGTK window, no Tauri involved (see the plan's
+          # Landmines) — so the installed .deb is smoke-tested on 24.04 (WebKitGTK 2.52).
           - name: linux
-            os: ${{ inputs.linux_runner || 'ubuntu-22.04' }}
+            os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:

@@ -3,7 +3,7 @@
 
 use gtk::glib::Propagation;
 use gtk::prelude::*;
-use tauri::{Manager, Runtime, WebviewWindow};
+use tauri::{Manager, Runtime, WebviewWindow, Window};
 
 use crate::keys::{self, Key, Mods, Platform};
 use crate::page_actions;
@@ -41,4 +41,18 @@ pub fn install<R: Runtime>(window: &WebviewWindow<R>) {
     if let Err(err) = result {
         eprintln!("little-joan: could not reach the webview: {err}");
     }
+}
+
+/// The GDK window state's fullscreen bit (set by WebKitGTK's own fullscreen, by tao, or by the
+/// window manager). Main thread only.
+pub fn is_fullscreen<R: Runtime>(window: &Window<R>) -> bool {
+    window
+        .gtk_window()
+        .ok()
+        .and_then(|gtk_window| gtk_window.window())
+        .is_some_and(|gdk_window| {
+            gdk_window
+                .state()
+                .contains(gtk::gdk::WindowState::FULLSCREEN)
+        })
 }

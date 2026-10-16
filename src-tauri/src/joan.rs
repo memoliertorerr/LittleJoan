@@ -188,7 +188,7 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
             smoke::log("hibernated", "");
         }
         WindowEvent::Resized(_) if smoke::enabled() => {
-            let fullscreen = window.is_fullscreen().unwrap_or(false);
+            let fullscreen = platform::is_fullscreen(window);
             if WAS_FULLSCREEN.swap(fullscreen, Ordering::Relaxed) != fullscreen {
                 smoke::log("fullscreen", if fullscreen { "true" } else { "false" });
             }
