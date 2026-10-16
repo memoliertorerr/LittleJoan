@@ -3,6 +3,13 @@
 //! At rest the process has a tray icon and nothing else — no window and no webview. See
 //! docs/architecture.md for the lifecycle.
 
+pub mod cli;
+pub mod input;
+pub mod navigation;
+pub mod settings;
+pub mod toggle;
+pub mod translate;
+
 mod tray;
 
 use tauri::RunEvent;

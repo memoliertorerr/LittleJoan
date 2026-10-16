@@ -36,7 +36,7 @@
 | Step | Scope | Model | Gate | Status |
 |------|-------|-------|------|--------|
 | LJ1 | Scaffold: env + toolchain, Tauri 2 + Vite + TS strict, icons, hibernating tray app, CI verify on 3 OSes | strong | auto | ✅ done |
-| LJ2 | Pure core modules: input → URL, navigation policy, translate URL, settings model, toggle state machine, CLI args | strong | auto | ⬜ todo |
+| LJ2 | Pure core modules: input → URL, navigation policy, translate URL, settings model, toggle state machine, CLI args | strong | auto | ✅ done |
 | LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ⬜ todo |
 | LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ⬜ todo |
 | LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ⬜ todo |
@@ -46,7 +46,7 @@
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: LJ1 done (hibernating tray app, CI verify). Next: LJ2, then the phase-1 PR.**
+**Overall status: phase 1 done (LJ1–LJ2: hibernating tray app, CI verify, pure core). Next: phase 2 (LJ3 → LJ5).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -560,6 +560,20 @@ This ends phase 1: push the branch, fill the PR description from the template, m
 once CI is green, then continue with phase 2 only if the user's instructions say the build
 runs end to end; otherwise stop.
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 14 GB free at the start; `.cache/target` 1.0 GB after the step.
+- **Search URLs are form-encoded** (`q=what+is+rust`, `%40` for `@`), not `%20`-encoded — that is
+  what `url::Url::parse_with_params` produces and what every engine accepts.
+- **`Url::parse("localhost:3000")` succeeds** (as scheme `localhost`), so `normalize` accepts a
+  parsed URL only when its scheme is http/https and it has a host; everything else goes through
+  the host heuristic (`host_of`), which rejects anything whose `:` isn't followed by a port.
+- **IP literals get `http://`** (not only localhost): routers and local dev servers rarely serve
+  TLS. A dotted word whose last label is all digits (`v1.2`) is a search, not a host.
+- `settings::Settings::with_window_size(f64, f64)` was added for LJ3's save-on-close (clamps,
+  rounds, tolerates NaN).
+- 29 Rust unit tests; clippy clean on the first build.
 
 ---
 
