@@ -215,7 +215,7 @@ function launch(): ChildProcess {
   const [command, args] = underGdb
     ? [
         "gdb",
-        ["-q", "-batch", "-ex", "set debuginfod enabled on", "-ex", "run", "-ex", "bt 40", "-ex", "thread apply all bt 8", "--args", app as string],
+        ["-q", "-batch", "-ex", "run", "-ex", "bt 40", "-ex", "thread apply all bt 8", "--args", app as string],
       ]
     : [app as string, []];
   const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"] });

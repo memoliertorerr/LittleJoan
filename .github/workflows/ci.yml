@@ -273,9 +273,9 @@ jobs:
       - name: Smoke test (Linux, X11 + session bus + window manager)
         if: runner.os == 'Linux'
         env:
-          # Run the app under gdb so a crash leaves a (symbolized) backtrace in the log.
+          # Run the app under gdb so a crash leaves a backtrace in the log. (debuginfod symbols
+          # were tried: downloads time out and the app no longer starts within the smoke timeouts.)
           LJ_SMOKE_GDB: "1"
-          DEBUGINFOD_URLS: https://debuginfod.ubuntu.com
           LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }}
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c \
