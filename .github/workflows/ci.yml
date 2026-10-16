@@ -14,10 +14,10 @@ on:
         description: "Extra environment for the app in smoke tests, e.g. WEBKIT_DISABLE_DMABUF_RENDERER=1"
         required: false
         default: ""
-      linux_core_symbols:
-        description: "Linux smoke: dump core instead of running under gdb, then symbolize it with Ubuntu's debug symbols"
-        type: boolean
-        default: false
+      linux_window_manager:
+        description: "Linux smoke: window manager to run under Xvfb (openbox, or none)"
+        required: false
+        default: openbox
 
 concurrency:
   # Pushes to a PR replace each other; manual smoke-only runs never cancel anything.
@@ -277,30 +277,14 @@ jobs:
       - name: Smoke test (Linux, X11 + session bus + window manager)
         if: runner.os == 'Linux'
         env:
-          # Run the app under gdb so a crash leaves a backtrace in the log. (debuginfod symbols
-          # were tried: downloads time out and the app no longer starts within the smoke timeouts.)
-          LJ_SMOKE_GDB: ${{ inputs.linux_core_symbols && '0' || '1' }}
+          # Run the app under gdb so a crash leaves a backtrace in the log. (Symbols were tried:
+          # debuginfod downloads time out, and Ubuntu's ddebs have no symbols for WebKitGTK 2.50.4.)
+          LJ_SMOKE_GDB: "1"
           LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }}
+          LJ_WM: ${{ inputs.linux_window_manager || 'openbox' }}
         run: |
-          if [ "${{ inputs.linux_core_symbols }}" = true ]; then
-            sudo sysctl -w kernel.core_pattern=/tmp/core.%e.%p
-            ulimit -c unlimited
-          fi
           xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c \
-            'openbox & sleep 2; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
-
-      - name: Symbolize a Linux crash (diagnostics only)
-        if: failure() && runner.os == 'Linux' && inputs.linux_core_symbols
-        run: |
-          ls -l /tmp/core.* || exit 0
-          echo "deb http://ddebs.ubuntu.com jammy main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/ddebs.list
-          echo "deb http://ddebs.ubuntu.com jammy-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/ddebs.list
-          sudo apt-get install -y ubuntu-dbgsym-keyring
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-0-dbgsym libjavascriptcoregtk-4.1-0-dbgsym libgtk-3-0-dbgsym || true
-          for core in /tmp/core.*; do
-            gdb -q -batch -ex "bt 40" /usr/bin/little-joan "$core" 2>&1 | grep -v "^warning" | head -80
-          done
+            'if [ "$LJ_WM" != none ]; then openbox & sleep 2; fi; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
 
       - name: AppImage starts (Linux)
         if: runner.os == 'Linux'
