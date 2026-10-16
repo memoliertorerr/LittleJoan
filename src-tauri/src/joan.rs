@@ -145,23 +145,43 @@ fn destroy<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     match app.get_webview_window(LABEL) {
         Some(window) => {
             remember_size(app, &window);
+            release_page(&window);
             window.destroy()
         }
         None => Ok(()),
     }
 }
 
-/// Window events for "joan": remember the size when the user closes it, and log hibernation.
+/// macOS: the CI smoke test (LJ9) saw WKWebView's page processes outlive a destroyed window by
+/// minutes, which would also let a video's audio keep playing. So the window is hidden at once,
+/// the page is unloaded, and WebKit gets a moment before the window is destroyed. Runs off the
+/// main thread (inside `handle`), so the short sleep blocks nothing the user sees.
+#[cfg(target_os = "macos")]
+fn release_page<R: Runtime>(window: &WebviewWindow<R>) {
+    let _ = window.hide();
+    if let Ok(blank) = Url::parse("about:blank") {
+        let _ = window.navigate(blank);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(400));
+}
+
+/// WebView2 and WebKitGTK release a page's processes when the window is destroyed (measured in
+/// CI), so nothing extra is needed.
+#[cfg(not(target_os = "macos"))]
+fn release_page<R: Runtime>(_window: &WebviewWindow<R>) {}
+
+/// Window events for "joan": route every close through `handle` (so it is hibernated the same
+/// way as with the shortcut), and log hibernation.
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if window.label() != LABEL {
         return;
     }
     match event {
-        WindowEvent::CloseRequested { .. } => {
-            let app = window.app_handle();
-            if let Some(webview_window) = app.get_webview_window(LABEL) {
-                remember_size(app, &webview_window);
-            }
+        WindowEvent::CloseRequested { api, .. } => {
+            // The close button, Cmd+W / Alt+F4: hibernate through the same path as the
+            // shortcut (remember the size, release the page, destroy).
+            api.prevent_close();
+            dispatch(window.app_handle(), Command::Hide);
         }
         WindowEvent::Destroyed => {
             tray::set_page_items_enabled(window.app_handle(), false);
