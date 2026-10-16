@@ -136,7 +136,8 @@ function memoryMb(pid: number): number {
 
 /**
  * Memory that is the app's own, in MB — RSS also counts shared system libraries: private bytes
- * on Windows, Pss on Linux (/proc/<pid>/smaps_rollup), the physical footprint on macOS.
+ * on Windows, private dirty pages on Linux (/proc/<pid>/smaps_rollup: what the kernel can't
+ * just drop and re-read from the library files), the physical footprint on macOS.
  */
 function ownMemoryMb(pid: number): number {
   if (os === "win32") {
@@ -144,8 +145,8 @@ function ownMemoryMb(pid: number): number {
   }
   if (os === "linux") {
     const rollup = existsSync(`/proc/${pid}/smaps_rollup`) ? readFileSync(`/proc/${pid}/smaps_rollup`, "utf8") : "";
-    const pss = /^Pss:\s+(\d+) kB/m.exec(rollup)?.[1];
-    return pss ? Math.round((Number(pss) / 1024) * 10) / 10 : -1;
+    const dirty = /^Private_Dirty:\s+(\d+) kB/m.exec(rollup)?.[1];
+    return dirty ? Math.round((Number(dirty) / 1024) * 10) / 10 : -1;
   }
   const footprint = /Footprint:\s+([\d.]+)\s*(KB|MB|GB)/i.exec(run("footprint", ["-p", String(pid)]));
   if (!footprint?.[1] || !footprint[2]) {
