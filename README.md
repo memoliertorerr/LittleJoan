@@ -19,18 +19,21 @@ Installers are built by CI for every change: open the latest successful
 [ci run](https://github.com/memoliertorerr/LittleJoan/actions/workflows/ci.yml), scroll to
 **Artifacts**, and download the one for your system. (There are no signed releases yet.)
 
-- **Windows 10/11** — `little-joan-windows` → run `Little Joan_…_x64-setup.exe`. It installs
+- **Windows 10/11** — `little-joan-windows` → run `Little Joan_0.1.0_x64-setup.exe` (about
+  1.2 MB). It installs
   for your user only (no admin). Windows SmartScreen may warn about an unknown publisher: choose
   **More info → Run anyway**. Windows 10 without the WebView2 runtime gets it during setup.
-- **macOS 12.3 or later** (Intel or Apple silicon) — `little-joan-macos` → open the `.dmg` and
+- **macOS 12.3 or later** (Intel or Apple silicon) — `little-joan-macos` → open the `.dmg`
+  (about 3.3 MB) and
   drag Little Joan to Applications. The app isn't notarized, so the first time, right-click it
   and choose **Open**, or run
   `xattr -dr com.apple.quarantine "/Applications/Little Joan.app"`. It lives in the menu bar
   (no Dock icon).
 - **Linux** — `little-joan-linux`:
-  - Debian/Ubuntu: `sudo apt install ./little-joan_*.deb` (pulls in the GStreamer plugins
-    video needs).
-  - Elsewhere: `chmod +x Little*.AppImage` and run it.
+  - Debian/Ubuntu: `sudo apt install "./Little Joan_0.1.0_amd64.deb"` (about 2 MB; pulls in
+    WebKitGTK and the GStreamer plugins video needs).
+  - Elsewhere: `chmod +x "Little Joan_0.1.0_amd64.AppImage"` and run it (about 140 MB: it carries
+    its own WebKitGTK and media framework).
   - The tray icon needs an AppIndicator host (on GNOME, the "AppIndicator and
     KStatusNotifierItem Support" extension).
 

@@ -1,0 +1,92 @@
+// Parsing and checking the app's smoke log (LITTLEJOAN_SMOKE_LOG, see src-tauri/src/smoke.rs).
+// Pure functions, unit-tested; scripts/ci/smoke.mts drives the installed app and uses these.
+
+export interface LogEvent {
+  millis: number;
+  event: string;
+  detail: string;
+}
+
+/** Parses `<millis> <event>[ <detail>]` lines; malformed lines are skipped. */
+export function parseLog(text: string): LogEvent[] {
+  const events: LogEvent[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^(\d+) (\S+)(?: (.*))?$/.exec(line);
+    if (match?.[1] && match[2]) {
+      events.push({ millis: Number(match[1]), event: match[2], detail: match[3] ?? "" });
+    }
+  }
+  return events;
+}
+
+/** How many events match `event` (and, if given, a detail starting with `detailPrefix`). */
+export function count(events: LogEvent[], event: string, detailPrefix = ""): number {
+  return events.filter((e) => e.event === event && e.detail.startsWith(detailPrefix)).length;
+}
+
+/** The detail of the last `title` event starting with `prefix`, if any. */
+export function lastTitle(events: LogEvent[], prefix: string): string | undefined {
+  return events.filter((e) => e.event === "title" && e.detail.startsWith(prefix)).at(-1)?.detail;
+}
+
+/** Codec support from the smoke page's ready title ("LJ-SMOKE ready h264=mse vp9=no …"). */
+export function parseCodecs(title: string | undefined): Record<string, string> {
+  const codecs: Record<string, string> = {};
+  for (const match of (title ?? "").matchAll(/(\w+)=(\S+)/g)) {
+    if (match[1] && match[2]) {
+      codecs[match[1]] = match[2];
+    }
+  }
+  return codecs;
+}
+
+export interface Expectations {
+  /** The window itself must report fullscreen after the click (Windows, Linux). */
+  windowFullscreen: boolean;
+  /** The page must report element fullscreen after the click. */
+  pageFullscreen: boolean;
+}
+
+export interface Measurements {
+  helpersBefore: number;
+  helpersAfter: number;
+}
+
+/** Checks a full smoke run. Returns the list of failures (empty = pass). */
+export function evaluate(events: LogEvent[], expect: Expectations, measured: Measurements): string[] {
+  const failures: string[] = [];
+  const ordered: [string, string][] = [
+    ["started", ""],
+    ["shortcut-registered", ""],
+    ["window-created", ""],
+    ["title", "LJ-SMOKE ready"],
+    ["hibernated", ""],
+  ];
+  let from = 0;
+  for (const [event, prefix] of ordered) {
+    const index = events.findIndex((e, i) => i >= from && e.event === event && e.detail.startsWith(prefix));
+    if (index < 0) {
+      failures.push(`missing "${event}${prefix ? ` ${prefix}` : ""}" (in order)`);
+    } else {
+      from = index + 1;
+    }
+  }
+  if (count(events, "started") !== 1) {
+    failures.push(`expected exactly one "started" (single instance), saw ${count(events, "started")}`);
+  }
+  if (expect.windowFullscreen && count(events, "fullscreen", "true") === 0) {
+    failures.push('the window never reported "fullscreen true" after the click');
+  }
+  if (expect.pageFullscreen && lastTitle(events, "LJ-SMOKE fullscreen=on") === undefined) {
+    failures.push("the page never reported element fullscreen after the click");
+  }
+  if (count(events, "window-created") < 2 || count(events, "hibernated") < 2) {
+    failures.push("summoning again after hibernating did not create and destroy a second window");
+  }
+  if (measured.helpersAfter > measured.helpersBefore) {
+    failures.push(
+      `webview helper processes left after hibernating: ${measured.helpersAfter} (before showing: ${measured.helpersBefore})`,
+    );
+  }
+  return failures;
+}

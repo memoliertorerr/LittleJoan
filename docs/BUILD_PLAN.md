@@ -43,10 +43,10 @@
 | LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ✅ done |
 | LJ7 | Translate page + open in default browser (tray, macOS menu, keys) | standard | auto | ✅ done |
 | LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ✅ done |
-| LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
+| LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ✅ done |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: phases 1–3 done (PRs #1–#3); LJ8 done. Next: LJ9 (install-and-run smoke in CI), then LJ10 (docs + human checkpoint).**
+**Overall status: phases 1–3 done (PRs #1–#3); LJ8–LJ9 done. Next: LJ10 (docs + human checkpoint).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -1048,7 +1048,16 @@ report — never commit red, never weaken a check to get green.
   universal binary and the ad-hoc signature.
 - Bundle metadata added: publisher, copyright, MIT license, homepage, category Utility, short
   and long descriptions.
-- Artifact sizes and bundler friction are recorded after the first CI run (see below / LJ9).
+- **First CI run (run 38922147279, recorded with LJ9's commit): every package job green on the
+  first try.** Sizes: Windows NSIS `Little Joan_0.1.0_x64-setup.exe` **1.21 MiB**; macOS
+  `Little Joan_0.1.0_universal.dmg` **3.25 MiB** (the `.app` is 7.1 MiB, `x86_64 arm64`,
+  `Signature=adhoc`); Linux `Little Joan_0.1.0_amd64.deb` **2.0 MiB** and
+  `Little Joan_0.1.0_amd64.AppImage` **142 MiB** (bundled WebKitGTK + GStreamer). Package job
+  times: Windows 308 s, Linux 309 s, macOS 455 s (universal = two compiles).
+- **The bundler adds the runtime libraries to the `.deb` by itself:** `Depends:` lists our three
+  GStreamer packages plus `libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0`.
+- Installer file names use the product name with its space (`Little Joan_0.1.0_…`); the README
+  quotes them.
 
 ---
 
@@ -1112,6 +1121,20 @@ app on all three OSes in CI". Push and watch CI until smoke is green. Paste the 
 `git log -1 --stat`, the CI result, and what each screenshot shows. If it is still red after
 two honest fix attempts, stop and report — never commit red, never weaken a check to get green.
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 13 GB free at the start. Nothing is built or run locally for this step beyond
+  `npm run verify` (the harness's pure parts are unit-tested: 40 TS tests).
+- **The smoke page reports through `document.title`,** which the app logs — so the harness
+  needs no IPC, no devtools protocol, and no browser driver.
+- **Second launches are the remote control:** `--show`, `--show <url>`, `--hide` are forwarded
+  by single-instance; the harness also asserts exactly one `started` line, which proves the
+  forwarding worked instead of a second app starting.
+- **Helper processes are counted by name** (`msedgewebview2.exe`, `com.apple.WebKit.WebContent`,
+  `WebKitWebProcess`); the check is "no more after hibernating than before showing".
+- **macOS synthetic clicks may be refused** on the runner (Accessibility permission); the
+  harness therefore requires fullscreen only on Windows and Linux and records what macOS did.
 
 ---
 

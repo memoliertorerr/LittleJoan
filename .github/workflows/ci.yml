@@ -183,3 +183,92 @@ jobs:
           path: bundles/
           retention-days: 14
           if-no-files-found: error
+
+  # Installs each installer the way a user would and drives the installed app: launching the
+  # build folder can pass while the real installer is broken.
+  smoke:
+    name: smoke (${{ matrix.name }})
+    needs: package
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-latest
+          - name: linux
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: little-joan-${{ matrix.name }}
+          path: installers
+
+      - name: Install (Windows, NSIS installer, silent)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installers -Filter *-setup.exe | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          $exe = Get-ChildItem $env:LOCALAPPDATA -Recurse -Depth 2 -Filter little-joan.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "little-joan.exe not found after installing" }
+          Get-ChildItem (Split-Path $exe.FullName) | Format-Table Name, Length
+          "APP=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Install (macOS, drag from the DMG)
+        if: runner.os == 'macOS'
+        run: |
+          dmg="$(ls installers/*.dmg | head -1)"
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/lj-dmg "$dmg"
+          mkdir -p "$RUNNER_TEMP/Applications"
+          cp -R "/tmp/lj-dmg/Little Joan.app" "$RUNNER_TEMP/Applications/"
+          hdiutil detach /tmp/lj-dmg
+          app="$RUNNER_TEMP/Applications/Little Joan.app"
+          codesign --verify --verbose "$app"
+          lipo -archs "$app/Contents/MacOS/little-joan"
+          echo "APP=$app/Contents/MacOS/little-joan" >> "$GITHUB_ENV"
+
+      - name: Install (Linux, .deb through apt)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11
+          echo "APP=$(command -v little-joan)" >> "$GITHUB_ENV"
+
+      - name: Smoke test (Windows, macOS)
+        if: runner.os != 'Linux'
+        run: node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke
+
+      - name: Smoke test (Linux, X11 + session bus + window manager)
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c \
+            'openbox & sleep 2; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
+
+      - name: AppImage starts (Linux)
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          image="$(ls installers/*.AppImage | head -1)"
+          chmod +x "$image"
+          xvfb-run -a dbus-run-session -- node scripts/ci/smoke.mts --app "$image" --out test-results/smoke --started-only
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: smoke-${{ matrix.name }}
+          path: test-results/smoke/
+          retention-days: 14

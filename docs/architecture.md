@@ -68,6 +68,8 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide parsing
+scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide), screenshots
+scripts/ci/smoke-log.mts           CI: smoke-log parsing and pass/fail rules, unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
 .github/workflows/ci.yml           verify on ubuntu-latest, windows-latest, macos-latest
@@ -276,3 +278,13 @@ and pushes to `main`:
   Windows- and Linux-specific code paths.
 - **package** — the installers above, uploaded as artifacts `little-joan-<os>` (14 days), with
   their sizes in the job summary.
+- **smoke** — installs each installer the way a user would (NSIS `/S`; copy the `.app` out of
+  the mounted `.dmg`; `apt install ./….deb`) and runs `scripts/ci/smoke.mts` against the
+  installed binary: launch with `LITTLEJOAN_SMOKE_LOG`, `--show` (start page), `--show
+  http://127.0.0.1:<port>/smoke.html`, click the screen centre (the page's fullscreen button),
+  `--hide`, summon and hide again, then check the log order, single-instance forwarding, window
+  fullscreen (Windows, Linux), and that no webview helper processes outlive the window.
+  Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`), the log, and
+  `summary.json` (memory, helper counts, codecs) are uploaded as `smoke-<os>`. Linux runs under
+  `xvfb-run` + `dbus-run-session` (single-instance needs a session bus) with openbox (fullscreen
+  needs a window manager); the AppImage gets a launch check.
