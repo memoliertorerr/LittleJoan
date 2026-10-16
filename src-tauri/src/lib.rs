@@ -5,6 +5,7 @@
 
 pub mod cli;
 pub mod commands;
+pub mod fullscreen;
 pub mod input;
 pub mod joan;
 pub mod keys;

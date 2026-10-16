@@ -3,6 +3,7 @@
 //! Nothing here keeps a webview alive while hibernating: `Destroy` (and the user closing the
 //! window) drops the window and its webview, so the engine's renderer processes exit.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
@@ -23,6 +24,9 @@ pub const LABEL: &str = "joan";
 
 /// Serializes lifecycle changes so two quick shortcut presses can't both create the window.
 static LIFECYCLE: Mutex<()> = Mutex::new(());
+
+/// Last fullscreen state seen, for the smoke log only.
+static WAS_FULLSCREEN: AtomicBool = AtomicBool::new(false);
 
 /// Handles `command` off the main thread. Building a webview window from the main thread can
 /// deadlock on Windows, and shortcut / single-instance / menu callbacks may run there.
@@ -99,7 +103,11 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
     if let Some(dir) = webview_data_dir {
         builder = builder.data_directory(dir);
     }
+    // Element fullscreen (video): WebView2 needs platform::install's handler; WKWebView (wry
+    // enables elementFullscreenEnabled) and WebKitGTK (fullscreens the toplevel by default)
+    // handle it themselves. See fullscreen.rs.
     let window = builder.build()?;
+    WAS_FULLSCREEN.store(false, Ordering::Relaxed);
     platform::install(&window);
     place(app, &window, width, height);
     window.show()?;
@@ -150,6 +158,12 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
             }
         }
         WindowEvent::Destroyed => smoke::log("hibernated", ""),
+        WindowEvent::Resized(_) if smoke::enabled() => {
+            let fullscreen = window.is_fullscreen().unwrap_or(false);
+            if WAS_FULLSCREEN.swap(fullscreen, Ordering::Relaxed) != fullscreen {
+                smoke::log("fullscreen", if fullscreen { "true" } else { "false" });
+            }
+        }
         _ => {}
     }
 }

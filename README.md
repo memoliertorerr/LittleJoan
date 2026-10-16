@@ -28,6 +28,9 @@ affiliated with or endorsed by The Browser Company.
   | Reload | Ctrl+R, F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
 
+- **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
+  Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,
+  `gstreamer1.0-libav` on Debian/Ubuntu); the `.deb` installs them.
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`
   talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
