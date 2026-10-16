@@ -312,14 +312,15 @@ and pushes to `main`:
     -f installers_from_run=<run id> -f linux_plain_webkit_check=true
   ```
 
-### Measured in CI (v0.1)
+### Measured in CI (v0.1, run 38936095643)
 
-| | Windows (WebView2) | macOS (WKWebView) | Linux (WebKitGTK 2.50.4, Xvfb) |
+| | Windows (WebView2) | macOS (WKWebView) | Linux (Ubuntu 24.04, WebKitGTK 2.52.6, Xvfb) |
 |---|---|---|---|
-| Hibernating at start: resident / own | 12.8 MB / 2.2 MB private | 66 MB / 11 MB footprint | 103 MB / 21.7 MB private dirty |
+| Hibernating at start: resident / own | 12.8 MB / 2.2 MB private | 66 MB / 11 MB footprint | 97 MB / 19.5 MB private dirty |
+| Hibernating again after a page: own | 4.5 MB | 24 MB | 44.6 MB |
 | Webview helpers while a page is open | 6 `msedgewebview2.exe` | 3 `WebContent` (+ GPU, Networking) | 1 `WebKitWebProcess` |
-| Helpers after hibernating | 0 (within 2 s) | 0 (within 30 s, after the macOS release step) | 0 |
-| Element fullscreen | window fullscreen ✔ | own Space ✔ | **engine abort** (see the plan's Landmines) |
+| Helpers after hibernating (2 s … 60 s, and after 3 cycles) | 0 | 0 | 0 |
+| Element fullscreen after a click | window fullscreen ✔ | own Space ✔ | window fullscreen ✔ (Ubuntu 22.04's WebKitGTK 2.50.4 aborts — see the plan's Landmines) |
 | Codecs (H.264 / VP9 / AV1 via MSE) | ✔ / ✔ / ✔ | ✔ / ✔ / ✔ | ✔ / ✔ / ✔ |
 
 Resident memory counts shared system libraries (WebKit is large); the "own" column is what the

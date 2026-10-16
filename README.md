@@ -14,8 +14,8 @@ WebKitGTK on Linux), which keeps the download to a few megabytes.
 Inspired by Little Arc in the Arc browser. Little Joan is an independent project and is not
 affiliated with or endorsed by The Browser Company.
 
-> **Status:** v0.1, built and smoke-tested in CI on all three systems; not yet released as
-> signed installers. The build plan and progress tracker live in
+> **Status:** v0.1, built and smoke-tested in CI on all three systems (Linux on Ubuntu 24.04);
+> not yet released as signed installers. See the known issue under Fullscreen video. The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## Install
@@ -66,6 +66,9 @@ always be ready.
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,
   `gstreamer1.0-libav` on Debian/Ubuntu); the `.deb` installs them.
+  **Known issue:** the WebKitGTK shipped with Ubuntu 22.04 at the moment (2.50.4) crashes when
+  any page goes fullscreen — reproduced in testing without Little Joan. Ubuntu 24.04's
+  (2.52) works. The AppImage currently bundles the 22.04 version.
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`
   talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
