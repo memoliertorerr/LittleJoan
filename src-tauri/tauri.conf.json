@@ -24,6 +24,37 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Mehmet Ali Ertorer",
+    "copyright": "© 2026 Mehmet Ali Ertorer",
+    "license": "MIT",
+    "homepage": "https://github.com/memoliertorerr/LittleJoan",
+    "category": "Utility",
+    "shortDescription": "A tiny pop-up browser that hibernates until you call it.",
+    "longDescription": "Little Joan sits in the tray without a window or a loaded page until a global keyboard shortcut brings up a small window with one field. Type an address or a search; close the window and it goes back to sleep.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "12.3"
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-plugins-bad",
+          "gstreamer1.0-libav"
+        ]
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    }
   }
 }

@@ -253,8 +253,26 @@ single-instance socket in `/tmp`) and registers a system-wide shortcut. Developm
 inside the repo, so the app is exercised in CI (and by people on their own machines); local
 checks are the compiler, clippy, and unit tests.
 
+## Packaging
+
+Installers are built in CI only (`package` job), never on a developer machine:
+
+| OS | Runner | Command | Artifact |
+|---|---|---|---|
+| Windows | windows-latest | `tauri build --bundles nsis` | `Little Joan_<v>_x64-setup.exe` — per-user install (no admin), downloads the WebView2 runtime if missing |
+| macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+ |
+| Linux | ubuntu-22.04 | `tauri build --bundles deb,appimage` | `.deb` (depends on the GStreamer plugins for video) and `.AppImage` (bundles the media framework) |
+
+The release profile optimizes for size (`opt-level = "s"`, LTO, one codegen unit, stripped,
+`panic = "abort"`). Builds are not notarized or Authenticode-signed (see the plan's Later
+section), so macOS Gatekeeper and Windows SmartScreen warn on first launch.
+
 ## CI
 
-`.github/workflows/ci.yml` runs `npm run verify` on Ubuntu, Windows, and macOS for every pull
-request (any base branch — the phase PRs are stacked) and on pushes to `main`. It is the only
-compiler for the Windows- and Linux-specific code paths.
+`.github/workflows/ci.yml`, for every pull request (any base branch — the phase PRs are stacked)
+and pushes to `main`:
+
+- **verify** — `npm run verify` on Ubuntu, Windows, and macOS. It is the only compiler for the
+  Windows- and Linux-specific code paths.
+- **package** — the installers above, uploaded as artifacts `little-joan-<os>` (14 days), with
+  their sizes in the job summary.

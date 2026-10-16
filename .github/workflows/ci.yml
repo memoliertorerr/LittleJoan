@@ -68,3 +68,118 @@ jobs:
         run: |
           source scripts/env.sh
           npm run verify
+
+  # Builds what users download. Release builds happen only here, never on a developer machine.
+  package:
+    name: package (${{ matrix.name }})
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            bundles: nsis
+            target: ""
+          - name: macos
+            os: macos-latest
+            bundles: app,dmg
+            target: universal-apple-darwin
+          # The oldest supported Ubuntu runner: an older glibc makes the .deb and AppImage run
+          # on more distributions.
+          - name: linux
+            os: ubuntu-22.04
+            bundles: deb,appimage
+            target: ""
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev build-essential file \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .cache/rustup
+            .cache/cargo/registry
+            .cache/cargo/git
+            .cache/target
+          key: package-${{ matrix.name }}-${{ hashFiles('rust-toolchain.toml', 'src-tauri/Cargo.lock') }}
+          restore-keys: package-${{ matrix.name }}-
+
+      - name: Install npm dependencies
+        run: |
+          source scripts/env.sh
+          npm ci
+
+      - name: Rust toolchain
+        run: |
+          source scripts/env.sh
+          rustup toolchain install
+          if [ "${{ matrix.name }}" = macos ]; then
+            rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          fi
+          rustc --version
+
+      - name: Build installers
+        run: |
+          source scripts/env.sh
+          # The target dir is cached: drop installers from earlier runs so only fresh ones ship.
+          rm -rf "$LJ_ROOT_POSIX"/.cache/target/release/bundle "$LJ_ROOT_POSIX"/.cache/target/*/release/bundle
+          if [ -n "${{ matrix.target }}" ]; then
+            npx tauri build --ci --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"
+          else
+            npx tauri build --ci --bundles "${{ matrix.bundles }}"
+          fi
+
+      - name: Collect installers
+        run: |
+          source scripts/env.sh
+          mkdir -p bundles
+          find "$LJ_ROOT_POSIX/.cache/target" -path '*/release/bundle/*' -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' \) \
+            -exec cp {} bundles/ \;
+          ls -l bundles
+          test -n "$(ls bundles)"
+          {
+            echo "### Installers (${{ matrix.name }})"
+            echo
+            echo "| File | Size |"
+            echo "|---|---|"
+            for f in bundles/*; do
+              echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Inspect the .deb
+        if: runner.os == 'Linux'
+        run: dpkg-deb -I bundles/*.deb
+
+      - name: Inspect the macOS app
+        if: runner.os == 'macOS'
+        run: |
+          source scripts/env.sh
+          app="$(find "$LJ_ROOT_POSIX/.cache/target/universal-apple-darwin/release/bundle/macos" -maxdepth 1 -name '*.app' | head -1)"
+          lipo -archs "$app/Contents/MacOS/little-joan"
+          codesign -dv "$app" 2>&1 | head -5
+          du -sh "$app"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: little-joan-${{ matrix.name }}
+          path: bundles/
+          retention-days: 14
+          if-no-files-found: error

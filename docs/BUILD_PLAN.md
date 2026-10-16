@@ -42,11 +42,11 @@
 | LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ✅ done |
 | LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ✅ done |
 | LJ7 | Translate page + open in default browser (tray, macOS menu, keys) | standard | auto | ✅ done |
-| LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ⬜ todo |
+| LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ✅ done |
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: phases 1–3 done (PRs #1–#3). Next: phase 4 (LJ8 → LJ10): installers, install-and-run smoke in CI, docs, human checkpoint.**
+**Overall status: phases 1–3 done (PRs #1–#3); LJ8 done. Next: LJ9 (install-and-run smoke in CI), then LJ10 (docs + human checkpoint).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -1037,6 +1037,18 @@ exists) and watch CI until package is green. Paste the verify output, `git log -
 CI result, and the artifact sizes. If it is still red after two honest fix attempts, stop and
 report — never commit red, never weaken a check to get green.
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 13 GB free at the start. No local release build (Ground Rule 8): the bundle config
+  was validated locally only by tauri-build parsing `tauri.conf.json` during clippy.
+- **The CI target dir is cached,** so the build step deletes earlier `release/bundle` folders
+  first; otherwise a stale installer from an older run could be uploaded.
+- The macOS job also prints `lipo -archs` and `codesign -dv` for the `.app`, so the PR shows the
+  universal binary and the ad-hoc signature.
+- Bundle metadata added: publisher, copyright, MIT license, homepage, category Utility, short
+  and long descriptions.
+- Artifact sizes and bundler friction are recorded after the first CI run (see below / LJ9).
 
 ---
 
