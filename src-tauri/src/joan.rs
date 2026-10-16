@@ -5,12 +5,15 @@
 
 use std::sync::{Mutex, PoisonError};
 
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{
     AppHandle, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     Window, WindowEvent,
 };
 use url::Url;
 
+use crate::navigation;
+use crate::platform;
 use crate::settings::{self, MIN_HEIGHT, MIN_WIDTH};
 use crate::smoke;
 use crate::state;
@@ -66,11 +69,38 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
         .inner_size(width, height)
         .min_inner_size(f64::from(MIN_WIDTH), f64::from(MIN_HEIGHT))
         .resizable(true)
-        .visible(false);
+        .visible(false)
+        // Web pages only: no file:, javascript:, or app-launching schemes (navigation.rs).
+        .on_navigation(navigation::is_allowed_navigation)
+        .on_document_title_changed(|window, title| {
+            let title = title.trim();
+            let title = if title.is_empty() {
+                "Little Joan"
+            } else {
+                title
+            };
+            let _ = window.set_title(title);
+            smoke::log("title", title);
+        })
+        .on_page_load(|_window, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                smoke::log("page-loaded", payload.url().as_str());
+            }
+        })
+        // target=_blank and window.open go to the default browser (web URLs only).
+        .on_new_window(|url, _features| {
+            if navigation::is_external_openable(&url)
+                && let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>)
+            {
+                eprintln!("little-joan: could not open the link in the default browser: {err}");
+            }
+            NewWindowResponse::Deny
+        });
     if let Some(dir) = webview_data_dir {
         builder = builder.data_directory(dir);
     }
     let window = builder.build()?;
+    platform::install(&window);
     place(app, &window, width, height);
     window.show()?;
     window.set_focus()?;

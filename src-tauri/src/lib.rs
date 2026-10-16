@@ -7,7 +7,9 @@ pub mod cli;
 pub mod commands;
 pub mod input;
 pub mod joan;
+pub mod keys;
 pub mod navigation;
+pub mod page_actions;
 pub mod settings;
 pub mod shortcut;
 pub mod smoke;
@@ -15,6 +17,9 @@ pub mod state;
 pub mod toggle;
 pub mod translate;
 
+#[cfg(target_os = "macos")]
+mod menu;
+mod platform;
 mod tray;
 
 use tauri::RunEvent;
@@ -43,6 +48,11 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let handle = app.handle();
+            #[cfg(target_os = "macos")]
+            {
+                app.set_menu(menu::create(handle)?)?;
+                app.on_menu_event(menu::on_menu_event);
+            }
             state::init(handle)?;
             tray::create(handle)?;
             shortcut::register_from_settings(handle);

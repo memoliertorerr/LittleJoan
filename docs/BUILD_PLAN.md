@@ -38,7 +38,7 @@
 | LJ1 | Scaffold: env + toolchain, Tauri 2 + Vite + TS strict, icons, hibernating tray app, CI verify on 3 OSes | strong | auto | ✅ done |
 | LJ2 | Pure core modules: input → URL, navigation policy, translate URL, settings model, toggle state machine, CLI args | strong | auto | ✅ done |
 | LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ✅ done |
-| LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ⬜ todo |
+| LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ✅ done |
 | LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ⬜ todo |
 | LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ⬜ todo |
 | LJ7 | Translate page + open in default browser (tray, macOS menu, keys) | standard | auto | ⬜ todo |
@@ -46,7 +46,7 @@
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: phase 1 done (PR #1); LJ3 done. Next: LJ4, LJ5, then the phase-2 PR.**
+**Overall status: phase 1 done (PR #1); LJ3–LJ4 done. Next: LJ5, then the phase-2 PR.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -753,6 +753,24 @@ are fixed per Ground Rule 3. Paste the verify output, `git log -1 --stat`, and t
 If it is still red after two honest fix attempts, stop and report — never commit red, never
 weaken a check to get green.
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 14 GB free at the start; `.cache/target` ~1.5 GB after the step.
+- **The opener is used as a plain function** (`tauri_plugin_opener::open_url`), not registered
+  as a plugin: that would also register its JS commands, and nothing in the UI needs them.
+- **Linux hook goes through `with_webview`:** `WebviewWindow::gtk_window()` hands back a GTK
+  object on a non-main thread (window creation runs off the main thread, see LJ3), and GTK must
+  only be touched on its main thread. `with_webview` runs on that thread; the hook is connected
+  to `webview.inner().toplevel()` (the GTK window), so only the `gtk` crate is needed, not
+  `webkit2gtk`.
+- **`tauri://` origins are opaque** in the `url` crate, so `Url::origin()` comparisons never
+  match; `keys::is_app_url` compares scheme, host, and port instead (test included).
+- Windows' module is `platform/win.rs` (not `windows.rs`) so `use windows::…` always means the
+  crate.
+- **Not verified locally:** the Windows and Linux hooks only compile in CI (Ground Rule 3); key
+  behavior on real desktops is in LJ10's checklist.
+- 46 Rust tests, 19 TS tests.
 
 ---
 

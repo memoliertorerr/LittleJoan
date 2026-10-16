@@ -19,6 +19,16 @@ affiliated with or endorsed by The Browser Company.
   address or a search and press Enter.
 - **Dismiss:** press the shortcut again, press Esc in the empty field, or close the window.
   The page is discarded and Little Joan goes back to sleep.
+- **Keys on a page:**
+
+  | | Windows / Linux | macOS |
+  |---|---|---|
+  | Close (hibernate) | Ctrl+W | Cmd+W |
+  | Go somewhere else | Ctrl+L | Cmd+L |
+  | Reload | Ctrl+R, F5 | Cmd+R |
+  | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
+
+- **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`
   talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
