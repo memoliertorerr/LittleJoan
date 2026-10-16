@@ -12,6 +12,7 @@ pub mod keys;
 pub mod navigation;
 pub mod page_actions;
 pub mod settings;
+pub mod settings_window;
 pub mod shortcut;
 pub mod smoke;
 pub mod state;
@@ -38,9 +39,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::open_input,
             commands::hibernate,
-            commands::start_info
+            commands::start_info,
+            commands::get_settings,
+            commands::save_settings,
+            commands::suspend_shortcut
         ])
-        .on_window_event(joan::on_window_event)
+        .on_window_event(|window, event| {
+            joan::on_window_event(window, event);
+            settings_window::on_window_event(window, event);
+        })
         .setup(|app| {
             smoke::log("started", "");
 

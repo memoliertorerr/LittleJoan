@@ -30,19 +30,25 @@ scripts/make-icons.mts             renders the app icon and the macOS tray templ
 scripts/copy-icons.mts             copies the desktop icon set from `tauri icon` output
 ui/index.html, ui/start.ts         the start page: one field; DOM glue only
 ui/start-logic.ts                  start page logic (Enter / Esc / ?u= prefill), unit-tested
-ui/lib/shortcut.ts                 accelerator → display text ("⌘⇧Space", "Ctrl+Shift+Space")
+ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
+ui/settings.html, ui/settings.ts   the settings window: shortcut recorder, search engine, language
+ui/settings-logic.ts               settings types + change detection, unit-tested
 ui/style.css                       shared styles; light/dark via prefers-color-scheme
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
 src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
 src-tauri/capabilities/joan.json   the start page may call open_input, hibernate, start_info
+src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
 src-tauri/src/lib.rs               builder: plugins, commands, setup, run loop
 src-tauri/src/state.rs             AppState (settings, data dir, active shortcut) behind a Mutex
 src-tauri/src/joan.rs              the page window: create / focus / navigate / destroy, placement
-src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback to default
-src-tauri/src/commands.rs          open_input, hibernate, start_info (local start page only)
+src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
+                                   with rollback (Registrar trait), suspend while recording
+src-tauri/src/commands.rs          start page: open_input, hibernate, start_info;
+                                   settings: get_settings, save_settings, suspend_shortcut
+src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close)
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen
 src-tauri/src/keys.rs              page keys per OS (pure), app origin, start-page URL for Ctrl+L
@@ -102,6 +108,29 @@ URLs, no `core:default`).
 | `open_input(input)` | start page, Enter | `input::normalize` with the configured engine → navigate the window |
 | `hibernate()` | start page, Esc | close the window (same path as `--hide`) |
 | `start_info()` | start page, on load | `{ shortcut, platform }` for the hint line |
+| `get_settings()` | settings window | settings + engine and language lists + platform |
+| `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save |
+| `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
+
+`capabilities/settings.json` grants the `settings` window the last three plus
+`core:window:allow-close` (its Cancel / Save buttons close it).
+
+## Settings
+
+`settings.json` lives in the app's config folder:
+
+| OS | Path |
+|---|---|
+| Windows | `%APPDATA%\io.github.memoliertorerr.littlejoan\settings.json` |
+| macOS | `~/Library/Application Support/io.github.memoliertorerr.littlejoan/settings.json` |
+| Linux | `~/.config/io.github.memoliertorerr.littlejoan/settings.json` |
+
+The settings window (tray → Settings…, or Cmd+, on macOS) records a shortcut by listening to the
+next key press. While it listens, the active global shortcut is **suspended** (unregistered) so
+pressing it doesn't summon or dismiss the page window; it is resumed when recording stops, when
+Save runs, and when the window closes for any reason. A new shortcut is registered before the
+old one is forgotten: if registration fails, the old one is registered again and the window
+shows the error.
 
 ## The page
 

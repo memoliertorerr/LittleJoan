@@ -1,13 +1,18 @@
-//! Commands the local start page may call. They are restricted to the "joan" window by
-//! build.rs's app manifest and capabilities/joan.json; remote pages get no IPC at all.
+//! Commands the local pages may call. build.rs's app manifest makes each one need a permission:
+//! capabilities/joan.json grants the start page its three, capabilities/settings.json grants the
+//! settings window its three. Remote pages get no IPC at all.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime, WebviewWindow};
 
-use crate::input;
+use crate::input::{self, SearchEngine};
 use crate::joan;
+use crate::settings::{self, Settings};
+use crate::shortcut::{self, PluginRegistrar};
+use crate::smoke;
 use crate::state;
 use crate::toggle::Command;
+use crate::translate::{LANGUAGES, is_valid_lang};
 
 /// Opens what the user typed: a web address, or a search with the configured engine.
 #[tauri::command]
@@ -44,4 +49,93 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
         shortcut: state::with(&app, |s| s.active_shortcut.clone()),
         platform: std::env::consts::OS,
     }
+}
+
+/// One option in a settings list.
+#[derive(Debug, Serialize)]
+pub struct Choice {
+    id: String,
+    name: String,
+}
+
+/// Everything the settings window shows.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsView {
+    settings: Settings,
+    engines: Vec<Choice>,
+    languages: Vec<Choice>,
+    platform: &'static str,
+}
+
+#[tauri::command]
+pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
+    SettingsView {
+        settings: state::with(&app, |s| s.settings.clone()),
+        engines: SearchEngine::ALL
+            .iter()
+            .map(|engine| Choice {
+                id: serde_json::to_value(engine)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default(),
+                name: engine.name().to_owned(),
+            })
+            .collect(),
+        languages: LANGUAGES
+            .iter()
+            .map(|(code, name)| Choice {
+                id: (*code).to_owned(),
+                name: (*name).to_owned(),
+            })
+            .collect(),
+        platform: std::env::consts::OS,
+    }
+}
+
+/// The fields the settings window can change.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsInput {
+    shortcut: String,
+    search_engine: SearchEngine,
+    translate_to: String,
+}
+
+/// Validates and applies new settings: the shortcut is swapped live (the old one comes back if
+/// the new one is taken), then everything is saved.
+#[tauri::command]
+pub async fn save_settings<R: Runtime>(
+    app: AppHandle<R>,
+    settings: SettingsInput,
+) -> Result<Settings, String> {
+    if !is_valid_lang(&settings.translate_to) {
+        return Err("Pick a language from the list.".to_owned());
+    }
+    let wanted = settings.shortcut.trim().to_owned();
+    // Recording may have paused the active shortcut; resume it so the swap starts from a known
+    // state.
+    shortcut::set_suspended(&app, false);
+    let old = state::with(&app, |s| s.active_shortcut.clone());
+    shortcut::swap(&PluginRegistrar(&app), old.as_deref(), &wanted)?;
+    smoke::log("shortcut-registered", &wanted);
+    let (dir, updated) = state::with(&app, |s| {
+        s.active_shortcut = Some(wanted.clone());
+        s.settings = Settings {
+            shortcut: wanted,
+            search_engine: settings.search_engine,
+            translate_to: settings.translate_to,
+            ..s.settings.clone()
+        };
+        (s.data_dir.clone(), s.settings.clone())
+    });
+    settings::save(&dir, &updated)
+        .map_err(|err| format!("The new settings work now, but couldn't be saved: {err}"))?;
+    Ok(updated)
+}
+
+/// Pauses (true) or resumes (false) the global shortcut while a new one is being recorded.
+#[tauri::command]
+pub async fn suspend_shortcut<R: Runtime>(app: AppHandle<R>, suspended: bool) {
+    shortcut::set_suspended(&app, suspended);
 }

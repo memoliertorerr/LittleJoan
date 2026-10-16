@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings",
+  "description": "The settings window: read and save settings, pause the shortcut while recording, close itself.",
+  "windows": ["settings"],
+  "permissions": [
+    "allow-get-settings",
+    "allow-save-settings",
+    "allow-suspend-shortcut",
+    "core:window:allow-close"
+  ]
+}

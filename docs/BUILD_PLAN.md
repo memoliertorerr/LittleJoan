@@ -40,13 +40,13 @@
 | LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ✅ done |
 | LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ✅ done |
 | LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ✅ done |
-| LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ⬜ todo |
+| LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ✅ done |
 | LJ7 | Translate page + open in default browser (tray, macOS menu, keys) | standard | auto | ⬜ todo |
 | LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ⬜ todo |
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: phases 1–2 done (PRs #1, #2). Next: phase 3 (LJ6 → LJ7).**
+**Overall status: phases 1–2 done (PRs #1, #2); LJ6 done. Next: LJ7, then the phase-3 PR.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -910,6 +910,24 @@ and watch CI. Paste the verify output, `git log -1 --stat`, and the CI result. I
 red after two honest fix attempts, stop and report — never commit red, never weaken a check to
 get green.
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 13 GB free at the start; `.cache/target` ~1.6 GB.
+- **`languages()` folded into `get_settings`:** the window gets settings, engine list, language
+  list, and platform in one call (three commands instead of four).
+- **Save closes the window** through `core:window:allow-close` (granted only to `settings`);
+  Cancel does the same.
+- **Suspension is tracked in state** (`shortcut_suspended`) and undone on Save, on recorder
+  stop, and on the window's `Destroyed` event — closing the window mid-recording can't leave the
+  app without a shortcut.
+- **Shift alone doesn't count as a modifier** in the recorder (it would steal capital letters);
+  F13–F24 may be used bare.
+- A Python edit of `build.rs` silently didn't apply (rustfmt had rewrapped the line it matched),
+  which tauri-build caught at once ("Permission allow-get-settings not found"). Later scripted
+  edits assert that the text they replace exists.
+- **Not verified locally:** recording and swapping a real shortcut (LJ10).
+- 54 Rust tests, 33 TS tests.
 
 ---
 

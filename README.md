@@ -36,6 +36,20 @@ affiliated with or endorsed by The Browser Company.
   talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
 
+## Settings
+
+Open **Settings…** from the tray / menu-bar icon (or press Cmd+, on macOS while Little Joan is in
+front) to change:
+
+- **Shortcut** — click it, then press the new combination. It needs a modifier (Ctrl, Alt, Cmd,
+  or Super; Shift alone doesn't count). If another app already owns it, Little Joan says so and
+  keeps the old one.
+- **Search with** — Google, DuckDuckGo, Bing, or Brave.
+- **Translate pages to** — the language for "Translate Page".
+
+The default shortcut, Cmd/Ctrl+Shift+Space, can clash with app shortcuts (VS Code's parameter
+hints, Word's non-breaking space); change it here if it does.
+
 ## Build from source
 
 Little Joan is built with [Tauri 2](https://tauri.app) (Rust + the operating system's own

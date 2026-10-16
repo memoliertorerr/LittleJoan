@@ -7,7 +7,9 @@ use tauri::{AppHandle, Runtime};
 
 use crate::keys::PageAction;
 use crate::page_actions;
+use crate::settings_window;
 
+const SETTINGS: &str = "menu-settings";
 const OPEN_LOCATION: &str = "page-open-location";
 const RELOAD: &str = "page-reload";
 const BACK: &str = "page-back";
@@ -24,6 +26,8 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         true,
         &[
             &PredefinedMenuItem::about(app, Some("About Little Joan"), Some(about))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, Some("Quit Little Joan"))?,
         ],
@@ -74,6 +78,10 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 /// Menu events (the app menu and the tray menu share this stream; unknown ids are ignored).
 pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let action = match event.id().as_ref() {
+        SETTINGS => {
+            settings_window::open(app);
+            return;
+        }
         OPEN_LOCATION => PageAction::OpenLocation,
         RELOAD => PageAction::Reload,
         BACK => PageAction::Back,
