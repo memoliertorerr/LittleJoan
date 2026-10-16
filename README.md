@@ -13,6 +13,12 @@ affiliated with or endorsed by The Browser Company.
 > **Status:** under construction. The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
+## Build from source
+
+Little Joan is built with [Tauri 2](https://tauri.app) (Rust + the operating system's own
+webview) and TypeScript. See [docs/architecture.md](docs/architecture.md) for the layout and
+build commands.
+
 ## License
 
 [MIT](LICENSE)

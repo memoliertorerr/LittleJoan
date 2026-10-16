@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev build-essential
+
+      # env.sh puts the toolchain, registry, and target dir under .cache/ — the same layout as
+      # a local build. The runner's preinstalled rustup installs the pinned toolchain there.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .cache/rustup
+            .cache/cargo/registry
+            .cache/cargo/git
+            .cache/target
+          key: verify-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'src-tauri/Cargo.lock') }}
+          restore-keys: verify-${{ runner.os }}-
+
+      - name: Install npm dependencies
+        run: |
+          source scripts/env.sh
+          npm ci
+
+      - name: Rust toolchain
+        run: |
+          source scripts/env.sh
+          rustup toolchain install
+          rustc --version
+
+      - name: Verify (typecheck, lint, tests, UI build, rustfmt, clippy, cargo test)
+        run: |
+          source scripts/env.sh
+          npm run verify

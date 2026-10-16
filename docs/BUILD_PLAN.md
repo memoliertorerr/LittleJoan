@@ -35,7 +35,7 @@
 
 | Step | Scope | Model | Gate | Status |
 |------|-------|-------|------|--------|
-| LJ1 | Scaffold: env + toolchain, Tauri 2 + Vite + TS strict, icons, hibernating tray app, CI verify on 3 OSes | strong | auto | ⬜ todo |
+| LJ1 | Scaffold: env + toolchain, Tauri 2 + Vite + TS strict, icons, hibernating tray app, CI verify on 3 OSes | strong | auto | ✅ done |
 | LJ2 | Pure core modules: input → URL, navigation policy, translate URL, settings model, toggle state machine, CLI args | strong | auto | ⬜ todo |
 | LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ⬜ todo |
 | LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ⬜ todo |
@@ -46,7 +46,7 @@
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: bootstrap committed on `main`; nothing built yet. Next: phase 1 (LJ1 → LJ2).**
+**Overall status: LJ1 done (hibernating tray app, CI verify). Next: LJ2, then the phase-1 PR.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -451,6 +451,22 @@ watch CI on all three OSes. Paste the verify output, `git log -1 --stat`, and th
 it is still red after two honest fix attempts, stop and report — never commit red, never
 weaken a check to get green.
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 15 GB free at the start of the step (the 9.9 GB seen at planning time had grown);
+  after the Rust toolchain (470 MB), the crate registry (~800 MB, includes the Windows/Linux
+  crates fetched during research), node_modules (100 MB), and the first clippy + test build
+  (`.cache/target` 1.0 GB), 14 GB free.
+- **Tray icon names differ from the prompt:** the macOS template images are
+  `src-tauri/icons/tray-template.png` / `tray-template@2x.png`; Windows and Linux use the
+  full-colour `icons/32x32.png` instead of a black glyph, because a black icon disappears on
+  Windows 11's dark taskbar.
+- **`tauri icon` also emits Android, iOS, and Windows Store icons.** `npm run icons` now writes
+  them to `.cache/icons/generated` and `scripts/copy-icons.mts` copies only the desktop set.
+- **No `capabilities/` directory yet:** tauri-build 2.7 compiles without one, so none was
+  created (LJ3 adds the first capability with the first window).
+- Resolved versions: vitest 5.0.5, tauri 2.12.4, wry 0.57.0, tao 0.37.1.
 
 ---
 
