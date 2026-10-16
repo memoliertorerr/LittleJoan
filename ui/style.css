@@ -50,6 +50,17 @@ body {
   border-color: var(--accent);
 }
 
+.hint,
+.error {
+  margin: 10px 2px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.error {
+  color: #d93025;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

@@ -28,14 +28,22 @@ scripts/png.mts                    dependency-free PNG encoder
 scripts/icon-geometry.mts          the original icon artwork as pure shape functions (+ test)
 scripts/make-icons.mts             renders the app icon and the macOS tray template
 scripts/copy-icons.mts             copies the desktop icon set from `tauri icon` output
-ui/index.html, ui/start.ts         the start page (placeholder until LJ3)
+ui/index.html, ui/start.ts         the start page: one field; DOM glue only
+ui/start-logic.ts                  start page logic (Enter / Esc / ?u= prefill), unit-tested
+ui/lib/shortcut.ts                 accelerator → display text ("⌘⇧Space", "Ctrl+Shift+Space")
 ui/style.css                       shared styles; light/dark via prefers-color-scheme
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
-src-tauri/build.rs                 tauri-build
+src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
+src-tauri/capabilities/joan.json   the start page may call open_input, hibernate, start_info
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
-src-tauri/src/lib.rs               builder, setup, run loop (prevent exit on last window)
+src-tauri/src/lib.rs               builder: plugins, commands, setup, run loop
+src-tauri/src/state.rs             AppState (settings, data dir, active shortcut) behind a Mutex
+src-tauri/src/joan.rs              the page window: create / focus / navigate / destroy, placement
+src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback to default
+src-tauri/src/commands.rs          open_input, hibernate, start_info (local start page only)
+src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/tray.rs              tray icon + menu (Quit)
 src-tauri/src/input.rs             start-field input → http(s) URL or a search (SearchEngine)
 src-tauri/src/navigation.rs        which URLs the page may navigate to / hand to the OS browser
@@ -45,6 +53,51 @@ src-tauri/src/toggle.rs            the toggle table: (window state, command) →
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide parsing
 .github/workflows/ci.yml           verify on ubuntu-latest, windows-latest, macos-latest
 ```
+
+## Lifecycle
+
+```
+launch ──► hibernating: tray icon + global shortcut, no window, no webview
+              │  shortcut / --toggle / --show [url] / second launch
+              ▼
+           joan window created (start page, field focused) ──Enter──► page fills the window
+              │  shortcut while focused / Esc on start page / close button / --hide
+              ▼
+           window + webview destroyed (page discarded, size remembered) ──► hibernating
+```
+
+- Every request goes through `toggle::decide` (table below) and `joan::handle`, which runs off
+  the main thread (`joan::dispatch`): building a webview window from the main thread can
+  deadlock on Windows. A lifecycle mutex keeps two quick presses from creating two windows.
+- The window opens centred in the work area of the monitor under the mouse cursor, at the last
+  size the user left it (logical pixels, saved on close unless fullscreen/maximized/minimized).
+- **Single instance:** `tauri-plugin-single-instance` forwards a second launch's arguments to
+  the running app (`--toggle`, `--show [url]`, `--hide`; no flags = `--show`). On Linux it
+  needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
+- **Global shortcut:** registered from settings; if it fails to parse or is taken, the default
+  (`CommandOrControl+Shift+Space`) is tried; if that fails too, the app still runs. Linux
+  global shortcuts work on X11 only — on Wayland, bind `little-joan --toggle` in the desktop's
+  keyboard settings.
+
+## Commands and capabilities
+
+Remote pages get no IPC. `build.rs` declares the app's commands in an app manifest, which makes
+each one require a permission; `capabilities/joan.json` grants the local pages of the `joan`
+window exactly `allow-open-input`, `allow-hibernate`, and `allow-start-info` (no `remote`
+URLs, no `core:default`).
+
+| Command | Called by | Does |
+|---|---|---|
+| `open_input(input)` | start page, Enter | `input::normalize` with the configured engine → navigate the window |
+| `hibernate()` | start page, Esc | close the window (same path as `--hide`) |
+| `start_info()` | start page, on load | `{ shortcut, platform }` for the hint line |
+
+## Smoke log
+
+When `LITTLEJOAN_SMOKE_LOG` names a file, the app appends `<unix millis> <event>[ <detail>]`
+lines: `started`, `shortcut-registered <accel>`, `shortcut-failed <reason>`,
+`window-created`, `hibernated` (more events arrive with later steps). Without the variable
+nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 

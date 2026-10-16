@@ -21,6 +21,8 @@ tauri = { version = "2.12", features = ["tray-icon", "image-png"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
+tauri-plugin-global-shortcut = "2.4"
+tauri-plugin-single-instance = "2.5"
 
 [profile.dev]
 # No debug info: it would multiply the size of target/ on a tight local disk.

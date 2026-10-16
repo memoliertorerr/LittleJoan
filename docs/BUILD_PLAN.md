@@ -37,7 +37,7 @@
 |------|-------|-------|------|--------|
 | LJ1 | Scaffold: env + toolchain, Tauri 2 + Vite + TS strict, icons, hibernating tray app, CI verify on 3 OSes | strong | auto | ✅ done |
 | LJ2 | Pure core modules: input → URL, navigation policy, translate URL, settings model, toggle state machine, CLI args | strong | auto | ✅ done |
-| LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ⬜ todo |
+| LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ✅ done |
 | LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ⬜ todo |
 | LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ⬜ todo |
 | LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ⬜ todo |
@@ -46,7 +46,7 @@
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: phase 1 done (LJ1–LJ2: hibernating tray app, CI verify, pure core). Next: phase 2 (LJ3 → LJ5).**
+**Overall status: phase 1 done (PR #1); LJ3 done. Next: LJ4, LJ5, then the phase-2 PR.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -660,6 +660,27 @@ none exists) and watch CI. Paste the verify output, `git log -1 --stat`, and the
 it is still red after two honest fix attempts, stop and report — never commit red, never
 weaken a check to get green.
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 14 GB free at the start; `.cache/target` 1.4 GB after the step.
+- **Webview data directory:** set only when `LITTLEJOAN_DATA_DIR` is set (development). The
+  prompt said "always `<data dir>/webview`", but the data dir is the *config* folder, which on
+  Windows is the roaming profile — browsing caches don't belong there. Shipped builds keep each
+  engine's default location (WebView2: `%LOCALAPPDATA%\<identifier>\EBWebView`).
+- **`start_info` returns `{ shortcut, platform }`;** the `?u=` prefill is read by the page
+  itself. `ui/lib/shortcut.ts` (display formatting) was created here for the hint line; LJ6
+  extends it with the recorder mapping.
+- **CSP gained `connect-src 'self' ipc: http://ipc.localhost`:** tauri-codegen 2.7 doesn't add
+  the IPC origins to a custom CSP, and without them IPC falls back to postMessage after a CSP
+  violation.
+- `get_window` is behind Tauri's `unstable` feature, so lifecycle code works with
+  `get_webview_window` everywhere.
+- **Not verified locally (Ground Rule 7):** that the window actually appears, takes focus, and
+  closes — the app is launched for the first time in CI (LJ9) and on real desktops (LJ10).
+  Local evidence: the ACL compiled to a `joan` capability that is `local: true` with exactly
+  the three permissions.
+- 37 Rust tests, 19 TS tests.
 
 ---
 

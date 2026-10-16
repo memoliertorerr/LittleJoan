@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "joan",
+  "description": "The page window's local start page: open what was typed, close, read the hint.",
+  "windows": ["joan"],
+  "permissions": ["allow-open-input", "allow-hibernate", "allow-start-info"]
+}

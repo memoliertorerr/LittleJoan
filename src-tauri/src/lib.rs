@@ -4,9 +4,14 @@
 //! docs/architecture.md for the lifecycle.
 
 pub mod cli;
+pub mod commands;
 pub mod input;
+pub mod joan;
 pub mod navigation;
 pub mod settings;
+pub mod shortcut;
+pub mod smoke;
+pub mod state;
 pub mod toggle;
 pub mod translate;
 
@@ -14,15 +19,40 @@ mod tray;
 
 use tauri::RunEvent;
 
+use crate::toggle::Command;
+
 /// Builds and runs the app. Returns only when the user quits.
 pub fn run() {
     let app = tauri::Builder::default()
+        // First: a second launch hands its arguments to the running instance and exits.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            joan::dispatch(app, cli::parse_args(&argv).unwrap_or(Command::Show(None)));
+        }))
+        .plugin(shortcut::plugin())
+        .invoke_handler(tauri::generate_handler![
+            commands::open_input,
+            commands::hibernate,
+            commands::start_info
+        ])
+        .on_window_event(joan::on_window_event)
         .setup(|app| {
+            smoke::log("started", "");
+
             // A menu-bar utility: no Dock icon on macOS.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            tray::create(app.handle())?;
+            let handle = app.handle();
+            state::init(handle)?;
+            tray::create(handle)?;
+            shortcut::register_from_settings(handle);
+
+            // A first launch with flags (e.g. `--show <url>`) acts on them; without flags
+            // Little Joan starts hibernating.
+            let args: Vec<String> = std::env::args().collect();
+            if let Some(command) = cli::parse_args(&args) {
+                joan::dispatch(handle, command);
+            }
             Ok(())
         })
         .build(tauri::generate_context!());
