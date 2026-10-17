@@ -28,8 +28,13 @@ export interface CommandBar {
   onKey(event: KeyboardEvent): boolean;
 }
 
-/** `shown` gives the open page's address ("" = none). */
-export function commandBar(field: HTMLInputElement, list: HTMLElement, shown: () => string): CommandBar {
+/** `shown` gives the open page's address ("" = none); `showHistory` switches to the history view. */
+export function commandBar(
+  field: HTMLInputElement,
+  list: HTMLElement,
+  shown: () => string,
+  showHistory: () => void,
+): CommandBar {
   let rows: RowList = EMPTY;
   let selected: number | null = null;
   /** What the user typed, without the inline completion. */
@@ -126,6 +131,9 @@ export function commandBar(field: HTMLInputElement, list: HTMLElement, shown: ()
         break;
       case "settings":
         void invoke("open_settings", {});
+        break;
+      case "history":
+        showHistory();
         break;
       case "command":
       case "copy":

@@ -72,7 +72,7 @@
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
 | LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ✅ done |
 | LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ✅ done |
-| LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ⬜ todo |
+| LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ✅ done |
 | LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ⬜ todo |
 | LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ⬜ todo |
 | LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ⬜ todo |
@@ -108,9 +108,9 @@ once its CI is green (CLAUDE.md, standing exception). Phase 12 (LJ20 → LJ21: l
 close and quit on all three OSes; local history with frecency) was PR #13, merged. Phase 13
 (LJ22 → LJ24: every trusted screen in the bar webview and no IPC at all for the page webview, the
 command bar with suggestions, the Little Arc-style toolbar with the macOS traffic lights inside
-it; it opened with `lj-step-20-fix2` for the macOS abort `main`'s CI had shown) is PR #14 on
-`lj/p13-command-bar`, merged once verify, package and smoke are green. Next: phase 14 (LJ25 →
-LJ26).**
+it; it opened with `lj-step-20-fix2` for the macOS abort `main`'s CI had shown) was PR #14,
+merged. Phase 14 (LJ25 → LJ26: the history view, the tabbed Settings window) is in progress on
+`lj/p14-history-settings`.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -3078,6 +3078,61 @@ phase-14 PR into main as a draft, and watch CI until every job is green (two hon
 then stop). Look at history.png.
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **`history_top` / `history_search` are removed** (the Deferred follow-up from LJ23): the
+  history view needs every page with its latest visit time and filters as you type in
+  TypeScript (the Verify puts the search filter in `ui/history/logic.ts`), which neither command
+  gave. In their place `history_list()` returns every record, latest visit first, as `{ url,
+  title, host, lastVisit, visitCount }` (bar only; empty with no window), and logs
+  `history-list <n>`. Their permission files went with them; `History::search` / `top_sites`
+  stay (suggest.rs uses them).
+- **`history_clear(range)`** (`hour` \| `day` \| `week` \| `all`, the bar and — as this prompt
+  says — already the settings window's capability for LJ26): the pure part is
+  `history/manage.rs` (a child module, so `history.rs` stays near its size; 6 tests): the visits
+  at or after the range's start go (a visit stamped in the future too), a page left without
+  visits goes, one with older visits keeps them with its count lowered. **The ranges are rolling
+  windows** (the last hour, 24 hours, 7 days): Rust has no local calendar without a new
+  dependency, so the view's choices say "Last hour", "Last 24 hours", "Last 7 days",
+  "Everything" rather than the prompt's "today / this week", which would have promised a local
+  day the clear doesn't use.
+- **Removing and clearing rewrite `history.json` at once** (`history_store::edit_in`, 3 tests
+  with a temp folder: with a window open, memory and file both change; with none, the file is
+  read, changed and written without loading anything into `AppState`; "everything" replaces
+  even an unreadable file, a smaller range leaves it alone). `history_remove` now returns
+  `Result<bool, String>`. One `FILE` lock (it replaced `SAVING`) now covers every
+  read-modify-write of the file and every change of the window's history — open, close, the
+  autosave's snapshot + write, remove, clear — taken before the app state's lock, so an
+  autosave's older snapshot can't land after a clear.
+- **The view** (`ui/history/`: `logic.ts` 19 tests, `view.ts` 3 tests with a stand-in document
+  that refuses `innerHTML`, `history.ts` glue, `history.css`): **one row per page at its latest
+  visit** (the store keeps one record per URL, and × removes the record), grouped by the local
+  day of that visit — Today, Yesterday, then "Monday, October 12" (with the year when it isn't
+  this one; `Intl`, so the system's language). Rows reuse the command bar's look (site icon,
+  "Title — site", plus the time and a ×). Choices this step made: Enter with no row chosen opens
+  the first one; Shift+Delete removes (Delete alone edits the search field); Esc first closes
+  the clear choices; 200 rows are drawn, 200 more when the list is scrolled to its end; the
+  clear choices start on the smallest range and need a second click (Clear).
+- **How it opens:** `PageAction::History` — Ctrl+Y in `keys.rs` (Windows and Linux, through the
+  existing WebView2 / GTK hooks, so also while the bar has the keyboard), Cmd+Y as a View → History
+  item in `menu.rs` — runs `bar::show_history`: open the overlay (which tells the bar first),
+  focus the bar, `window.littleJoan.showHistory()`; not during element fullscreen. The command
+  bar's built-in **History** row (`rows.ts` `builtInCommands`, a clock icon) shows the view
+  without Rust. It appears when the typed text starts "history" (two letters or more) or
+  contains the word; **built-in commands always find room among the 8 rows** (history matches
+  make way), extension commands still take what is left.
+- **The bar** keeps the panel (command / history) itself: the body gets a third view class,
+  `history` (`bar-markup.test.ts` now checks it too, in every stylesheet `bar.html` links);
+  opening or closing the overlay starts again at the command bar.
+- **Not in the prompt's file list but needed:** `history_store.rs` (the store moved there in
+  LJ21), `bar.rs` (`show_history`), `lib.rs`, `ui/command/{rows,view,command}.ts` (the History
+  row), `ui/bar.html`, `ui/bar-markup.test.ts`, `scripts/ci/smoke-command.mts` (+ test).
+- **Smoke:** after `command-typing.png`, Ctrl+Y (xdotool; SendKeys `^y`; a Swift key event with
+  the Command flag on macOS, best effort like typing) must log `history-view` and then a
+  `history-list` of at least one page (`historyViewFailures`, 3 tests); then `history.png`.
+- `npm run verify`: 168 TS tests, 159 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.2 GB.
+
 ### LJ26 — Settings window with tabs · standard · auto
 
 **Verify:** `npm run verify` green, including vitest tests for `ui/settings-logic.ts` (tab
@@ -3552,8 +3607,14 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   script turns a double click on a drag region into `internal_toggle_maximize`, which needs
   `core:window:allow-internal-toggle-maximize`; the bar has only `allow-start-dragging` (what
   LJ24 named), so a double click does nothing.
-- **`history_top` / `history_search` have no caller** since LJ23 (the command bar uses
-  `suggest`). They stay in the bar's capability for the history view (LJ25) to use or remove.
+- ~~**`history_top` / `history_search` have no caller**~~ since LJ23 (the command bar uses
+  `suggest`). They stay in the bar's capability for the history view (LJ25) to use or remove. →
+  *Removed by LJ25: the history view uses `history_list` and filters in TypeScript.*
+- **Ctrl+Y on a page is no longer redo on Windows** (surfaced by LJ25). The plan's history key
+  is Ctrl+Y on Windows and Linux, caught natively before the page sees it; in WebView2 (as in
+  Chromium) Ctrl+Y was also "redo" in text fields, so pages lose it there (Ctrl+Shift+Z still
+  redoes). WebKitGTK has no Ctrl+Y binding. Option: Ctrl+H (Chrome's history key) on Windows and
+  Linux instead — the owner's call.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

@@ -9,7 +9,7 @@ use tauri::{AppHandle, Runtime};
 
 use crate::autostart;
 use crate::bar;
-use crate::history::{Row, VisitKind};
+use crate::history::{ClearRange, Listed, VisitKind};
 use crate::history_store;
 use crate::input::{self, SearchEngine};
 use crate::joan;
@@ -213,24 +213,15 @@ pub async fn save_settings<R: Runtime>(
     Ok(updated)
 }
 
-/// The most rows a history command returns.
-const MAX_ROWS: usize = 50;
-
-/// Up to `n` top sites from history, by frecency (the bar's empty command bar, LJ23).
-/// Read-only; rows are `{ url, title, host, score }`.
+/// Every page in history, latest visit first: `[{ url, title, host, lastVisit, visitCount }]`
+/// (the history view; it groups, searches and draws them as text). Empty while no window is
+/// open — only the bar, which lives in that window, asks.
 #[tauri::command]
-pub async fn history_top<R: Runtime>(app: AppHandle<R>, n: usize) -> Vec<Row> {
-    history_store::top(&app, n.min(MAX_ROWS))
-}
-
-/// Up to `limit` history records matching every word of `query` (the bar, LJ23). Read-only.
-#[tauri::command]
-pub async fn history_search<R: Runtime>(
-    app: AppHandle<R>,
-    query: String,
-    limit: usize,
-) -> Vec<Row> {
-    history_store::search(&app, &query, limit.min(MAX_ROWS))
+pub async fn history_list<R: Runtime>(app: AppHandle<R>) -> Vec<Listed> {
+    let pages = history_store::list(&app);
+    // A count only, never what is in it.
+    smoke::log("history-list", &pages.len().to_string());
+    pages
 }
 
 /// The command bar's suggestions for what is typed (suggest.rs): top sites (or the starters)
@@ -254,10 +245,22 @@ pub async fn suggest<R: Runtime>(app: AppHandle<R>, query: String) -> Vec<Sugges
     rows
 }
 
-/// Forgets one history record (Shift+Delete on a suggestion). Returns whether there was one.
+/// Forgets one history record (Shift+Delete on a suggestion, × in the history view) and
+/// rewrites history.json at once. Returns whether there was one.
 #[tauri::command]
-pub async fn history_remove<R: Runtime>(app: AppHandle<R>, url: String) -> bool {
-    history_store::remove(&app, &url)
+pub async fn history_remove<R: Runtime>(app: AppHandle<R>, url: String) -> Result<bool, String> {
+    history_store::remove(&app, &url).map_err(|err| format!("Couldn't save the history: {err}"))
+}
+
+/// Forgets the visits of the last hour, day or week, or everything (`range`: "hour", "day",
+/// "week", "all"), and rewrites history.json at once — with no window open, the file itself (the
+/// settings window's Privacy tab). Returns how many pages went.
+#[tauri::command]
+pub async fn history_clear<R: Runtime>(
+    app: AppHandle<R>,
+    range: ClearRange,
+) -> Result<usize, String> {
+    history_store::clear(&app, range).map_err(|err| format!("Couldn't save the history: {err}"))
 }
 
 /// Opens the settings window (the command bar's "Settings & extensions" row). `tab` will pick

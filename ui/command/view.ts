@@ -58,8 +58,11 @@ export function siteIcon<E extends ElementLike>(doc: DocumentLike<E>, host: stri
   return box;
 }
 
-/** A row's icon: its site's, or for Settings its own symbol (style.css). */
+/** A row's icon: its site's, or for Settings and built-in commands their own symbol (style.css). */
 function icon<E extends ElementLike>(doc: DocumentLike<E>, row: Row): E {
+  if (row.icon !== undefined) {
+    return siteIcon(doc, "", row.icon);
+  }
   return siteIcon(doc, row.kind === "settings" ? "" : row.host, row.kind);
 }
 

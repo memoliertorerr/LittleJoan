@@ -74,10 +74,10 @@ pub fn run() {
             commands::save_settings,
             commands::suspend_shortcut,
             commands::set_start_at_login,
-            commands::history_top,
-            commands::history_search,
+            commands::history_list,
             commands::suggest,
             commands::history_remove,
+            commands::history_clear,
             commands::open_settings
         ])
         .on_window_event(|window, event| {

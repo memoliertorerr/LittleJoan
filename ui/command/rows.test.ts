@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  HISTORY_ROW,
   MAX_SUGGESTIONS,
   SETTINGS_ROW,
   autofillFor,
   buildRows,
+  builtInCommands,
   faviconUrl,
   hueFor,
   initialSelection,
@@ -103,6 +105,33 @@ describe("rows while typing", () => {
     expect(rows.slice(0, 2).map((row) => row.kind)).toEqual(["history", "search"]);
     expect(rows.filter((row) => row.kind === "command")).toHaveLength(0);
     expect(rows.at(-1)).toEqual(SETTINGS_ROW);
+  });
+
+  it("offers the History command for its name, after the matches and before extensions'", () => {
+    const command: Row = { kind: "command", title: "Snake", domain: "", host: "", action: { kind: "command", id: "snake" } };
+    const { rows } = buildRows("hist", [SMOKE, GOOGLE], { commands: () => [command] });
+    expect(rows.map((row) => row.title)).toEqual([SMOKE.title, "Search Google for “hist”", "History", "Snake", SETTINGS_ROW.title]);
+    expect(rows[2]).toEqual(HISTORY_ROW);
+    expect(HISTORY_ROW.action).toEqual({ kind: "history" });
+    expect(HISTORY_ROW.icon).toBe("clock");
+  });
+
+  it("keeps room for the History command among many matches", () => {
+    const many = Array.from({ length: 12 }, (_, i): Suggestion => ({ ...EXAMPLE, url: `https://hi${i}.test/`, host: `hi${i}.test` }));
+    const { rows } = buildRows("hi", [...many, GOOGLE]);
+    expect(rows).toHaveLength(MAX_SUGGESTIONS + 1);
+    expect(rows.at(-2)).toEqual(HISTORY_ROW);
+    expect(rows.at(-1)).toEqual(SETTINGS_ROW);
+  });
+
+  it("matches History on its start (two letters or more) or the whole word", () => {
+    for (const query of ["hi", "HIST", " history ", "clear history", "history please"]) {
+      expect(builtInCommands(query), query).toEqual([HISTORY_ROW]);
+    }
+    for (const query of ["h", "", "historyx", "his tory", "story", "chistory"]) {
+      expect(builtInCommands(query), query).toEqual([]);
+    }
+    expect(buildRows("", [], {}).rows).not.toContainEqual(HISTORY_ROW);
   });
 
   it("only history rows can be removed", () => {

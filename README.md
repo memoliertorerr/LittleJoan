@@ -74,8 +74,13 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   best match from your history — and when what you type starts a site's address, the address is
   completed in the field (Tab accepts it) —, a search with your search engine, then more matches.
   ↑/↓ choose a row, Enter opens it (with no row chosen, Enter opens what you typed), Shift+Delete
-  removes a page from your history, × or Esc closes the command bar. The last row, **Settings &
-  extensions**, opens Settings.
+  removes a page from your history, × or Esc closes the command bar. Typing "history" (or just
+  "hi") offers **History**. The last row, **Settings & extensions**, opens Settings.
+- **History:** press **Ctrl+Y** (Windows, Linux) or **Cmd+Y** (macOS) — or pick History in the
+  command bar — to see the pages you opened, by day (Today, Yesterday, then dates), each with its
+  time. Type to search them; click one (or ↑/↓ and Enter) to open it; × or Shift+Delete removes a
+  page; **Clear history…** removes the last hour, the last 24 hours, the last 7 days, or
+  everything. Esc returns to the command bar.
 - **The toolbar** stays at the top of the window while a page is open: a back button (once
   there is somewhere to go back to), the site's icon and domain in the middle, and **open in
   your default browser** on the right (the page moves there and Little Joan goes back to sleep).
@@ -100,6 +105,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | Reload | Ctrl+R, F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
+  | History | Ctrl+Y | Cmd+Y |
   | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |
 
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
@@ -157,9 +163,10 @@ hints, Word's non-breaking space); change it here if it does.
 - **Site icons in the command bar** are loaded straight from each suggested site
   (`https://<site>/favicon.ico`, without a referrer); nothing else is fetched for suggestions.
 - **History stays on your computer.** Little Joan records the pages you open (address, title,
-  when) in `history.json` next to its settings, for its own suggestions; it is never sent
-  anywhere. Its own pages aren't recorded, and nothing is while `"rememberHistory": false` is
-  in `settings.json` (a switch in Settings comes with the history view).
+  when) in `history.json` next to its settings, for its own suggestions and the history view; it
+  is never sent anywhere. Its own pages aren't recorded, and nothing is while
+  `"rememberHistory": false` is in `settings.json` (a switch in Settings comes next). Removing a
+  page or clearing history in the history view rewrites `history.json` at once.
 - Web pages get no access to Little Joan's internals: the web view that shows pages can't call
   into the app at all. Only Little Joan's own screens — the bar (address bar and command bar) and
   Settings, each in a web view of its own — can.

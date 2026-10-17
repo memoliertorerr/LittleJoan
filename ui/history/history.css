@@ -1,0 +1,199 @@
+/* The history view, in the command bar's overlay (the body has "overlay" and "history"): its own
+   header (back, search, "Clear history…") and a list by day. Rows share the command bar's look
+   (style.css: .row, .row-icon, .row-text). */
+
+.bar-body.history .command > .bar-top,
+.bar-body.history .panel {
+  display: none;
+}
+
+.history-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.history-panel[hidden],
+.bar-body.toolbar .history-panel {
+  display: none;
+}
+
+.history-top {
+  gap: 8px;
+}
+
+.bar-body.overlay .history-top {
+  padding-left: 8px;
+}
+
+.text-button {
+  flex: none;
+  height: 28px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.text-button:hover,
+.text-button:focus-visible,
+.text-button[aria-expanded="true"] {
+  background: var(--field-bg);
+  outline: none;
+}
+
+.text-button.danger {
+  color: #ffffff;
+  background: #d93025;
+}
+
+.text-button.danger:hover,
+.text-button.danger:focus-visible {
+  background: #b3261e;
+}
+
+.text-button:disabled {
+  opacity: 0.5;
+}
+
+/* "Clear history from [Last hour] [Last 24 hours] [Last 7 days] [Everything]  Cancel  Clear" */
+.history-clearing {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 10px 12px 10px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.history-clearing[hidden] {
+  display: none;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.choice {
+  height: 26px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--field-bg);
+  border: 0;
+  border-radius: 13px;
+  cursor: pointer;
+}
+
+.choice[aria-pressed="true"] {
+  color: #ffffff;
+  background: var(--select-bg);
+}
+
+.history-clearing-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.history-status {
+  flex: none;
+  margin: 8px 16px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.history-status[hidden] {
+  display: none;
+}
+
+.history-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 6px 6px;
+}
+
+.history-day {
+  padding: 12px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.history-time {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.history-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.history-row:hover .history-remove,
+.history-row.selected .history-remove {
+  opacity: 1;
+}
+
+.history-remove:hover {
+  color: var(--fg);
+  background: var(--field-bg);
+}
+
+.row.selected .history-time,
+.row.selected .history-remove {
+  color: #ffffff;
+}
+
+.row.selected .history-remove:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.history-empty {
+  margin: 28px 16px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.history-empty[hidden] {
+  display: none;
+}
+
+/* The command bar's built-in "History" row: a clock. */
+.row-icon-clock {
+  background: center / 16px no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='8' r='5.8'/%3E%3Cpath d='M8 4.6V8l2.3 1.5'/%3E%3C/svg%3E");
+}
+
+.row.selected .row-icon-clock {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='8' r='5.8'/%3E%3Cpath d='M8 4.6V8l2.3 1.5'/%3E%3C/svg%3E");
+}

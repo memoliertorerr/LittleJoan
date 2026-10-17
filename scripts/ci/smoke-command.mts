@@ -1,6 +1,8 @@
-// Smoke-log rules for the command bar (pure, unit-tested; scripts/ci/smoke.mts uses them). The
-// app logs `suggestions <rows> first=<site> typed=<characters>` for every suggest() call the bar
-// makes (src-tauri/src/commands.rs) — counts and a site, never the typed text.
+// Smoke-log rules for the command bar and its history view (pure, unit-tested;
+// scripts/ci/smoke.mts uses them). The app logs `suggestions <rows> first=<site>
+// typed=<characters>` for every suggest() call the bar makes, `history-view` when Ctrl/Cmd+Y
+// opens the history view and `history-list <rows>` when the view asks for the pages
+// (src-tauri/src/commands.rs, bar.rs) — counts and a site, never the typed text or an address.
 import type { LogEvent } from "./smoke-log.mts";
 
 export interface SuggestionsEvent {
@@ -76,4 +78,34 @@ export function commandBarFailures(events: LogEvent[], check: CommandBarCheck): 
     failures.push(`typing "${TYPED}" in the command bar never found ${SMOKE_SITE} first`);
   }
   return failures;
+}
+
+/** A `history-list <rows>` event's count (the history view asked for the pages); else undefined. */
+export function parseHistoryList(event: LogEvent): number | undefined {
+  if (event.event !== "history-list" || !/^\d+$/.test(event.detail)) {
+    return undefined;
+  }
+  return Number(event.detail);
+}
+
+/**
+ * Ctrl/Cmd+Y reached the app (`history-view`, the page action) and the bar's history view then
+ * listed history with at least one page (`history-list <n>`, n ≥ 1).
+ */
+export function sawHistoryView(events: LogEvent[]): boolean {
+  const opened = events.findIndex((e) => e.event === "history-view");
+  return opened >= 0 && events.slice(opened).some((e) => (parseHistoryList(e) ?? 0) > 0);
+}
+
+export interface HistoryViewCheck {
+  /** The keys were driven (Linux, Windows; macOS is best effort). */
+  driven: boolean;
+}
+
+/** The history view opened with Ctrl/Cmd+Y and listed the smoke page's history. */
+export function historyViewFailures(events: LogEvent[], check: HistoryViewCheck): string[] {
+  if (!check.driven || sawHistoryView(events)) {
+    return [];
+  }
+  return ["Ctrl/Cmd+Y never opened the history view with the smoke page's history in it"];
 }

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { commandBarFailures, parseSuggestions, sawSmokeTopSite, sawTypedMatch } from "./smoke-command.mts";
+import {
+  commandBarFailures,
+  historyViewFailures,
+  parseHistoryList,
+  parseSuggestions,
+  sawHistoryView,
+  sawSmokeTopSite,
+  sawTypedMatch,
+} from "./smoke-command.mts";
 import { parseLog } from "./smoke-log.mts";
 
 const GOOD = `1 window-created
@@ -56,5 +64,41 @@ describe("the command bar check", () => {
     const untyped = parseLog(GOOD.replace("7 suggestions 2 first=127.0.0.1:5000 typed=3\n", ""));
     expect(commandBarFailures(untyped, { typing: false })).toEqual([]);
     expect(commandBarFailures(untyped, { typing: true })).toEqual([expect.stringContaining('typing "127"')]);
+  });
+});
+
+describe("the history view check", () => {
+  const OPENED = `1 window-created
+2 suggestions 2 first=127.0.0.1:5000 typed=3
+3 history-view
+4 history-list 3
+5 hibernated
+`;
+
+  it("parses the listed count", () => {
+    const [event] = parseLog("1 history-list 12\n");
+    expect(event && parseHistoryList(event)).toBe(12);
+    const [bad] = parseLog("1 history-list many\n");
+    expect(bad && parseHistoryList(bad)).toBeUndefined();
+    const [other] = parseLog("1 title history-list 3\n");
+    expect(other && parseHistoryList(other)).toBeUndefined();
+  });
+
+  it("wants Ctrl/Cmd+Y to open the view and the view to list pages", () => {
+    expect(sawHistoryView(parseLog(OPENED))).toBe(true);
+    expect(historyViewFailures(parseLog(OPENED), { driven: true })).toEqual([]);
+    const empty = parseLog(OPENED.replace("4 history-list 3", "4 history-list 0"));
+    expect(sawHistoryView(empty)).toBe(false);
+    expect(historyViewFailures(empty, { driven: true })).toEqual([expect.stringContaining("Ctrl/Cmd+Y")]);
+    // A list from the command bar's History row alone isn't the key.
+    const rowOnly = parseLog(OPENED.replace("3 history-view\n", ""));
+    expect(sawHistoryView(rowOnly)).toBe(false);
+    const before = parseLog("1 history-list 3\n2 history-view\n");
+    expect(sawHistoryView(before)).toBe(false);
+  });
+
+  it("is best effort where the keys aren't driven", () => {
+    expect(historyViewFailures(parseLog("1 window-created\n"), { driven: false })).toEqual([]);
+    expect(historyViewFailures(parseLog("1 window-created\n"), { driven: true })).toHaveLength(1);
   });
 });

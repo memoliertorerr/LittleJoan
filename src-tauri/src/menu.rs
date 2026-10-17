@@ -20,6 +20,7 @@ const OPEN_IN_BROWSER: &str = "page-open-in-browser";
 const RELOAD: &str = "page-reload";
 const BACK: &str = "page-back";
 const FORWARD: &str = "page-forward";
+const HISTORY: &str = "page-history";
 
 pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let about = AboutMetadata {
@@ -90,6 +91,8 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &MenuItem::with_id(app, RELOAD, "Reload", true, Some("CmdOrCtrl+R"))?,
             &MenuItem::with_id(app, BACK, "Back", true, Some("CmdOrCtrl+["))?,
             &MenuItem::with_id(app, FORWARD, "Forward", true, Some("CmdOrCtrl+]"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, HISTORY, "History", true, Some("CmdOrCtrl+Y"))?,
         ],
     )?;
     Menu::with_items(app, &[&app_menu, &file, &edit, &view])
@@ -112,6 +115,7 @@ pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         RELOAD => PageAction::Reload,
         BACK => PageAction::Back,
         FORWARD => PageAction::Forward,
+        HISTORY => PageAction::History,
         _ => return,
     };
     page_actions::perform(app, action);

@@ -5,19 +5,20 @@
 //! while it has changes, and dropped when Little Joan hibernates — nothing extra is held at
 //! rest. Visits are recorded natively from the page webview's load and title events (bar.rs),
 //! so pages need no IPC; nothing is recorded while the "Remember history" setting is off.
-//! History never leaves the machine.
+//! Removing a page or clearing a range (the history view, Settings → Privacy) rewrites the file
+//! at once — with no window open, straight on disk. History never leaves the machine.
 
 use std::fs;
 use std::io;
 use std::path::Path;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Runtime};
 use url::Url;
 
-use crate::history::{HISTORY_FILE, History, Row, VisitKind};
+use crate::history::{ClearRange, HISTORY_FILE, History, Listed, VisitKind};
 use crate::input::SearchEngine;
 use crate::keys;
 use crate::smoke;
@@ -27,8 +28,11 @@ use crate::suggest::{self, Suggestion};
 /// How often unsaved visits are written while the window is open.
 const AUTOSAVE_EVERY: Duration = Duration::from_secs(30);
 
-/// Saves never overlap (the autosave and the close could otherwise share the temp file).
-static SAVING: Mutex<()> = Mutex::new(());
+/// Held across every read-modify-write of history.json and every change of the window's history
+/// (open, close, autosave, remove, clear), so writes never overlap and an older copy can't
+/// overwrite a newer one (an autosave's snapshot landing after a clear). Always taken before the
+/// app state's lock, never inside it.
+static FILE: Mutex<()> = Mutex::new(());
 /// Bumped for every window, so an old autosave loop stops.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
@@ -58,11 +62,18 @@ pub fn load(dir: &Path) -> History {
     )
 }
 
+fn file_lock() -> MutexGuard<'static, ()> {
+    FILE.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 /// Writes `dir/history.json` atomically (a temp file, then a rename over the old one).
 pub fn save(dir: &Path, history: &History) -> io::Result<()> {
-    let _saving = SAVING
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _file = file_lock();
+    save_unlocked(dir, history)
+}
+
+/// `save` for callers that hold the file lock already.
+fn save_unlocked(dir: &Path, history: &History) -> io::Result<()> {
     fs::create_dir_all(dir)?;
     let tmp = dir.join(format!("{HISTORY_FILE}.tmp"));
     fs::write(&tmp, history.to_json())?;
@@ -71,28 +82,33 @@ pub fn save(dir: &Path, history: &History) -> io::Result<()> {
 
 /// The window opened: loads history and starts the autosave loop.
 pub fn open<R: Runtime>(app: &AppHandle<R>) {
-    let dir = state::with(app, |s| s.data_dir.clone());
-    let history = load(&dir);
-    state::with(app, |s| {
-        s.history = Some(OpenHistory {
-            history,
-            ..OpenHistory::default()
+    {
+        let _file = file_lock();
+        let dir = state::with(app, |s| s.data_dir.clone());
+        let history = load(&dir);
+        state::with(app, |s| {
+            s.history = Some(OpenHistory {
+                history,
+                ..OpenHistory::default()
+            });
         });
-    });
+    }
     autosave(app);
 }
 
 /// The window closes: saves what changed and drops the history from memory.
 pub fn close<R: Runtime>(app: &AppHandle<R>) {
     GENERATION.fetch_add(1, Ordering::Relaxed);
+    let _file = file_lock();
     let (dir, open) = state::with(app, |s| (s.data_dir.clone(), s.history.take()));
     if let Some(open) = open.filter(|open| open.dirty) {
         write(&dir, &open.history);
     }
 }
 
+/// Saves (the caller holds the file lock) and logs the outcome.
 fn write(dir: &Path, history: &History) {
-    match save(dir, history) {
+    match save_unlocked(dir, history) {
         Ok(()) => smoke::log("history-saved", &history.entries().len().to_string()),
         Err(err) => eprintln!("little-joan: could not save the history: {err}"),
     }
@@ -117,6 +133,7 @@ fn autosave<R: Runtime>(app: &AppHandle<R>) {
                     continue;
                 }
                 waited = Duration::ZERO;
+                let _file = file_lock();
                 let pending = state::with(&app, |s| {
                     let dir = s.data_dir.clone();
                     let open = s.history.as_mut().filter(|open| open.dirty)?;
@@ -196,17 +213,87 @@ pub fn title_changed<R: Runtime>(app: &AppHandle<R>, url: &Url, title: &str) {
     });
 }
 
-/// Forgets the record of `url` (Shift+Delete on a suggestion). Returns whether there was one.
-/// History that isn't loaded (no window) is left alone.
-pub fn remove<R: Runtime>(app: &AppHandle<R>, url: &str) -> bool {
+/// Forgets the record of `url` (Shift+Delete on a suggestion, × in the history view) and
+/// rewrites history.json at once. Returns whether there was one.
+pub fn remove<R: Runtime>(app: &AppHandle<R>, url: &str) -> io::Result<bool> {
+    edit(app, removing(url))
+}
+
+/// The change `remove` makes: (whether there was a record, whether to rewrite the file).
+fn removing(url: &str) -> impl FnOnce(&mut History, u64) -> (bool, bool) + '_ {
+    move |history, _| {
+        let removed = history.remove(url);
+        (removed, removed)
+    }
+}
+
+/// Forgets the visits of `range` (the history view's "Clear history…", Settings → Privacy) and
+/// rewrites history.json at once — also with no window open, and always for everything (a file
+/// that couldn't be read goes too). Returns how many pages went.
+pub fn clear<R: Runtime>(app: &AppHandle<R>, range: ClearRange) -> io::Result<usize> {
+    edit(app, clearing(range))
+}
+
+/// The change `clear` makes: (pages removed, whether to rewrite the file).
+fn clearing(range: ClearRange) -> impl FnOnce(&mut History, u64) -> (usize, bool) {
+    move |history, now| {
+        let removed = history.clear(range, now);
+        (removed, removed > 0 || range == ClearRange::All)
+    }
+}
+
+/// Every page for the history view, latest visit first (empty while no window is open).
+pub fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<Listed> {
     state::with(app, |s| {
-        let Some(open) = s.history.as_mut() else {
-            return false;
-        };
-        let removed = open.history.remove(url);
-        open.dirty |= removed;
-        removed
+        s.history
+            .as_ref()
+            .map(|open| open.history.list())
+            .unwrap_or_default()
     })
+}
+
+/// Applies `change` under the file lock (so the window can't open or close meanwhile).
+fn edit<R: Runtime, T>(
+    app: &AppHandle<R>,
+    change: impl FnOnce(&mut History, u64) -> (T, bool),
+) -> io::Result<T> {
+    let _file = file_lock();
+    state::with(app, |s| {
+        let dir = s.data_dir.clone();
+        edit_in(&mut s.history, &dir, now_millis(), change)
+    })
+}
+
+/// Applies `change` to the open window's history (`slot`) or, with no window, to the file in
+/// `dir`, and writes history.json at once when `change` says so (its second value). The caller
+/// holds the file lock.
+fn edit_in<T>(
+    slot: &mut Option<OpenHistory>,
+    dir: &Path,
+    now: u64,
+    change: impl FnOnce(&mut History, u64) -> (T, bool),
+) -> io::Result<T> {
+    let mut on_disk;
+    let (history, open) = match slot.as_mut() {
+        Some(open) => (&mut open.history, Some(&mut open.dirty)),
+        None => {
+            on_disk = load(dir);
+            (&mut on_disk, None)
+        }
+    };
+    let (outcome, rewrite) = change(history, now);
+    if rewrite {
+        // Until the file is written, the window still has unsaved changes.
+        if let Some(dirty) = open {
+            *dirty = true;
+            save_unlocked(dir, history)?;
+            *dirty = false;
+        } else {
+            save_unlocked(dir, history)?;
+        }
+        smoke::log("history-saved", &history.entries().len().to_string());
+    }
+    Ok(outcome)
 }
 
 /// The command bar's suggestions for `query` (suggest.rs); with no window open, those of empty
@@ -220,26 +307,6 @@ pub fn suggest<R: Runtime>(
     state::with(app, |s| match s.history.as_ref() {
         Some(open) => suggest::suggestions(&open.history, query, current, engine, now_millis()),
         None => suggest::suggestions(&History::default(), query, current, engine, now_millis()),
-    })
-}
-
-/// Up to `n` top sites (empty while no window is open).
-pub fn top<R: Runtime>(app: &AppHandle<R>, n: usize) -> Vec<Row> {
-    state::with(app, |s| {
-        s.history
-            .as_ref()
-            .map(|open| open.history.top_sites(n, &[], now_millis()))
-            .unwrap_or_default()
-    })
-}
-
-/// Up to `limit` records matching `query` (empty while no window is open).
-pub fn search<R: Runtime>(app: &AppHandle<R>, query: &str, limit: usize) -> Vec<Row> {
-    state::with(app, |s| {
-        s.history
-            .as_ref()
-            .map(|open| open.history.search(query, limit, now_millis()))
-            .unwrap_or_default()
     })
 }
 
@@ -277,6 +344,91 @@ mod tests {
         fs::create_dir_all(&dir).expect("create");
         fs::write(dir.join(HISTORY_FILE), "{ not json").expect("write");
         assert_eq!(load(&dir), History::default());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn two_pages(dir: &Path) -> History {
+        let mut history = History::default();
+        for (address, at) in [("https://a.test/", now_millis()), ("https://b.test/", 1)] {
+            let url = Url::parse(address).expect("url");
+            history.record(&url, Some("T"), VisitKind::Link, at, &keys::app_origin());
+        }
+        save(dir, &history).expect("save");
+        history
+    }
+
+    /// How many records history.json holds, read as plain JSON (`None`: not a history file).
+    fn file_entries(dir: &Path) -> Option<usize> {
+        let text = fs::read_to_string(dir.join(HISTORY_FILE)).ok()?;
+        let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+        Some(value.get("entries")?.as_array()?.len())
+    }
+
+    fn urls(history: &History) -> Vec<&str> {
+        history.entries().iter().map(|e| e.url.as_str()).collect()
+    }
+
+    #[test]
+    fn removing_and_clearing_change_the_open_history_and_rewrite_the_file() {
+        let dir = temp_dir("edit-open");
+        let history = two_pages(&dir);
+        let mut slot = Some(OpenHistory {
+            history,
+            dirty: true,
+            ..OpenHistory::default()
+        });
+        let now = now_millis();
+        let removed = edit_in(&mut slot, &dir, now, removing("https://a.test/")).expect("edit");
+        assert!(removed);
+        let open = slot.as_ref().expect("still open");
+        assert_eq!(urls(&open.history), ["https://b.test/"], "in memory");
+        assert!(!open.dirty, "everything is on disk");
+        assert_eq!(urls(&load(&dir)), ["https://b.test/"], "on disk");
+        let again = edit_in(&mut slot, &dir, now, removing("https://a.test/")).expect("edit");
+        assert!(!again, "already gone");
+
+        let cleared = edit_in(&mut slot, &dir, now, clearing(ClearRange::All)).expect("clear");
+        assert_eq!(cleared, 1);
+        assert!(slot.as_ref().expect("open").history.entries().is_empty());
+        assert!(load(&dir).entries().is_empty());
+        assert_eq!(file_entries(&dir), Some(0));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn with_no_window_the_file_itself_is_rewritten() {
+        let dir = temp_dir("edit-closed");
+        two_pages(&dir);
+        let mut slot = None;
+        // The last hour: a.test was visited just now, b.test long ago.
+        let cleared =
+            edit_in(&mut slot, &dir, now_millis(), clearing(ClearRange::Hour)).expect("clear");
+        assert_eq!(cleared, 1);
+        assert!(slot.is_none(), "nothing is loaded into memory");
+        assert_eq!(urls(&load(&dir)), ["https://b.test/"]);
+        let removed =
+            edit_in(&mut slot, &dir, now_millis(), removing("https://b.test/")).expect("remove");
+        assert!(removed);
+        assert!(load(&dir).entries().is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clearing_everything_replaces_a_bad_file() {
+        let dir = temp_dir("edit-bad");
+        fs::create_dir_all(&dir).expect("create");
+        fs::write(dir.join(HISTORY_FILE), "{ not json").expect("write");
+        let cleared =
+            edit_in(&mut None, &dir, now_millis(), clearing(ClearRange::All)).expect("clear");
+        assert_eq!(cleared, 0);
+        assert_eq!(file_entries(&dir), Some(0));
+        // A smaller range leaves an untouched file alone.
+        fs::write(dir.join(HISTORY_FILE), "{ not json").expect("write");
+        edit_in(&mut None, &dir, now_millis(), clearing(ClearRange::Hour)).expect("clear");
+        assert_eq!(
+            fs::read_to_string(dir.join(HISTORY_FILE)).expect("read"),
+            "{ not json"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

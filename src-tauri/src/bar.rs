@@ -1,6 +1,6 @@
 //! The page window's two webviews: the bar (`joan-bar`, the trusted local page that holds every
-//! screen of the app's own: the toolbar, the command bar, the welcome) and the page
-//! (`joan-page`, where web content loads, with no IPC at all). Built with Tauri's multi-webview
+//! screen of the app's own: the toolbar, the command bar, the welcome, the history view) and the
+//! page (`joan-page`, where web content loads, with no IPC at all). Built with Tauri's multi-webview
 //! API (`unstable` feature), laid out by layout.rs: the bar is either the 40 px toolbar above the
 //! page, or an overlay covering the whole window while the command bar is open (the page is
 //! hidden meanwhile). Every summon opens the overlay; showing a page closes it.
@@ -278,6 +278,22 @@ pub fn focus_bar<R: Runtime>(app: &AppHandle<R>) {
         let _ = bar.set_focus();
         let _ = bar.eval("window.littleJoan && window.littleJoan.focusField()");
     }
+}
+
+/// Opens the command bar's overlay in its history view, the keyboard in its search field
+/// (Ctrl/Cmd+Y: page keys and the macOS menu). Not during element fullscreen, which always wins.
+pub fn show_history<R: Runtime>(app: &AppHandle<R>) {
+    if element_fullscreen() {
+        return;
+    }
+    // Opening the overlay tells the bar first, so the history view comes after (evals run in
+    // order).
+    set_overlay(app, true);
+    if let Some(bar) = app.get_webview(BAR) {
+        let _ = bar.set_focus();
+        let _ = bar.eval("window.littleJoan && window.littleJoan.showHistory()");
+    }
+    smoke::log("history-view", "");
 }
 
 /// Gives the keyboard back to the page.

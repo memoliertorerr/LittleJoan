@@ -39,6 +39,10 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
             PageAction::Forward => page.eval("history.forward()"),
             PageAction::Translate => translate_page(&app),
             PageAction::OpenInBrowser => open_in_browser(&app),
+            PageAction::History => {
+                bar::show_history(&app);
+                Ok(())
+            }
             PageAction::Close => Ok(()),
         };
         if let Err(err) = result {
