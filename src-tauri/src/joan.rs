@@ -116,15 +116,18 @@ fn destroy<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     }
 }
 
-/// macOS: the CI smoke test (LJ9) saw WKWebView's page processes outlive a destroyed window by
-/// minutes, which would also let a video's audio keep playing. So the window is hidden at once,
-/// the page is unloaded, and WebKit gets a moment before the window is destroyed. Runs off the
-/// main thread (inside `handle`), so the short sleep blocks nothing the user sees.
+/// macOS: the CI smoke test (LJ9) saw WKWebView's processes outlive a destroyed window by
+/// minutes unless their page was unloaded first, which would also let a video's audio keep
+/// playing. So the window is hidden at once, both webviews (page and URL bar) are unloaded, and
+/// WebKit gets a moment before the window is destroyed. Runs off the main thread (inside
+/// `handle`), so the short sleep blocks nothing the user sees.
 #[cfg(target_os = "macos")]
 fn release_page<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
     let _ = window.hide();
-    if let (Some(page), Ok(blank)) = (bar::page(app), Url::parse("about:blank")) {
-        let _ = page.navigate(blank);
+    if let Ok(blank) = Url::parse("about:blank") {
+        for webview in bar::webviews(app) {
+            let _ = webview.navigate(blank.clone());
+        }
     }
     std::thread::sleep(std::time::Duration::from_millis(400));
 }

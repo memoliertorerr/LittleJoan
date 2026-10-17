@@ -1366,6 +1366,12 @@ was shown and counts which of those survive (`newPids` / `survivors`, unit-teste
 per summon cycle. The bar on macOS itself worked (`bar-loaded`, `bar-url` with the smoke
 page's address).
 
+**Second macOS finding (smoke-only rerun 38990685304, with attribution):** after summon cycle 2
+(start page only), 2 of *our* helpers were still alive 10 s after hibernating (cycle 3: 0).
+v0.1 only unloaded the page before destroying; the URL bar's webview wasn't. **Fix
+(lj-step-10.1-fix):** on macOS both webviews are navigated to `about:blank` before the window
+is destroyed (the bar's navigation filter allows `about:blank` for that).
+
 ---
 
 ### LJ10.2 — Project files for GitHub · standard · auto

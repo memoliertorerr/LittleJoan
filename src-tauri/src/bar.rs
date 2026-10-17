@@ -59,8 +59,11 @@ pub fn add_webviews<R: Runtime>(
     let bar_rect = initial.bar.unwrap_or(initial.page);
 
     let mut bar = WebviewBuilder::new(BAR, WebviewUrl::App("bar.html".into()))
-        // The bar is ours and never leaves the app's origin.
-        .on_navigation(|url| keys::is_app_url(&keys::app_origin(), url))
+        // The bar is ours and never leaves the app's origin (about:blank only to unload it when
+        // the window closes on macOS, see joan::release_page).
+        .on_navigation(|url| {
+            keys::is_app_url(&keys::app_origin(), url) || url.as_str() == "about:blank"
+        })
         .on_new_window(|_, _| NewWindowResponse::Deny)
         .on_page_load(|_, payload| {
             if payload.event() == PageLoadEvent::Finished {
@@ -246,6 +249,14 @@ pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
 /// The page webview, if the window is open.
 pub fn page<R: Runtime>(app: &AppHandle<R>) -> Option<Webview<R>> {
     app.get_webview(PAGE)
+}
+
+/// Both webviews of the window, if it is open.
+pub fn webviews<R: Runtime>(app: &AppHandle<R>) -> Vec<Webview<R>> {
+    [BAR, PAGE]
+        .into_iter()
+        .filter_map(|label| app.get_webview(label))
+        .collect()
 }
 
 #[cfg(test)]
