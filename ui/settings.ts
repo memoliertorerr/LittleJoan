@@ -17,6 +17,7 @@ const recorder = element<HTMLButtonElement>("#shortcut");
 const note = element<HTMLElement>("#shortcut-note");
 const engine = element<HTMLSelectElement>("#engine");
 const language = element<HTMLSelectElement>("#language");
+const mobile = element<HTMLInputElement>("#mobile");
 const error = element<HTMLElement>("#error");
 const save = element<HTMLButtonElement>("#save");
 const cancel = element<HTMLButtonElement>("#cancel");
@@ -49,7 +50,7 @@ function refresh(): void {
   recorder.textContent = recording ? "Press keys…" : displayShortcut(shortcut, isMac) || "None";
   recorder.classList.toggle("recording", recording);
   note.textContent = recording ? "Esc cancels." : NOTE;
-  save.disabled = saved === null || !isChanged(saved, toInput(shortcut, engine.value, language.value));
+  save.disabled = saved === null || !isChanged(saved, toInput(shortcut, engine.value, language.value, mobile.checked));
 }
 
 function stopRecording(): void {
@@ -97,11 +98,12 @@ window.addEventListener(
 
 engine.addEventListener("change", refresh);
 language.addEventListener("change", refresh);
+mobile.addEventListener("change", refresh);
 
 save.addEventListener("click", () => {
   stopRecording();
   showError("");
-  invoke<Settings>("save_settings", { settings: toInput(shortcut, engine.value, language.value) })
+  invoke<Settings>("save_settings", { settings: toInput(shortcut, engine.value, language.value, mobile.checked) })
     .then(async (updated) => {
       saved = updated;
       await getCurrentWindow().close();
@@ -124,6 +126,7 @@ invoke<SettingsView>("get_settings")
     shortcut = view.settings.shortcut;
     fill(engine, view.engines, view.settings.searchEngine);
     fill(language, view.languages, view.settings.translateTo);
+    mobile.checked = view.settings.mobileSites;
     refresh();
   })
   .catch((err: unknown) => showError(String(err)));

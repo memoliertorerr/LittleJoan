@@ -12,6 +12,7 @@ use tauri::{AppHandle, Manager, Runtime, Window, WindowEvent};
 use url::Url;
 
 use crate::bar;
+use crate::phone_mode;
 use crate::placement;
 use crate::platform;
 use crate::settings::{self, MIN_HEIGHT, MIN_WIDTH};
@@ -44,6 +45,7 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
         Action::Focus => focus(app),
         Action::FocusAndNavigate(url) => focus(app).and_then(|()| bar::navigate(app, url)),
         Action::Destroy => destroy(app),
+        Action::Resize { width, height } => resize(app, width, height),
         Action::Nothing => Ok(()),
     };
     if let Err(err) = result {
@@ -89,6 +91,9 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
         let _ = window.destroy();
         return Err(err);
     }
+    // Phone or desktop user agent for this width, before any web page loads (phone_mode.rs).
+    phone_mode::reset();
+    phone_mode::apply(app, false);
     placement::place(app, &window, width, height);
     window.show()?;
     window.set_focus()?;
@@ -107,6 +112,19 @@ fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         window.unminimize()?;
         window.show()?;
         window.set_focus()?;
+    }
+    Ok(())
+}
+
+/// `--size`: the open window becomes width × height logical pixels (within the allowed range).
+fn resize<R: Runtime>(app: &AppHandle<R>, width: u32, height: u32) -> tauri::Result<()> {
+    if let Some(window) = app.get_window(LABEL) {
+        let wanted =
+            settings::Settings::default().with_window_size(f64::from(width), f64::from(height));
+        window.set_size(tauri::LogicalSize::new(
+            f64::from(wanted.window_width),
+            f64::from(wanted.window_height),
+        ))?;
     }
     Ok(())
 }
@@ -162,6 +180,7 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
         }
         WindowEvent::Resized(_) => {
             bar::apply_layout(window);
+            phone_mode::on_resized(window.app_handle());
             if smoke::enabled() {
                 let fullscreen = platform::is_fullscreen(window);
                 if WAS_FULLSCREEN.swap(fullscreen, Ordering::Relaxed) != fullscreen {

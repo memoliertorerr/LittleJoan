@@ -47,6 +47,7 @@
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ✅ done — waiting for the human check |
 | LJ10.1 | *(added mid-plan 2026-10-17)* Always-visible URL bar: a trusted local webview above the page | strong | auto | ✅ done |
 | LJ10.2 | *(added mid-plan 2026-10-17)* Project files: CHANGELOG, CONTRIBUTING, SECURITY, repo metadata | standard | auto | ✅ done |
+| LJ10.3 | *(added mid-plan 2026-10-17)* Page size at every scale factor; phone mode for narrow windows | strong | auto | ✅ done |
 
 **Overall status: v0.1 (LJ1–LJ10) passed the user's own check on macOS. Phase 5 (LJ10.1–LJ10.2,
 added mid-plan 2026-10-17) adds the always-visible URL bar and the project files; PR #5 into
@@ -1428,6 +1429,65 @@ ends phase 5: fill the PR description from the template, then stop and report.
   Private vulnerability reporting → Enable); enabling it was outside the allowed settings
   change.
 - No releases or tags were created.
+
+---
+
+### LJ10.3 — Page size check and phone mode · strong · auto
+
+> **Added mid-plan 2026-10-17** — from the user's bug report on the v0.1 build ("resizing doesn't
+> affect the page … when Little Joan is long and narrow I expect a website to behave as if I
+> opened it on an iPhone"). Branch `lj/fix-viewport` from `main`, PR into `main`. No human
+> checkpoint; CI is the gate.
+
+**Verify:** `npm run verify` green, including Rust tests that the layout gives the same logical
+page size at scale factors 1, 1.5 and 2 (390×844 → page 390×804; 1280×800; 480×640), that the
+phone threshold is 600 px and off when the setting is off, which phone user agent each OS gets
+(Chrome major version copied on Windows), that a switch happens only on change, and that the
+debounce fires once, 400 ms after the last resize; vitest tests for the smoke page's viewport
+report and the new smoke assertions. CI green on Windows, macOS, Linux and Linux at scale 2:
+after `--size 390x600` the page reports `viewport=390x560 ua=phone`, after `--size 720x600`
+`viewport=720x560 ua=desktop`.
+**Commit:** `lj-step-10.3: pages fit the window at any scale; phone mode for narrow windows`
+
+```text
+1. Confirm or rule out a physical-vs-logical size mix-up in the URL-bar layout (Retina = scale
+   2, CI = scale 1). Make the conversion one pure, tested function (layout::for_physical_size)
+   used by bar::apply_layout; test scale 1, 1.5, 2 with narrow and wide windows.
+2. Phone mode: below 600 logical px of page width, the page webview identifies as a phone
+   (iPhone Safari on macOS/Linux, Chrome on Android on Windows); otherwise the engine's own
+   agent. Set at runtime per OS (WKWebView customUserAgent, WebView2 Settings2.SetUserAgent,
+   WebKitGTK settings "user-agent"); new windows get it before any web page; a threshold
+   crossing applies after the resize settles (400 ms) and reloads the current web page; never
+   during fullscreen. Setting "Mobile sites in a narrow window" (mobileSites, default on).
+3. `--size WxH` (resize the open window) so CI can drive it; the smoke page reports
+   innerWidth/innerHeight/agent/devicePixelRatio in its title; smoke-log requires the narrow
+   and wide reports; a Linux smoke job at GDK_SCALE=2.
+4. Docs: README (Using it), CHANGELOG 0.1.0 (Added), architecture.md, this entry.
+```
+
+**Implementation notes (2026-10-17):**
+
+- **Root cause of the report: not a sizing bug.** The user's screenshot is the pre-URL-bar
+  build (no bar): one webview that Tauri itself sizes to the window. Google chooses its mobile
+  or desktop results page by **user agent**, and its desktop page has a minimum width, so a
+  narrow window got a cropped desktop page whatever its size. Phone mode fixes that.
+- **HiDPI check of the URL-bar build: no mismatch found.** `bar::apply_layout` already
+  converted the physical inner size with the window's scale factor and passed **logical**
+  bounds; tauri-runtime-wry passes them through unchanged, and wry converts them with the
+  display's own scale (`backingScaleFactor` on macOS, the window's DPI on Windows). The
+  conversion is now one tested function, and CI checks the page's real `innerWidth` at scale 1
+  (all OSes) and 2 (Linux). The Windows and macOS runners can't run at another scale.
+- **Threshold 600 px:** phone layouts target ~360–430 CSS px; 600 is where Material's "compact"
+  width ends and where Android stops treating a screen as a phone. The default 480 px window is
+  therefore a phone; half a laptop screen is not.
+- **Which phone:** the browser that shares the engine — iPhone Safari for WKWebView and
+  WebKitGTK, Chrome on Android for WebView2 (with WebView2's Chrome major version), so mobile
+  pages built for that engine come back.
+- **Runtime agent APIs instead of recreating the page webview:** no history loss and no new
+  webview; Tauri 2.12 has no runtime user-agent API, so each OS's API is called through
+  `with_webview` (macOS adds `objc2` / `objc2-foundation`, already in the build through wry).
+- **No switching during fullscreen:** a fullscreen video makes the window wide; switching to
+  the desktop agent would reload the page and end the video.
 
 ---
 

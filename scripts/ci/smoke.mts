@@ -13,7 +13,18 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, resolve } from "node:path";
-import { count, evaluate, lastTitle, newPids, parseCodecs, parseLog, survivors, type LogEvent } from "./smoke-log.mts";
+import {
+  count,
+  evaluate,
+  lastTitle,
+  newPids,
+  parseCodecs,
+  parseLog,
+  sawViewport,
+  survivors,
+  type LogEvent,
+  type Viewport,
+} from "./smoke-log.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -287,6 +298,28 @@ await waitFor(
 await sleep(2000);
 screenshot("fullscreen.png");
 
+// Leave fullscreen by loading the page again, then resize the window: the page must reflow to
+// it (innerWidth × innerHeight = the window minus the 40 px URL bar, in logical pixels) and get
+// a phone user agent while narrow (< 600 px), the desktop one when wide. 720 px keeps the wide
+// window on a 1024 px runner screen.
+const readyBefore = count(events(), "title", "LJ-SMOKE ready");
+await forward(["--show", `http://127.0.0.1:${port}/smoke.html`]);
+await waitFor("smoke page loaded again", (e) => count(e, "title", "LJ-SMOKE ready") > readyBefore, 30_000);
+if (windowWanted) {
+  await waitFor("window left fullscreen", (e) => e.filter((x) => x.event === "fullscreen").at(-1)?.detail === "false", 15_000);
+}
+await sleep(1500);
+const NARROW: Viewport = { width: 390, height: 560, ua: "phone" };
+const WIDE: Viewport = { width: 720, height: 560, ua: "desktop" };
+await forward(["--size", "390x600"]);
+await waitFor("narrow viewport, phone user agent", (e) => sawViewport(e, NARROW), 30_000);
+await sleep(1000);
+screenshot("narrow.png");
+await forward(["--size", "720x600"]);
+await waitFor("wide viewport, desktop user agent", (e) => sawViewport(e, WIDE), 30_000);
+await sleep(1000);
+screenshot("wide.png");
+
 await forward(["--hide"]);
 await waitFor("hibernated", (e) => count(e, "hibernated") > 0, 20_000);
 // Engines may keep helper processes briefly after the last view closes; sample for a minute.
@@ -347,7 +380,7 @@ console.log(JSON.stringify(summary, null, 2));
 // required there only if the click visibly reached the page; Windows and Linux must pass.
 const failures = evaluate(
   log,
-  { windowFullscreen: windowWanted, pageFullscreen: windowWanted },
+  { windowFullscreen: windowWanted, pageFullscreen: windowWanted, viewports: [NARROW, WIDE] },
   { pageHelpersLeft: Math.max(...helpersPerCycle) },
 );
 if (failures.length > 0) {

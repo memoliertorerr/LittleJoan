@@ -14,6 +14,7 @@ use crate::bar;
 use crate::keys::{self, Key, Mods, Platform};
 use crate::layout::BAR_HEIGHT;
 use crate::page_actions;
+use crate::phone;
 
 /// The URL bar: a fixed height at the top of the window's box instead of an equal share.
 pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
@@ -95,4 +96,17 @@ pub fn is_fullscreen<R: Runtime>(window: &Window<R>) -> bool {
                 .state()
                 .contains(gtk::gdk::WindowState::FULLSCREEN)
         })
+}
+
+/// WebKitGTK: the `user-agent` property of the webview's WebKitSettings (unset = the engine's
+/// own). Set through GObject properties, so no webkit2gtk crate is needed.
+pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
+    let result = page.with_webview(move |webview| {
+        let settings = webview.inner().property::<gtk::glib::Object>("settings");
+        let user_agent = mobile.then(|| phone::mobile_user_agent(Platform::Linux, None));
+        settings.set_property("user-agent", user_agent.as_deref());
+    });
+    if let Err(err) = result {
+        eprintln!("little-joan: could not change the user agent: {err}");
+    }
 }

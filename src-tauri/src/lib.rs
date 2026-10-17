@@ -13,6 +13,8 @@ pub mod keys;
 pub mod layout;
 pub mod navigation;
 pub mod page_actions;
+pub mod phone;
+pub mod phone_mode;
 pub mod placement;
 pub mod settings;
 pub mod settings_window;

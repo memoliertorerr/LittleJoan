@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { count, evaluate, lastTitle, newPids, parseCodecs, parseLog, survivors, type LogEvent } from "./smoke-log.mts";
+import {
+  count,
+  evaluate,
+  lastTitle,
+  newPids,
+  parseCodecs,
+  parseLog,
+  survivors,
+  sawViewport,
+  type LogEvent,
+} from "./smoke-log.mts";
 
 const GOOD = `1 started
 2 shortcut-registered CommandOrControl+Shift+Space
@@ -82,6 +92,29 @@ describe("evaluate", () => {
       pageHelpersLeft: 3,
     });
     expect(failures).toEqual([expect.stringContaining("helper processes of the page left")]);
+  });
+});
+
+describe("viewports", () => {
+  const log = parseLog(`1 title LJ-SMOKE viewport=390x560 ua=phone dpr=1
+2 title LJ-SMOKE viewport=900x560 ua=phone dpr=1
+3 title LJ-SMOKE viewport=900x560 ua=desktop dpr=1
+`);
+
+  it("matches size and agent kind exactly", () => {
+    expect(sawViewport(log, { width: 390, height: 560, ua: "phone" })).toBe(true);
+    expect(sawViewport(log, { width: 900, height: 560, ua: "desktop" })).toBe(true);
+    expect(sawViewport(log, { width: 390, height: 560, ua: "desktop" })).toBe(false);
+    expect(sawViewport(log, { width: 39, height: 560, ua: "phone" })).toBe(false);
+  });
+
+  it("fails a run whose page never reflowed to the window", () => {
+    const failures = evaluate(
+      parseLog(GOOD),
+      { windowFullscreen: false, pageFullscreen: false, viewports: [{ width: 390, height: 560, ua: "phone" }] },
+      NONE,
+    );
+    expect(failures).toEqual([expect.stringContaining("never saw a 390x560 viewport with a phone user agent")]);
   });
 });
 

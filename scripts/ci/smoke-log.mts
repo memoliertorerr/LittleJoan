@@ -40,11 +40,26 @@ export function parseCodecs(title: string | undefined): Record<string, string> {
   return codecs;
 }
 
+/** What the smoke page must report after a `--size` resize (see smoke-logic.mjs). */
+export interface Viewport {
+  width: number;
+  height: number;
+  ua: "phone" | "desktop";
+}
+
+/** The page reported exactly this viewport and agent kind at some point. */
+export function sawViewport(events: LogEvent[], want: Viewport): boolean {
+  const prefix = `LJ-SMOKE viewport=${want.width}x${want.height} ua=${want.ua} `;
+  return events.some((e) => e.event === "title" && e.detail.startsWith(prefix));
+}
+
 export interface Expectations {
   /** The window itself must report fullscreen after the click (Windows, Linux). */
   windowFullscreen: boolean;
   /** The page must report element fullscreen after the click. */
   pageFullscreen: boolean;
+  /** Viewports (and agent kinds) the page must have reported after the scripted resizes. */
+  viewports?: Viewport[];
 }
 
 export interface Measurements {
@@ -84,6 +99,11 @@ export function evaluate(events: LogEvent[], expect: Expectations, measured: Mea
       failures.push(`missing "${event}${prefix ? ` ${prefix}` : ""}" (in order)`);
     } else {
       from = index + 1;
+    }
+  }
+  for (const want of expect.viewports ?? []) {
+    if (!sawViewport(events, want)) {
+      failures.push(`the page never saw a ${want.width}x${want.height} viewport with a ${want.ua} user agent`);
     }
   }
   if (count(events, "bar-loaded") === 0) {

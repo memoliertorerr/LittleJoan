@@ -34,6 +34,8 @@ pub struct Settings {
     /// Last size of the page window, in logical pixels.
     pub window_width: u32,
     pub window_height: u32,
+    /// Phone mode: in a narrow window, pages get a phone user agent (phone.rs).
+    pub mobile_sites: bool,
 }
 
 impl Default for Settings {
@@ -45,6 +47,7 @@ impl Default for Settings {
             translate_to: "en".to_owned(),
             window_width: 480,
             window_height: 640,
+            mobile_sites: true,
         }
     }
 }
@@ -90,6 +93,10 @@ pub fn parse(json: &str) -> Settings {
         size("windowWidth").map_or(defaults.window_width, |w| clamp_size(w, MIN_WIDTH));
     let window_height =
         size("windowHeight").map_or(defaults.window_height, |h| clamp_size(h, MIN_HEIGHT));
+    let mobile_sites = map
+        .get("mobileSites")
+        .and_then(Value::as_bool)
+        .unwrap_or(defaults.mobile_sites);
 
     Settings {
         version: SETTINGS_VERSION,
@@ -98,6 +105,7 @@ pub fn parse(json: &str) -> Settings {
         translate_to,
         window_width,
         window_height,
+        mobile_sites,
     }
 }
 
@@ -180,6 +188,7 @@ mod tests {
             translate_to: "zh-CN".into(),
             window_width: 900,
             window_height: 500,
+            mobile_sites: false,
             ..Settings::default()
         };
         save(&dir, &settings).expect("save");
@@ -188,6 +197,20 @@ mod tests {
         let json = fs::read_to_string(dir.join(SETTINGS_FILE)).expect("written");
         assert!(json.contains("\"searchEngine\": \"brave\""), "{json}");
         fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    #[test]
+    fn phone_mode_is_on_unless_switched_off() {
+        assert!(Settings::default().mobile_sites);
+        assert!(
+            parse("{}").mobile_sites,
+            "settings from before the option existed"
+        );
+        assert!(!parse(r#"{"mobileSites": false}"#).mobile_sites);
+        assert!(
+            parse(r#"{"mobileSites": "no"}"#).mobile_sites,
+            "a wrong type falls back"
+        );
     }
 
     #[test]

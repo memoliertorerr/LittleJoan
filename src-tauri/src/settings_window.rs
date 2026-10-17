@@ -18,7 +18,7 @@ pub fn open<R: Runtime>(app: &AppHandle<R>) {
         }
         let built = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("settings.html".into()))
             .title("Little Joan Settings")
-            .inner_size(420.0, 360.0)
+            .inner_size(420.0, 430.0)
             .resizable(false)
             .maximizable(false)
             .minimizable(false)

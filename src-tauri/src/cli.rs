@@ -5,6 +5,7 @@
 //! - `--toggle`        same as the global shortcut
 //! - `--show [url]`    open (or focus) the window; with an http(s) URL, load it
 //! - `--hide`          close the window (hibernate)
+//! - `--size WxH`      resize the open window to W×H logical pixels (scripts, tests)
 //!
 //! The last recognized flag wins; unknown arguments are ignored (macOS can add `-psn_…`).
 
@@ -20,6 +21,14 @@ pub fn parse_args(args: &[String]) -> Option<Command> {
         match arg.as_str() {
             "--toggle" => command = Some(Command::Toggle),
             "--hide" => command = Some(Command::Hide),
+            "--size" => {
+                if let Some((width, height)) = rest
+                    .next_if(|next| !next.starts_with("--"))
+                    .and_then(|value| parse_size(value))
+                {
+                    command = Some(Command::Resize { width, height });
+                }
+            }
             "--show" => {
                 let url = rest
                     .next_if(|next| !next.starts_with("--"))
@@ -30,6 +39,17 @@ pub fn parse_args(args: &[String]) -> Option<Command> {
         }
     }
     command
+}
+
+/// `"390x844"` → `(390, 844)`; both sides must be whole numbers from 1 to 10000.
+fn parse_size(value: &str) -> Option<(u32, u32)> {
+    let (width, height) = value.split_once(['x', 'X'])?;
+    let side = |text: &str| {
+        text.parse::<u32>()
+            .ok()
+            .filter(|n| (1..=10_000).contains(n))
+    };
+    Some((side(width)?, side(height)?))
 }
 
 /// Only absolute http(s) URLs are accepted from the command line — never a search, a file, or
@@ -81,6 +101,28 @@ mod tests {
         );
         assert_eq!(parse(&["--toggle", "--show"]), Some(Command::Show(None)));
         assert_eq!(parse(&["--show", "--hide"]), Some(Command::Hide));
+    }
+
+    #[test]
+    fn size_takes_width_x_height() {
+        assert_eq!(
+            parse(&["--size", "390x600"]),
+            Some(Command::Resize {
+                width: 390,
+                height: 600
+            })
+        );
+        assert_eq!(
+            parse(&["--size", "900X600"]),
+            Some(Command::Resize {
+                width: 900,
+                height: 600
+            })
+        );
+        for bad in ["390", "x600", "0x600", "390x-1", "390x600x2", "wide"] {
+            assert_eq!(parse(&["--size", bad]), None, "{bad}");
+        }
+        assert_eq!(parse(&["--size"]), None);
     }
 
     #[test]
