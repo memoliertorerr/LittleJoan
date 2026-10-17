@@ -48,10 +48,12 @@
 | LJ10.1 | *(added mid-plan 2026-10-17)* Always-visible URL bar: a trusted local webview above the page | strong | auto | ✅ done |
 | LJ10.2 | *(added mid-plan 2026-10-17)* Project files: CHANGELOG, CONTRIBUTING, SECURITY, repo metadata | standard | auto | ✅ done |
 
-**Overall status: v0.1 (LJ1–LJ10) passed the user's own check on macOS. Phase 5 (LJ10.1–LJ10.2,
-added mid-plan 2026-10-17) adds the always-visible URL bar and the project files; PR #5 into
-`lj/p4-ship`. Open question for the user: Linux fullscreen on Ubuntu 22.04 / the AppImage
-(WebKitGTK 2.50.4 aborts on element fullscreen — see Deferred follow-ups).**
+**Overall status: v0.1.0 is released (2026-10-17). LJ1–LJ10 passed the user's own check on
+macOS. Phase 5 (LJ10.1–LJ10.2, added mid-plan) added the always-visible URL bar and the project
+files. PRs #1–#5 were merged into `main` at the user's request, and the GitHub Release `v0.1.0`
+carries the Windows, macOS and Linux installers built by CI from the tagged commit. Still open:
+Linux fullscreen on Ubuntu 22.04 and in the AppImage (WebKitGTK 2.50.4 aborts on element
+fullscreen; see Deferred follow-ups).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for

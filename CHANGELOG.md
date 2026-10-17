@@ -4,7 +4,7 @@ All notable changes to Little Joan are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] — unreleased
+## [0.1.0] — 2026-10-17
 
 The first version: a tiny pop-up browser for Windows, macOS, and Linux that hibernates until a
 global shortcut calls it.
@@ -43,4 +43,4 @@ global shortcut calls it.
   a Gatekeeper or SmartScreen warning.
 - Linux global shortcuts work on X11 only; on Wayland, bind `little-joan --toggle` instead.
 
-[0.1.0]: https://github.com/memoliertorerr/LittleJoan
+[0.1.0]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0
