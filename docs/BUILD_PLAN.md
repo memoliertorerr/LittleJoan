@@ -1913,8 +1913,9 @@ Design (decided with the user; do not relitigate):
 - Closing the window during a download cancels it. Nothing keeps a webview alive for it
   (Ground Rule 9). No notification plugin.
 - Windows: WebView2's own download flyout must not appear on top. Check it in the smoke
-  screenshot; if wry doesn't suppress it, hide it through ICoreWebView2_9's
-  DefaultDownloadDialog API in platform/win.rs.
+  screenshot; if wry doesn't suppress it, set `Handled` on the DownloadStarting event's
+  arguments (ICoreWebView2DownloadStartingEventArgs) in platform/win.rs, keeping wry's
+  destination.
 
 Smoke (scripts/ci/smoke.mts + smoke-log.mts and its test; the smoke server in smoke.mts): add a
 route that answers with a fixed 1 KB body, Content-Type application/octet-stream and
