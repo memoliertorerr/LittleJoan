@@ -46,7 +46,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # Linux is pinned (same release as the smoke job): ubuntu-latest moves to Ubuntu 26
+        # from 2026-10-19, and a runner-image change shouldn't turn a PR red on its own.
+        os: [ubuntu-24.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
