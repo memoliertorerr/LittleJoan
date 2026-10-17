@@ -1989,6 +1989,7 @@ dependencies = [
  "webkit2gtk",
  "webview2-com",
  "windows",
+ "winreg 0.10.1",
 ]
 
 [[package]]
