@@ -66,6 +66,11 @@ always be ready.
   following links and redirects. Click it (or press Ctrl/Cmd+L) to go somewhere else: Enter
   opens the address or searches for the text, Esc puts the current address back. It hides
   while a video is fullscreen.
+- **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
+  narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
+  macOS and Linux, Chrome on Android on Windows), so Google, YouTube and others serve their
+  mobile versions; widen it past 600 px and the page reloads in its desktop version once you
+  let go. Switch it off in Settings ("Mobile sites in a narrow window").
 - **Dismiss:** press the shortcut again, press Ctrl/Cmd+W, close the window, or press Esc in the
   empty address bar before opening anything. The page is discarded and Little Joan goes back to sleep. The window remembers its
   size.
@@ -87,8 +92,9 @@ always be ready.
   any page goes fullscreen — reproduced in testing without Little Joan. Ubuntu 24.04's
   (2.52) works. The AppImage currently bundles the 22.04 version.
 - **Links that open a new window** (`target=_blank`) open in your default browser.
-- **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`
-  talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
+- **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
+  and `little-joan --size 390x844` (resize the open window, in logical pixels) talk to the
+  running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
 - **Quit:** tray menu → **Quit Little Joan** (or Cmd+Q on macOS while it's in front).
 

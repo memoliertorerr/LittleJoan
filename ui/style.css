@@ -114,6 +114,13 @@ body {
   padding: 6px 10px;
 }
 
+.settings input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .recorder {
   min-width: 150px;
   text-align: center;

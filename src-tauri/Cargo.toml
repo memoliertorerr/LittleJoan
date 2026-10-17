@@ -32,8 +32,15 @@ tauri-plugin-opener = "2.7"
 webview2-com = "0.39"
 windows = { version = "0.62", features = ["Win32_UI_Input_KeyboardAndMouse"] }
 
+# Phone mode sets WKWebView's customUserAgent (same versions as wry uses; nothing new to fetch).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+# Phone mode sets WebKitSettings' user agent (same version as wry uses; nothing new to fetch).
+webkit2gtk = "2.0"
 
 [profile.dev]
 # No debug info: it would multiply the size of target/ on a tight local disk.

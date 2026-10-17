@@ -134,10 +134,11 @@ pub fn apply_layout<R: Runtime>(window: &Window<R>) {
     let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) else {
         return;
     };
-    let size = size.to_logical::<f64>(scale);
-    let wanted = layout(
+    // inner_size is physical; the bounds below are logical (layout.rs).
+    let wanted = layout::for_physical_size(
         size.width,
         size.height,
+        scale,
         !ELEMENT_FULLSCREEN.load(Ordering::Relaxed),
     );
     match wanted.bar {
@@ -157,6 +158,11 @@ fn to_tauri(rect: layout::Rect) -> tauri::Rect {
         position: LogicalPosition::new(rect.x, rect.y).into(),
         size: LogicalSize::new(rect.width, rect.height).into(),
     }
+}
+
+/// Whether the page shows an element fullscreen right now.
+pub fn element_fullscreen() -> bool {
+    ELEMENT_FULLSCREEN.load(Ordering::Relaxed)
 }
 
 /// The page entered or left element fullscreen: hide or bring back the bar.

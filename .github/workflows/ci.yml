@@ -222,14 +222,26 @@ jobs:
       matrix:
         include:
           - name: windows
+            artifact: windows
             os: windows-latest
           - name: macos
+            artifact: macos
             os: macos-latest
           # Ubuntu 22.04's current WebKitGTK (2.50.4) aborts when any page enters element
           # fullscreen — reproduced with a bare WebKitGTK window, no Tauri involved (see the plan's
           # Landmines) — so the installed .deb is smoke-tested on 24.04 (WebKitGTK 2.52).
           - name: linux
+            artifact: linux
             os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
+            screen: 1280x800x24
+          # The same at scale factor 2 (GTK's GDK_SCALE on a 2560×1600 Xvfb screen = 1280×800
+          # logical): the page must see the same logical viewport as at scale 1. The Windows and
+          # macOS runners have no way to change their display scale.
+          - name: linux-scale-2
+            artifact: linux
+            os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
+            screen: 2560x1600x24
+            app_env: GDK_SCALE=2
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -243,7 +255,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: little-joan-${{ matrix.name }}
+          name: little-joan-${{ matrix.artifact }}
           path: installers
           run-id: ${{ inputs.installers_from_run || github.run_id }}
           github-token: ${{ github.token }}
@@ -291,10 +303,11 @@ jobs:
           # Run the app under gdb so a crash leaves a backtrace in the log. (Symbols were tried:
           # debuginfod downloads time out, and Ubuntu's ddebs have no symbols for WebKitGTK 2.50.4.)
           LJ_SMOKE_GDB: "1"
-          LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }}
+          LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }} ${{ matrix.app_env }}
           LJ_WM: ${{ inputs.linux_window_manager || 'openbox' }}
+          LJ_SCREEN: ${{ matrix.screen }}
         run: |
-          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c \
+          xvfb-run -a -s "-screen 0 $LJ_SCREEN" dbus-run-session -- bash -c \
             'if [ "$LJ_WM" != none ]; then openbox & sleep 2; fi; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
 
       # Diagnostics: the same click in a bare WebKitGTK 4.1 window built with PyGObject (no Tauri,

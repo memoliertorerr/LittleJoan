@@ -2,12 +2,12 @@
 //! the page does and lets us mark them handled; and element fullscreen through
 //! `ContainsFullScreenElementChanged`, which WebView2 leaves to the host app.
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use tauri::{AppHandle, Manager, Runtime, Webview, Window};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
-    COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
+    COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN, ICoreWebView2Settings2,
 };
 use webview2_com::{
     AcceleratorKeyPressedEventHandler, ContainsFullScreenElementChangedEventHandler,
@@ -15,11 +15,13 @@ use webview2_com::{
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
+use windows::core::{HSTRING, Interface, PWSTR};
 
 use crate::bar;
 use crate::fullscreen::FullscreenTracker;
 use crate::keys::{self, Key, Mods, Platform};
 use crate::page_actions;
+use crate::phone;
 
 /// The URL bar: page keys only.
 pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
@@ -137,4 +139,44 @@ fn is_down(key: VIRTUAL_KEY) -> bool {
     // SAFETY: GetKeyState only reads the calling thread's keyboard state; the high bit is set
     // while the key is down. This runs on the UI thread that received the key event.
     unsafe { GetKeyState(i32::from(key.0)) < 0 }
+}
+
+/// WebView2's own user agent, read before the first change (every page webview starts with it).
+static ENGINE_USER_AGENT: OnceLock<String> = OnceLock::new();
+
+/// WebView2: `ICoreWebView2Settings2::SetUserAgent`. The phone agent is Chrome on Android with
+/// the installed WebView2's Chrome version; the desktop agent is WebView2's own, read once.
+pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
+    let result = page.with_webview(move |webview| {
+        let controller = webview.controller();
+        let outcome = (|| -> windows::core::Result<()> {
+            // SAFETY: COM calls on the live controller of this webview and its settings.
+            unsafe {
+                let settings: ICoreWebView2Settings2 =
+                    controller.CoreWebView2()?.Settings()?.cast()?;
+                let engine = match ENGINE_USER_AGENT.get() {
+                    Some(engine) => engine.clone(),
+                    None => {
+                        let mut raw = PWSTR::null();
+                        settings.UserAgent(&mut raw)?;
+                        ENGINE_USER_AGENT
+                            .get_or_init(|| webview2_com::take_pwstr(raw))
+                            .clone()
+                    }
+                };
+                let user_agent = if mobile {
+                    phone::mobile_user_agent(Platform::Windows, Some(&engine))
+                } else {
+                    engine
+                };
+                settings.SetUserAgent(&HSTRING::from(user_agent.as_str()))
+            }
+        })();
+        if let Err(err) = outcome {
+            eprintln!("little-joan: could not change the user agent: {err}");
+        }
+    });
+    if let Err(err) = result {
+        eprintln!("little-joan: could not reach the webview: {err}");
+    }
 }

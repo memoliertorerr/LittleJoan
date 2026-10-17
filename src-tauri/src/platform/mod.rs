@@ -2,6 +2,8 @@
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod mac;
 #[cfg(windows)]
 mod win;
 
@@ -52,4 +54,23 @@ pub fn is_fullscreen<R: Runtime>(window: &Window<R>) -> bool {
 #[cfg(not(target_os = "linux"))]
 pub fn is_fullscreen<R: Runtime>(window: &Window<R>) -> bool {
     window.is_fullscreen().unwrap_or(false)
+}
+
+/// Gives the page webview a phone user agent (`mobile`) or the engine's own one (phone.rs).
+/// Takes effect with the next request; phone_mode.rs reloads the page when it must.
+#[cfg(windows)]
+pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
+    win::set_mobile(page, mobile);
+}
+
+/// Gives the page webview a phone user agent (`mobile`) or the engine's own one (phone.rs).
+#[cfg(target_os = "linux")]
+pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
+    linux::set_mobile(page, mobile);
+}
+
+/// Gives the page webview a phone user agent (`mobile`) or the engine's own one (phone.rs).
+#[cfg(target_os = "macos")]
+pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
+    mac::set_mobile(page, mobile);
 }
