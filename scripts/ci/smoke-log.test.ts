@@ -8,7 +8,9 @@ import {
   newPids,
   parseCodecs,
   parseLog,
+  parsePersist,
   parseRegValues,
+  persistFailures,
   plistProgram,
   pointsAt,
   startAtLoginFailures,
@@ -273,6 +275,84 @@ describe("first run", () => {
     const main = parseLog(`${GOOD}12 first-run\n`);
     expect(evaluate(main, { windowFullscreen: false, pageFullscreen: false }, { pageHelpersLeft: 0 })).toEqual([
       expect.stringContaining("the main run was a first run"),
+    ]);
+  });
+});
+
+describe("persistence", () => {
+  const main = parseLog(`${GOOD}20 title LJ-PERSIST set
+21 hibernated
+22 window-created
+23 title LJ-PERSIST p=1 s=1 l=1
+30000 title LJ-PERSIST set
+30600 quit
+`);
+  const relaunch = parseLog("1 started\n2 shortcut-registered CommandOrControl+Shift+Space\n3 window-created\n4 title LJ-PERSIST p=1 s=0 l=1\n");
+  const good = {
+    afterClose: "LJ-PERSIST p=1 s=1 l=1",
+    afterQuit: "LJ-PERSIST p=1 s=0 l=1",
+    quitExited: true,
+    relaunch,
+  };
+
+  it("reads the page's report", () => {
+    expect(parsePersist("LJ-PERSIST p=1 s=0 l=1")).toEqual({ p: true, s: false, l: true });
+    expect(parsePersist("LJ-PERSIST p=0 s=1 l=0")).toEqual({ p: false, s: true, l: false });
+    for (const bad of [undefined, "", "LJ-PERSIST set", "LJ-PERSIST p=2 s=0 l=1", "LJ-PERSIST p=1 s=0", "x LJ-PERSIST p=1 s=0 l=1"]) {
+      expect(parsePersist(bad), String(bad)).toBeUndefined();
+    }
+  });
+
+  it("passes everything kept across close, and the session cookie gone after quitting", () => {
+    expect(persistFailures(main, good)).toEqual([]);
+  });
+
+  it("names what close → summon lost", () => {
+    expect(persistFailures(main, { ...good, afterClose: "LJ-PERSIST p=1 s=0 l=1" })).toEqual([
+      "close → summon lost the session cookie (p=1 s=0 l=1, want p=1 s=1 l=1)",
+    ]);
+    expect(persistFailures(main, { ...good, afterClose: "LJ-PERSIST p=0 s=0 l=0" })).toEqual([
+      "close → summon lost the persistent cookie, the session cookie, localStorage (p=0 s=0 l=0, want p=1 s=1 l=1)",
+    ]);
+    expect(persistFailures(main, { ...good, afterClose: undefined })).toEqual([
+      "close → summon: the page never reported (got nothing)",
+    ]);
+  });
+
+  it("names what quitting lost, and a session cookie that outlived the app run", () => {
+    expect(persistFailures(main, { ...good, afterQuit: "LJ-PERSIST p=0 s=0 l=0" })).toEqual([
+      "quit → relaunch lost the persistent cookie, localStorage (p=0 s=0 l=0, want p=1 s=0 l=1)",
+    ]);
+    expect(persistFailures(main, { ...good, afterQuit: "LJ-PERSIST p=1 s=1 l=1" })).toEqual([
+      "quit → relaunch kept the session cookie (p=1 s=1 l=1); it must end with the app run",
+    ]);
+    expect(persistFailures(main, { ...good, afterQuit: "LJ-SMOKE ready" })).toEqual([
+      "quit → relaunch: the page never reported (got LJ-SMOKE ready)",
+    ]);
+  });
+
+  it("needs the quit within a second of the set, and the process to end by itself", () => {
+    const late = parseLog("1 started\n10 title LJ-PERSIST set\n1011 quit\n");
+    expect(persistFailures(late, good)).toEqual([
+      "quit → relaunch: the quit came 1001 ms after the set (at most 1000)",
+    ]);
+    const noQuit = parseLog("1 started\n10 title LJ-PERSIST set\n");
+    expect(persistFailures(noQuit, { ...good, quitExited: false })).toEqual([
+      'quit → relaunch: the app never logged "quit" after the set',
+      "--quit did not end the app's process",
+    ]);
+    // A quit logged before the last set doesn't count.
+    const early = parseLog("1 started\n5 quit\n10 title LJ-PERSIST set\n");
+    expect(persistFailures(early, good)).toEqual(['quit → relaunch: the app never logged "quit" after the set']);
+    expect(persistFailures(parseLog(GOOD), good)).toEqual(['quit → relaunch: the page never reported "LJ-PERSIST set"']);
+  });
+
+  it("needs a plain relaunch on the same data folder", () => {
+    expect(persistFailures(main, { ...good, relaunch: parseLog("1 started\n2 first-run\n") })).toEqual([
+      "quit → relaunch: it was a first run (the data folder lost its settings)",
+    ]);
+    expect(persistFailures(main, { ...good, relaunch: [] })).toEqual([
+      'quit → relaunch: expected one "started", saw 0',
     ]);
   });
 });

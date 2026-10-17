@@ -7,6 +7,7 @@
 //! - `--hide`          close the window (hibernate)
 //! - `--size WxH`      resize the open window to W×H logical pixels (scripts, tests)
 //! - `--start-at-login on|off`  add or remove the OS login entry; never touches the window
+//! - `--quit`          quit Little Joan (the tray's Quit); wins over any window flag
 //!
 //! The last recognized window flag wins; unknown arguments are ignored (macOS can add `-psn_…`).
 
@@ -15,17 +16,23 @@ use url::Url;
 use crate::toggle::Command;
 
 /// What a command line asks for. `command` goes through the toggle table (the window);
-/// `start_at_login` only changes the OS login entry and is handled before it.
+/// `start_at_login` only changes the OS login entry and is handled before it; `quit` comes last
+/// and replaces the window command.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Args {
     pub command: Option<Command>,
     pub start_at_login: Option<bool>,
+    pub quit: bool,
 }
 
 impl Args {
     /// What a second launch does to the window: its window flag, or `--show` when it had no
-    /// recognized flag at all. A launch that only changes start at login leaves the window alone.
+    /// recognized flag at all. A launch that only changes start at login leaves the window alone,
+    /// and one that quits never opens it.
     pub fn forwarded_command(&self) -> Option<Command> {
+        if self.quit {
+            return None;
+        }
         match (&self.command, self.start_at_login) {
             (Some(command), _) => Some(command.clone()),
             (None, None) => Some(Command::Show(None)),
@@ -38,11 +45,13 @@ impl Args {
 pub fn parse_args(args: &[String]) -> Args {
     let mut command = None;
     let mut start_at_login = None;
+    let mut quit = false;
     let mut rest = args.iter().skip(1).peekable();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--toggle" => command = Some(Command::Toggle),
             "--hide" => command = Some(Command::Hide),
+            "--quit" => quit = true,
             "--start-at-login" => {
                 if let Some(enabled) = rest
                     .next_if(|next| !next.starts_with("--"))
@@ -71,6 +80,7 @@ pub fn parse_args(args: &[String]) -> Args {
     Args {
         command,
         start_at_login,
+        quit,
     }
 }
 
@@ -247,7 +257,8 @@ mod tests {
             parse_all(&["--start-at-login", "--toggle"]),
             Args {
                 command: Some(Command::Toggle),
-                start_at_login: None
+                start_at_login: None,
+                quit: false,
             }
         );
     }
@@ -258,7 +269,8 @@ mod tests {
             parse_all(&["--start-at-login", "on", "--hide"]),
             Args {
                 command: Some(Command::Hide),
-                start_at_login: Some(true)
+                start_at_login: Some(true),
+                quit: false,
             }
         );
         assert_eq!(
@@ -281,5 +293,27 @@ mod tests {
             parse_all(&["--toggle"]).forwarded_command(),
             Some(Command::Toggle)
         );
+    }
+
+    #[test]
+    fn quit_never_opens_the_window() {
+        let quit = parse_all(&["--quit"]);
+        assert!(quit.quit);
+        assert_eq!(quit.command, None);
+        assert_eq!(quit.forwarded_command(), None);
+        // It wins over window flags in any order; start at login still applies first.
+        for args in [
+            &["--show", "https://x.test", "--quit"][..],
+            &["--quit", "--toggle"],
+            &["--quit", "--start-at-login", "on"],
+        ] {
+            assert_eq!(parse_all(args).forwarded_command(), None, "{args:?}");
+        }
+        assert_eq!(
+            parse_all(&["--quit", "--start-at-login", "off"]).start_at_login,
+            Some(false)
+        );
+        assert!(!parse_all(&["--toggle"]).quit);
+        assert!(!parse_all(&["--quitting"]).quit);
     }
 }

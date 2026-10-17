@@ -45,7 +45,9 @@ pub fn run() {
                 // `set` logs the outcome; there is no window to show an error in.
                 let _ = autostart::set(app, enabled);
             }
-            if let Some(command) = args.forwarded_command() {
+            if args.quit {
+                joan::quit(app);
+            } else if let Some(command) = args.forwarded_command() {
                 joan::dispatch(app, command);
             }
         }))
@@ -99,7 +101,10 @@ pub fn run() {
             if let Some(enabled) = args.start_at_login {
                 let _ = autostart::set(handle, enabled);
             }
-            if let Some(command) = args.command.or(welcome.then_some(Command::Show(None))) {
+            if args.quit {
+                // `little-joan --quit` with nothing running: nothing to quit, so this one ends.
+                joan::quit(handle);
+            } else if let Some(command) = args.command.or(welcome.then_some(Command::Show(None))) {
                 joan::dispatch(handle, command);
             }
             Ok(())

@@ -53,6 +53,12 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
     }
 }
 
+/// Quits Little Joan: the tray's "Quit Little Joan" and `--quit` (forwarded by single-instance).
+pub fn quit<R: Runtime>(app: &AppHandle<R>) {
+    smoke::log("quit", "");
+    app.exit(0);
+}
+
 fn window_state<R: Runtime>(app: &AppHandle<R>) -> WindowState {
     match app.get_window(LABEL) {
         None => WindowState::Hibernating,

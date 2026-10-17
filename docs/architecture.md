@@ -10,7 +10,8 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
   window and no webview, so no webview helper processes exist (WebView2's `msedgewebview2.exe`,
   WebKit's `WebContent`/`WebKitWebProcess`). `tauri.conf.json` declares `"windows": []`.
 - **Closing the last window never quits.** `RunEvent::ExitRequested` without an exit code is
-  prevented; only Quit in the tray menu exits.
+  prevented; only Quit in the tray menu and `--quit` (both `joan::quit`), and Cmd+Q on macOS
+  (the app menu's standard Quit item), exit.
 - **macOS:** `ActivationPolicy::Accessory` — a menu-bar icon and no Dock icon.
 
 ## Files
@@ -92,11 +93,13 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
-                                   --start-at-login on|off parsing
+                                   --start-at-login on|off / --quit parsing
 scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide, start at
-                                   login on/off), reads the OS login entry, screenshots
+                                   login on/off, cookies and storage across close and quit),
+                                   reads the OS login entry, screenshots
 scripts/ci/smoke-log.mts           CI: smoke-log parsing and pass/fail rules, unit-tested
-tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
+tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
+                                   with ?persist=set|check, the cookie and localStorage check
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
 .github/workflows/ci.yml           verify on ubuntu-24.04, windows-latest, macos-latest; package; smoke
 ```
@@ -139,9 +142,11 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   sees the `WebContent` processes gone within 30 s and no growth across summon cycles. WebView2
   and WebKitGTK release theirs on destroy without help.
 - **Single instance:** `tauri-plugin-single-instance` forwards a second launch's arguments to
-  the running app (`--toggle`, `--show [url]`, `--hide`, `--start-at-login on|off`; no flags =
-  `--show`). On Linux it needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
-  `--start-at-login` is handled before the toggle table and never touches the window.
+  the running app (`--toggle`, `--show [url]`, `--hide`, `--start-at-login on|off`, `--quit`; no
+  flags = `--show`). On Linux it needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
+  `--start-at-login` is handled before the toggle table and never touches the window. `--quit`
+  takes the tray's Quit path (`joan::quit`) and wins over any window flag; a `--quit` launch with
+  nothing running just ends.
 - **Global shortcut:** registered from settings; if it fails to parse or is taken, the default
   (`CommandOrControl+Shift+Space`) is tried; if that fails too, the app still runs. Linux
   global shortcuts work on X11 only — on Wayland, bind `little-joan --toggle` in the desktop's
@@ -195,6 +200,22 @@ Settings or with `--start-at-login on`.
   from a random `/AppTranslocation/` copy, and a LaunchAgent made then would point at nothing
   after a reboot, so turning it on there fails with "Move Little Joan to Applications first, then
   turn this on." (`autostart::refusal`, unit-tested).
+
+## Where data lives
+
+Little Joan's own file is `settings.json`; cookies, localStorage, IndexedDB and the HTTP cache
+belong to the web engine, in its own store (read from the vendored tauri 2.12.4 / wry 0.57
+sources):
+
+| | Windows (WebView2) | macOS (WKWebView) | Linux (WebKitGTK) |
+|---|---|---|---|
+| `settings.json` | `%APPDATA%\io.github.memoliertorerr.littlejoan\` | `~/Library/Application Support/io.github.memoliertorerr.littlejoan/` | `~/.config/io.github.memoliertorerr.littlejoan/` |
+| Cookies and site data | `%LOCALAPPDATA%\io.github.memoliertorerr.littlejoan\` (the WebView2 user data folder, `EBWebView\` inside): Tauri forces `app_local_data_dir` when the app sets no `data_directory` | WebKit's `defaultDataStore`, keyed by the bundle id (under `~/Library/WebKit/` and `~/Library/HTTPStorages/`); `data_directory` does nothing there | `~/.local/share/io.github.memoliertorerr.littlejoan/` (Tauri forces `app_local_data_dir`); cookies are a text file, `cookies`, there |
+| With `LITTLEJOAN_DATA_DIR` (dev builds, CI) | `<dir>\settings.json`, `<dir>\webview\` | `<dir>/settings.json`; site data stays in WebKit's default store | `<dir>/settings.json`, `<dir>/webview/` |
+
+Switching between a dev build and the installed app therefore looks like a logout on Windows and
+Linux. Both webviews of the window share one data folder (WebView2 requires it). Closing the
+window discards the page, not the store.
 
 ## Settings
 
@@ -331,7 +352,8 @@ app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finis
 `bar-url <address | start>` (what the bar was told to show), `hibernated`,
 `start-at-login <true|false>` (the login entry read back after a change),
 `start-at-login-failed <reason>`, `first-run` (no settings.json at launch), `welcome` (the start
-page was handed the first run). Without the variable nothing is logged.
+page was handed the first run), `quit` (Quit or `--quit` is about to exit). Without the
+variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -362,7 +384,8 @@ The modules below hold every decision the app makes; the native glue only calls 
   the open window); the last flag wins; unknown arguments are ignored; `--show` accepts only
   absolute web URLs. `--start-at-login on|off` (any case; other values are ignored) is a
   separate result next to the window command, so it never maps to one; a second launch whose
-  only flag is `--start-at-login` leaves the window alone.
+  only flag is `--start-at-login` leaves the window alone. `--quit` is a third result; it
+  replaces the window command (a quitting launch never opens the window).
 
 ## Building
 
@@ -430,8 +453,14 @@ and pushes to `main`:
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`, `narrow.png`,
   `wide.png`, `welcome.png`), the logs, and
   The app runs on a fresh `LITTLEJOAN_DATA_DIR` that already holds the default `settings.json`,
-  so it starts hibernating (memory at rest is measured before any window opens). Last comes the
-  **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  so it starts hibernating (memory at rest is measured before any window opens). Then the
+  **login-persistence check**: the smoke page's `?persist=set&t=<token>` sets a persistent
+  cookie (`Max-Age` a year), a session cookie and a localStorage value; `--hide` and `--show
+  ?persist=check` must report `LJ-PERSIST p=1 s=1 l=1`; new values, `--quit` within 1 s of
+  them (from the log's clock), and a relaunch on the same data folder (log
+  `smoke-after-quit.log`) must report `p=1 s=0 l=1` — session cookies end with the app run. The
+  smoke server keeps its port across the relaunch, because localStorage is per origin. Last
+  comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).

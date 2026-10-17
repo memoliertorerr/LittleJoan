@@ -6,6 +6,10 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `little-joan --quit` quits the running app, the same way as **Quit Little Joan** in the tray
+  menu (handy for scripts; CI uses it to quit gracefully).
+
 ## [0.2.0-beta.1] — 2026-10-17
 
 A pre-release of v0.2: the first two v0.2 features, for trying out before v0.2.0.

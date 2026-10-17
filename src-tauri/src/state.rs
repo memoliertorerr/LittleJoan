@@ -9,15 +9,19 @@ use crate::cli::Args;
 use crate::settings::{self, SETTINGS_FILE, Settings};
 
 /// Development builds point this at `.cache/dev-data` (see scripts/env.sh). Shipped builds never
-/// set it, so settings live in the OS config folder and browsing data in the engine's default.
+/// set it, so settings live in the OS config folder and browsing data where Tauri puts it (see
+/// `AppState::webview_data_dir`).
 pub const DATA_DIR_ENV: &str = "LITTLEJOAN_DATA_DIR";
 
 pub struct AppState {
     pub settings: Settings,
     /// Folder holding settings.json.
     pub data_dir: PathBuf,
-    /// Webview data folder override (Windows and Linux honor it; macOS WebKit uses its own
-    /// store). `None` keeps the engine's default location.
+    /// Webview data folder override: `<LITTLEJOAN_DATA_DIR>/webview`. `None` (shipped builds)
+    /// leaves it to Tauri, which on Windows and Linux forces the app's local data folder
+    /// (`%LOCALAPPDATA%\<identifier>`, `~/.local/share/<identifier>`; tauri 2.12's
+    /// manager/webview.rs). macOS ignores both: WebKit's default data store, keyed by the bundle
+    /// id, holds cookies and site data there (docs/architecture.md, "Where data lives").
     pub webview_data_dir: Option<PathBuf>,
     /// The accelerator currently registered as the global shortcut, if any.
     pub active_shortcut: Option<String>,
@@ -67,7 +71,7 @@ pub fn finish_first_run(dir: &Path, settings: &Settings, args: &Args) -> bool {
     if let Err(err) = settings::save(dir, settings) {
         eprintln!("little-joan: could not save the first settings: {err}");
     }
-    args.command.is_none() && args.start_at_login.is_none()
+    args.command.is_none() && args.start_at_login.is_none() && !args.quit
 }
 
 /// Runs `f` with the state locked. Never call anything that waits on the main thread (window
@@ -131,15 +135,19 @@ mod tests {
         for args in [
             Args {
                 command: Some(Command::Toggle),
-                start_at_login: None,
+                ..Args::default()
             },
             Args {
                 command: Some(Command::Show(None)),
-                start_at_login: None,
+                ..Args::default()
             },
             Args {
-                command: None,
                 start_at_login: Some(true),
+                ..Args::default()
+            },
+            Args {
+                quit: true,
+                ..Args::default()
             },
         ] {
             let dir = temp_dir("flags");

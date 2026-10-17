@@ -99,10 +99,11 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   (2.52) works. The AppImage currently bundles the 22.04 version.
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
-  `little-joan --size 390x844` (resize the open window, in logical pixels), and
-  `little-joan --start-at-login on|off` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
+  `little-joan --size 390x844` (resize the open window, in logical pixels),
+  `little-joan --start-at-login on|off`, and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
-- **Quit:** tray menu → **Quit Little Joan** (or Cmd+Q on macOS while it's in front).
+- **Quit:** tray menu → **Quit Little Joan**, `little-joan --quit`, or Cmd+Q on macOS while
+  it's in front.
 
 ## Translate
 

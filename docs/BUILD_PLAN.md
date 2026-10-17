@@ -67,7 +67,7 @@
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (starts once the user's secrets exist) | strong | auto | ⬜ todo |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
-| LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ⬜ todo |
+| LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | 🔄 checks pushed first (lj-step-20); results and fixes follow in lj-step-20-fix |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ⬜ todo |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ⬜ todo |
 | LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ⬜ todo |
@@ -2485,6 +2485,35 @@ quitting (cookie and storage checks in smoke)". Push, open the phase-12 PR into 
 and watch CI until verify, package and smoke are green on all three OSes (Ground Rule 3; two
 honest fix attempts, then stop).
 ```
+
+**Implementation notes (2026-10-17):**
+
+- **Checks first, as the prompt orders.** The step commit (`lj-step-20`) carries only the checks,
+  `--quit` and the doc corrections, so CI shows what each engine does before anything is fixed;
+  the fixes follow as `lj-step-20-fix` commits, and the tracker row turns ✅ with the last one.
+- **The smoke page** (`tests/smoke/smoke.html`, logic in `smoke-logic.mjs`): `?persist=set&t=…`
+  writes `lj_p` (`Max-Age=31536000; Path=/; SameSite=Lax`), `lj_s` (`Path=/`, no expiry) and
+  localStorage `lj_l`, then titles itself `LJ-PERSIST set`; `?persist=check&t=…` titles itself
+  `LJ-PERSIST p=<0|1> s=<0|1> l=<0|1>` (1 = still the token). In persist mode it skips the codec
+  and viewport reports so the title stays put. Tokens are cookie-safe (`[\w-]{1,64}`).
+- **`--quit`** (`cli.rs`): a third result next to the window command and `--start-at-login`;
+  it wins over window flags, so a quitting launch never opens the window. Single-instance hands
+  it to `joan::quit`, which the tray's Quit now uses too (logs `quit`, then `app.exit(0)`, as
+  before). A `--quit` launch with nothing running just ends (a first run still saves its
+  settings, without the welcome).
+- **The smoke sequence** (`smoke.mts`, after start at login): set → `--hide` → `--show` check;
+  new token → `--quit` as soon as the set is logged (the log is polled every 50 ms) → wait for
+  the process to end by itself (15 s, else it is killed and that fails) → 2 s → relaunch on the
+  same data folder (log `smoke-after-quit.log`) → check → `--quit`. The node server stays up
+  across the relaunch, so the origin (and its localStorage) is the same. `persistFailures`
+  (`smoke-log.mts`, unit-tested) wants `p=1 s=1 l=1` after close → summon, `p=1 s=0 l=1` after
+  quit → relaunch, the app's `quit` within 1000 ms of the page's `LJ-PERSIST set` (both from
+  the app's own log clock, so the check really is "quit right after setting"), one `started`
+  and no `first-run` in the relaunch. `summary.json` gains `persist`.
+- **`state.rs`'s comment was wrong**: with no `data_directory`, Tauri forces
+  `app_local_data_dir` on Windows and Linux (`manager/webview.rs`); macOS ignores it. The
+  comment and docs/architecture.md ("Where data lives") now say so.
+- Disk (checks commit): 13 GiB free at the start, 12 GiB after verify; `.cache/target` 1.2 GB.
 
 ### LJ21 — History: recorder, store, frecency · strong · auto
 
