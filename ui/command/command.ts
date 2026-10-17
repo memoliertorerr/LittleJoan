@@ -130,7 +130,7 @@ export function commandBar(
         });
         break;
       case "settings":
-        void invoke("open_settings", {});
+        void invoke("open_settings", { tab: action.tab });
         break;
       case "history":
         showHistory();

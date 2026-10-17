@@ -54,6 +54,11 @@ describe("rows while nothing is typed", () => {
     expect(autofill).toBeNull();
   });
 
+  it("ends with Settings & extensions, which opens Settings on Extensions", () => {
+    expect(buildRows("", []).rows).toEqual([SETTINGS_ROW]);
+    expect(SETTINGS_ROW).toMatchObject({ title: "Settings & extensions", action: { kind: "settings", tab: "extensions" } });
+  });
+
   it("shows the four starters when there is no history", () => {
     const { rows } = buildRows("", STARTERS);
     expect(rows.map((row) => row.title)).toEqual(["Wikipedia", "YouTube", "GitHub", "Google Maps", "Settings & extensions"]);
@@ -207,7 +212,7 @@ describe("keys", () => {
 
   it("Enter opens the selected row, or with none what the field says", () => {
     expect(listKey(list, 0, "Enter", false, "127")).toEqual({ kind: "act", action: { kind: "open", url: SMOKE.url } });
-    expect(listKey(list, last, "Enter", false, "127")).toEqual({ kind: "act", action: { kind: "settings" } });
+    expect(listKey(list, last, "Enter", false, "127")).toEqual({ kind: "act", action: { kind: "settings", tab: "extensions" } });
     expect(listKey(list, null, "Enter", false, " github.com ")).toEqual({ kind: "act", action: { kind: "input", text: "github.com" } });
     expect(listKey(list, null, "Enter", false, "  ")).toEqual({ kind: "none" });
   });

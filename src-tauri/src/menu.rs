@@ -102,7 +102,7 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let action = match event.id().as_ref() {
         SETTINGS => {
-            settings_window::open(app);
+            settings_window::open(app, None);
             return;
         }
         QUIT => {

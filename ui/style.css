@@ -116,78 +116,6 @@ body {
   white-space: nowrap;
 }
 
-.settings {
-  padding: 20px 22px;
-  font-size: 14px;
-}
-
-.settings h1 {
-  margin: 0 0 16px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 12px 0 4px;
-}
-
-.label {
-  color: var(--fg);
-}
-
-.note {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.settings select,
-.settings button {
-  font: inherit;
-  color: var(--fg);
-  background: var(--field-bg);
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 6px 10px;
-}
-
-.settings input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.recorder {
-  min-width: 150px;
-  text-align: center;
-  cursor: pointer;
-}
-
-.recorder.recording {
-  border-color: var(--accent);
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 24px;
-}
-
-.settings button.primary {
-  background: var(--accent);
-  color: #ffffff;
-}
-
-.settings button:disabled {
-  opacity: 0.5;
-}
-
 /* The bar (its own webview): in the toolbar view a thin strip pinned above the page, 40 px
    tall; in the overlay view the command bar, a rounded panel covering the whole window. */
 .bar-body {
@@ -444,12 +372,14 @@ body {
   list-style: none;
 }
 
+/* Rows sit 12 px apart (their margins collapse); the history view's rows too. */
 .row {
   position: relative;
   display: flex;
   gap: 10px;
   align-items: center;
   height: 38px;
+  margin: 12px 0 4px;
   padding: 0 10px;
   font-size: 14px;
   border-radius: 8px;

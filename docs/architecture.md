@@ -61,8 +61,12 @@ ui/toolbar/logic.ts                the toolbar: the domain shown, back / open-in
 ui/toolbar/toolbar.ts              the toolbar's buttons and site; DOM glue only
 ui/index.html                      the page webview's first page: a plain background, no script
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
-ui/settings.html, ui/settings.ts   the settings window: shortcut recorder, search engine, language
-ui/settings-logic.ts               settings types + change detection, unit-tested
+ui/settings.html, ui/settings.ts   the settings window: tabs (General, Appearance, Extensions,
+                                   Privacy, About), shortcut recorder, lists, switches, clear
+                                   history; DOM glue only
+ui/settings-logic.ts               settings types, tabs, change detection across tabs, the
+                                   Privacy tab's clear action (unit-tested)
+ui/settings.css                    the settings window's styles (style.css has the shared tokens)
 ui/style.css                       shared styles; light/dark via prefers-color-scheme
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
 src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
@@ -117,7 +121,9 @@ src-tauri/src/commands.rs          bar: open_input, page_url, focus_page, set_ov
                                    history_clear (both)
 src-tauri/src/autostart.rs         start at login: tauri-plugin-autostart (Rust API only), the
                                    macOS translocation guard (pure, tested)
-src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close)
+src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close): its tabs
+                                   (`SettingsTab`, tested), open on a tab or switch an open one,
+                                   links to the default browser
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen
 src-tauri/src/keys.rs              page keys per OS (pure), app origin
@@ -142,7 +148,7 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
-                                   --start-at-login on|off / --quit parsing
+                                   --start-at-login on|off / --settings [tab] / --quit parsing
 scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide, start at
                                    login on/off, cookies and storage across close and quit),
                                    reads the OS login entry, screenshots
@@ -204,8 +210,8 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   sees the `WebContent` processes gone within 30 s and no growth across summon cycles. WebView2
   and WebKitGTK release theirs on destroy without help.
 - **Single instance:** `tauri-plugin-single-instance` forwards a second launch's arguments to
-  the running app (`--toggle`, `--show [url]`, `--hide`, `--start-at-login on|off`, `--quit`; no
-  flags = `--show`). On Linux it needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
+  the running app (`--toggle`, `--show [url]`, `--hide`, `--start-at-login on|off`,
+  `--settings [tab]`, `--quit`; no flags = `--show`). On Linux it needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
   `--start-at-login` is handled before the toggle table and never touches the window. `--quit`
   takes the tray's Quit path (`joan::quit`) and wins over any window flag; a `--quit` launch with
   nothing running just ends.
@@ -250,15 +256,15 @@ settings window's `core:window:allow-close`).
 | `open_in_browser()` | the toolbar's "open in default browser" | the page action OpenInBrowser: the page goes to the default browser, the window hibernates |
 | `hibernate()` | the bar, Esc with no page | close the window (same path as `--hide`) |
 | `start_info()` | the command bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut }` for the hint line and the welcome; `firstRun` is true once |
-| `get_settings()` | settings window | settings + engine and language lists + platform |
-| `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save |
+| `get_settings()` | settings window, on load | settings + engine and language lists + platform + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version`; logs `settings-loaded` |
+| `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 | `history_list()` | the history view, when it opens and after a change | every record, latest visit first: `[{ url, title, host, lastVisit, visitCount }]` (empty with no window); the view searches, groups and draws them; logs `history-list <n>` |
 | `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → up to 8 top sites, leaving out the open page's site, or the 4 starters when there are none; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) |
 | `history_remove(url)` | the command bar (Shift+Delete on a history row), the history view (× or Shift+Delete) | forget that record and rewrite `history.json` at once; returns whether there was one |
-| `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy (LJ26) | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
-| `open_settings(tab?)` | the command bar's "Settings & extensions" row | open (or focus) the settings window; `tab` is for LJ26's tabs |
+| `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
+| `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
 `capabilities/settings.json` grants the `settings` window the four settings commands,
@@ -363,8 +369,29 @@ from the sites visited.
 | macOS | `~/Library/Application Support/io.github.memoliertorerr.littlejoan/settings.json` |
 | Linux | `~/.config/io.github.memoliertorerr.littlejoan/settings.json` |
 
-The settings window (tray → Settings…, or Cmd+, on macOS) records a shortcut by listening to the
-next key press. While it listens, the active global shortcut is **suspended** (unregistered) so
+**The settings window** (`settings_window.rs`, `ui/settings.*`; about 600×480, not resizable)
+opens from the tray (Settings…), Cmd+, on macOS, the command bar's "Settings & extensions" (on
+Extensions) and `--settings [tab]` (forwarded by single-instance; it never opens the page
+window). A sidebar on the left holds the tabs (↑/↓, Home, End move between them), the tab is on
+the right, and **Save / Cancel** along the bottom cover every tab (change detection compares
+all fields, whichever tab they are on):
+
+| Tab | Holds |
+|---|---|
+| General | shortcut, search engine, translate language, mobile sites, start at login |
+| Appearance | a placeholder until the theme engine (LJ27) |
+| Extensions | a placeholder until extensions (LJ30) |
+| Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
+| About | version, license, the repository link, "Inspired by Little Arc…" as plain text |
+
+A new window gets its first tab from an initialization script (`window.__littleJoanSettingsTab`)
+that runs before the page's own; an open window is focused and switched with
+`window.littleJoanSettings.showTab(<tab>)`. Tab names come from `SettingsTab`, never from user
+text. The window may only navigate within the app's origin; a link (About's) opens in the
+default browser (web URLs only), like the page's new-window requests. Smoke log:
+`settings-window <tab>` (or `focus`), `settings-loaded`.
+
+The General tab records a shortcut by listening to the next key press. While it listens, the active global shortcut is **suspended** (unregistered) so
 pressing it doesn't summon or dismiss the page window; it is resumed when recording stops, when
 Save runs, and when the window closes for any reason. A new shortcut is registered before the
 old one is forgotten: if registration fails, the old one is registered again and the window
@@ -571,7 +598,9 @@ engine: the window's fullscreen state changed), `element-fullscreen <true|false>
 app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finished loading),
 `bar-url <address | start>` (what the bar was told to show), `hibernated`,
 `start-at-login <true|false>` (the login entry read back after a change),
-`start-at-login-failed <reason>`, `first-run` (no settings.json at launch), `welcome` (the command
+`start-at-login-failed <reason>`, `settings-window <tab | focus>` (Settings opened on a tab, or
+was focused / switched), `settings-loaded` (its page asked for the settings), `first-run` (no
+settings.json at launch), `welcome` (the command
 bar was handed the first run), `quit` (Quit or `--quit` is about to exit),
 `session-cookies-kept <n>` / `session-cookies-restored <n>` (Windows: session cookies kept on
 close, set again in the new window; counts only), `history-visit <kind> <url>` (a visit was
@@ -608,8 +637,10 @@ The modules below hold every decision the app makes; the native glue only calls 
   the open window); the last flag wins; unknown arguments are ignored; `--show` accepts only
   absolute web URLs. `--start-at-login on|off` (any case; other values are ignored) is a
   separate result next to the window command, so it never maps to one; a second launch whose
-  only flag is `--start-at-login` leaves the window alone. `--quit` is a third result; it
-  replaces the window command (a quitting launch never opens the window).
+  only flag is `--start-at-login` leaves the window alone. `--settings [tab]` (general,
+  appearance, extensions, privacy, about, any case; General without one or for a name it doesn't
+  know) opens Settings and leaves the page window alone too. `--quit` is a third result; it
+  replaces the window command (a quitting launch never opens the window, nor Settings).
 
 ## Building
 
@@ -684,8 +715,8 @@ and pushes to `main`:
   `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the
   window (followed by process id, so other apps' WebKit helpers on the runner don't count).
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`, `narrow.png`,
-  `wide.png`, `command-bar.png`, `command-typing.png`, `history.png`, `welcome.png`), the logs,
-  and
+  `wide.png`, `command-bar.png`, `command-typing.png`, `history.png`, `settings-general.png`,
+  `settings-privacy.png`, `welcome.png`), the logs, and
   The app runs on a fresh `LITTLEJOAN_DATA_DIR` that already holds the default `settings.json`,
   so it starts hibernating (memory at rest is measured before any window opens). Then the
   **login-persistence check**: the smoke page's `?persist=set&t=<token>` sets a persistent
@@ -697,7 +728,11 @@ and pushes to `main`:
   **history check**: the main run's `history.json` must hold the smoke page's address with its
   `LJ-SMOKE …` title, its host and a visit, and none of the app's own pages; a run whose
   settings say `"rememberHistory": false` loads the smoke page, hibernates and quits, and must
-  leave no records (log `smoke-history-off.log`). Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  leave no records (log `smoke-history-off.log`); before it quits it runs the **settings
+  check**: `--settings` must open Settings on General and its page load (`settings-window
+  general`, `settings-loaded`; screenshot `settings-general.png`), `--settings privacy` must
+  switch it to Privacy (`settings-privacy.png`, where Remember history is off), and the page
+  window must not open. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).

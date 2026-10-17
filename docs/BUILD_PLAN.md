@@ -73,7 +73,7 @@
 | LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ✅ done |
 | LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ✅ done |
 | LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ✅ done |
-| LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ⬜ todo |
+| LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ✅ done |
 | LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ⬜ todo |
 | LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ⬜ todo |
 | LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ⬜ todo |
@@ -3132,6 +3132,16 @@ then stop). Look at history.png.
   `history-list` of at least one page (`historyViewFailures`, 3 tests); then `history.png`.
 - `npm run verify`: 168 TS tests, 159 Rust tests, clippy clean. Disk: 13 GiB free at the start
   and after verify; `.cache/target` 1.2 GB.
+- **CI (run 39076586164): every job green** — verify ×3, package ×3, smoke on Windows, macOS,
+  Linux and Linux at scale 2. Ctrl+Y reached the app on Windows and Linux, and Cmd+Y on macOS
+  too (`history-view`, then `history-list 1` on all four). `history.png`: the overlay's rounded
+  white panel with a back chevron, "Search history…" (the caret in it on Windows and macOS) and
+  "Clear history…" on the right, a hairline, the muted "TODAY" heading, and the smoke page's row —
+  its lettered stand-in icon, "LJ-SMOKE viewport=720x560 ua=desktop dpr=1 — 127.0.0.1:<port>"
+  with the site muted, "10:57 PM" and a muted × at the right end; nothing cut off, the same
+  look as the command bar. macOS: the traffic lights in the 40 px strip above the panel. Linux
+  at scale 2: the same, crisp (`dpr=2`). The rows kept the command bar's 12 px spacing, which
+  is airy for a list; LJ26 makes the history list's rows tight.
 
 ### LJ26 — Settings window with tabs · standard · auto
 
@@ -3170,6 +3180,55 @@ CI until every job is green (two honest attempts, then stop). Look at both scree
 ends phase 14: fill the PR description, merge into main once green (merge commit), then stop and
 report.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **The window** (`settings_window.rs`): 600×480, not resizable, a sidebar of tabs on the left
+  and the tab on the right, Save / Cancel along the bottom across both. `SettingsTab` (General,
+  Appearance, Extensions, Privacy, About; by name in any case, 2 tests) is the only tab type in
+  Rust. A new window gets its tab from an initialization script (`window.__littleJoanSettingsTab
+  = "<tab>"`, which runs before the page's script; names are ours, lower-case letters only — a
+  test checks); an open one is focused and switched with `window.littleJoanSettings.showTab`.
+  Every opener goes through `settings_window::open(app, tab)`: `--settings [tab]`
+  (single-instance and a first launch), `open_settings(tab)` (the command bar's row asks for
+  `extensions`; the tab now travels in the row's action, `SETTINGS_ROW.action.tab`, so it is
+  tested), the tray and Cmd+, (no tab: General when new, an open one stays where it is). Smoke
+  log: `settings-window <tab | focus>`, and `settings-loaded` from `get_settings`.
+- **`--settings [tab]`** (`cli.rs`, 1 new test): General without a tab or for a name it doesn't
+  know (the window still opens); it never opens the page window (`forwarded_command` → none),
+  `--quit` wins over it, a first launch with it shows no welcome (`state::finish_first_run`).
+- **Hardening, not in the prompt:** the settings window only navigates within the app's origin,
+  and links open in the default browser (web URLs only) — About's repository link would
+  otherwise have loaded GitHub inside the trusted window.
+- **Privacy:** **Remember history** joins `SettingsInput` (`save_settings` sets it; Save covers
+  it with the rest); **Clear history** is a range list (the history view's choices), "Clear…", a
+  question ("Remove the history of the last 7 days?") with Cancel / Remove, then `history_clear`
+  at once — it isn't a setting, so Cancel doesn't undo it — and what went (the history view's
+  wording). Its states are `clearStep` in `settings-logic.ts` (pick / ask / cancel / confirm /
+  done / failed; nothing changes while Rust works). **What is stored where** comes from
+  `get_settings`'s new `storage` (`folder`: the data folder of settings.json and history.json;
+  `siteData`: the webview data folder — `LITTLEJOAN_DATA_DIR/webview` or `app_local_data_dir` —
+  or on macOS a description of WebKit's own store), plus "session cookies in memory only" and
+  "history never leaves this computer". About gets `version` (the package's).
+- **Appearance / Extensions** say what is coming (LJ27 / LJ30); no controls yet.
+- **`ui/settings-logic.ts`** (11 tests, 4 before): tabs (`TABS`, `tabFrom`, `tabForKey` for
+  ↑/↓/Home/End without wrapping), change detection across tabs (`rememberHistory` counts; edits
+  on General and Privacy make one Save), the clear action. The old tests changed only where the
+  input gained `rememberHistory`.
+- **Styles:** a new `ui/settings.css` (the settings window only; style.css keeps the shared
+  tokens): the sidebar uses the toolbar's tint and the command bar's selection color, so the
+  window matches the command bar in light and dark. The old settings rules left `style.css`,
+  which brings it back toward 400 lines. One of them, a settings `.row` rule, had also given the
+  command bar's rows their 12 px spacing; that margin is now on the command bar's own `.row`
+  rule, so its look is unchanged (the history view's denser rows set their own).
+- **Smoke:** the history-off run (hibernating, before it quits) runs `--settings` → General must
+  open and load (`settings-general.png`), then `--settings privacy` must switch the open window
+  (`settings-privacy.png`, Remember history off there), and no page window may open
+  (`settingsFailures`, 3 tests).
+- Files beyond the prompt's list: `ui/settings.css`, `ui/command/{rows,command}.ts` (+ test),
+  `src-tauri/src/{state,menu,tray}.rs`, `scripts/ci/smoke-command.mts` (+ test).
+- `npm run verify`: 179 TS tests, 162 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.2 GB.
 
 ### LJ27 — Theme engine · strong · auto
 

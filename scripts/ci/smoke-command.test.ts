@@ -5,8 +5,11 @@ import {
   parseHistoryList,
   parseSuggestions,
   sawHistoryView,
+  sawSettings,
   sawSmokeTopSite,
   sawTypedMatch,
+  settingsFailures,
+  settingsTabs,
 } from "./smoke-command.mts";
 import { parseLog } from "./smoke-log.mts";
 
@@ -100,5 +103,37 @@ describe("the history view check", () => {
   it("is best effort where the keys aren't driven", () => {
     expect(historyViewFailures(parseLog("1 window-created\n"), { driven: false })).toEqual([]);
     expect(historyViewFailures(parseLog("1 window-created\n"), { driven: true })).toHaveLength(1);
+  });
+});
+
+describe("the settings check", () => {
+  const GOOD_SETTINGS = `1 window-created
+2 page-loaded http://127.0.0.1:5000/smoke.html
+3 hibernated
+4 settings-window general
+5 settings-loaded
+6 settings-window privacy
+7 quit
+`;
+
+  it("lists the tabs and sees the page load after General", () => {
+    const events = parseLog(GOOD_SETTINGS);
+    expect(settingsTabs(events)).toEqual(["general", "privacy"]);
+    expect(sawSettings(events, "general")).toBe(true);
+    expect(sawSettings(parseLog("1 settings-loaded\n2 settings-window general\n"), "general")).toBe(false);
+  });
+
+  it("passes General, then Privacy, with no page window", () => {
+    expect(settingsFailures(parseLog(GOOD_SETTINGS))).toEqual([]);
+  });
+
+  it("wants the page to load, Privacy after General, and no page window", () => {
+    const unloaded = parseLog(GOOD_SETTINGS.replace("5 settings-loaded\n", ""));
+    expect(settingsFailures(unloaded)).toEqual([expect.stringContaining("on General")]);
+    const noPrivacy = parseLog(GOOD_SETTINGS.replace("6 settings-window privacy\n", ""));
+    expect(settingsFailures(noPrivacy)).toEqual([expect.stringContaining("to Privacy")]);
+    const opened = parseLog(GOOD_SETTINGS.replace("7 quit", "7 window-created"));
+    expect(settingsFailures(opened)).toEqual([expect.stringContaining("page window")]);
+    expect(settingsFailures(parseLog("1 started\n"))).toHaveLength(2);
   });
 });

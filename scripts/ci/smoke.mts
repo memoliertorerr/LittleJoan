@@ -11,8 +11,9 @@
 // the history view), turn start at login on and off (reading the OS's own login entry each
 // time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
 // then a relaunch on the same data folder), that history.json recorded the smoke page (and that
-// a run with history off records nothing), then check the logs (scripts/ci/smoke-log.mts,
-// smoke-command.mts) and the webview helper processes. The app runs on a fresh
+// a run with history off records nothing; that run also opens Settings with `--settings` and
+// `--settings privacy`), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts) and
+// the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
 // data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
@@ -49,8 +50,11 @@ import {
   commandBarFailures,
   historyViewFailures,
   sawHistoryView,
+  sawSettings,
   sawSmokeTopSite,
   sawTypedMatch,
+  settingsFailures,
+  settingsTabs,
   TYPED,
 } from "./smoke-command.mts";
 
@@ -700,11 +704,24 @@ await forward(["--show", smokePageUrl], historyOffEnv);
 await waitFor("history off: smoke page", (e) => lastTitle(e, "LJ-SMOKE ready") !== undefined, 30_000, historyOffLogPath);
 await forward(["--hide"], historyOffEnv);
 await waitFor("history off: hibernated", (e) => count(e, "hibernated") > 0, 20_000, historyOffLogPath);
+// Settings (LJ26), while hibernating: `--settings` opens it on General, `--settings privacy`
+// switches the open window to Privacy (where "Remember history" is off in this run); neither
+// opens the page window.
+const settingsFrom = events(historyOffLogPath).length;
+await forward(["--settings"], historyOffEnv);
+await waitFor("settings: General", (e) => sawSettings(e.slice(settingsFrom), "general"), 20_000, historyOffLogPath);
+await sleep(1500);
+screenshot("settings-general.png");
+await forward(["--settings", "privacy"], historyOffEnv);
+await waitFor("settings: Privacy", (e) => settingsTabs(e.slice(settingsFrom)).includes("privacy"), 15_000, historyOffLogPath);
+await sleep(1000);
+screenshot("settings-privacy.png");
 await forward(["--quit"], historyOffEnv);
 if (!(await exited(historyOffPid, 15_000))) {
   await quit(historyOffChild, historyOffPid);
 }
 const historyOff = readIfThere(join(historyOffDir, "history.json"));
+const historyOffEvents = events(historyOffLogPath);
 const historyCheck = { main: historyMain, pageUrl: smokePageUrl, off: historyOff };
 console.log(`history: main ${historyMain === undefined ? "no file" : `${historyMain.length} bytes`}, off ${historyOff ?? "no file"}`);
 server.close();
@@ -778,6 +795,7 @@ const summary = {
     typingDriven,
     historyView: sawHistoryView(log),
   },
+  settings: settingsTabs(historyOffEvents),
   history: {
     mainRecords: parseHistory(historyMain)?.length ?? null,
     smokePage: parseHistory(historyMain)?.find((record) => record.url === smokePageUrl) ?? null,
@@ -807,6 +825,7 @@ const failures = evaluate(
   .concat(historyViewFailures(log, { driven: typingDriven }))
   .concat(persistFailures(log, persistCheck))
   .concat(historyFailures(historyCheck))
+  .concat(settingsFailures(historyOffEvents))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));

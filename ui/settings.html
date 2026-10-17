@@ -5,39 +5,157 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Little Joan Settings</title>
     <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./settings.css" />
     <script type="module" src="./settings.ts"></script>
   </head>
-  <body>
-    <main class="settings">
-      <h1>Settings</h1>
-      <div class="row">
-        <span class="label" id="shortcut-label">Shortcut</span>
-        <button id="shortcut" class="recorder" type="button" aria-labelledby="shortcut-label">…</button>
-      </div>
-      <p class="note" id="shortcut-note">Click, then press the keys you want to use.</p>
-      <label class="row" for="login">
-        <span class="label">Start Little Joan at login</span>
-        <input id="login" type="checkbox" />
-      </label>
-      <p class="note" id="login-note">So the shortcut works after you restart.</p>
-      <label class="row" for="engine">
-        <span class="label">Search with</span>
-        <select id="engine"></select>
-      </label>
-      <label class="row" for="language">
-        <span class="label">Translate pages to</span>
-        <select id="language"></select>
-      </label>
-      <label class="row" for="mobile">
-        <span class="label">Mobile sites in a narrow window</span>
-        <input id="mobile" type="checkbox" />
-      </label>
-      <p class="note">Narrower than 600 px, pages get a phone browser's user agent.</p>
-      <p id="error" class="error" role="alert" hidden></p>
-      <div class="actions">
+  <!-- The settings window: tabs in a sidebar on the left, the chosen tab on the right, and
+       Save / Cancel at the bottom for every tab. -->
+  <body class="settings-body">
+    <div class="settings-window">
+      <nav class="tabs" role="tablist" aria-orientation="vertical" aria-label="Settings">
+        <button id="tab-general" class="tab" type="button" role="tab" data-tab="general" aria-controls="panel-general">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="2.2" />
+            <circle cx="8" cy="8" r="4.7" />
+            <path d="M8 1.3v1.6M8 13.1v1.6M1.3 8h1.6M13.1 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M3.3 12.7l1.1-1.1M11.6 4.4l1.1-1.1" />
+          </svg>
+          General
+        </button>
+        <button id="tab-appearance" class="tab" type="button" role="tab" data-tab="appearance" aria-controls="panel-appearance">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.8" />
+            <path d="M8 2.2a5.8 5.8 0 0 1 0 11.6z" class="filled" />
+          </svg>
+          Appearance
+        </button>
+        <button id="tab-extensions" class="tab" type="button" role="tab" data-tab="extensions" aria-controls="panel-extensions">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="2.2" y="2.2" width="4.8" height="4.8" rx="1.2" />
+            <rect x="9" y="2.2" width="4.8" height="4.8" rx="1.2" />
+            <rect x="2.2" y="9" width="4.8" height="4.8" rx="1.2" />
+            <rect x="9" y="9" width="4.8" height="4.8" rx="2.4" />
+          </svg>
+          Extensions
+        </button>
+        <button id="tab-privacy" class="tab" type="button" role="tab" data-tab="privacy" aria-controls="panel-privacy">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 1.8 13 3.6v4.1c0 3.1-2.1 5.5-5 6.5-2.9-1-5-3.4-5-6.5V3.6z" />
+          </svg>
+          Privacy
+        </button>
+        <button id="tab-about" class="tab" type="button" role="tab" data-tab="about" aria-controls="panel-about">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.8" />
+            <path d="M8 7.2v4M8 4.8v.1" />
+          </svg>
+          About
+        </button>
+      </nav>
+
+      <main class="tab-panels">
+        <section id="panel-general" class="tab-panel" role="tabpanel" aria-labelledby="tab-general" hidden>
+          <h1>General</h1>
+          <div class="setting">
+            <span class="setting-label" id="shortcut-label">Shortcut</span>
+            <button id="shortcut" class="recorder" type="button" aria-labelledby="shortcut-label">…</button>
+          </div>
+          <p class="setting-note" id="shortcut-note">Click, then press the keys you want to use.</p>
+          <label class="setting" for="engine">
+            <span class="setting-label">Search with</span>
+            <select id="engine"></select>
+          </label>
+          <label class="setting" for="language">
+            <span class="setting-label">Translate pages to</span>
+            <select id="language"></select>
+          </label>
+          <label class="setting" for="mobile">
+            <span class="setting-label">Mobile sites in a narrow window</span>
+            <input id="mobile" type="checkbox" />
+          </label>
+          <p class="setting-note">Narrower than 600 px, pages get a phone browser's user agent.</p>
+          <label class="setting" for="login">
+            <span class="setting-label">Start Little Joan at login</span>
+            <input id="login" type="checkbox" />
+          </label>
+          <p class="setting-note" id="login-note">So the shortcut works after you restart.</p>
+        </section>
+
+        <section id="panel-appearance" class="tab-panel" role="tabpanel" aria-labelledby="tab-appearance" hidden>
+          <h1>Appearance</h1>
+          <p class="placeholder">
+            Themes are coming: one to three muted colors that blend into the toolbar, the command bar
+            and these windows, in light and dark.
+          </p>
+        </section>
+
+        <section id="panel-extensions" class="tab-panel" role="tabpanel" aria-labelledby="tab-extensions" hidden>
+          <h1>Extensions</h1>
+          <p class="placeholder">
+            Extensions are coming: small tools, games and page actions that open from the command bar,
+            and a way to write your own.
+          </p>
+        </section>
+
+        <section id="panel-privacy" class="tab-panel" role="tabpanel" aria-labelledby="tab-privacy" hidden>
+          <h1>Privacy</h1>
+          <label class="setting" for="remember">
+            <span class="setting-label">Remember history</span>
+            <input id="remember" type="checkbox" />
+          </label>
+          <p class="setting-note" id="remember-note">
+            Pages you open are kept on this computer for the command bar's suggestions and the history
+            view. Off: nothing new is recorded; what is there stays until you clear it.
+          </p>
+          <div class="setting">
+            <span class="setting-label" id="clear-label">Clear history</span>
+            <span class="setting-controls">
+              <select id="clear-range" aria-labelledby="clear-label"></select>
+              <button id="clear-ask" type="button">Clear…</button>
+            </span>
+          </div>
+          <div id="clear-confirm" class="confirm" role="group" aria-labelledby="clear-question" hidden>
+            <span id="clear-question"></span>
+            <span class="setting-controls">
+              <button id="clear-cancel" type="button">Cancel</button>
+              <button id="clear-go" class="danger" type="button">Remove</button>
+            </span>
+          </div>
+          <p id="clear-status" class="setting-note" role="status" hidden></p>
+          <h2>What is stored where</h2>
+          <dl class="storage">
+            <dt>Settings and history</dt>
+            <dd id="store-folder">…</dd>
+            <dt>Cookies and site data</dt>
+            <dd id="store-site">…</dd>
+            <dt>Session cookies</dt>
+            <dd>In memory while Little Joan runs, never on disk.</dd>
+          </dl>
+          <p class="setting-note">History never leaves this computer: nothing is synced or sent anywhere.</p>
+        </section>
+
+        <section id="panel-about" class="tab-panel" role="tabpanel" aria-labelledby="tab-about" hidden>
+          <h1>About</h1>
+          <p class="about-name">Little Joan</p>
+          <p class="setting-note" id="about-version">Version …</p>
+          <p>A tiny pop-up browser that hibernates until you call it.</p>
+          <p>MIT License · © 2026 Mehmet Ali Ertorer</p>
+          <p>
+            <a href="https://github.com/memoliertorerr/LittleJoan" target="_blank" rel="noreferrer">
+              github.com/memoliertorerr/LittleJoan
+            </a>
+          </p>
+          <p class="setting-note">
+            Inspired by Little Arc in the Arc browser. Little Joan is an independent project and is not
+            affiliated with or endorsed by The Browser Company.
+          </p>
+        </section>
+      </main>
+
+      <footer class="settings-actions">
+        <p id="error" class="error" role="alert" hidden></p>
         <button id="cancel" type="button">Cancel</button>
         <button id="save" class="primary" type="button">Save</button>
-      </div>
-    </main>
+      </footer>
+    </div>
   </body>
 </html>

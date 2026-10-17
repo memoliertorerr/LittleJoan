@@ -21,7 +21,8 @@ export type Action =
   | { kind: "open"; url: string }
   /** What open_input makes of the text: an address or a search. */
   | { kind: "input"; text: string }
-  | { kind: "settings" }
+  /** Open the settings window on a tab. */
+  | { kind: "settings"; tab: string }
   /** Show the history view (the built-in "History" command). */
   | { kind: "history" }
   /** An extension's command (LJ30). */
@@ -64,13 +65,13 @@ export interface RowList {
 /** The most suggestion rows; "Settings & extensions" comes after them. */
 export const MAX_SUGGESTIONS = 8;
 
-/** Always the last row — where Little Arc has "Contact the Team". */
+/** Always the last row — where Little Arc has "Contact the Team": Settings, on Extensions. */
 export const SETTINGS_ROW: Row = {
   kind: "settings",
   title: "Settings & extensions",
   domain: "",
   host: "",
-  action: { kind: "settings" },
+  action: { kind: "settings", tab: "extensions" },
 };
 
 /** The built-in "History" command: it opens the history view (also Ctrl/Cmd+Y). */

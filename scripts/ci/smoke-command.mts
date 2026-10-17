@@ -1,8 +1,10 @@
-// Smoke-log rules for the command bar and its history view (pure, unit-tested;
-// scripts/ci/smoke.mts uses them). The app logs `suggestions <rows> first=<site>
-// typed=<characters>` for every suggest() call the bar makes, `history-view` when Ctrl/Cmd+Y
-// opens the history view and `history-list <rows>` when the view asks for the pages
-// (src-tauri/src/commands.rs, bar.rs) — counts and a site, never the typed text or an address.
+// Smoke-log rules for the app's own screens — the command bar, its history view, the settings
+// window (pure, unit-tested; scripts/ci/smoke.mts uses them). The app logs `suggestions <rows>
+// first=<site> typed=<characters>` for every suggest() call the bar makes, `history-view` when
+// Ctrl/Cmd+Y opens the history view, `history-list <rows>` when the view asks for the pages,
+// `settings-window <tab>` when Settings opens or switches tab and `settings-loaded` when its page
+// asks for the settings (src-tauri/src/commands.rs, bar.rs, settings_window.rs) — counts, a site
+// and tab names, never the typed text or an address.
 import type { LogEvent } from "./smoke-log.mts";
 
 export interface SuggestionsEvent {
@@ -108,4 +110,36 @@ export function historyViewFailures(events: LogEvent[], check: HistoryViewCheck)
     return [];
   }
   return ["Ctrl/Cmd+Y never opened the history view with the smoke page's history in it"];
+}
+
+/** The tabs Settings was opened or switched to (`settings-window <tab>`), in order. */
+export function settingsTabs(events: LogEvent[]): string[] {
+  return events.filter((e) => e.event === "settings-window").map((e) => e.detail);
+}
+
+/** Settings opened on `tab` and its page then loaded its settings (`settings-loaded`). */
+export function sawSettings(events: LogEvent[], tab: string): boolean {
+  const opened = events.findIndex((e) => e.event === "settings-window" && e.detail === tab);
+  return opened >= 0 && events.slice(opened).some((e) => e.event === "settings-loaded");
+}
+
+/**
+ * The settings check (a run that is hibernating): `--settings` opened Settings on General and
+ * its page loaded, `--settings privacy` then switched it to Privacy, and the page window never
+ * opened meanwhile.
+ */
+export function settingsFailures(events: LogEvent[]): string[] {
+  const failures: string[] = [];
+  const first = events.findIndex((e) => e.event === "settings-window");
+  if (!sawSettings(events, "general")) {
+    failures.push("--settings never opened Settings on General (or its page never loaded)");
+  }
+  const tabs = settingsTabs(events);
+  if (tabs.indexOf("privacy") <= tabs.indexOf("general")) {
+    failures.push("--settings privacy never switched Settings to Privacy after General");
+  }
+  if (first >= 0 && events.slice(first).some((e) => e.event === "window-created")) {
+    failures.push("--settings opened the page window");
+  }
+  return failures;
 }

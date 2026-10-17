@@ -4,8 +4,10 @@
 //! has no capability at all, so nothing loaded there — web pages, the start page — can call any
 //! of these.
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::autostart;
 use crate::bar;
@@ -17,7 +19,7 @@ use crate::keys::PageAction;
 use crate::page_actions;
 use crate::phone_mode;
 use crate::settings::{self, Settings};
-use crate::settings_window;
+use crate::settings_window::{self, SettingsTab};
 use crate::shortcut::{self, PluginRegistrar};
 use crate::smoke;
 use crate::state;
@@ -129,6 +131,16 @@ pub struct Choice {
     name: String,
 }
 
+/// Where Little Joan keeps things, for Settings → Privacy.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Storage {
+    /// The folder of settings.json and history.json.
+    folder: String,
+    /// Where the web engine keeps cookies and site data (a folder, or on macOS a description).
+    site_data: String,
+}
+
 /// Everything the settings window shows.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -140,12 +152,39 @@ pub struct SettingsView {
     engines: Vec<Choice>,
     languages: Vec<Choice>,
     platform: &'static str,
+    storage: Storage,
+    /// Little Joan's version (About).
+    version: String,
+}
+
+/// Where the web engine keeps cookies and site data (docs/architecture.md, "Where data lives"):
+/// WebKit's own store on macOS whatever the app says; elsewhere the webview data folder.
+fn site_data<R: Runtime>(app: &AppHandle<R>, webview_dir: Option<&Path>) -> String {
+    if cfg!(target_os = "macos") {
+        return "WebKit's own store for Little Joan, in ~/Library/WebKit and ~/Library/HTTPStorages"
+            .to_owned();
+    }
+    match webview_dir {
+        Some(dir) => dir.display().to_string(),
+        None => app.path().app_local_data_dir().map_or_else(
+            |_| "the web engine's own folder for Little Joan".to_owned(),
+            |dir| dir.display().to_string(),
+        ),
+    }
 }
 
 #[tauri::command]
 pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
+    let (settings, folder, webview_dir) = state::with(&app, |s| {
+        (
+            s.settings.clone(),
+            s.data_dir.clone(),
+            s.webview_data_dir.clone(),
+        )
+    });
+    smoke::log("settings-loaded", "");
     SettingsView {
-        settings: state::with(&app, |s| s.settings.clone()),
+        settings,
         start_at_login: autostart::is_enabled(&app),
         engines: SearchEngine::ALL
             .iter()
@@ -165,6 +204,11 @@ pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
             })
             .collect(),
         platform: std::env::consts::OS,
+        storage: Storage {
+            folder: folder.display().to_string(),
+            site_data: site_data(&app, webview_dir.as_deref()),
+        },
+        version: app.package_info().version.to_string(),
     }
 }
 
@@ -176,6 +220,7 @@ pub struct SettingsInput {
     search_engine: SearchEngine,
     translate_to: String,
     mobile_sites: bool,
+    remember_history: bool,
 }
 
 /// Validates and applies new settings: the shortcut is swapped live (the old one comes back if
@@ -202,6 +247,7 @@ pub async fn save_settings<R: Runtime>(
             search_engine: settings.search_engine,
             translate_to: settings.translate_to,
             mobile_sites: settings.mobile_sites,
+            remember_history: settings.remember_history,
             ..s.settings.clone()
         };
         (s.data_dir.clone(), s.settings.clone())
@@ -263,12 +309,12 @@ pub async fn history_clear<R: Runtime>(
     history_store::clear(&app, range).map_err(|err| format!("Couldn't save the history: {err}"))
 }
 
-/// Opens the settings window (the command bar's "Settings & extensions" row). `tab` will pick
-/// its tab once Settings has tabs (LJ26); until then it opens as always.
+/// Opens (or focuses) the settings window on `tab` — general, appearance, extensions, privacy,
+/// about; the command bar's "Settings & extensions" row asks for extensions. Without a tab (or
+/// with one it doesn't know) a new window opens on General and an open one stays where it is.
 #[tauri::command]
 pub async fn open_settings<R: Runtime>(app: AppHandle<R>, tab: Option<String>) {
-    let _ = tab;
-    settings_window::open(&app);
+    settings_window::open(&app, tab.as_deref().and_then(SettingsTab::from_name));
 }
 
 /// Pauses (true) or resumes (false) the global shortcut while a new one is being recorded.

@@ -17,6 +17,12 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Settings has tabs:** General (shortcut, search engine, translate language, mobile sites,
+  start at login), Appearance and Extensions (coming next), Privacy (**Remember history**,
+  **Clear history**, and what is kept where), and About (version, license, the project's page),
+  in a sidebar, with Save and Cancel for all of them. **Settings & extensions** in the command
+  bar opens it on Extensions, and `little-joan --settings [tab]` on any tab. Links in Settings
+  open in your default browser.
 - **History view (Ctrl+Y, Cmd+Y on macOS):** the pages you opened, by day — Today, Yesterday,
   then dates — with their times, a search field, × to remove a page, and **Clear history…** for
   the last hour, the last 24 hours, the last 7 days, or everything. It opens over the command

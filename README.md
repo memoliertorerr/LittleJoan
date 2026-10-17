@@ -75,7 +75,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   completed in the field (Tab accepts it) —, a search with your search engine, then more matches.
   ↑/↓ choose a row, Enter opens it (with no row chosen, Enter opens what you typed), Shift+Delete
   removes a page from your history, × or Esc closes the command bar. Typing "history" (or just
-  "hi") offers **History**. The last row, **Settings & extensions**, opens Settings.
+  "hi") offers **History**. The last row, **Settings & extensions**, opens Settings on its
+  Extensions tab.
 - **History:** press **Ctrl+Y** (Windows, Linux) or **Cmd+Y** (macOS) — or pick History in the
   command bar — to see the pages you opened, by day (Today, Yesterday, then dates), each with its
   time. Type to search them; click one (or ↑/↓ and Enter) to open it; × or Shift+Delete removes a
@@ -117,7 +118,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),
-  `little-joan --start-at-login on|off`, and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
+  `little-joan --start-at-login on|off`, `little-joan --settings [general|appearance|extensions|privacy|about]`
+  (open Settings on a tab), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
 - **Quit:** tray menu → **Quit Little Joan**, `little-joan --quit`, or Cmd+Q on macOS while
   it's in front.
@@ -130,18 +132,27 @@ you to be signed in usually can't be translated this way.
 
 ## Settings
 
-Open **Settings…** from the tray / menu-bar icon (or press Cmd+, on macOS while Little Joan is in
-front) to change:
+Open **Settings…** from the tray / menu-bar icon, **Settings & extensions** at the bottom of the
+command bar, Cmd+, on macOS while Little Joan is in front, or `little-joan --settings [tab]`. Its
+tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover all of them.
 
-- **Shortcut** — click it, then press the new combination. It needs a modifier (Ctrl, Alt, Cmd,
-  or Super; Shift alone doesn't count). If another app already owns it, Little Joan says so and
-  keeps the old one.
-- **Start Little Joan at login** — adds Little Joan to your system's login items: a LaunchAgent
-  on macOS (`~/Library/LaunchAgents/Little Joan.plist`), the startup apps on Windows (the
-  registry's Run key), `~/.config/autostart/Little Joan.desktop` on Linux. Little Joan keeps no
-  copy of this setting, so if you remove it in your system's settings, it shows as off here too.
-- **Search with** — Google, DuckDuckGo, Bing, or Brave.
-- **Translate pages to** — the language for "Translate Page".
+- **General**
+  - **Shortcut** — click it, then press the new combination. It needs a modifier (Ctrl, Alt,
+    Cmd, or Super; Shift alone doesn't count). If another app already owns it, Little Joan says
+    so and keeps the old one.
+  - **Search with** — Google, DuckDuckGo, Bing, or Brave.
+  - **Translate pages to** — the language for "Translate Page".
+  - **Mobile sites in a narrow window** — phone mode (above).
+  - **Start Little Joan at login** — adds Little Joan to your system's login items: a
+    LaunchAgent on macOS (`~/Library/LaunchAgents/Little Joan.plist`), the startup apps on
+    Windows (the registry's Run key), `~/.config/autostart/Little Joan.desktop` on Linux. Little
+    Joan keeps no copy of this setting, so if you remove it in your system's settings, it shows
+    as off here too.
+- **Appearance** and **Extensions** — coming next (themes; extensions).
+- **Privacy** — **Remember history** (on by default; off, nothing new is recorded), **Clear
+  history** (the last hour, 24 hours, 7 days, or everything — at once, after a question; it isn't
+  undone by Cancel), and what Little Joan keeps where on your computer.
+- **About** — the version, the license and the project's page.
 
 The default shortcut, Cmd/Ctrl+Shift+Space, can clash with app shortcuts (VS Code's parameter
 hints, Word's non-breaking space); change it here if it does.
@@ -164,9 +175,9 @@ hints, Word's non-breaking space); change it here if it does.
   (`https://<site>/favicon.ico`, without a referrer); nothing else is fetched for suggestions.
 - **History stays on your computer.** Little Joan records the pages you open (address, title,
   when) in `history.json` next to its settings, for its own suggestions and the history view; it
-  is never sent anywhere. Its own pages aren't recorded, and nothing is while
-  `"rememberHistory": false` is in `settings.json` (a switch in Settings comes next). Removing a
-  page or clearing history in the history view rewrites `history.json` at once.
+  is never sent anywhere. Its own pages aren't recorded, and nothing is while **Remember history**
+  is off (Settings → Privacy). Removing a page or clearing history — in the history view or in
+  Settings → Privacy — rewrites `history.json` at once.
 - Web pages get no access to Little Joan's internals: the web view that shows pages can't call
   into the app at all. Only Little Joan's own screens — the bar (address bar and command bar) and
   Settings, each in a web view of its own — can.

@@ -80,7 +80,7 @@ pub fn finish_first_run(dir: &Path, settings: &Settings, args: &Args) -> bool {
     if let Err(err) = settings::save(dir, settings) {
         eprintln!("little-joan: could not save the first settings: {err}");
     }
-    args.command.is_none() && args.start_at_login.is_none() && !args.quit
+    args.command.is_none() && args.start_at_login.is_none() && args.settings.is_none() && !args.quit
 }
 
 /// Runs `f` with the state locked. Never call anything that waits on the main thread (window
@@ -156,6 +156,10 @@ mod tests {
             },
             Args {
                 quit: true,
+                ..Args::default()
+            },
+            Args {
+                settings: Some(crate::settings_window::SettingsTab::Privacy),
                 ..Args::default()
             },
         ] {
