@@ -10,6 +10,7 @@ import {
   letterFor,
   listKey,
   queryFor,
+  showsTyped,
   typedForm,
   type Row,
   type Suggestion,
@@ -222,5 +223,24 @@ describe("the query", () => {
     expect(queryFor("https://example.com/x", "https://example.com/")).toBe("https://example.com/x");
     expect(queryFor("127", "")).toBe("127");
     expect(queryFor("", "")).toBe("");
+  });
+});
+
+describe("whether the field still shows what was typed", () => {
+  it("is the typed text with the caret at its end", () => {
+    expect(showsTyped("127", "127", 3, 3)).toBe(true);
+    expect(showsTyped("127", "127", 1, 1)).toBe(false);
+    expect(showsTyped("127", "127", 0, 3)).toBe(false);
+  });
+
+  it("or the typed text followed by a completion that is still selected", () => {
+    // The answer for "12" completed the field just after "7" was typed.
+    expect(showsTyped("127.0.0.1:5000/smoke.html", "127", 3, 25)).toBe(true);
+    expect(showsTyped("127.0.0.1:5000/smoke.html", "12", 2, 25)).toBe(true);
+    // The user moved the caret or selected something else: it's theirs now.
+    expect(showsTyped("127.0.0.1:5000/smoke.html", "127", 25, 25)).toBe(false);
+    expect(showsTyped("127.0.0.1:5000/smoke.html", "127", 3, 10)).toBe(false);
+    expect(showsTyped("128.0.0.1", "127", 3, 9)).toBe(false);
+    expect(showsTyped("127", "127", null, null)).toBe(false);
   });
 });

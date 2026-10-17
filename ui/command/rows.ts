@@ -166,6 +166,22 @@ export function queryFor(value: string, shown: string): string {
   return value === shown ? "" : value;
 }
 
+/**
+ * Whether the field shows what was typed and nothing of the user's own after it: the typed text
+ * alone with the caret at its end, or followed by an inline completion that is still selected
+ * (so typing replaces it). `start` / `end` are the field's selection. Only then may a new
+ * autofill go in — also when the answer for the previous keystroke already completed it.
+ */
+export function showsTyped(value: string, typed: string, start: number | null, end: number | null): boolean {
+  if (end !== value.length) {
+    return false;
+  }
+  if (value === typed) {
+    return start === value.length;
+  }
+  return value.startsWith(typed) && start === typed.length;
+}
+
 /** The row selected when a list appears: the autofill's row, else none (Enter = the field). */
 export function initialSelection(list: RowList): number | null {
   return list.autofill?.row ?? null;

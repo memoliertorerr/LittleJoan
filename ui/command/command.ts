@@ -2,7 +2,16 @@
 // the latest answer counts), builds the rows (rows.ts), draws them as text (view.ts), and
 // handles the inline autofill, the keys and the mouse.
 import { invoke } from "@tauri-apps/api/core";
-import { buildRows, initialSelection, listKey, queryFor, type Action, type RowList, type Suggestion } from "./rows.ts";
+import {
+  buildRows,
+  initialSelection,
+  listKey,
+  queryFor,
+  showsTyped,
+  type Action,
+  type RowList,
+  type Suggestion,
+} from "./rows.ts";
 import { renderRows } from "./view.ts";
 
 /** How long typing must pause before Rust is asked. */
@@ -47,15 +56,23 @@ export function commandBar(field: HTMLInputElement, list: HTMLElement, shown: ()
     }
   };
 
-  /** Puts the autofill's completion after the typed text, selected, if it still fits. */
+  /**
+   * Puts the autofill's completion after the typed text, selected, if it still fits; otherwise
+   * takes away a completion an earlier answer left (keys can outrun answers: the answer for
+   * "12" may land after "7" was typed, and the answer for "127" must still own the field).
+   */
   const applyAutofill = (): boolean => {
     const fill = rows.autofill;
-    const caretAtEnd = field.selectionStart === field.value.length && field.selectionEnd === field.value.length;
-    if (!fill || !inserting || field.value !== typed || !caretAtEnd) {
+    const untouched = showsTyped(field.value, typed, field.selectionStart, field.selectionEnd);
+    const fits = fill !== null && fill.text.toLowerCase().startsWith(typed.toLowerCase());
+    if (!fill || !inserting || !untouched || !fits) {
+      if (untouched && field.value !== typed) {
+        field.value = typed;
+      }
       return false;
     }
-    field.value = fill.text;
-    field.setSelectionRange(typed.length, fill.text.length);
+    field.value = typed + fill.text.slice(typed.length);
+    field.setSelectionRange(typed.length, field.value.length);
     return true;
   };
 

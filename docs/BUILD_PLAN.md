@@ -2796,6 +2796,10 @@ mode". Push, open the phase-13 PR into main as a draft, and watch CI until every
   policy (it sizes the child to itself) — and packs the frame instead; the frame follows the
   bar's show / hide (element fullscreen). The prompt's "height request = the window's height"
   would have hit the same natural-size loop (and pinned the window's minimum size).
+- **After the fix (run 39070607023, with LJ23 on top): every job green** — verify ×3, package ×3,
+  smoke on Windows, macOS, Linux and Linux at scale 2. The Linux viewports are right again
+  (`480x600` at both scales, `390x560` / `720x560` after `--size`), and `page.png` at scale 1
+  and 2 shows the 40 px bar above the smoke page.
 
 ### LJ23 — The command bar · strong · auto
 
@@ -2903,6 +2907,28 @@ every OS.
   `--hide`. `summary.json` gains `commandBar`.
 - `npm run verify`: 126 TS tests, 143 Rust tests, clippy clean. Disk: 13 GiB free;
   `.cache/target` 1.2 GB.
+- **CI (run 39070607023, together with `lj-step-22-fix`): every job green.** The smoke log has
+  `suggestions 4 first=wikipedia.org typed=0` for the first window on all four jobs, then
+  `first=127.0.0.1:<port>` in every later window and `typed=3` after typing — on macOS too, so
+  its best-effort key events got through. Screenshots, all four alike in layout:
+  `start.png` — the command bar over the whole window: a rounded white panel on a light-grey
+  backdrop, a search icon, "Search or enter URL…" with the caret, × on the right, then
+  Wikipedia, YouTube, GitHub and Google Maps with their real favicons (loaded from the sites) as
+  "Title — domain" with the domain in grey, a hairline, and "Settings & extensions" with the
+  gear; `command-bar.png` — the smoke page as the only top site ("LJ-SMOKE viewport=720x560 …
+  — 127.0.0.1:<port>") with its stand-in icon (a "1" in a tinted circle: the favicon can't load
+  over https from the http-only smoke server) and Settings under it; `command-typing.png` —
+  "127" typed and ".0.0.1:<port>/smoke.html" completed and selected in the field, the smoke page
+  row filled with the accent blue (white text), "Search Google for “127”" with Google's icon,
+  then Settings. At scale 2 everything is crisp and twice the pixels. Text stays text: the long
+  titles are plain, no markup. **One finding, Linux scale 1:** the completed field had *no*
+  selected row: xdotool's second and third keys came 61 ms apart, the answer for "12" completed
+  the field after "7" was typed, and the answer for "127" then found the field no longer equal to
+  the typed text, dropped its autofill (no selection, Tab dead) and left the old completion on
+  screen. **Fix (`lj-step-23-fix`):** `rows.ts`'s `showsTyped` (pure, tested) accepts the typed
+  text followed by our own still-selected completion as "untouched", so the newer answer
+  completes the field again and selects its row; when an answer has no autofill, a completion an
+  earlier one left is taken away.
 
 ### LJ24 — The Little Arc-style toolbar · strong · auto
 
