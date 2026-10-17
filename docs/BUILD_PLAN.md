@@ -109,8 +109,10 @@ close and quit on all three OSes; local history with frecency) was PR #13, merge
 (LJ22 → LJ24: every trusted screen in the bar webview and no IPC at all for the page webview, the
 command bar with suggestions, the Little Arc-style toolbar with the macOS traffic lights inside
 it; it opened with `lj-step-20-fix2` for the macOS abort `main`'s CI had shown) was PR #14,
-merged. Phase 14 (LJ25 → LJ26: the history view, the tabbed Settings window) is in progress on
-`lj/p14-history-settings`.**
+merged. Phase 14 (LJ25 → LJ26: the history view with Ctrl/Cmd+Y, removing and clearing history
+on disk at once, the tabbed Settings window with `--settings [tab]`) is PR #15 on
+`lj/p14-history-settings`, merged once verify, package and smoke are green. Next: phase 15
+(LJ27 → LJ28).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -3244,7 +3246,8 @@ report.
   and the command bar's rows look as before (`command-typing.png`). **One finding, macOS:** its
   wider text wrapped the Privacy tab about a line past the window, so a scrollbar showed. **Fix
   (`lj-step-26-fix`):** a little less padding above the tab and its heading, and a shorter
-  Remember-history note.
+  Remember-history note. Run 39078418578 (every job green): macOS `settings-privacy.png` now
+  ends with the closing note above Save / Cancel and no scrollbar; Windows and Linux unchanged.
 
 ### LJ27 — Theme engine · strong · auto
 
