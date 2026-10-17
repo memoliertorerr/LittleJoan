@@ -37,16 +37,16 @@
 |------|-------|-------|------|--------|
 | LJ1 | Scaffold: env + toolchain, Tauri 2 + Vite + TS strict, icons, hibernating tray app, CI verify on 3 OSes | strong | auto | ✅ done |
 | LJ2 | Pure core modules: input → URL, navigation policy, translate URL, settings model, toggle state machine, CLI args | strong | auto | ✅ done |
-| LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ⬜ todo |
-| LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ⬜ todo |
-| LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ⬜ todo |
+| LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ✅ done |
+| LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ✅ done |
+| LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ✅ done |
 | LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ⬜ todo |
 | LJ7 | Translate page + open in default browser (tray, macOS menu, keys) | standard | auto | ⬜ todo |
 | LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ⬜ todo |
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: phase 1 done (LJ1–LJ2: hibernating tray app, CI verify, pure core). Next: phase 2 (LJ3 → LJ5).**
+**Overall status: phases 1–2 done (PRs #1, #2). Next: phase 3 (LJ6 → LJ7).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -661,6 +661,27 @@ it is still red after two honest fix attempts, stop and report — never commit 
 weaken a check to get green.
 ```
 
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 14 GB free at the start; `.cache/target` 1.4 GB after the step.
+- **Webview data directory:** set only when `LITTLEJOAN_DATA_DIR` is set (development). The
+  prompt said "always `<data dir>/webview`", but the data dir is the *config* folder, which on
+  Windows is the roaming profile — browsing caches don't belong there. Shipped builds keep each
+  engine's default location (WebView2: `%LOCALAPPDATA%\<identifier>\EBWebView`).
+- **`start_info` returns `{ shortcut, platform }`;** the `?u=` prefill is read by the page
+  itself. `ui/lib/shortcut.ts` (display formatting) was created here for the hint line; LJ6
+  extends it with the recorder mapping.
+- **CSP gained `connect-src 'self' ipc: http://ipc.localhost`:** tauri-codegen 2.7 doesn't add
+  the IPC origins to a custom CSP, and without them IPC falls back to postMessage after a CSP
+  violation.
+- `get_window` is behind Tauri's `unstable` feature, so lifecycle code works with
+  `get_webview_window` everywhere.
+- **Not verified locally (Ground Rule 7):** that the window actually appears, takes focus, and
+  closes — the app is launched for the first time in CI (LJ9) and on real desktops (LJ10).
+  Local evidence: the ACL compiled to a `joan` capability that is `local: true` with exactly
+  the three permissions.
+- 37 Rust tests, 19 TS tests.
+
 ---
 
 ### LJ4 — Page behavior: navigation guard, titles, new windows, page keys · strong · auto
@@ -733,6 +754,24 @@ If it is still red after two honest fix attempts, stop and report — never comm
 weaken a check to get green.
 ```
 
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 14 GB free at the start; `.cache/target` ~1.5 GB after the step.
+- **The opener is used as a plain function** (`tauri_plugin_opener::open_url`), not registered
+  as a plugin: that would also register its JS commands, and nothing in the UI needs them.
+- **Linux hook goes through `with_webview`:** `WebviewWindow::gtk_window()` hands back a GTK
+  object on a non-main thread (window creation runs off the main thread, see LJ3), and GTK must
+  only be touched on its main thread. `with_webview` runs on that thread; the hook is connected
+  to `webview.inner().toplevel()` (the GTK window), so only the `gtk` crate is needed, not
+  `webkit2gtk`.
+- **`tauri://` origins are opaque** in the `url` crate, so `Url::origin()` comparisons never
+  match; `keys::is_app_url` compares scheme, host, and port instead (test included).
+- Windows' module is `platform/win.rs` (not `windows.rs`) so `use windows::…` always means the
+  crate.
+- **Not verified locally:** the Windows and Linux hooks only compile in CI (Ground Rule 3); key
+  behavior on real desktops is in LJ10's checklist.
+- 46 Rust tests, 19 TS tests.
+
 ---
 
 ### LJ5 — Fullscreen video · strong · auto
@@ -794,6 +833,26 @@ This ends phase 2: push the branch, fill the PR description from the template, m
 once CI is green, then stop (or continue to phase 3 if the user's instructions say the build
 runs end to end).
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 13 GB free at the start; `.cache/target` ~1.5 GB.
+- **The fullscreen change is queued off the WebView2 callback** (spawned on the async runtime,
+  so the window message is processed after the callback returns): resizing the window resizes
+  the WebView2 controller, which would re-enter WebView2 from inside its own event handler.
+  The tracker is shared through `Arc<Mutex<…>>` for that reason.
+- **Two smoke events instead of one:** `element-fullscreen` (Windows: the app changed the
+  window for the page) and `fullscreen` (every engine: the window's fullscreen state changed,
+  logged from `Resized`). On macOS WebKit uses its own fullscreen window, so our window never
+  reports fullscreen there; the page title (`LJ-SMOKE fullscreen=on`) is the macOS signal.
+- **The smoke page's logic is a plain-JS module** (`tests/smoke/smoke-logic.mjs`, JSDoc-typed;
+  `tsconfig.json` now has `allowJs` + `checkJs`) that `smoke.html` imports and vitest tests
+  directly — instead of a hand-copied function plus a drift test. Same guarantee, no copy.
+- The smoke page also uses the WebKit-prefixed fullscreen API when the standard one is missing
+  (older WKWebView).
+- **Not verified locally:** WebView2 behavior (CI compiles it; LJ9 clicks the button on a
+  Windows runner) and real-video fullscreen on all three OSes (LJ10).
+- 49 Rust tests, 25 TS tests.
 
 ---
 
