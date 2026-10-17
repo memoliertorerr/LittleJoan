@@ -13,6 +13,7 @@ use url::Url;
 
 use crate::bar;
 use crate::cookies::{self, SessionCookies};
+use crate::history_store;
 use crate::phone_mode;
 use crate::placement;
 use crate::platform;
@@ -67,6 +68,8 @@ const QUIT_WAIT: std::time::Duration = std::time::Duration::from_millis(1500);
 /// 1.5 s. Windows and Linux kept everything without it, so they exit at once.
 pub fn quit<R: Runtime>(app: &AppHandle<R>) {
     smoke::log("quit", "");
+    // Visits not saved yet would be lost with the process (the window may still be open).
+    history_store::close(app);
     #[cfg(target_os = "macos")]
     {
         let app = app.clone();
@@ -133,6 +136,7 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
         return Err(err);
     }
     restore_session_cookies(app);
+    history_store::open(app);
     // Phone or desktop user agent for this width, before any web page loads (phone_mode.rs).
     phone_mode::reset();
     phone_mode::apply(app, false);
@@ -175,6 +179,7 @@ fn destroy<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     match app.get_window(LABEL) {
         Some(window) => {
             remember_size(app, &window);
+            history_store::close(app);
             keep_session_cookies(app);
             release_page(app, &window);
             window.destroy()

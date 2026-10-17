@@ -9,6 +9,11 @@ All notable changes to Little Joan are recorded here. The format follows
 ### Added
 - `little-joan --quit` quits the running app, the same way as **Quit Little Joan** in the tray
   menu (handy for scripts; CI uses it to quit gracefully).
+- **History, kept locally:** the pages you open (address, title, when and how) are recorded in
+  `history.json` next to the settings — at most 5,000 addresses, ranked by how often and how
+  recently you visit them — for the command bar's suggestions to come. It never leaves your
+  computer; Little Joan's own pages are never recorded, and the `rememberHistory` setting (on by
+  default) turns recording off. Nothing shows it yet.
 - CI now proves that logins survive: on every system the smoke test checks that a persistent
   cookie, a session cookie and localStorage outlive closing the window, and that the persistent
   cookie and localStorage outlive quitting and relaunching.

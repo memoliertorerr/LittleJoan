@@ -4,6 +4,8 @@ use tauri::{AppHandle, Runtime};
 use url::Url;
 
 use crate::bar;
+use crate::history::VisitKind;
+use crate::history_store;
 use crate::joan;
 use crate::keys::{self, PageAction};
 use crate::navigation;
@@ -28,7 +30,11 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
                 bar::focus_bar(&app);
                 Ok(())
             }
-            PageAction::Reload => page.reload(),
+            PageAction::Reload => {
+                // A reload is a visit that adds nothing to frecency (history.rs).
+                history_store::set_next_kind(&app, VisitKind::Reload);
+                page.reload()
+            }
             PageAction::Back => page.eval("history.back()"),
             PageAction::Forward => page.eval("history.forward()"),
             PageAction::Translate => translate_page(&app),

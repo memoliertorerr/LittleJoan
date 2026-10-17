@@ -19,6 +19,7 @@ use tauri::{
 };
 use url::Url;
 
+use crate::history_store;
 use crate::keys;
 use crate::layout::{self, layout};
 use crate::navigation;
@@ -87,7 +88,11 @@ pub fn add_webviews<R: Runtime>(
             };
             let _ = webview.window().set_title(title);
             smoke::log("title", title);
-            publish_url(webview.app_handle());
+            let app = webview.app_handle();
+            publish_url(app);
+            if let Some(url) = page_url(app) {
+                history_store::title_changed(app, &url, title);
+            }
         })
         .on_page_load(|webview, payload| {
             PAGE_STARTED.store(true, Ordering::Relaxed);
@@ -99,6 +104,8 @@ pub fn add_webviews<R: Runtime>(
                     && navigation::is_external_openable(url);
                 tray::set_page_items_enabled(app, web_page);
                 smoke::log("page-loaded", url.as_str());
+                // History records visits natively: the page itself has no IPC.
+                history_store::page_loaded(app, url);
             }
         })
         // target=_blank and window.open go to the default browser (web URLs only).

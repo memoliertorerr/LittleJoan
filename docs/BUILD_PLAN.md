@@ -68,7 +68,7 @@
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (starts once the user's secrets exist) | strong | auto | ⬜ todo |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
-| LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ⬜ todo |
+| LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ⬜ todo |
 | LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ⬜ todo |
 | LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ⬜ todo |
@@ -104,7 +104,10 @@ Little Joan to look and feel like Little Arc: a command bar with suggestions, hi
 that survive, themes, and an extension system with bundled extensions (decisions: "Design
 Decisions Already Made → v0.2 round 2"). These phases (12–17, LJ20–LJ35) run NEXT, before phases
 7–10; LJ19 stays the final v0.2.0 release. The user allowed the agent to merge each phase PR
-once its CI is green (CLAUDE.md, standing exception). Next: phase 12 (LJ20 → LJ21).**
+once its CI is green (CLAUDE.md, standing exception). Phase 12 (LJ20 → LJ21: logins survive
+close and quit on all three OSes; local history with frecency) is PR #13 on
+`lj/p12-logins-history`, merged once verify, package and smoke are green. Next: phase 13
+(LJ22 → LJ24).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -2522,6 +2525,10 @@ honest fix attempts, then stop).
 - **Fix 3, the abort:** `bar::page_url` reads the page's address only after the page webview
   reported a page load in this window (`PAGE_STARTED`, reset per window); `current_text`,
   `publish_url`, Translate and Open in Browser use it. Before that the bar shows the start page.
+- **After the fixes** (run 39065170176, every job green): close → summon `p=1 s=1 l=1` and quit
+  → relaunch `p=1 s=0 l=1` on Windows (`session-cookies-kept 1`, `-restored 1`), macOS (the
+  window closed 441 ms after `quit`; the relaunch loaded at once) and Linux at scale 1 and 2;
+  `--quit` came 51–80 ms after the set; no webview helpers left after any cycle.
 - **Not fixed (Deferred follow-ups, Landmines):** Tauri's cookie type drops the leading dot of a
   domain cookie, so a session cookie set for `.example.com` comes back for `example.com` only.
 - Disk: checks commit 13 GiB free at the start, 12 GiB after verify; fix commit 13 GiB free;
@@ -2602,6 +2609,44 @@ from the template ("Needs human check": nothing visible yet; the regression list
 green, merge the PR into main with a merge commit (CLAUDE.md standing exception), then stop and
 report.
 ```
+
+**Implementation notes (2026-10-17):**
+
+- **`history.rs`** (pure; its tests are in `history/tests.rs` to keep the file near 400 lines):
+  `recordable` (http/https only, the fragment dropped, the query kept; never the app's origin
+  via `keys::is_app_url`, never Windows' `tauri.localhost` / `ipc.localhost` /
+  `ljext.localhost`, never a URL over 4,096 bytes), `host_key` (lower case, `www.` stripped, a
+  non-default port kept so local servers on different ports are different sites), `record`,
+  `set_title`, `frecency`, `top_sites`, `search`, the cap, `to_json` / `parse`. Titles are cut
+  at 300 characters. The two size limits are additions (not in the prompt) so one page can't
+  bloat the file.
+- **Interpretations, stated so LJ23 can revisit them:** frecency is per host for top sites (as
+  decided) and the same formula over the URL's own visits for matching and the cap — with
+  host frecency, every page of a site would tie and the latest video would beat the site's
+  home page. Matching keeps zero-score matches (visits older than 90 days) at the end instead
+  of hiding them. A top site's "URL with at most one path segment" also needs no query, so a
+  search-results or video page is never a site's tile; sites with no visit in 90 days aren't
+  top sites. `exclude` takes hosts; `history_top` passes none for now.
+- **Recording** (`history_store.rs`, `bar.rs`): `on_page_load(Finished)` records a visit,
+  `on_document_title_changed` updates that URL's record, and a title that arrived before the
+  load is kept for it (`last_title`, same page but for the fragment). The kind: `open_input`
+  sets `typed` for the next load, the Reload page action `reload`; the next finished load takes
+  it, whatever its URL, and everything else is `link`. WebView2's built-in F5 / Ctrl+R never
+  reach the page action, so on Windows those reloads count as `link`.
+- **Store:** loaded in `joan::create` after the webviews exist, saved and dropped in
+  `joan::destroy` before the page is released, every 30 s while dirty (a thread that checks
+  once a second and ends within a second of the window closing), and in `joan::quit` (Windows
+  and Linux exit without `destroy`, so unsaved visits would be lost). Saves share one lock, so
+  the autosave and the close can't write the temp file at once.
+- **Commands** `history_top(n)` and `history_search(query, limit)` (both capped at 50 rows),
+  only in `capabilities/bar.json`; nothing calls them yet (LJ23).
+- **Settings:** `rememberHistory` (default true, a wrong type falls back). `save_settings`
+  keeps fields the window doesn't send, so it survives a Save; the Settings switch is LJ25/26.
+- **Smoke:** after the persistence steps the main run's `history.json` is read (it must hold
+  the smoke page with an `LJ-SMOKE …` title, its host and a visit, and no app page), then a run
+  with `"rememberHistory": false` loads the smoke page, hibernates and quits, and must leave no
+  records (`historyFailures`, unit-tested). Smoke log: `history-visit`, `history-saved`.
+- Disk: 13 GiB free at the start and after verify; `.cache/target` 1.2 GB.
 
 ### LJ22 — Trusted screens move into the bar; the page webview has no IPC; overlay mode · strong · auto
 

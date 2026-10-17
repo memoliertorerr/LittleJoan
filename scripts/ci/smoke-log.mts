@@ -368,3 +368,73 @@ export function persistFailures(main: LogEvent[], check: PersistCheck): string[]
   }
   return failures;
 }
+
+/** One record of history.json (src-tauri/src/history.rs). */
+export interface HistoryRecord {
+  url: string;
+  title: string;
+  host: string;
+  visitCount: number;
+  visits: { at: number; kind: string }[];
+}
+
+/** The records of a history.json text; `undefined` when there is no file or it isn't history. */
+export function parseHistory(text: string | undefined): HistoryRecord[] | undefined {
+  if (text === undefined) {
+    return undefined;
+  }
+  try {
+    const file = JSON.parse(text) as { entries?: unknown };
+    return Array.isArray(file.entries) ? (file.entries as HistoryRecord[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The history check: the main run's history.json, and a run with `rememberHistory: false`. */
+export interface HistoryCheck {
+  /** history.json of the main run's data folder (undefined: no file). */
+  main: string | undefined;
+  /** The smoke page's address (no query), which the main run loaded several times. */
+  pageUrl: string;
+  /** history.json of the run with "rememberHistory": false (undefined: no file, as wanted). */
+  off: string | undefined;
+}
+
+/**
+ * The main run's history holds the smoke page with its title (LJ-SMOKE …), its host and at
+ * least one visit, and none of the app's own pages; the run with history off recorded nothing.
+ */
+export function historyFailures(check: HistoryCheck): string[] {
+  const failures: string[] = [];
+  const main = parseHistory(check.main);
+  if (!main) {
+    failures.push(`history.json of the main run is ${check.main === undefined ? "missing" : "not history"}`);
+  } else {
+    const page = main.find((record) => record.url === check.pageUrl);
+    if (!page) {
+      failures.push(`history.json has no record of ${check.pageUrl} (${main.length} records)`);
+    } else {
+      if (!page.title.startsWith("LJ-SMOKE")) {
+        failures.push(`history: the smoke page's title is "${page.title}", not the page's own`);
+      }
+      if (page.host !== new URL(check.pageUrl).host) {
+        failures.push(`history: the smoke page's host is "${page.host}"`);
+      }
+      if (!Array.isArray(page.visits) || page.visits.length === 0 || page.visitCount < 1) {
+        failures.push("history: the smoke page has no visit");
+      }
+    }
+    const own = main.filter((record) => !/^https?:\/\//.test(record.url) || /\/\/(tauri|ipc|ljext)\.localhost[:/]/.test(record.url));
+    if (own.length > 0) {
+      failures.push(`history recorded the app's own pages: ${own.map((record) => record.url).join(", ")}`);
+    }
+  }
+  if (check.off !== undefined) {
+    const off = parseHistory(check.off) ?? [];
+    if (off.length > 0) {
+      failures.push(`history off: ${off.length} records were still written`);
+    }
+  }
+  return failures;
+}

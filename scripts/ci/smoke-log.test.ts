@@ -4,9 +4,11 @@ import {
   desktopExec,
   evaluate,
   firstRunFailures,
+  historyFailures,
   lastTitle,
   newPids,
   parseCodecs,
+  parseHistory,
   parseLog,
   parsePersist,
   parseRegValues,
@@ -364,6 +366,55 @@ describe("persistence", () => {
     ]);
     expect(persistFailures(main, { ...good, relaunch: [] })).toEqual([
       'quit → relaunch: expected one "started", saw 0',
+    ]);
+  });
+});
+
+describe("history", () => {
+  const pageUrl = "http://127.0.0.1:5000/smoke.html";
+  const record = (url: string, title = "LJ-SMOKE ready h264=mse", visits = 1) => ({
+    url,
+    title,
+    host: new URL(url).host,
+    visitCount: visits,
+    visits: Array.from({ length: visits }, (_, i) => ({ at: 1000 + i, kind: "link" })),
+  });
+  const file = (...records: object[]) => JSON.stringify({ version: 1, entries: records });
+
+  it("reads history.json", () => {
+    expect(parseHistory(file(record(pageUrl)))?.[0]?.url).toBe(pageUrl);
+    expect(parseHistory(undefined)).toBeUndefined();
+    expect(parseHistory("nope")).toBeUndefined();
+    expect(parseHistory('{"version": 1}')).toBeUndefined();
+  });
+
+  it("passes the smoke page recorded with its title and visits, and nothing with history off", () => {
+    const main = file(record(pageUrl, "LJ-SMOKE viewport=720x560 ua=desktop dpr=1", 3), record(`${pageUrl}?persist=set&t=x`));
+    expect(historyFailures({ main, pageUrl, off: undefined })).toEqual([]);
+    expect(historyFailures({ main, pageUrl, off: file() })).toEqual([]);
+  });
+
+  it("fails without the file, the record, its title or a visit", () => {
+    expect(historyFailures({ main: undefined, pageUrl, off: undefined })).toEqual(["history.json of the main run is missing"]);
+    expect(historyFailures({ main: "{", pageUrl, off: undefined })).toEqual(["history.json of the main run is not history"]);
+    expect(historyFailures({ main: file(record("https://other.test/")), pageUrl, off: undefined })).toEqual([
+      `history.json has no record of ${pageUrl} (1 records)`,
+    ]);
+    expect(historyFailures({ main: file(record(pageUrl, "")), pageUrl, off: undefined })).toEqual([
+      'history: the smoke page\'s title is "", not the page\'s own',
+    ]);
+    expect(historyFailures({ main: file(record(pageUrl, "LJ-SMOKE ready", 0)), pageUrl, off: undefined })).toEqual([
+      "history: the smoke page has no visit",
+    ]);
+  });
+
+  it("fails when the app's own pages were recorded, or history off still wrote records", () => {
+    const own = file(record(pageUrl), record("http://tauri.localhost/index.html"), record("tauri://localhost/index.html"));
+    expect(historyFailures({ main: own, pageUrl, off: undefined })).toEqual([
+      "history recorded the app's own pages: http://tauri.localhost/index.html, tauri://localhost/index.html",
+    ]);
+    expect(historyFailures({ main: file(record(pageUrl)), pageUrl, off: file(record(pageUrl)) })).toEqual([
+      "history off: 1 records were still written",
     ]);
   });
 });

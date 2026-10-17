@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use crate::cli::Args;
 use crate::cookies::SessionCookies;
+use crate::history_store::OpenHistory;
 use crate::settings::{self, SETTINGS_FILE, Settings};
 
 /// Development builds point this at `.cache/dev-data` (see scripts/env.sh). Shipped builds never
@@ -16,7 +17,7 @@ pub const DATA_DIR_ENV: &str = "LITTLEJOAN_DATA_DIR";
 
 pub struct AppState {
     pub settings: Settings,
-    /// Folder holding settings.json.
+    /// Folder holding settings.json and history.json.
     pub data_dir: PathBuf,
     /// Webview data folder override: `<LITTLEJOAN_DATA_DIR>/webview`. `None` (shipped builds)
     /// leaves it to Tauri, which on Windows and Linux forces the app's local data folder
@@ -34,6 +35,8 @@ pub struct AppState {
     /// Session cookies kept from the last window for the next one, in memory only (cookies.rs;
     /// only where the engine drops them with the window).
     pub session_cookies: SessionCookies,
+    /// Browsing history, only while the page window exists (history_store.rs); `None` at rest.
+    pub history: Option<OpenHistory>,
 }
 
 pub type SharedState = Mutex<AppState>;
@@ -59,6 +62,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         shortcut_suspended: false,
         first_run,
         session_cookies: SessionCookies::default(),
+        history: None,
     }));
     Ok(())
 }

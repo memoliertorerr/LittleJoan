@@ -8,7 +8,8 @@
 // fullscreen button, hibernate with `--hide`, summon and hibernate once more, turn start at
 // login on and off (reading the OS's own login entry each time), check that cookies and
 // localStorage outlive closing the window and quitting (`--quit`, then a relaunch on the same
-// data folder), then check the logs (scripts/ci/smoke-log.mts) and the webview helper
+// data folder), that history.json recorded the smoke page (and that a run with history off
+// records nothing), then check the logs (scripts/ci/smoke-log.mts) and the webview helper
 // processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
@@ -26,9 +27,11 @@ import {
   desktopExec,
   evaluate,
   firstRunFailures,
+  historyFailures,
   lastTitle,
   newPids,
   parseCodecs,
+  parseHistory,
   parseLog,
   parseRegValues,
   persistFailures,
@@ -70,8 +73,11 @@ const extraEnv = Object.fromEntries(
 );
 // Data folders live outside <out>, which is uploaded (WebView2 keeps its profile there).
 const dataRoot = process.env.RUNNER_TEMP ?? tmpdir();
-/** A fresh data folder; with `settings`, it already holds a default settings.json. */
-function dataDir(name: string, settings: boolean): string {
+/**
+ * A fresh data folder; with `settings`, it already holds a default settings.json (plus
+ * `overrides`).
+ */
+function dataDir(name: string, settings: boolean, overrides: Record<string, unknown> = {}): string {
   const dir = mkdtempSync(join(dataRoot, `lj-${name}-`));
   if (settings) {
     const defaults = {
@@ -82,10 +88,20 @@ function dataDir(name: string, settings: boolean): string {
       windowWidth: 480,
       windowHeight: 640,
       mobileSites: true,
+      ...overrides,
     };
     writeFileSync(join(dir, "settings.json"), `${JSON.stringify(defaults, null, 2)}\n`);
   }
   return dir;
+}
+
+/** A file's text, or undefined when it doesn't exist (or can't be read). */
+function readIfThere(path: string): string | undefined {
+  try {
+    return existsSync(path) ? readFileSync(path, "utf8") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 const env = {
   ...process.env,
@@ -552,6 +568,30 @@ await forward(["--quit"], afterQuitEnv);
 if (!(await exited(afterQuitPid, 15_000))) {
   await quit(afterQuitChild, afterQuitPid);
 }
+
+// History (LJ21): the main run's history.json must hold the smoke page; a run whose settings say
+// "rememberHistory": false loads the page too and must record nothing.
+const smokePageUrl = `http://127.0.0.1:${port}/smoke.html`;
+const historyMain = readIfThere(join(env.LITTLEJOAN_DATA_DIR, "history.json"));
+const historyOffDir = dataDir("history-off", true, { rememberHistory: false });
+const historyOffLogPath = join(out, "smoke-history-off.log");
+rmSync(historyOffLogPath, { force: true });
+const historyOffEnv = { ...env, LITTLEJOAN_DATA_DIR: historyOffDir, LITTLEJOAN_SMOKE_LOG: historyOffLogPath };
+const historyOffChild = launch(historyOffEnv);
+await waitFor("history off: started", (e) => count(e, "started") > 0, 30_000, historyOffLogPath);
+await sleep(1500);
+const historyOffPid = appPid(historyOffChild);
+await forward(["--show", smokePageUrl], historyOffEnv);
+await waitFor("history off: smoke page", (e) => lastTitle(e, "LJ-SMOKE ready") !== undefined, 30_000, historyOffLogPath);
+await forward(["--hide"], historyOffEnv);
+await waitFor("history off: hibernated", (e) => count(e, "hibernated") > 0, 20_000, historyOffLogPath);
+await forward(["--quit"], historyOffEnv);
+if (!(await exited(historyOffPid, 15_000))) {
+  await quit(historyOffChild, historyOffPid);
+}
+const historyOff = readIfThere(join(historyOffDir, "history.json"));
+const historyCheck = { main: historyMain, pageUrl: smokePageUrl, off: historyOff };
+console.log(`history: main ${historyMain === undefined ? "no file" : `${historyMain.length} bytes`}, off ${historyOff ?? "no file"}`);
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -617,6 +657,11 @@ const summary = {
     relaunch: relaunch.map((e) => e.event),
     settingsSaved,
   },
+  history: {
+    mainRecords: parseHistory(historyMain)?.length ?? null,
+    smokePage: parseHistory(historyMain)?.find((record) => record.url === smokePageUrl) ?? null,
+    offRecords: historyOff === undefined ? "no file" : (parseHistory(historyOff)?.length ?? "not history"),
+  },
   persist: {
     afterCloseAndSummon: persistAfterClose ?? null,
     afterQuitAndRelaunch: persistAfterQuit ?? null,
@@ -638,10 +683,11 @@ const failures = evaluate(
   },
 )
   .concat(persistFailures(log, persistCheck))
+  .concat(historyFailures(historyCheck))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
-  for (const path of [logPath, afterQuitLogPath, firstLogPath, relaunchLogPath]) {
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

@@ -9,6 +9,8 @@ pub mod cli;
 pub mod commands;
 pub mod cookies;
 pub mod fullscreen;
+pub mod history;
+pub mod history_store;
 pub mod input;
 pub mod joan;
 pub mod keys;
@@ -63,7 +65,9 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::suspend_shortcut,
-            commands::set_start_at_login
+            commands::set_start_at_login,
+            commands::history_top,
+            commands::history_search
         ])
         .on_window_event(|window, event| {
             joan::on_window_event(window, event);

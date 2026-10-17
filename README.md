@@ -143,6 +143,10 @@ hints, Word's non-breaking space); change it here if it does.
 - Session cookies (the "until you close the browser" kind) last while Little Joan runs, across
   closing and reopening the window. On Windows, Little Joan holds them in memory meanwhile —
   never on disk — and quitting forgets them, as quitting a browser does.
+- **History stays on your computer.** Little Joan records the pages you open (address, title,
+  when) in `history.json` next to its settings, for its own suggestions; it is never sent
+  anywhere. Its own pages aren't recorded, and nothing is while `"rememberHistory": false` is
+  in `settings.json` (a switch in Settings comes with the history view).
 - Web pages get no access to Little Joan's internals: only its own two local pages (the start
   field and Settings) can call into the app.
 

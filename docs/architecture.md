@@ -45,7 +45,8 @@ ui/settings-logic.ts               settings types + change detection, unit-teste
 ui/style.css                       shared styles; light/dark via prefers-color-scheme
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
 src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
-src-tauri/capabilities/bar.json    the URL bar may call open_input, page_url, focus_page, hibernate
+src-tauri/capabilities/bar.json    the URL bar may call open_input, page_url, focus_page, hibernate,
+                                   history_top, history_search
 src-tauri/capabilities/joan.json   the page webview's local start page may call start_info and
                                    set_start_at_login (the welcome's checkbox)
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
@@ -58,6 +59,11 @@ src-tauri/src/state.rs             AppState (settings, data dir, active shortcut
                                    session cookies) behind a Mutex; first-run detection (tested)
 src-tauri/src/cookies.rs           session cookies kept in memory across close → summon where the
                                    engine drops them (WebView2): which, how many (pure, tested)
+src-tauri/src/history.rs           history: what is recorded, frecency, top sites, typed matching,
+                                   the 5,000-URL cap, history.json parse/serialize (pure; tests
+                                   in history/tests.rs, with a fixed clock)
+src-tauri/src/history_store.rs     history.json on disk and in AppState while the window exists:
+                                   load, record (page load / title events), autosave, atomic save
 src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is, Wayland (pure)
 src-tauri/src/joan.rs              the page window: create / focus / destroy, window events
 src-tauri/src/bar.rs               its two webviews (URL bar + page): build, layout, fullscreen,
@@ -70,7 +76,7 @@ src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fal
                                    with rollback (Registrar trait), suspend while recording
 src-tauri/src/commands.rs          start page: open_input, hibernate, start_info;
                                    settings: get_settings, save_settings, suspend_shortcut,
-                                   set_start_at_login
+                                   set_start_at_login; bar: history_top, history_search
 src-tauri/src/autostart.rs         start at login: tauri-plugin-autostart (Rust API only), the
                                    macOS translocation guard (pure, tested)
 src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close)
@@ -167,7 +173,7 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
 Remote pages get no IPC. `build.rs` declares the app's commands in an app manifest, which makes
 each one require a permission, and capabilities grant them **per webview label**:
 `capabilities/bar.json` gives the URL bar (`joan-bar`) `allow-open-input`, `allow-page-url`,
-`allow-focus-page`, `allow-hibernate`; `capabilities/joan.json` gives the page webview
+`allow-focus-page`, `allow-hibernate`, `allow-history-top`, `allow-history-search`; `capabilities/joan.json` gives the page webview
 (`joan-page`) only `allow-start-info` and `allow-set-start-at-login` (the welcome's checkbox),
 and only for its local start page — capabilities are local unless they list `remote` URLs, and
 none does. No `core:default` anywhere.
@@ -183,6 +189,8 @@ none does. No `core:default` anywhere.
 | `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox | add / remove the OS login entry; returns whether it exists afterwards (read back) |
+| `history_top(n)` | the bar (from LJ23) | up to `n` (≤ 50) top sites: `[{ url, title, host, score }]`; read-only |
+| `history_search(query, limit)` | the bar (from LJ23) | up to `limit` (≤ 50) records matching every word of `query`, same rows; read-only |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
 `capabilities/settings.json` grants the `settings` window the last four plus
@@ -233,6 +241,41 @@ window discards the page, not the store.
 |---|---|---|
 | Persistent cookies, localStorage | kept by the engine (all three) | on disk (all three; macOS closes the window before quitting, above) |
 | Session cookies (no expiry) | macOS and Linux keep them while the app runs; WebView2 drops them with the window, so on Windows `joan::destroy` reads them (`Webview::cookies`) and keeps up to 500 in memory, and `joan::create` sets them again before the first page (`cookies.rs`) | gone, as when a browser quits — never written to disk by Little Joan |
+
+## History
+
+Little Joan keeps a local history for the command bar's suggestions (LJ23) and the history view
+(LJ25). It never leaves the machine: no sync, no remote suggestions; favicons will come straight
+from the sites visited.
+
+- **Where:** `history.json` next to `settings.json` (the table above; `LITTLEJOAN_DATA_DIR`
+  in dev builds and CI). Loaded when the page window opens, kept in `AppState` while it exists,
+  saved atomically (temp file + rename) when it closes, every 30 s while there are unsaved
+  visits, and on Quit; dropped from memory on hibernate, so nothing extra is held at rest.
+- **Format:** `{ "version": 1, "entries": [ { "url", "title", "host", "visitCount", "visits":
+  [ { "at": <unix ms>, "kind": "typed" | "link" | "reload" } ] } ] }` — one record per URL (the
+  fragment dropped, the query kept), `host` lower case without `www.` (with a non-default
+  port), the all-time visit count and the last 20 visits. Titles are cut at 300 characters;
+  URLs over 4,096 bytes aren't recorded. A bad or missing file is empty history; a bad record
+  or visit is skipped alone.
+- **Cap:** 5,000 URLs; past that the least frecent go (on a tie, the least recently visited).
+- **Recording** is native, from the page webview's events (`bar.rs`), so pages need no IPC: a
+  finished page load records a visit, a title change updates that URL's record. The visit's
+  kind comes from the app: `typed` after `open_input` (and, from LJ23, a picked suggestion),
+  `reload` after the Reload page action, `link` otherwise (WebView2's own F5 / Ctrl+R reload
+  counts as `link`).
+- **Never recorded:** anything but `http`/`https` (`about:`, `ljext:`, `data:`, `file:` …), the
+  app's own pages (`keys::is_app_url`), Tauri's custom-scheme hosts on Windows
+  (`tauri.localhost`, `ipc.localhost`, `ljext.localhost`), and nothing at all while the setting
+  `rememberHistory` is off — existing history then stays until it is cleared (LJ25).
+- **Frecency** (per host for top sites, per URL for matching): Σ w · 2^(−age / 14 days) over the
+  last 20 visits within 90 days; w = 2 typed, 1 link, 0 reload.
+- **Top sites** (`top_sites(n, exclude)`): hosts by frecency (sites without a recent visit left
+  out), ties to the latest visit; each opens the host's most-visited URL with at most one path
+  segment and no query, else its origin.
+- **Matching** (`search(query, limit)`): every word must match; per word the best of host
+  prefix 10, host word boundary 8, title word prefix 6, path word boundary 4, substring 1;
+  score = points × the URL's frecency, ties to the latest visit (old matches still come, last).
 
 ## Settings
 
@@ -371,7 +414,9 @@ app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finis
 `start-at-login-failed <reason>`, `first-run` (no settings.json at launch), `welcome` (the start
 page was handed the first run), `quit` (Quit or `--quit` is about to exit),
 `session-cookies-kept <n>` / `session-cookies-restored <n>` (Windows: session cookies kept on
-close, set again in the new window; counts only). Without the variable nothing is logged.
+close, set again in the new window; counts only), `history-visit <kind> <url>` (a visit was
+recorded), `history-saved <records>` (history.json written). Without the variable nothing is
+logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -387,8 +432,8 @@ The modules below hold every decision the app makes; the native glue only calls 
 - **translate** — `https://translate.google.com/translate?sl=auto&tl=<lang>&hl=<lang>&u=<page>`,
   which redirects to `<host>.translate.goog`; skipped for non-web pages and pages that are
   already translated.
-- **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight}`
-  (camelCase JSON). Each field falls back to its default on its own; sizes are clamped to
+- **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
+  mobileSites, rememberHistory}` (camelCase JSON). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; saves go through a temp file + rename.
 - **toggle** — what a shortcut press or a command-line request does:
 
@@ -477,8 +522,11 @@ and pushes to `main`:
   ?persist=check` must report `LJ-PERSIST p=1 s=1 l=1`; new values, `--quit` within 1 s of
   them (from the log's clock), and a relaunch on the same data folder (log
   `smoke-after-quit.log`) must report `p=1 s=0 l=1` — session cookies end with the app run. The
-  smoke server keeps its port across the relaunch, because localStorage is per origin. Last
-  comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  smoke server keeps its port across the relaunch, because localStorage is per origin. Then the
+  **history check**: the main run's `history.json` must hold the smoke page's address with its
+  `LJ-SMOKE …` title, its host and a visit, and none of the app's own pages; a run whose
+  settings say `"rememberHistory": false` loads the smoke page, hibernates and quits, and must
+  leave no records (log `smoke-history-off.log`). Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).
