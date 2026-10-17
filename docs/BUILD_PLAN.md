@@ -1488,6 +1488,11 @@ after `--size 390x600` the page reports `viewport=390x560 ua=phone`, after `--si
   `with_webview` (macOS adds `objc2` / `objc2-foundation`, already in the build through wry).
 - **No switching during fullscreen:** a fullscreen video makes the window wide; switching to
   the desktop agent would reload the page and end the video.
+- **CI caught a Linux panic (lj-step-10.3-fix):** WebKitWebView's `settings` GObject property is
+  write-only ("property 'settings' of type 'WebKitWebView' is not readable"), so reading it
+  through glib aborted the app on its first user-agent change. Linux now calls
+  `webkit_web_view_get_settings` through the `webkit2gtk` crate (already in the build via wry).
+  macOS and Windows passed the new viewport and user-agent checks on the first run.
 
 ---
 

@@ -9,6 +9,7 @@ use gtk::glib::Propagation;
 use gtk::glib::prelude::*;
 use gtk::prelude::*;
 use tauri::{Manager, Runtime, Webview, Window};
+use webkit2gtk::{SettingsExt, WebViewExt};
 
 use crate::bar;
 use crate::keys::{self, Key, Mods, Platform};
@@ -98,13 +99,16 @@ pub fn is_fullscreen<R: Runtime>(window: &Window<R>) -> bool {
         })
 }
 
-/// WebKitGTK: the `user-agent` property of the webview's WebKitSettings (unset = the engine's
-/// own). Set through GObject properties, so no webkit2gtk crate is needed.
+/// WebKitGTK: the user agent in the webview's WebKitSettings (unset = the engine's own). The
+/// view's `settings` GObject property is write-only, so this goes through
+/// `webkit_web_view_get_settings` (the webkit2gtk crate, as wry does).
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     let result = page.with_webview(move |webview| {
-        let settings = webview.inner().property::<gtk::glib::Object>("settings");
         let user_agent = mobile.then(|| phone::mobile_user_agent(Platform::Linux, None));
-        settings.set_property("user-agent", user_agent.as_deref());
+        match WebViewExt::settings(&webview.inner()) {
+            Some(settings) => settings.set_user_agent(user_agent.as_deref()),
+            None => eprintln!("little-joan: the webview has no settings; user agent unchanged"),
+        }
     });
     if let Err(err) = result {
         eprintln!("little-joan: could not change the user agent: {err}");
