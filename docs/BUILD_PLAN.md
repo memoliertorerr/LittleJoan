@@ -1,4 +1,4 @@
-# Little Joan — Build Plan (v0.1)
+# Little Joan — Build Plan (v0.1, v0.2)
 
 > **Little Joan** is a tiny pop-up browser for Windows, Linux, and macOS, inspired by Little Arc.
 > It **hibernates by default**: after launch it shows no window and loads no page, and sits in
@@ -17,6 +17,16 @@
 > extensions, downloads UI, find-in-page, zoom controls, start at login, keeping the page after
 > close, popups that stay inside the app (OAuth windows), code signing / notarization, auto-update,
 > Wayland-native global shortcut.
+>
+> **v0.2 (planned 2026-10-17, steps LJ11–LJ19, phases 6–11):** start at login and a one-time
+> welcome on the first launch; Linux fullscreen (the AppImage built on Ubuntu 24.04, a stopgap
+> for WebKitGTK older than 2.52); downloads and page zoom; a Wayland-native global shortcut (XDG
+> portal); Developer ID signing and notarization for macOS. **Not in v0.2:** Windows code signing
+> (waiting on the user's SignPath Foundation application), find in page, auto-update, popups
+> inside the app, keeping the page after close, tabs, bookmarks, history. **v0.2 must not
+> disturb:** hibernation (no window or webview at rest), no IPC for remote pages, the URL bar,
+> phone mode, fullscreen video on Windows / macOS / Ubuntu 24.04, single-instance CLI flags, and
+> the page size at scale 1, 1.5 and 2 — every phase PR re-checks them.
 >
 > **Never use Arc's name, logo, or artwork as branding.** "Inspired by Little Arc" in the README
 > is the only mention. The icon is original.
@@ -48,6 +58,15 @@
 | LJ10.1 | *(added mid-plan 2026-10-17)* Always-visible URL bar: a trusted local webview above the page | strong | auto | ✅ done |
 | LJ10.2 | *(added mid-plan 2026-10-17)* Project files: CHANGELOG, CONTRIBUTING, SECURITY, repo metadata | standard | auto | ✅ done |
 | LJ10.3 | *(added mid-plan 2026-10-17)* Page size at every scale factor; phone mode for narrow windows | strong | auto | ✅ done |
+| LJ11 | *(v0.2)* Start at login: tauri-plugin-autostart, a Settings switch, `--start-at-login on\|off`, the OS entry checked in smoke | strong | auto | ⬜ todo |
+| LJ12 | *(v0.2)* First launch: the window opens once with a welcome (shortcut, where the icon is, start at login) | standard | auto | ⬜ todo |
+| LJ13 | *(v0.2)* AppImage built on Ubuntu 24.04 (WebKitGTK 2.52); the AppImage gets the full smoke | strong | auto | ⬜ todo |
+| LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⬜ todo |
+| LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ⬜ todo |
+| LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ⬜ todo |
+| LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
+| LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (starts once the user's secrets exist) | strong | auto | ⬜ todo |
+| LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
@@ -56,11 +75,18 @@ for narrow windows, and layout tests at scale factors 1, 1.5 and 2). PRs #1–#7
 installers CI built from the tagged commit. Still open: Linux fullscreen on Ubuntu 22.04 and in
 the AppImage (WebKitGTK 2.50.4 aborts on element fullscreen; see Deferred follow-ups).**
 
+**v0.2 status: planned 2026-10-17 with the user (scope and decisions under "Design Decisions
+Already Made → v0.2"); nothing built yet. PR #8 (housekeeping: `.claude/` ignored, the Linux
+verify runner pinned to `ubuntu-24.04`) came first. Next: phase 6 (LJ11 → LJ12). LJ18 also
+waits for the user to add the Apple signing secrets (its prompt lists them).**
+
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
 Windows or Linux (CI is the only compiler for those paths), and phase 4 is CI packaging, where
 mistakes only show up after a 15-minute round trip. Phase 3 is ordinary UI + glue on top of
-settled contracts and can run on a standard model.
+settled contracts and can run on a standard model. In v0.2 the strong steps are the ones that
+touch three OSes' native APIs or CI packaging (LJ11, LJ13–LJ15, LJ17, LJ18); LJ12, LJ16 and
+LJ19 are UI, key tables and release chores on settled code.
 
 **Phases** — one pull request each, stacked (each phase branches from the previous one):
 1. **LJ1 → LJ2** · strong — `lj/p1-foundation` → PR into `main`. Review: the toolchain/caching
@@ -75,6 +101,24 @@ settled contracts and can run on a standard model.
    2026-10-17)*. Review: the two-webview window (trusted bar, IPC-free page), the `unstable`
    feature, layout and fullscreen per OS, the project files. No human checkpoint (the user
    asked for none).
+
+**v0.2 phases** — stacked the same way: each PR goes into the previous phase's branch, or into
+`main` once that phase is merged (`gh pr edit <n> --base main --repo memoliertorerr/LittleJoan`).
+Every phase PR's "Needs human check" names the v0.2 must-not-disturb list above.
+
+6. **LJ11 → LJ12** · strong — `lj/p6-first-run` → PR into `main`. Review: the login entry per
+   OS, the welcome, the new `set_start_at_login` command and who may call it (local pages only).
+7. **LJ13 → LJ14** · strong — `lj/p7-linux-fullscreen` → PR into `lj/p6-first-run`. Review: the
+   two Linux package jobs and their glibc floors, the 22.04 stopgap and its smoke job.
+8. **LJ15 → LJ16** · strong — `lj/p8-downloads-zoom` → PR into `lj/p7-linux-fullscreen`.
+   Review: where files land and how they're named, the bar's status line, zoom keys per OS.
+9. **LJ17** · strong — `lj/p9-wayland-shortcut` → PR into `lj/p8-downloads-zoom`. Review: the
+   new `ashpd` dependency, the fallback without a portal. Human check on a Wayland desktop.
+10. **LJ18** · strong — `lj/p10-macos-signing` → PR into `lj/p9-wayland-shortcut`. Starts only
+    when the user's signing secrets exist. Review: how secrets reach one step only, the ad-hoc
+    fallback, the Gatekeeper evidence.
+11. **LJ19** · standard — `lj/release-0.2.0` → PR into `lj/p10-macos-signing` (or `main`).
+    Checkpoint: the user's checklist; merge, tag and release only on their word.
 
 Never start a phase with uncommitted changes in the tree.
 
@@ -97,6 +141,11 @@ Never start a phase with uncommitted changes in the tree.
 The first build (v0.1) was run end to end by one autonomous session at the user's request:
 all four phases back to back, stopping only at LJ10's human checkpoint. PRs stay open for the
 user to review and merge in order (phase 1 first).
+
+v0.2 (phases 6–11) uses the same prompts. The user says per run how far to go: one phase, or
+several back to back. LJ18 needs the user's signing secrets before it starts (see its prompt).
+`CLAUDE.md` lets the agent commit and push on branches; merging, tagging and releasing still need
+the user's word for each one.
 
 ### Opening prompt — every session
 
@@ -136,8 +185,8 @@ For each step:
 2. Run its verify. If green: flip its tracker row to ✅, add implementation notes under the
    step (always including the free-disk numbers), and commit everything as one commit with
    the step's commit message.
-3. Push. If the phase has no PR yet, open it as a draft (base = previous phase's branch, or
-   main for phase 1) so CI runs. Watch CI with
+3. Push. If the phase has no PR yet, open it as a draft (base = previous phase's branch; main
+   for phase 1, phase 6, or when the previous phase is already merged) so CI runs. Watch CI with
    `gh run watch <id> --repo memoliertorerr/LittleJoan`. If CI is red on code the Mac cannot
    compile, fix it in a follow-up commit "lj-step-N-fix: ..." (Ground Rule 3).
 4. Paste a short report: the verify output, `git log -1 --stat`, and the CI result per OS.
@@ -185,6 +234,12 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 | Fullscreen video on real hardware (YouTube) | **you** — LJ10 | Video fills the screen, Esc returns to the window, audio/video play |
 | Memory at rest in Task Manager / Activity Monitor / `ps` | **you** — LJ10 (CI gives a first number) | No webview helper processes while hibernating |
 | Gatekeeper (unsigned macOS), SmartScreen (unsigned Windows), tray on GNOME | **you** — LJ10 | The documented workaround opens the app |
+| *(v0.2)* Login entry written and removed per OS | CI `smoke` (LJ11) | The registry value / LaunchAgent plist / autostart `.desktop` appears after `--start-at-login on`, points at the installed binary, and is gone after `off` |
+| *(v0.2)* Start at login across a real logout or reboot; the first-run welcome | **you** — phase 6 PR | The icon is there after logging in and the shortcut works; a fresh profile shows the welcome once |
+| *(v0.2)* Fullscreen on a real Ubuntu 22.04 desktop (the `.deb`), and the AppImage on 24.04 | **you** — phase 7 PR, if you have the machines | 22.04: no crash, the window fills the screen; 24.04 AppImage: the video fills the screen |
+| *(v0.2)* A real download (a PDF from a site), "Show in folder", zoom keys | **you** — phase 8 PR | The file is in Downloads under its own name; the folder opens with it selected; zoom steps and resets |
+| *(v0.2)* Wayland-native shortcut (GNOME 48+ or KDE Plasma, Wayland session) | **you** — LJ17 (CI has no portal backend) | The desktop asks once to allow the shortcut; it then summons and dismisses the window |
+| *(v0.2)* Gatekeeper on a DMG downloaded with a browser (notarized build) | **you** — LJ18 / LJ19 | It opens without any warning or `xattr` step |
 
 The agent self-verifies everything a compiler, a test suite, and CI (including headless
 screenshots of the installed app) can show. Everything that needs a real desktop, real input
@@ -241,6 +296,12 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
     tests — log and degrade.
 15. **Every step:** update `docs/architecture.md` (file map + behavior), this tracker, and the
     README when user-facing behavior changes, in the same commit.
+16. *(v0.2)* **Signing secrets belong to the user.** They live only in the repository's GitHub
+    Actions secrets, which the user sets. The agent never reads, prints, asks for, or handles
+    their values. Workflows pass them to the one step that signs, and fall back to ad-hoc
+    signing when they're absent (forks, or before the user has added them).
+17. *(v0.2)* **CHANGELOG:** every user-facing change goes under `## [Unreleased]` in the same
+    commit; LJ19 turns it into `[0.2.0]` with the date.
 
 ### Stop conditions
 
@@ -360,6 +421,37 @@ condition.
   for real (standard); Cmd+W / Esc on the start page / the shortcut only hibernate.
 - **Identifier** `io.github.memoliertorerr.littlejoan`, product name `Little Joan`, binary
   `little-joan`, version 0.1.0, MIT license.
+
+### v0.2 (decided with the user, 2026-10-17)
+
+- **Scope and order:** start at login + first-run welcome → Linux fullscreen → downloads + zoom
+  → Wayland shortcut → macOS signing → release. All four feature groups were chosen.
+- **Start at login:** `tauri-plugin-autostart`, used from Rust only (none of its JS permissions
+  are granted). macOS uses its LaunchAgent launcher (no AppleScript, so no Automation prompt).
+  **The OS login entry is the only state** — `settings.json` has no field for it, so removing
+  the entry in the OS's own settings shows up in Little Joan's Settings. Off by default; turned
+  on in Settings, from the welcome, or with `--start-at-login on|off`.
+- **First launch:** when `settings.json` doesn't exist yet, the window opens **once** with a
+  welcome on the start page (the shortcut, where the icon is, a start-at-login checkbox, the
+  Wayland `--toggle` hint). Default settings are saved at once, so it never shows twice. Every
+  later launch hibernates, as in v0.1.
+- **Ubuntu 22.04 fullscreen:** build the AppImage on ubuntu-24.04 (it bundles WebKitGTK 2.52;
+  its glibc floor rises to 2.39, so 22.04 and Debian 12 use the `.deb`), and add a stopgap for
+  WebKitGTK older than 2.52: decline element fullscreen and fullscreen the window instead —
+  only if a 22.04 CI run first shows that this avoids the abort. Draft a Launchpad report for
+  the user to file.
+- **Downloads:** to the OS Downloads folder under a name that never overwrites a file; the URL
+  bar shows the status and "Show in folder". No notification plugin. Closing the window during a
+  download cancels it — no webview stays alive for it (Ground Rule 9).
+- **Zoom:** Ctrl/Cmd + / − / 0, caught natively like the other page keys, applied with
+  `Webview::set_zoom`. Per window, reset on the next summon, not saved. Never Tauri's
+  `zoom_hotkeys_enabled` (Landmines).
+- **Wayland shortcut:** the XDG GlobalShortcuts portal through `ashpd` when the session is
+  Wayland and the portal offers it; otherwise v0.1's behavior and the `--toggle` hint.
+- **Signing:** macOS — the user has an Apple Developer account: Developer ID signing and
+  notarization in CI from the user's secrets, ad-hoc when they're missing. Windows — unsigned
+  for v0.2; the user applies to SignPath Foundation (free for open source), and a step is added
+  if it's approved. Linux — nothing to sign; `SHA256SUMS.txt` as before.
 
 ---
 
@@ -1499,6 +1591,610 @@ after `--size 390x600` the page reports `viewport=390x560 ua=phone`, after `--si
 
 ---
 
+## v0.2 steps
+
+> Planned 2026-10-17 with the user (decisions: "Design Decisions Already Made → v0.2"). Every
+> step inherits the Ground Rules, the stop conditions, and the v0.2 must-not-disturb list in the
+> scope blockquote. Each step updates `CHANGELOG.md` under `[Unreleased]` (Ground Rule 17).
+
+### LJ11 — Start at login · strong · auto
+
+> Phase 6. Branch `lj/p6-first-run` from `main`; the phase PR goes into `main`.
+
+**Verify:** `npm run verify` green, including Rust tests for `--start-at-login on|off` (`cli.rs`:
+`on` / `off` case-insensitive, anything else ignored, and it never maps to a window command)
+and for the macOS translocation guard (`autostart.rs`: a path containing `/AppTranslocation/` is
+refused, `/Applications/Little Joan.app/Contents/MacOS/little-joan` is allowed), and vitest
+tests showing the settings window's change detection includes the new switch. Capabilities:
+`allow-set-start-at-login` is granted to the `settings` window only (LJ12 adds the local start
+page); no `autostart:*` permission anywhere. CI green on Windows, macOS and Linux for verify,
+package and smoke; the smoke log shows `start-at-login true` after `--start-at-login on` and
+`start-at-login false` after `off`, and the smoke reads the OS entry itself — Windows: a value
+under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` pointing at the installed
+`little-joan.exe`, then none; macOS: a plist in `~/Library/LaunchAgents` whose
+`ProgramArguments` point into the installed `.app`, then none; Linux: a `.desktop` file in
+`~/.config/autostart` whose `Exec=` is the installed binary, then none.
+**Commit:** `lj-step-11: start at login (settings switch and --start-at-login), checked per OS in smoke`
+
+```text
+Add "Start at login", so the global shortcut works after a reboot without launching Little Joan
+by hand.
+
+Design (decided with the user; do not relitigate):
+- Use tauri-plugin-autostart (current 2.x; check with `cargo tree` that its dependencies unify
+  with Cargo.lock's instead of adding second copies). macOS: MacosLauncher::LaunchAgent (a plist
+  in ~/Library/LaunchAgents). Never AppleScript, which triggers an Automation permission prompt.
+  Pass no extra launch arguments: a plain launch already starts hibernating.
+- The OS login entry is the ONLY state. settings.json gets no field for it. get_settings
+  reports `autolaunch().is_enabled()`, and the new command `set_start_at_login(enabled) ->
+  Result<bool, String>` calls enable()/disable() and returns is_enabled() read back. If the user
+  removes the entry in the OS's own settings, Little Joan's Settings shows that the next time it
+  opens.
+- Register the plugin for its Rust API only. Do NOT grant any autostart:allow-* permission; our
+  own command calls it. Add set_start_at_login to build.rs's app manifest and grant
+  allow-set-start-at-login in capabilities/settings.json. (LJ12 grants it to the local start
+  page; don't do that here.)
+- Off by default. Nothing turns it on implicitly.
+- macOS guard: refuse to enable when the executable path contains "/AppTranslocation/" (an app
+  run straight from the DMG or from Downloads): the LaunchAgent would record a temporary path
+  that disappears. Return "Move Little Joan to Applications first, then turn this on." Keep the
+  check pure in a new src-tauri/src/autostart.rs, with tests; native glue stays thin.
+- Linux AppImage: the plugin already writes $APPIMAGE into the entry (confirmed in its source),
+  so nothing to do here, but don't break the smoke's AppImage launch check.
+- Settings window (ui/settings.html, ui/settings.ts, ui/settings-logic.ts): a "Start Little
+  Joan at login" checkbox under the shortcut. Apply it on Save, only if it changed. On an
+  error, keep the window open and show the message the way the shortcut error is shown.
+- CLI: `--start-at-login on|off` (cli.rs) changes the setting without touching the window,
+  forwarded through single-instance like the other flags, and logs `start-at-login
+  <true|false>` (the value read back) to the smoke log (smoke.rs). Give it its own parse result
+  or Command variant and handle it before toggle::decide; the toggle table is about the window
+  and stays as it is.
+
+Smoke (scripts/ci/smoke.mts, scripts/ci/smoke-log.mts and its test): after the existing summon
+cycles, run `--start-at-login on`, then check the OS entry (Windows: `reg query
+HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; macOS: the plist and its ProgramArguments;
+Linux: ~/.config/autostart/*.desktop and its Exec=). It must point at the INSTALLED binary: the
+NSIS install folder, the .app copied out of the DMG, /usr/bin/little-joan. Then run `off` and
+check it's gone. Write what you found into summary.json. Read the entry's file name and label
+from the plugin's source (the auto-launch crate) rather than guessing, and record them under
+Landmines.
+
+Files: src-tauri/Cargo.toml (+ Cargo.lock), src-tauri/build.rs, src-tauri/capabilities/settings.json,
+src-tauri/src/{autostart.rs (new), cli.rs, commands.rs, lib.rs, smoke.rs}, ui/settings.html,
+ui/settings.ts, ui/settings-logic.ts (+ test), scripts/ci/smoke.mts, scripts/ci/smoke-log.mts
+(+ test), README (Using it: start at login; macOS: move to Applications first), CHANGELOG
+([Unreleased] → Added), docs/architecture.md (file map, commands table, CLI, smoke-log events),
+this plan (tracker, notes; Deferred follow-ups: mark "Start at login" as handled by LJ11).
+
+Do NOT build the welcome (LJ12), and don't touch tray.rs.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ11 to ✅, add
+implementation notes (with the df -h numbers), and commit everything as one commit:
+"lj-step-11: start at login (settings switch and --start-at-login), checked per OS in smoke".
+Push, open the phase-6 PR into main as a draft, and watch CI until verify, package and smoke are
+green on all three OSes; fix Windows/Linux-only failures per Ground Rule 3. If it is still red
+after two honest fix attempts, stop and report. Never commit red; never weaken a check.
+```
+
+### LJ12 — A one-time welcome on the first launch · standard · auto
+
+**Verify:** `npm run verify` green, including Rust tests that a first run is detected only when
+`settings.json` is missing (a present but invalid file is not a first run), that the default
+settings are saved as soon as the welcome is shown, and that the tray-hint text is right per OS
+(a pure function: macOS menu bar; Windows system tray, possibly in the ^ overflow; Linux tray plus
+the GNOME AppIndicator note), and vitest tests for the start page's welcome logic
+(`ui/start-logic.ts`). Capabilities: `capabilities/joan.json` gives the page webview's local
+start page `allow-start-info` and `allow-set-start-at-login`, nothing else, and no remote URLs.
+CI green on all three. The main smoke flow runs on a pre-written `settings.json` and is
+unchanged (it still hibernates at start, with the same memory checks). A new first-run check
+launches with an empty `LITTLEJOAN_DATA_DIR` and requires `first-run`, `window-created`,
+`bar-loaded` and a `welcome.png` screenshot; after `--hide` and a quit, a relaunch on the same
+folder creates no window within 5 s, and `settings.json` exists.
+**Commit:** `lj-step-12: a one-time welcome on the first launch`
+
+```text
+A new user sees only a tray icon after installing (on GNOME without the AppIndicator extension,
+nothing at all) and doesn't know the shortcut. Show a welcome once.
+
+Design (decided with the user; do not relitigate):
+- First run means settings.json doesn't exist when state::init runs; keep that as
+  `first_run: bool` in AppState. A file that exists but is unreadable or invalid is NOT a first
+  run.
+- On a first run, setup registers the shortcut as now, then logs `first-run`, saves the default
+  settings at once (settings::save), so the welcome appears only once even if the user quits
+  straight away, and dispatches Command::Show(None). A first launch WITH flags (`--show <url>`,
+  `--toggle`, `--start-at-login …`) acts on the flags instead and still saves settings, with no
+  welcome. Every later launch hibernates, as in v0.1.
+- The welcome is the existing start page (ui/index.html, ui/start.ts, ui/start-logic.ts) in a
+  "welcome" variant, not a new window. StartInfo gains `firstRun: bool`, `trayHint: string` (a
+  pure Rust function: where the icon is on this OS), `startAtLogin: bool | null` (null where it
+  can't be read) and `waylandNoShortcut: bool` (a Linux Wayland session, where the X11 shortcut
+  can't fire; LJ17 turns it off when the portal registers the shortcut). The URL bar keeps the
+  focus as always: typing there and pressing Enter just opens the page.
+- Content, kept short: "Little Joan is ready." · what the shortcut does ("⌘⇧Space summons and
+  dismisses this window"), or on Wayland "Bind `little-joan --toggle` to a key in your keyboard
+  settings" · where the icon is (trayHint; on Linux add "On GNOME the icon needs the
+  AppIndicator extension. Opening Little Joan from your app list also summons it.") · a "Start
+  Little Joan at login" checkbox calling set_start_at_login (from LJ11), which
+  capabilities/joan.json grants to the page webview's LOCAL start page only · "Esc or the
+  shortcut closes this window."
+- Only the first summon is a welcome. Clear firstRun once the start page has read it, so later
+  summons show the normal hint.
+
+Smoke (scripts/ci/smoke.mts, scripts/ci/smoke-log.mts and its test): the existing flow must stay
+comparable, because memory at rest is measured before any window opens. Launch it on a fresh
+LITTLEJOAN_DATA_DIR that already holds a default settings.json. Then add the first-run check at
+the end: quit, launch on a new empty LITTLEJOAN_DATA_DIR, require `first-run`, then
+`window-created` and `bar-loaded`, screenshot welcome.png, `--hide`, quit, relaunch on the same
+folder, and require that no window opens within 5 s. Every build reads LITTLEJOAN_DATA_DIR
+(state.rs), so this tests the installed app.
+
+Files: src-tauri/src/{state.rs, lib.rs, commands.rs, smoke.rs, and the tray-hint function with
+tests}, src-tauri/capabilities/joan.json, ui/{index.html, start.ts, start-logic.ts (+ test),
+style.css}, scripts/ci/{smoke.mts, smoke-log.mts (+ test)}, README (first launch), CHANGELOG
+([Unreleased] → Added), docs/architecture.md (lifecycle: first launch; capabilities), this plan
+(Deferred follow-ups: strike "First-run discoverability", resolved by LJ12).
+
+Do NOT add a separate welcome window, a notification or a tray balloon. Change nothing about
+hibernation beyond the one first-run summon.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ12 to ✅, add
+implementation notes (with df -h), and commit everything as one commit: "lj-step-12: a one-time
+welcome on the first launch". Push and watch CI until verify, package and smoke are green on all
+three OSes (Ground Rule 3; stop after two honest fix attempts). Download each OS's welcome.png
+into test-results/ci/, look at it, then delete it. This ends phase 6. Fill the PR description
+from the template. Needs human check, on your Mac:
+(1) quit Little Joan, move ~/Library/Application Support/io.github.memoliertorerr.littlejoan/settings.json
+aside, launch it: the welcome shows; quit and launch again: it doesn't;
+(2) tick "Start at login", log out and back in: the menu-bar icon is there and the shortcut
+works;
+(3) untick it in Settings: ~/Library/LaunchAgents has no Little Joan plist;
+(4) the must-not-disturb list.
+Then mark the PR ready for review and stop.
+```
+
+### LJ13 — Build the AppImage on Ubuntu 24.04 · strong · auto
+
+> Phase 7. Branch `lj/p7-linux-fullscreen` from `lj/p6-first-run` (or from `main` if phase 6 is
+> merged).
+
+**Verify:** `npm run verify` green. CI: `package (linux)` on ubuntu-22.04 builds only the
+`.deb`, so its glibc floor is unchanged; a new `package (linux-appimage)` on ubuntu-24.04 builds
+the `.AppImage`, and its job summary shows the size and the bundled WebKitGTK version (2.52.x).
+The AppImage gets the full smoke on ubuntu-24.04 (matrix entry `linux-appimage`, with the same
+checks as `linux`, including element fullscreen and the phone-mode viewports), replacing the
+launch-only check. Every other job stays green, and `installers_from_run` still works.
+**Commit:** `lj-step-13: build the AppImage on ubuntu-24.04 (WebKitGTK 2.52) and smoke-test it fully`
+
+```text
+The AppImage bundles the WebKitGTK of the machine that built it. It is built on ubuntu-22.04,
+whose WebKitGTK 2.50.4 aborts on element fullscreen (Landmines), so the AppImage crashes on
+fullscreen on EVERY distro it runs on (seen in CI; not yet tried on a desktop). Ubuntu hasn't
+updated 22.04's WebKitGTK since 2026-01-13, while 24.04 got 2.52.6 on 2026-08-31.
+
+Decided with the user: build the AppImage on ubuntu-24.04. Its glibc floor rises to 2.39
+(Ubuntu 24.04+, Debian 13, Fedora 40+). Ubuntu 22.04 and Debian 12 use the .deb, which LJ14
+makes survive fullscreen. Keep building the .deb on ubuntu-22.04 so it still installs there.
+
+1. .github/workflows/ci.yml, package job: split the linux entry into `linux` (ubuntu-22.04,
+   bundles deb) and `linux-appimage` (ubuntu-24.04, bundles appimage), each with its own
+   artifact (little-joan-linux, little-joan-linux-appimage) and its own cache key. Put the
+   bundled WebKitGTK version in the job summary: find libwebkit2gtk-4.1.so.* in the AppDir or
+   in the extracted AppImage.
+2. Smoke: replace the "AppImage starts" launch-only step with a matrix entry `linux-appimage`
+   (ubuntu-24.04, artifact little-joan-linux-appimage) that runs the same smoke.mts flow
+   against the AppImage (APPIMAGE_EXTRACT_AND_RUN=1, since the runners have no FUSE; keep gdb).
+   The installer download step must fetch the right artifact for each entry, and
+   `installers_from_run` must keep working.
+3. Note the AppImage's size in the PR (it was 149 MB in v0.1.0). A big change in either
+   direction is worth a line in the notes, not a fix.
+4. Update the local CLAUDE.md "Release process" (it is gitignored; edit it in place): the
+   AppImage now comes from the little-joan-linux-appimage artifact.
+5. Docs: README (which Linux download suits which distro: the .deb for Ubuntu 22.04+ and
+   Debian 12+, the AppImage for glibc 2.39+), CHANGELOG ([Unreleased] → Changed; Fixed: the
+   AppImage's fullscreen crash), docs/architecture.md (the Packaging table, CI), this plan
+   (update the WebKitGTK entry in Landmines).
+
+Do NOT add the 22.04 stopgap (LJ14) or change app code.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ13 to ✅, add notes, and
+commit: "lj-step-13: build the AppImage on ubuntu-24.04 (WebKitGTK 2.52) and smoke-test it
+fully". Push, open the phase-7 PR as a draft (base: lj/p6-first-run, or main if phase 6 is
+merged), and watch CI until every job is green. Download linux-appimage's fullscreen.png into
+test-results/ci/, look at it, then delete it. If a job is still red after two honest fix
+attempts, stop and report.
+```
+
+### LJ14 — WebKitGTK older than 2.52: fullscreen the window instead of aborting · strong · auto
+
+**Verify:** first, the experiment: a CI run on ubuntu-22.04 of the bare PyGObject check, with
+an `enter-fullscreen` handler that returns `True`, shows the process still running after the
+click. If it aborts anyway, that is a stop condition: record it, change no app code, and finish
+only point 4. If the experiment passes: `npm run verify` green, including Rust tests for
+`fullscreen::needs_window_fallback(major, minor)` (2.44 → true, 2.50 → true, 2.52 → false,
+2.54 → false). CI green everywhere, plus a permanent smoke entry `linux-22.04` (ubuntu-22.04,
+the `.deb`) whose log shows `fullscreen-fallback`, then `fullscreen true`, then
+`fullscreen false` after the page loads again, with no abort. The 24.04 entries never log
+`fullscreen-fallback`. `docs/upstream/webkitgtk-2.50-fullscreen-abort.md` exists.
+**Commit:** `lj-step-14: WebKitGTK older than 2.52 fullscreens the window instead of aborting; 22.04 smoke`
+
+```text
+Ubuntu 22.04's WebKitGTK 2.50.4 aborts the process when a page enters element fullscreen
+(Landmines; reproduced with a bare WebKitGTK window). The .deb targets 22.04, so 22.04 users
+crash on any video's fullscreen button. Decided with the user: a stopgap for WebKitGTK older
+than 2.52. When a page asks for element fullscreen, decline it and fullscreen the WINDOW
+instead (bar hidden, page fills the screen). The page doesn't know it's fullscreen, so a video
+stays its in-page size, but nothing crashes.
+
+1. Prove it helps before writing app code. Add a variant to ci.yml's "Bare WebKitGTK fullscreen
+   check" whose enter-fullscreen handler returns True (handled, so WebKit cancels the request),
+   and run it on ubuntu-22.04:
+   `gh workflow run ci.yml --repo memoliertorerr/LittleJoan --ref <branch> -f installers_from_run=<a green run id> -f linux_runner=ubuntu-22.04 -f linux_plain_webkit_check=true`.
+   If the log says "still running after the click" for the handled variant, go on. If it
+   aborts anyway (the crash happens before the signal), STOP: record that in the
+   implementation notes and Landmines, leave the app alone, keep the known issue in the README
+   and CHANGELOG, still do point 4, and report.
+2. App (src-tauri/src/platform/linux.rs, fullscreen.rs, bar.rs): read WebKitGTK's runtime
+   version (webkit_get_major_version / webkit_get_minor_version). Add a pure
+   `fullscreen::needs_window_fallback(major, minor) -> bool` that is true below 2.52, with
+   tests. When it applies, the enter-fullscreen handler returns TRUE, logs
+   `fullscreen-fallback`, fullscreens the window and hides the bar, through the same path as
+   bar::set_element_fullscreen. Esc, a new page load (Started), or the window leaving
+   fullscreen by other means ends it and brings the bar back. Esc goes through keys.rs and the
+   GTK key hook, and only while the fallback is active. FullscreenTracker's rule holds: undo
+   only a fullscreen we caused. WebKitGTK 2.52+ keeps today's behavior untouched.
+3. CI smoke: add a permanent matrix entry `linux-22.04` (ubuntu-22.04, artifact
+   little-joan-linux, the .deb). Its smoke-log rules, unit-tested: `fullscreen-fallback`, then
+   `fullscreen true`, then `fullscreen false` after the page loads again, and no abort.
+   Everything else matches the `linux` entry. The 24.04 entries must NOT log
+   fullscreen-fallback.
+4. Write docs/upstream/webkitgtk-2.50-fullscreen-abort.md: a bug report for Ubuntu's
+   webkit2gtk package on Launchpad. Jammy has stayed at 2.50.4-0ubuntu0.22.04.1 since
+   2026-01-13, while noble and resolute got 2.52.6 on 2026-08-31. Include the bare PyGObject
+   reproduction, the CI evidence (run ids), and the ask: 2.52.x for jammy. The user files it;
+   do not post anything outside this repository.
+5. Docs: README (on 22.04 a video's fullscreen button fills the screen with the page, not with
+   the video), CHANGELOG ([Unreleased] → Fixed), docs/architecture.md (the Fullscreen table
+   gains a WebKitGTK < 2.52 row), this plan (Landmines; in Deferred follow-ups, strike the Linux
+   fullscreen line once LJ13 and LJ14 are both done).
+
+Do NOT change the Windows or macOS fullscreen code.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ14 to ✅, add notes, and
+commit: "lj-step-14: WebKitGTK older than 2.52 fullscreens the window instead of aborting; 22.04
+smoke". Push and watch CI until every job is green (two honest attempts, then stop). Look at
+linux-22.04's fullscreen.png. This ends phase 7. Fill the PR description. Needs human check:
+- If you have an Ubuntu 22.04 desktop: in the .deb build, play a YouTube video and press its
+  fullscreen button. Nothing crashes, the window fills the screen, and Esc brings it back.
+- On 24.04: the AppImage's fullscreen fills the screen with the video.
+- The must-not-disturb list.
+Then mark the PR ready and stop.
+```
+
+### LJ15 — Downloads · strong · auto
+
+> Phase 8. Branch `lj/p8-downloads-zoom` from `lj/p7-linux-fullscreen` (or from `main`).
+
+**Verify:** `npm run verify` green, including Rust tests for a pure `downloads.rs`. The file
+name comes from the engine's suggested name, else the URL's last path segment, else
+`download`. It is cleaned: no path separators, no `..`, no control characters, no Windows
+reserved names (`CON`, `NUL`, `COM1`…) or trailing dots and spaces, capped at 200 bytes. It is
+made unique in the folder: `report.pdf` → `report (1).pdf`, `archive.tar.gz` →
+`archive (1).tar.gz`. Only `http`, `https`, `blob` and `data` downloads are accepted. Vitest
+tests for the bar's status logic in `ui/bar-logic.ts`: downloading → saved → cleared after 8 s;
+failed; an address edit in progress is never disturbed. Capabilities: the bar gains only
+`allow-reveal-download`. CI green on all three, with a new smoke check: `--show` a smoke-server
+URL that answers `application/octet-stream` with `Content-Disposition: attachment;
+filename="lj-smoke.bin"`. The log then shows `download-started lj-smoke.bin` and
+`download-finished lj-smoke.bin ok`, the file is in that OS's Downloads folder with the exact
+bytes, and a second identical download lands as `lj-smoke (1).bin`.
+**Commit:** `lj-step-15: downloads go to the Downloads folder, with status in the URL bar`
+
+```text
+WebView2 saves downloads with its own UI; WKWebView and WebKitGTK drop them (Deferred
+follow-ups). Make downloads work the same way everywhere.
+
+Design (decided with the user; do not relitigate):
+- The page webview (bar.rs, `page` builder) gets on_download. On Requested: accept only
+  http/https/blob/data URLs (anything else returns false). Set the destination to the OS
+  Downloads folder (app.path().download_dir(); if it reports none, as on Linux without XDG
+  user dirs, use ~/Downloads and create it) under a cleaned, unique name. Base the name on the
+  engine's suggested destination, else the URL. Log `download-started <name>`, remember the
+  destination keyed by URL (DownloadEvent::Finished carries no path on macOS; see Landmines),
+  and tell the bar. On Finished: log `download-finished <name> ok|failed` and tell the bar.
+- The URL bar (ui/bar.html, ui/bar.ts, ui/bar-logic.ts) gets a small status area at its right
+  edge, pushed from Rust like the address: bar.eval("window.littleJoan.setStatus(<json>)").
+  It shows "Downloading lj-smoke.bin…", then "lj-smoke.bin saved" with a "Show in folder"
+  button, or "Download failed". It clears after 8 s, or at once when the user starts editing
+  the address. The button calls a new command `reveal_download()`, which reveals the last
+  saved file with tauri_plugin_opener's reveal_item_in_dir. It is granted to the bar only and
+  added to build.rs's app manifest. LJ16 reuses this status area for the zoom level, so keep it
+  generic (text + optional action).
+- Closing the window during a download cancels it. Nothing keeps a webview alive for it
+  (Ground Rule 9). No notification plugin.
+- Windows: WebView2's own download flyout must not appear on top. Check it in the smoke
+  screenshot; if wry doesn't suppress it, hide it through ICoreWebView2_9's
+  DefaultDownloadDialog API in platform/win.rs.
+
+Smoke (scripts/ci/smoke.mts + smoke-log.mts and its test; the smoke server in smoke.mts): add a
+route that answers with a fixed 1 KB body, Content-Type application/octet-stream and
+Content-Disposition attachment; filename="lj-smoke.bin". Use `--show` on that URL twice. Check
+the log events, the bytes of Downloads/lj-smoke.bin and of Downloads/lj-smoke (1).bin, and take
+a screenshot of the bar (download.png). Delete both files afterwards (the runner is
+disposable, but stay tidy).
+
+Files: src-tauri/src/{downloads.rs (new, pure), bar.rs, commands.rs, lib.rs, smoke.rs,
+platform/win.rs if needed}, src-tauri/build.rs, src-tauri/capabilities/bar.json, ui/{bar.html,
+bar.ts, bar-logic.ts (+ test), style.css}, scripts/ci/{smoke.mts, smoke-log.mts (+ test)},
+README, CHANGELOG ([Unreleased] → Added), docs/architecture.md (the page, the URL bar,
+commands, smoke log), this plan (Deferred follow-ups: "Downloads" handled by LJ15).
+
+Do NOT add a downloads list, a progress bar, pause/resume, or a "where to save" dialog (Later).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ15 to ✅, add notes, and
+commit: "lj-step-15: downloads go to the Downloads folder, with status in the URL bar". Push,
+open the phase-8 PR as a draft (base: lj/p7-linux-fullscreen, or main), and watch CI until
+every job is green (Ground Rule 3; two honest attempts, then stop). Look at each OS's
+download.png.
+```
+
+### LJ16 — Page zoom · standard · auto
+
+**Verify:** `npm run verify` green, including Rust tests for a pure `zoom.rs`: levels 50, 67,
+75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300 %; zooming in or out steps to the next level
+from any value, stops at the ends, and reset goes to 100 %. `keys.rs` tests: Ctrl+= / Ctrl+Shift+=
+/ Ctrl++ (keypad) zoom in, Ctrl+- (and keypad -) zoom out, Ctrl+0 resets (Windows and Linux).
+The exact-match rules still hold (Ctrl+Alt never matches). macOS: View menu items Zoom In ⌘+,
+Zoom Out ⌘−, Actual Size ⌘0 in `menu.rs`. `zoom_hotkeys_enabled` appears nowhere in
+`src-tauri/src`. CI green; the Linux smoke sends ctrl+equal with xdotool, and the Windows smoke
+sends it with SendKeys `^=`. The page then reports a smaller `innerWidth` (about 655 instead of
+720 at 110 %), and after Ctrl+0 it reports 720 again. On macOS the check is required only if the
+synthetic key reached the page (the same rule as the fullscreen click).
+**Commit:** `lj-step-16: page zoom with Ctrl/Cmd + / − / 0`
+
+```text
+Add page zoom. Keys only, plus a short status in the URL bar.
+
+Design (decided with the user; do not relitigate):
+- The keys are caught natively like the other page keys (keys.rs → page_actions.rs:
+  PageAction::ZoomIn / ZoomOut / ZoomReset): WebView2 AcceleratorKeyPressed (platform/win.rs),
+  the GTK key hook (platform/linux.rs), and a View menu in menu.rs on macOS. They call
+  Webview::set_zoom on the PAGE webview with the level from zoom.rs.
+- NEVER enable Tauri's zoom_hotkeys_enabled on joan-page. On macOS and Linux it injects a
+  script into the page that needs core:webview:allow-set-webview-zoom, which is IPC for remote
+  pages (Ground Rule 10; Landmines). On Windows it is WebView2's IsZoomControlEnabled, which
+  stays off so our levels are the only ones.
+- Zoom is per window: it survives navigations within the window, starts at 100 % on every
+  summon, and is never saved. Keep the current level next to the window's other per-window
+  state in bar.rs or joan.rs.
+- Each change shows "Zoom 110 %" for 1.5 s in the bar's status area (from LJ15). At 100 % it
+  shows "Zoom 100 %" once, then nothing.
+- Phone mode is unaffected: its 600 px threshold is the window's logical width, not the page's
+  CSS width.
+
+Smoke: after the wide (720×600) viewport report, send Ctrl+= (Linux: `xdotool key ctrl+equal`;
+Windows: SendKeys "^="; macOS: a CGEvent key press, best-effort), and require the next viewport
+report to be narrower than 720. Then send Ctrl+0 and require 720 again. Add the rules to
+smoke-log.mts with tests.
+
+Files: src-tauri/src/{zoom.rs (new, pure), keys.rs, page_actions.rs, menu.rs, platform/win.rs,
+platform/linux.rs, bar.rs}, ui/bar-logic.ts (+ test) if the status needs it,
+scripts/ci/{smoke.mts, smoke-log.mts (+ test)}, README (page keys table), CHANGELOG
+([Unreleased] → Added), docs/architecture.md (the page keys table), this plan (Later: zoom
+moved here; find in page stays Later).
+
+Do NOT add Ctrl+mouse-wheel or pinch zoom, per-site zoom, or a zoom control in the bar (Later).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ16 to ✅, add notes, and
+commit: "lj-step-16: page zoom with Ctrl/Cmd + / − / 0". Push and watch CI until every job is
+green (two honest attempts, then stop). This ends phase 8. Fill the PR description. Needs human
+check:
+- On your Mac: download a PDF from a real site. It appears in ~/Downloads under its own name,
+  and "Show in folder" opens Finder with it selected.
+- Download it again: you get "name (1).pdf".
+- ⌘+ / ⌘− / ⌘0 zoom and reset, with the level shown briefly in the bar.
+- The must-not-disturb list.
+Then mark the PR ready and stop.
+```
+
+### LJ17 — Wayland-native global shortcut · strong · auto
+
+> Phase 9. Branch `lj/p9-wayland-shortcut` from `lj/p8-downloads-zoom` (or from `main`).
+
+**Verify:** `npm run verify` green, including Rust tests for the pure parts:
+- accelerator → XDG shortcut trigger (`CommandOrControl+Shift+Space` → `CTRL+SHIFT+space`; Alt →
+  `ALT`, Super → `LOGO`; keys the spec can't express → `None`);
+- the backend decision (not Linux, or an X11 session → global-hotkey as now; a Wayland session
+  with the GlobalShortcuts portal → portal; a Wayland session without it → global-hotkey on
+  XWayland as now, plus the `--toggle` hint);
+- the smoke-log events (`shortcut-registered <accel> portal`, `shortcut-portal-unavailable`).
+
+`cargo tree -i zbus` shows one `zbus` 5, shared by `ashpd` and the existing dependencies. CI green
+on all three OSes. The X11 smoke is unchanged (it still logs `shortcut-registered` from
+global-hotkey). The portal path can't run in CI (no portal backend under Xvfb), so it is the
+user's check.
+**Commit:** `lj-step-17: Wayland-native global shortcut through the XDG GlobalShortcuts portal`
+
+```text
+global-hotkey's Linux backend is X11 only, so on a Wayland session the shortcut fires only while
+an XWayland window has focus (Landmines). The XDG GlobalShortcuts portal is the Wayland way: KDE
+Plasma has it, GNOME since 48, so Ubuntu 26.04 has it and 24.04 (GNOME 46) doesn't.
+
+Design (decided with the user; do not relitigate):
+- Add `ashpd` (current version, default features off, the tokio feature to match
+  tauri::async_runtime; it must use the zbus 5 already in Cargo.lock) as a Linux-only
+  dependency.
+- In shortcut.rs (or a new src-tauri/src/platform/portal.rs if shortcut.rs would pass ~400
+  lines): on Linux, when XDG_SESSION_TYPE is "wayland" (or WAYLAND_DISPLAY is set), try the
+  portal first. Create a session, bind one shortcut with id "toggle", description "Summon or
+  dismiss Little Joan", and the preferred trigger converted from the settings accelerator.
+  Listen for Activated → joan::dispatch(Command::Toggle). Keep the session alive for the life
+  of the process. Log `shortcut-registered <trigger> portal`. If the portal isn't there or
+  refuses: log `shortcut-portal-unavailable` and do exactly what v0.1 does.
+- The desktop owns the final key. It may show its own dialog the first time and may change the
+  trigger. Take the trigger it reports and show that in the start-page hint and in Settings.
+- Host apps and app ids: GNOME's portal identifies a non-sandboxed app by its desktop file id.
+  Check what Tauri's .deb installs (dpkg-deb -c on the CI artifact). If it is "Little Joan.desktop"
+  (with a space), the portal may not match it. Then use ashpd's host-app registration with
+  io.github.memoliertorerr.littlejoan, and install the desktop file under that id if that's
+  needed. Record what you find in Landmines.
+- Settings window: on the portal path, replace the recorder with the trigger the portal reports,
+  plus "Change it in your desktop's keyboard settings". On other paths nothing changes.
+- StartInfo.waylandNoShortcut (LJ12) becomes false once the portal registers the shortcut.
+
+Files: src-tauri/Cargo.toml (+ Cargo.lock), src-tauri/src/{shortcut.rs and/or
+platform/portal.rs, lib.rs, commands.rs, smoke.rs}, ui/settings.{html,ts}, ui/settings-logic.ts
+(+ test), possibly src-tauri/tauri.conf.json (desktop file), README (Wayland), CHANGELOG
+([Unreleased] → Added), docs/architecture.md (global shortcut), this plan (Later: the Wayland
+row moved here).
+
+Do NOT remove the `--toggle` fallback or the X11 path.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ17 to ✅, add notes, and
+commit: "lj-step-17: Wayland-native global shortcut through the XDG GlobalShortcuts portal".
+Push, open the phase-9 PR as a draft (base: lj/p8-downloads-zoom, or main), and watch CI until
+every job is green (two honest attempts, then stop). This ends phase 9. Needs human check:
+- On a Wayland session with GNOME 48+ or KDE Plasma: install the .deb and launch. The desktop
+  asks once to allow the shortcut (or shows it in its shortcut settings). The shortcut then
+  summons and dismisses the window, with no XWayland window focused.
+- On Ubuntu 24.04 Wayland: the welcome shows the `--toggle` hint, as before.
+- On X11, nothing changed.
+- The must-not-disturb list.
+Mark the PR ready and stop.
+```
+
+### LJ18 — macOS Developer ID signing and notarization · strong · auto
+
+> Phase 10. Branch `lj/p10-macos-signing` from `lj/p9-wayland-shortcut` (or from `main`).
+> **Starts only after the user has done the human pre-step below.** Check with
+> `gh secret list --repo memoliertorerr/LittleJoan` (it lists names only, never values). If any
+> name is missing, stop and ask.
+
+**Human pre-step (the user, once, about 20 minutes; the agent never sees these values):**
+1. developer.apple.com → Certificates, IDs & Profiles → Certificates → + → **Developer ID
+   Application** (only the Account Holder can create one). Make the certificate signing
+   request in Keychain Access → Certificate Assistant → Request a Certificate From a Certificate
+   Authority (save it to disk). Download the `.cer` and double-click it.
+2. In Keychain Access → My Certificates, export "Developer ID Application: …" (with its private
+   key) as a `.p12` with a strong password.
+3. App Store Connect → Users and Access → Integrations → App Store Connect API → Team Keys → +,
+   with Developer access. Download the `.p8` (it downloads only once). Note the Key ID and the
+   Issuer ID.
+4. Add the repository secrets (GitHub → Settings → Secrets and variables → Actions, or
+   `gh secret set <NAME> --repo memoliertorerr/LittleJoan`):
+   - `APPLE_CERTIFICATE` = `base64 -i DeveloperID.p12`
+   - `APPLE_CERTIFICATE_PASSWORD`
+   - `APPLE_SIGNING_IDENTITY` = exactly what `security find-identity -v -p codesigning` prints,
+     e.g. `Developer ID Application: <Name> (<TEAMID>)`
+   - `APPLE_API_ISSUER`
+   - `APPLE_API_KEY` = the Key ID
+   - `APPLE_API_KEY_P8` = the `.p8` file's contents
+5. Keep the `.p12`, its password and the `.p8` in a password manager, and delete the loose
+   copies.
+
+**Verify:** `npm run verify` green. CI, on branches of this repository: `package (macos)` signs
+with the Developer ID. `codesign -dv --verbose=2` shows `Authority=Developer ID Application: …`,
+the hardened runtime flag and a secure timestamp. With notarization on (pushes to `main`, and
+`workflow_dispatch` with `notarize=true`): the DMG users download is notarized and stapled
+(`xcrun stapler validate` passes on the DMG and the app). On the smoke (macos) job,
+`spctl -a -vv -t exec` on the installed app says `accepted` with `source=Notarized Developer ID`,
+and `spctl -a -vv -t open --context context:primary-signature` on the DMG is accepted. Without
+the secrets (fork PRs), the job falls back to ad-hoc signing and stays green. No secret value
+appears in any log. Every existing smoke check still passes.
+**Commit:** `lj-step-18: sign the macOS app with Developer ID and notarize the DMG in CI`
+
+```text
+macOS users currently need `xattr -dr com.apple.quarantine` or System Settings → Open Anyway,
+because the build is ad-hoc signed. The user has an Apple Developer account and has added the
+secrets listed in this step's pre-step. Sign and notarize in CI. You never see, print, or
+handle the secret values (Ground Rule 16).
+
+1. Read how the Tauri CLI in node_modules/@tauri-apps/cli (and tauri-bundler's source in the
+   cargo registry, if it's there) treats APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+   APPLE_SIGNING_IDENTITY, APPLE_API_ISSUER, APPLE_API_KEY and APPLE_API_KEY_PATH, and how the
+   environment interacts with tauri.conf.json's `"signingIdentity": "-"`. Write what you find
+   into the step's notes before changing anything.
+2. .github/workflows/ci.yml, package (macos) only:
+   - When APPLE_CERTIFICATE is non-empty, pass the signing variables to the "Build installers"
+     step only, through `env:` from secrets. Never `echo` them, and never write them to
+     $GITHUB_ENV. Write APPLE_API_KEY_P8 to a file under $RUNNER_TEMP with mode 600, set
+     APPLE_API_KEY_PATH to it, and delete the file in an `if: always()` step.
+   - Notarize only on push to main and on workflow_dispatch with a new boolean input `notarize`.
+     PR builds are Developer ID-signed but not notarized, to save time and Apple submissions.
+   - Without the secrets, keep today's ad-hoc build.
+   - Make the DMG users download pass Gatekeeper: if Tauri notarizes only the .app, sign the DMG
+     (codesign --timestamp), notarize it (xcrun notarytool submit --wait) and staple it. Don't
+     do anything twice that Tauri already does.
+   - "Inspect the macOS app": print codesign -dv --verbose=2 and, when notarized,
+     `xcrun stapler validate` for the app and the DMG.
+3. Smoke (macos): when the build was notarized, run the spctl checks from Verify on the installed
+   app and on the DMG, and fail if they aren't accepted. Otherwise log that it was skipped.
+   Everything else is unchanged; the hardened runtime must not break WKWebView, downloads
+   (LJ15) or start at login (LJ11).
+4. tauri.conf.json: keep "-" as the fallback if the environment overrides it; otherwise make
+   the fallback explicit in the workflow. Add entitlements only if a check proves one is needed,
+   and record why.
+5. Docs: README (macOS install: no xattr step for notarized builds; keep it for builds from
+   source), CHANGELOG ([Unreleased] → Changed), CONTRIBUTING (forks build ad-hoc), SECURITY
+   (official macOS builds are notarized), docs/architecture.md (Packaging), this plan (Later:
+   macOS signing moved here; Windows stays pending SignPath).
+
+Do NOT touch Windows or Linux signing, and don't add the updater.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ18 to ✅, add notes, and
+commit: "lj-step-18: sign the macOS app with Developer ID and notarize the DMG in CI". Push, open
+the phase-10 PR as a draft (base: lj/p9-wayland-shortcut, or main), let CI run, then run
+`gh workflow run ci.yml --repo memoliertorerr/LittleJoan --ref lj/p10-macos-signing -f notarize=true`
+and watch both runs until green (two honest attempts, then stop). This ends phase 10. Needs
+human check: download the DMG artifact of the notarized run with a browser (so it gets
+quarantined), open it, drag Little Joan to Applications and launch it. There should be no
+Gatekeeper warning. Mark the PR ready and stop.
+```
+
+### LJ19 — Release v0.2.0 · standard · checkpoint
+
+> Phase 11. Branch `lj/release-0.2.0` from `lj/p10-macos-signing` (or from `main` once the
+> phases are merged).
+
+**Verify:** `npm run verify` green. Version `0.2.0` in `package.json` (+ lock), `tauri.conf.json`
+and `Cargo.toml` (+ `Cargo.lock`). `CHANGELOG.md` has `[0.2.0] — <date>` built from
+`[Unreleased]`, with a fresh empty `[Unreleased]` above it and the link references at the
+bottom. The README points at the v0.2.0 assets. CI green on the release PR. **Checkpoint:** the
+user ticks the checklist. Only after the user says to merge and release: merges in order (merge
+commits), `main`'s CI green, the assets renamed (`LittleJoan-0.2.0-windows-x64-setup.exe`,
+`-macos-universal.dmg`, `-linux-amd64.deb`, `-linux-x86_64.AppImage`), `SHA256SUMS.txt`,
+`gh release create v0.2.0 --target <that main commit> --latest`, and then the release, its tag
+and one downloaded asset's checksum checked.
+**Commit:** `lj-release-0.2.0: version 0.2.0, changelog and readme`
+
+```text
+Prepare v0.2.0 exactly as CLAUDE.md's "Release process" says (it was done that way for v0.1.0):
+bump the three versions, turn [Unreleased] into [0.2.0] with today's date, and point the README
+at the release. Do it all through this PR.
+
+Fill the PR description from the template. Needs human check (the user's checklist):
+- [ ] Mac (your Retina machine): install from the notarized DMG with no warning; the welcome on
+      a fresh profile; start at login across a logout; a real download and "Show in folder";
+      zoom keys; YouTube fullscreen; phone mode at a narrow width; memory at rest in Activity
+      Monitor (no WebContent processes for Little Joan).
+- [ ] Windows, if you have one: the installer (SmartScreen still warns, since it's unsigned),
+      the welcome, start at login across a reboot, a download, zoom, YouTube fullscreen.
+- [ ] Linux, if you have one: the .deb on 22.04 (fullscreen fallback), the AppImage on 24.04
+      (real fullscreen), and the Wayland shortcut on GNOME 48+ or KDE.
+- [ ] The must-not-disturb list.
+
+Then STOP and wait. Merging, tagging and releasing need the user's word for each one. When they
+give it: merge the open phase PRs in order with merge commits, let main's CI build the
+installers, download them (`gh run download <run> --repo memoliertorerr/LittleJoan`; the AppImage
+is in little-joan-linux-appimage), rename them, write SHA256SUMS.txt, and run `gh release create
+v0.2.0 --repo memoliertorerr/LittleJoan --target <that main commit> --latest` with notes taken
+from the CHANGELOG. Then check the release, its tag, and one downloaded asset's checksum. Flip
+LJ19 to ✅ and record the release in the plan's overall status in a follow-up PR (main is never
+committed to directly).
+```
+
+---
+
 ## Deferred follow-ups (cross-step, live tracker)
 
 > Things a step noticed but were out of its own scope. Kept here so they don't get buried in
@@ -1507,24 +2203,38 @@ after `--size 390x600` the page reports `viewport=390x560 ua=phone`, after `--si
 - **First-run discoverability** (surfaced by LJ3). Hibernating from the very first launch means a
   new user sees only a tray icon — and on GNOME without the AppIndicator extension, nothing at
   all. Option: when no `settings.json` exists yet, show the window once with the shortcut hint.
-  Not done: the brief says "hibernates by default"; this is the user's call.
+  Not done: the brief says "hibernates by default"; this is the user's call. → *The user chose
+  the one-time welcome on 2026-10-17: planned as LJ12.*
 - **Start at login** (surfaced by LJ8's README). Without it the shortcut is dead after a reboot
   until the user launches the app; already designed under Later — the most useful next step.
+  → *Planned as LJ11.*
 - **macOS menu page items are always enabled** (surfaced by LJ7). The menu bar is hidden
   (Accessory app), so only the key equivalents matter, and they do nothing without a page. The
   tray items do track page state.
 - **Downloads use each engine's default** (surfaced by LJ4). WebView2 saves to Downloads with its
   own UI; WKWebView and WebKitGTK ignore downloads unless the app handles them. Designed under
-  Later.
+  Later. → *Planned as LJ15.*
 - **Linux fullscreen on Ubuntu 22.04 / the AppImage** (surfaced by LJ9). WebKitGTK 2.50.4
   aborts on element fullscreen (Landmines). Options for the user: (a) build the AppImage on
   ubuntu-24.04 so it bundles WebKitGTK 2.52 (raises its glibc floor to 2.39); (b) wait for
   Ubuntu to ship a fixed 2.50.x/2.52 to 22.04; (c) report upstream with the bare-WebKitGTK
   reproduction; (d) as a stopgap, handle `enter-fullscreen` and fullscreen only the window
-  (the page wouldn't know it is fullscreen — YouTube's player would stay small).
+  (the page wouldn't know it is fullscreen — YouTube's player would stay small). → *The user
+  chose (a) + (d) on 2026-10-17, with (c) as a Launchpad report they file: planned as LJ13 and
+  LJ14. Waiting (b) looks unpromising: jammy's webkit2gtk hasn't moved since 2026-01-13.*
 - **macOS footprint after the first page stays ~12 MB above the hibernating baseline**
   (11 → 23 MB) — WebKit's framework state in our process. Acceptable for v0.1; noted so a
-  future memory pass knows where to look.
+  future memory pass knows where to look. Not in v0.2: worth a time-boxed look (vmmap /
+  footprint on a CI runner before and after the first page), not a phase.
+- **Windows code signing** (planning v0.2, 2026-10-17). Unsigned for v0.2, so SmartScreen warns.
+  The user applies to SignPath Foundation (free for OSI-licensed projects; the signer shown is
+  "SignPath Foundation"; it needs a public code-signing policy in the README and the project's
+  roles). If approved, add a step: sign the NSIS installer in the package job, plus a smoke
+  check (`Get-AuthenticodeSignature` → Valid). Azure Artifact Signing ($9.99/month) only takes
+  individuals in the US or Canada.
+- ~~**`ubuntu-latest` moves to Ubuntu 26 from 2026-10-19**~~ (GitHub's notice on run
+  39021598084). Handled by PR #8: the Linux `verify` job runs on `ubuntu-24.04`. A later
+  ubuntu-26.04 verify job is optional.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -1585,26 +2295,49 @@ Populated from real friction, not speculation:
   is 45 minutes.
 - **Google Translate's proxy picks the UI language from the requester's IP** (`_x_tr_hl=it`
   came back from a plain request), so the translate URL passes `hl=<lang>` too.
+- *(v0.2 planning, 2026-10-17)* **Tauri's `zoom_hotkeys_enabled` is IPC for the page on macOS
+  and Linux.** Its docs (tauri 2.12.4, `webview/mod.rs`) say it "injects a polyfill" that
+  "requires `core:webview:allow-set-webview-zoom` permission", so the page would need IPC. Zoom
+  goes through native keys and `Webview::set_zoom` instead (LJ16).
+- *(v0.2 planning)* **`DownloadEvent::Finished` has no path on macOS** ("always empty, due to
+  API limitations", tauri 2.12.4). Remember the destination set in `Requested`, keyed by URL
+  (LJ15).
+- *(v0.2 planning)* **tauri-plugin-autostart records the canonical path of the running
+  executable on macOS** (`current_exe()?.canonicalize()` in its source). An app run straight
+  from a DMG or Downloads is translocated to a random temporary path, and a LaunchAgent made
+  then would point at nothing after a reboot. LJ11 refuses to enable it from
+  `/AppTranslocation/`. On Linux the plugin uses `$APPIMAGE` for the AppImage.
+- *(v0.2 planning)* **`ubuntu-latest` moves to Ubuntu 26 from 2026-10-19** (GitHub's notice on
+  run 39021598084). The Linux `verify` job is pinned to `ubuntu-24.04` (PR #8); packaging (22.04)
+  and smoke (24.04) were already pinned.
+- *(v0.2 planning)* **Ubuntu 22.04's WebKitGTK has stood still:** jammy has
+  2.50.4-0ubuntu0.22.04.1 (2026-01-13), while noble and resolute got 2.52.6 on 2026-08-31
+  (Launchpad, checked 2026-10-17). Don't wait on a jammy update.
 
 ---
 
 ## Later — designed, NOT built in v0.1
 
-Everything below is intentionally out of scope, recorded so nobody half-builds it.
+Everything below is intentionally out of scope, recorded so nobody half-builds it. Rows that v0.2
+picked up point at their step and stay here for the record.
 
 | Item | Design | What it needs |
 |---|---|---|
-| **Start at login** | Settings checkbox → tauri-plugin-autostart (LaunchAgent / registry Run key / XDG autostart) | New dependency, settings field, per-OS human check |
+| **Start at login** → *v0.2, LJ11* | Settings checkbox → tauri-plugin-autostart (LaunchAgent / registry Run key / XDG autostart) | New dependency, settings field, per-OS human check |
 | **Keep the page after close** | Settings "Keep page for N minutes": hide instead of destroy, destroy on a timer | Breaks the "no webview at rest" invariant for N minutes — needs a measured memory budget |
-| **Downloads** | `on_download` → save to the OS Downloads folder, tray notification | Handler + notification permission per OS |
-| **Find in page, zoom** | Native keys (Ctrl/Cmd+F, +/-) → engine APIs where they exist (WebView2 has zoom; WKWebView `pageZoom`) | Per-engine glue; WebKitGTK find controller |
-| **Popups inside the app (OAuth)** | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too |
-| **Code signing / notarization / SmartScreen reputation** | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Paid certificates and secrets in CI — the user's call |
+| **Downloads** → *v0.2, LJ15 (status in the URL bar, no notifications)* | `on_download` → save to the OS Downloads folder, tray notification | Handler + notification permission per OS |
+| **Find in page** (zoom → *v0.2, LJ16*) | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
+| **Popups inside the app (OAuth)** | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too. Some "Sign in with …" flows break today because the popup opens in the default browser |
+| **Code signing / notarization / SmartScreen reputation** → *macOS: v0.2, LJ18* | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Windows: SignPath Foundation if the user's application is approved (Deferred follow-ups) |
 | **Auto-update and GitHub Releases** | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys, release workflow |
-| **Wayland-native global shortcut** | XDG GlobalShortcuts portal (via ashpd) when `WAYLAND_DISPLAY` is set | New dependency, portal support varies by desktop |
+| **Wayland-native global shortcut** → *v0.2, LJ17* | XDG GlobalShortcuts portal (via ashpd) when `WAYLAND_DISPLAY` is set | New dependency, portal support varies by desktop |
 | **rpm package, MSI, Windows ARM64, Linux ARM64** | Extra `--bundles` / targets in the package job | CI time + smoke coverage per artifact |
 | **Hide Tauri's IPC object from remote pages** | Remote pages can see `__TAURI_INTERNALS__` (every call is denied); a future Tauri option or a separate content webview without IPC injection | Upstream support or a multi-webview layout |
 | **Incognito mode** | `incognito(true)` on the builder for a "private" summon variant (second shortcut) | Settings + second shortcut |
+| *(v0.2)* **Zoom extras** | Ctrl+mouse wheel and pinch zoom; zoom remembered per site | Wheel/gesture hooks per engine; a per-origin store |
+| *(v0.2)* **Downloads list** | A small list of recent downloads (in Settings or the tray), pause/resume, "ask where to save" | UI + state across summons |
+| *(v0.2)* **Build provenance for release assets** | `actions/attest-build-provenance` in the release run; users check with `gh attestation verify` | A release-workflow step; free, no secrets |
 
-**When Later work starts:** start at login first (it makes the shortcut useful after a
-reboot), then downloads, then signing (it removes the scariest install friction).
+**When Later work starts:** v0.1's order (start at login, then downloads, then signing) became
+v0.2. What's left, roughly by value: popups inside the app (OAuth), find in page, auto-update
+(best after Windows signing), then the rest.
