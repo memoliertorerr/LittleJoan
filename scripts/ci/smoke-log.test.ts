@@ -3,6 +3,7 @@ import {
   count,
   desktopExec,
   evaluate,
+  firstRunFailures,
   lastTitle,
   newPids,
   parseCodecs,
@@ -222,6 +223,56 @@ describe("start at login", () => {
     const opened = parseLog(`${GOOD}12 start-at-login true\n13 window-created\n14 start-at-login false\n`);
     expect(startAtLoginFailures(opened, { afterOn: [entry], afterOff: [] })).toEqual([
       expect.stringContaining("opened a window"),
+    ]);
+  });
+});
+
+describe("first run", () => {
+  const first = parseLog(`1 started
+2 shortcut-registered CommandOrControl+Shift+Space
+3 first-run
+4 bar-loaded
+4 welcome
+5 window-created
+6 title Little Joan
+7 hibernated
+`);
+  const relaunch = parseLog("1 started\n2 shortcut-registered CommandOrControl+Shift+Space\n");
+
+  it("passes a welcome once, then a hibernating relaunch", () => {
+    expect(firstRunFailures({ first, relaunch, settingsSaved: true })).toEqual([]);
+  });
+
+  it("fails without the welcome, the saved settings, or the window", () => {
+    const noWelcome = parseLog("1 started\n2 first-run\n3 window-created\n4 bar-loaded\n5 hibernated\n");
+    expect(firstRunFailures({ first: noWelcome, relaunch, settingsSaved: true })).toEqual([
+      expect.stringContaining('never showed the welcome ("welcome")'),
+    ]);
+    expect(firstRunFailures({ first, relaunch, settingsSaved: false })).toEqual([
+      expect.stringContaining("settings.json wasn't saved"),
+    ]);
+    const hibernating = parseLog("1 started\n2 shortcut-registered x\n");
+    expect(firstRunFailures({ first: hibernating, relaunch, settingsSaved: true }).join("\n")).toContain(
+      'missing "first-run"',
+    );
+  });
+
+  it("fails when the relaunch shows a window or is a first run again", () => {
+    const shown = parseLog("1 started\n2 window-created\n");
+    expect(firstRunFailures({ first, relaunch: shown, settingsSaved: true })).toEqual([
+      expect.stringContaining("relaunch: a window opened"),
+    ]);
+    const again = parseLog("1 started\n2 first-run\n3 window-created\n");
+    expect(firstRunFailures({ first, relaunch: again, settingsSaved: true })).toHaveLength(2);
+    expect(firstRunFailures({ first, relaunch: [], settingsSaved: true })).toEqual([
+      expect.stringContaining('relaunch: expected one "started", saw 0'),
+    ]);
+  });
+
+  it("fails the main run if it was a first run", () => {
+    const main = parseLog(`${GOOD}12 first-run\n`);
+    expect(evaluate(main, { windowFullscreen: false, pageFullscreen: false }, { pageHelpersLeft: 0 })).toEqual([
+      expect.stringContaining("the main run was a first run"),
     ]);
   });
 });

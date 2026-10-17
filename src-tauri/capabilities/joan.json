@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "joan",
-  "description": "The local start page in the page webview: read the shortcut for its hint. Remote pages in the same webview get nothing (local only).",
+  "description": "The local start page in the page webview: read what its hint and the first launch's welcome show, and add or remove the login entry from the welcome. Remote pages in the same webview get nothing (local only).",
   "webviews": ["joan-page"],
-  "permissions": ["allow-start-info"]
+  "permissions": ["allow-start-info", "allow-set-start-at-login"]
 }

@@ -189,6 +189,58 @@ export function evaluate(events: LogEvent[], expect: Expectations, measured: Mea
   if (measured.loginEntry) {
     failures.push(...startAtLoginFailures(events, measured.loginEntry));
   }
+  if (count(events, "first-run") > 0) {
+    failures.push("the main run was a first run (first-run), so it didn't start hibernating");
+  }
+  return failures;
+}
+
+/** The first-launch check: a launch on an empty data folder, then a relaunch on the same one. */
+export interface FirstRunCheck {
+  /** Events of the launch on the empty folder (shown, then `--hide`). */
+  first: LogEvent[];
+  /** Events of the relaunch on the same folder, 5 s after it started. */
+  relaunch: LogEvent[];
+  /** settings.json existed in the folder after the first launch. */
+  settingsSaved: boolean;
+}
+
+/**
+ * A first launch opens the window once with the welcome (the start page read `firstRun`), saves
+ * the default settings, and the next launch on the same folder hibernates.
+ */
+export function firstRunFailures(check: FirstRunCheck): string[] {
+  const failures: string[] = [];
+  let from = 0;
+  for (const event of ["started", "first-run", "window-created", "hibernated"]) {
+    const index = check.first.findIndex((e, i) => i >= from && e.event === event);
+    if (index < 0) {
+      failures.push(`first launch: missing "${event}" (in order)`);
+    } else {
+      from = index + 1;
+    }
+  }
+  if (count(check.first, "bar-loaded") === 0) {
+    failures.push('first launch: the URL bar never loaded ("bar-loaded")');
+  }
+  if (count(check.first, "welcome") === 0) {
+    failures.push('first launch: the start page never showed the welcome ("welcome")');
+  }
+  if (count(check.first, "window-created") !== 1) {
+    failures.push(`first launch: expected one window, saw ${count(check.first, "window-created")}`);
+  }
+  if (!check.settingsSaved) {
+    failures.push("first launch: settings.json wasn't saved");
+  }
+  if (count(check.relaunch, "started") !== 1) {
+    failures.push(`relaunch: expected one "started", saw ${count(check.relaunch, "started")}`);
+  }
+  if (count(check.relaunch, "first-run") > 0) {
+    failures.push("relaunch: it was a first run again");
+  }
+  if (count(check.relaunch, "window-created") > 0) {
+    failures.push("relaunch: a window opened (it should hibernate)");
+  }
   return failures;
 }
 

@@ -17,6 +17,7 @@ use crate::smoke;
 use crate::state;
 use crate::toggle::Command;
 use crate::translate::{LANGUAGES, is_valid_lang};
+use crate::welcome;
 
 /// Opens what the user typed in the URL bar in the page: a web address, or a search with the
 /// configured engine. The keyboard then moves to the page.
@@ -56,14 +57,33 @@ pub struct StartInfo {
     shortcut: Option<String>,
     /// `std::env::consts::OS`: "macos", "windows", "linux".
     platform: &'static str,
+    /// The first launch: this start page is the welcome. Reading it clears it, so only the
+    /// first summon is a welcome.
+    first_run: bool,
+    /// Where the tray / menu-bar icon is on this OS.
+    tray_hint: &'static str,
+    /// Whether the OS login entry exists (`null` when it can't be read).
+    start_at_login: Option<bool>,
+    /// A Linux Wayland session, where the X11 global shortcut can't fire.
+    wayland_no_shortcut: bool,
 }
 
-/// What the start page needs to show its hint line.
+/// What the start page needs for its hint line and, on the first launch, the welcome.
 #[tauri::command]
 pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
+    let (shortcut, first_run) = state::with(&app, |s| {
+        (s.active_shortcut.clone(), std::mem::take(&mut s.first_run))
+    });
+    if first_run {
+        smoke::log("welcome", "");
+    }
     StartInfo {
-        shortcut: state::with(&app, |s| s.active_shortcut.clone()),
+        shortcut,
         platform: std::env::consts::OS,
+        first_run,
+        tray_hint: welcome::tray_hint(std::env::consts::OS),
+        start_at_login: autostart::is_enabled(&app),
+        wayland_no_shortcut: welcome::wayland_no_shortcut_here(),
     }
 }
 

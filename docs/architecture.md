@@ -35,8 +35,9 @@ scripts/make-icons.mts             renders the app icon and the macOS tray templ
 scripts/copy-icons.mts             copies the desktop icon set from `tauri icon` output
 ui/bar.html, ui/bar.ts             the URL bar (its own webview above the page); DOM glue only
 ui/bar-logic.ts                    URL bar logic (Enter / Esc / never clobber an edit), unit-tested
-ui/index.html, ui/start.ts         the start page under the bar: a hint, nothing to type into
-ui/start-logic.ts                  the start page's StartInfo type
+ui/index.html, ui/start.ts         the start page under the bar: a hint, nothing to type into;
+                                   on the first launch, the one-time welcome
+ui/start-logic.ts                  StartInfo, the hint line and the welcome's content, unit-tested
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
 ui/settings.html, ui/settings.ts   the settings window: shortcut recorder, search engine, language
 ui/settings-logic.ts               settings types + change detection, unit-tested
@@ -44,14 +45,17 @@ ui/style.css                       shared styles; light/dark via prefers-color-s
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
 src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
 src-tauri/capabilities/bar.json    the URL bar may call open_input, page_url, focus_page, hibernate
-src-tauri/capabilities/joan.json   the page webview's local start page may call start_info
+src-tauri/capabilities/joan.json   the page webview's local start page may call start_info and
+                                   set_start_at_login (the welcome's checkbox)
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
 src-tauri/src/lib.rs               builder: plugins, commands, setup, run loop
-src-tauri/src/state.rs             AppState (settings, data dir, active shortcut) behind a Mutex
+src-tauri/src/state.rs             AppState (settings, data dir, active shortcut, first run) behind
+                                   a Mutex; first-run detection and its bookkeeping (tested)
+src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is, Wayland (pure)
 src-tauri/src/joan.rs              the page window: create / focus / destroy, window events
 src-tauri/src/bar.rs               its two webviews (URL bar + page): build, layout, fullscreen,
                                    pushing the page's address to the bar, focus
@@ -110,6 +114,16 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
            window + webview destroyed (page discarded, size remembered) ──► hibernating
 ```
 
+- **First launch:** when `settings.json` doesn't exist as `state::init` runs (a file that exists
+  but can't be read or parsed doesn't count), setup registers the shortcut as usual, logs
+  `first-run`, saves the default settings at once (so the welcome appears only once, even if the
+  user quits straight away), and opens the window with `--show`'s path. The start page asks
+  `start_info`, gets `firstRun: true` once (reading it clears it), and shows the welcome above
+  the usual lead: what the shortcut does (on a Linux Wayland session: bind `little-joan
+  --toggle`), where the icon is (`welcome::tray_hint`), a "Start Little Joan at login" checkbox
+  (`set_start_at_login`), and "Esc or the shortcut closes this window." The URL bar keeps the
+  focus. A first launch with flags (`--show <url>`, `--toggle`, `--start-at-login …`) acts on
+  them instead, still saves the settings, and shows no welcome. Every later launch hibernates.
 - Every request goes through `toggle::decide` (table below) and `joan::handle`, which runs off
   the main thread (`joan::dispatch`): building a webview window from the main thread can
   deadlock on Windows. A lifecycle mutex keeps two quick presses from creating two windows.
@@ -139,8 +153,9 @@ Remote pages get no IPC. `build.rs` declares the app's commands in an app manife
 each one require a permission, and capabilities grant them **per webview label**:
 `capabilities/bar.json` gives the URL bar (`joan-bar`) `allow-open-input`, `allow-page-url`,
 `allow-focus-page`, `allow-hibernate`; `capabilities/joan.json` gives the page webview
-(`joan-page`) only `allow-start-info`, and only for its local start page — capabilities are
-local unless they list `remote` URLs, and none does. No `core:default` anywhere.
+(`joan-page`) only `allow-start-info` and `allow-set-start-at-login` (the welcome's checkbox),
+and only for its local start page — capabilities are local unless they list `remote` URLs, and
+none does. No `core:default` anywhere.
 
 | Command | Called by | Does |
 |---|---|---|
@@ -148,11 +163,11 @@ local unless they list `remote` URLs, and none does. No `core:default` anywhere.
 | `page_url()` | URL bar, on load | what the bar shows now (`null` on the start page) |
 | `focus_page()` | URL bar, Esc | give the keyboard back to the page |
 | `hibernate()` | URL bar, Esc on the start page | close the window (same path as `--hide`) |
-| `start_info()` | start page, on load | `{ shortcut, platform }` for the hint line |
+| `start_info()` | start page, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut }` for the hint line and the welcome; `firstRun` is true once |
 | `get_settings()` | settings window | settings + engine and language lists + platform |
 | `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
-| `set_start_at_login(enabled)` | settings window, Save (only when the switch changed) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
+| `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
 `capabilities/settings.json` grants the `settings` window the last four plus
@@ -315,7 +330,8 @@ engine: the window's fullscreen state changed), `element-fullscreen <true|false>
 app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finished loading),
 `bar-url <address | start>` (what the bar was told to show), `hibernated`,
 `start-at-login <true|false>` (the login entry read back after a change),
-`start-at-login-failed <reason>`. Without the variable nothing is logged.
+`start-at-login-failed <reason>`, `first-run` (no settings.json at launch), `welcome` (the start
+page was handed the first run). Without the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -412,7 +428,13 @@ and pushes to `main`:
   `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the
   window (followed by process id, so other apps' WebKit helpers on the runner don't count).
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`, `narrow.png`,
-  `wide.png`), the log, and
+  `wide.png`, `welcome.png`), the logs, and
+  The app runs on a fresh `LITTLEJOAN_DATA_DIR` that already holds the default `settings.json`,
+  so it starts hibernating (memory at rest is measured before any window opens). Last comes the
+  **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
+  on the same folder: `settings.json` must exist and no window may open within 5 s (logs
+  `smoke-first-run.log`, `smoke-relaunch.log`).
   `summary.json` (memory — resident and the app's own: private bytes / private dirty /
   physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs,
   the login entries found)

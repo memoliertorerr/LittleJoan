@@ -54,10 +54,12 @@ aren't code-signed yet, so the first launch shows a warning; the steps below get
   `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` in the download folder on macOS or Linux, or
   compare against `Get-FileHash <file>` on Windows.
 
-After launch you only see the tray / menu-bar icon — that's hibernation. To have the shortcut
-ready after every restart, turn on **Start Little Joan at login** in Settings (it's off until you
-do). On macOS, move Little Joan to Applications first: an app opened straight from the disk image
-or from Downloads runs from a temporary copy, so Little Joan won't add a login item for it.
+The very first launch opens the window once with a short welcome: the shortcut, where the icon
+is, and a "Start Little Joan at login" checkbox. Every launch after that only shows the tray /
+menu-bar icon — that's hibernation. To have the shortcut ready after every restart, turn on
+**Start Little Joan at login** (in the welcome or in Settings; it's off until you do). On macOS,
+move Little Joan to Applications first: an app opened straight from the disk image or from
+Downloads runs from a temporary copy, so Little Joan won't add a login item for it.
 
 ## Using it
 

@@ -24,6 +24,7 @@ pub mod smoke;
 pub mod state;
 pub mod toggle;
 pub mod translate;
+pub mod welcome;
 
 #[cfg(target_os = "macos")]
 mod menu;
@@ -31,6 +32,8 @@ mod platform;
 mod tray;
 
 use tauri::RunEvent;
+
+use crate::toggle::Command;
 
 /// Builds and runs the app. Returns only when the user quits.
 pub fn run() {
@@ -81,12 +84,22 @@ pub fn run() {
             shortcut::register_from_settings(handle);
 
             // A first launch with flags (e.g. `--show <url>`, `--start-at-login on`) acts on
-            // them; without flags Little Joan starts hibernating.
+            // them; without flags Little Joan starts hibernating — except on the very first run
+            // (no settings.json yet), which opens the window once with the welcome.
             let args = cli::parse_args(&std::env::args().collect::<Vec<_>>());
+            let first_run = state::with(handle, |s| {
+                s.first_run
+                    .then(|| (s.data_dir.clone(), s.settings.clone()))
+            });
+            let welcome = first_run.is_some_and(|(dir, settings)| {
+                smoke::log("first-run", "");
+                state::finish_first_run(&dir, &settings, &args)
+            });
+            state::with(handle, |s| s.first_run = welcome);
             if let Some(enabled) = args.start_at_login {
                 let _ = autostart::set(handle, enabled);
             }
-            if let Some(command) = args.command {
+            if let Some(command) = args.command.or(welcome.then_some(Command::Show(None))) {
                 joan::dispatch(handle, command);
             }
             Ok(())

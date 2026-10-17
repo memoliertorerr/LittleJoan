@@ -13,6 +13,11 @@ All notable changes to Little Joan are recorded here. The format follows
   The login item is the only record, so removing it in the system's settings shows as off in
   Little Joan. On macOS it refuses to start from a temporary copy ("Move Little Joan to
   Applications first").
+- **A one-time welcome on the first launch:** when there are no settings yet, the window opens
+  once on the start page with the shortcut, where the tray / menu-bar icon is (and, on Linux,
+  the GNOME AppIndicator note), a "Start Little Joan at login" checkbox, and under Wayland how
+  to bind `little-joan --toggle`. The default settings are saved at once, so it never shows
+  again; every later launch hibernates as before.
 
 ## [0.1.0] — 2026-10-17
 
