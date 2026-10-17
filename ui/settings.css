@@ -71,7 +71,7 @@
 
 .tab-panels {
   overflow-y: auto;
-  padding: 20px 24px 12px;
+  padding: 16px 24px 10px;
 }
 
 .tab-panel h1 {
@@ -81,7 +81,7 @@
 }
 
 .tab-panel h2 {
-  margin: 22px 0 8px;
+  margin: 16px 0 8px;
   font-size: 13px;
   font-weight: 600;
 }

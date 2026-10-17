@@ -3229,6 +3229,22 @@ report.
   `src-tauri/src/{state,menu,tray}.rs`, `scripts/ci/smoke-command.mts` (+ test).
 - `npm run verify`: 179 TS tests, 162 Rust tests, clippy clean. Disk: 13 GiB free at the start
   and after verify; `.cache/target` 1.2 GB.
+- **CI (run 39077448620): every job green** — verify ×3, package ×3, smoke on Windows, macOS,
+  Linux and Linux at scale 2; every job logged `settings-window general`, `settings-loaded`,
+  `settings-window privacy` and opened no page window. `settings-general.png`: the window
+  centred, the tinted sidebar with General selected (accent fill, white text and icon) over
+  Appearance, Extensions, Privacy, About with their glyphs; on the right "General", the shortcut
+  (`Ctrl+Shift+Space`, `⌘⇧Space` on macOS), the two lists, Mobile sites checked, Start at login
+  unchecked, each note muted under its row; Cancel and a dimmed Save along the bottom across
+  both columns. `settings-privacy.png`: Privacy selected; Remember history unchecked (this run
+  has it off), its note, "Clear history" with "Last hour" and "Clear…", "What is stored where"
+  with the run's data folder, its `webview` folder (Windows, Linux) or "WebKit's own store …"
+  (macOS), session cookies in memory, and the closing note. Linux draws its lists GTK-style
+  (taller, bordered); at scale 2 everything is crisp. History rows are now tight (`history.png`),
+  and the command bar's rows look as before (`command-typing.png`). **One finding, macOS:** its
+  wider text wrapped the Privacy tab about a line past the window, so a scrollbar showed. **Fix
+  (`lj-step-26-fix`):** a little less padding above the tab and its heading, and a shorter
+  Remember-history note.
 
 ### LJ27 — Theme engine · strong · auto
 
