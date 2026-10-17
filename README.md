@@ -14,9 +14,12 @@ WebKitGTK on Linux), which keeps the download to a few megabytes.
 Inspired by Little Arc in the Arc browser. Little Joan is an independent project and is not
 affiliated with or endorsed by The Browser Company.
 
-> **Status:** v0.1, built and smoke-tested in CI on all three systems (Linux on Ubuntu 24.04);
-> not yet released as signed installers. See the known issue under Fullscreen video. The build plan and progress tracker live in
-> [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
+> **Status:** [v0.1.0](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0) is the
+> latest release; the
+> [v0.2.0-beta.1 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.1)
+> adds start at login and a first-launch welcome. Every build is smoke-tested in CI on all three
+> systems (Linux on Ubuntu 24.04); none is code-signed yet. See the known issue under Fullscreen
+> video. The build plan and progress tracker live in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## Install
 

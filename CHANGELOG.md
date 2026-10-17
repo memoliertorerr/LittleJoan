@@ -6,6 +6,10 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0-beta.1] — 2026-10-17
+
+A pre-release of v0.2: the first two v0.2 features, for trying out before v0.2.0.
+
 ### Added
 - **Start at login**, off until you turn it on: a "Start Little Joan at login" switch in
   Settings and `little-joan --start-at-login on|off` add or remove the system's own login item
@@ -62,5 +66,6 @@ global shortcut calls it.
   a Gatekeeper or SmartScreen warning.
 - Linux global shortcuts work on X11 only; on Wayland, bind `little-joan --toggle` instead.
 
-[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.0-beta.1...HEAD
+[0.2.0-beta.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.1
 [0.1.0]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0

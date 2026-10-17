@@ -459,6 +459,12 @@ console.log(`webview helpers after each hibernate: ${JSON.stringify(helpersPerCy
 
 // Start at login: `on` must write the OS's login entry for the INSTALLED binary and `off` must
 // remove it again, without touching the window (hibernating here).
+if (os === "win32") {
+  // A Windows profile can lack the per-user Run key (one runner did, and every call failed);
+  // remove it on this throwaway runner so the app has to create it, every run. (`run` logs a
+  // failure, e.g. when there is no key to remove, and carries on.)
+  run("reg", ["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/f"]);
+}
 await forward(["--start-at-login", "on"]);
 await waitFor(
   "start-at-login true",
