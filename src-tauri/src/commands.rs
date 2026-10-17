@@ -13,6 +13,8 @@ use crate::history::{Row, VisitKind};
 use crate::history_store;
 use crate::input::{self, SearchEngine};
 use crate::joan;
+use crate::keys::PageAction;
+use crate::page_actions;
 use crate::phone_mode;
 use crate::settings::{self, Settings};
 use crate::settings_window;
@@ -51,14 +53,30 @@ pub async fn focus_page<R: Runtime>(app: AppHandle<R>) {
     bar::focus_page(&app);
 }
 
-/// Opens (`on`) or closes the command bar's overlay. Closing it (Esc in the command bar with a
-/// page behind it) gives the keyboard back to the page.
+/// Opens (`on`: a click on the toolbar's site; the field gets the keyboard with the address
+/// selected, as with Ctrl/Cmd+L) or closes the command bar's overlay (Esc or × with a page behind
+/// it; the page gets the keyboard back).
 #[tauri::command]
 pub async fn set_overlay<R: Runtime>(app: AppHandle<R>, on: bool) {
-    bar::set_overlay(&app, on);
-    if !on {
+    if on {
+        bar::focus_bar(&app);
+    } else {
+        bar::set_overlay(&app, false);
         bar::focus_page(&app);
     }
+}
+
+/// The toolbar's back button: the page goes back (the same page action as Alt+Left / Cmd+[).
+#[tauri::command]
+pub async fn go_back<R: Runtime>(app: AppHandle<R>) {
+    page_actions::perform(&app, PageAction::Back);
+}
+
+/// The toolbar's "open in default browser" button: the page moves to the default browser and
+/// Little Joan hibernates (the same page action as the tray's item).
+#[tauri::command]
+pub async fn open_in_browser<R: Runtime>(app: AppHandle<R>) {
+    page_actions::perform(&app, PageAction::OpenInBrowser);
 }
 
 /// Closes the page window: back to hibernation.

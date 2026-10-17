@@ -1,27 +1,24 @@
-// The bar: the trusted local page above (or over) the web page. In the toolbar view it shows the
-// page's address (the app pushes changes with window.littleJoan.setUrl); in the overlay view it
-// is the command bar, covering the window: the field at the top with suggestions under it (and
-// the welcome on the first run). Rust switches the view with window.littleJoan.setOverlay;
-// every summon and Ctrl/Cmd+L open the overlay, opening a page closes it.
+// The bar: the trusted local page above (or over) the web page. In the toolbar view it is the
+// Little Arc-style toolbar — back, the site's icon and domain, "open in default browser" — for
+// the page's address (the app pushes changes with window.littleJoan.setUrl and setCanGoBack); in
+// the overlay view it is the command bar, covering the window: the field at the top with
+// suggestions under it (and the welcome on the first run). Rust switches the view with
+// window.littleJoan.setOverlay; every summon, Ctrl/Cmd+L and a click on the domain open the
+// overlay, opening a page closes it.
 import { invoke } from "@tauri-apps/api/core";
 import { mayReplace, textFor } from "./bar-logic.ts";
 import { commandBar } from "./command/command.ts";
 import { fillPanel } from "./command/panel.ts";
-import {
-  initialState,
-  onCloseButton,
-  onFieldPress,
-  onKey,
-  withOverlay,
-  withShown,
-  type KeyOutcome,
-} from "./command/view-state.ts";
+import { initialState, onCloseButton, onKey, withOverlay, withShown, type KeyOutcome } from "./command/view-state.ts";
+import { isMac } from "./toolbar/logic.ts";
+import { toolbar } from "./toolbar/toolbar.ts";
 
 declare global {
   interface Window {
     littleJoan?: {
       setUrl(url: string | null): void;
       setOverlay(on: boolean): void;
+      setCanGoBack(on: boolean): void;
       focusField(): void;
     };
   }
@@ -30,10 +27,16 @@ declare global {
 const field = document.querySelector<HTMLInputElement>("#url");
 const rowList = document.querySelector<HTMLElement>("#rows");
 const closeButton = document.querySelector<HTMLButtonElement>("#close");
+const toolbarRoot = document.querySelector<HTMLElement>(".toolbar");
 
-if (field && rowList) {
+// macOS: the traffic lights sit in the bar's top left corner (style.css leaves room for them).
+document.documentElement.classList.toggle("os-macos", isMac(navigator.userAgent));
+
+if (field && rowList && toolbarRoot) {
   let state = initialState();
+  let canGoBack = false;
   const command = commandBar(field, rowList, () => state.shown);
+  const tools = toolbar(toolbarRoot);
 
   const render = (): void => {
     document.body.classList.toggle("overlay", state.view === "overlay");
@@ -46,6 +49,7 @@ if (field && rowList) {
       field.value = next;
     }
     state = withShown(state, next);
+    tools.update(next, canGoBack);
   };
 
   const act = (outcome: KeyOutcome, event: KeyboardEvent): void => {
@@ -94,6 +98,10 @@ if (field && rowList) {
         command.reset(on);
       }
     },
+    setCanGoBack(on: boolean) {
+      canGoBack = on;
+      tools.update(state.shown, canGoBack);
+    },
     focusField() {
       field.focus();
       field.select();
@@ -106,12 +114,6 @@ if (field && rowList) {
   field.addEventListener("blur", () => {
     if (state.view === "toolbar") {
       field.value = state.shown;
-    }
-  });
-  // A click on the address in the toolbar opens the command bar.
-  field.addEventListener("pointerdown", () => {
-    if (onFieldPress(state) === "openOverlay") {
-      void invoke("set_overlay", { on: true });
     }
   });
   field.addEventListener("input", (event) => {
@@ -140,6 +142,7 @@ if (field && rowList) {
   });
 
   render();
+  tools.update(state.shown, canGoBack);
   fillPanel();
   invoke<string | null>("page_url")
     .then(setUrl)

@@ -71,7 +71,7 @@
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
 | LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ✅ done |
-| LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ⬜ todo |
+| LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ✅ done |
 | LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ⬜ todo |
 | LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ⬜ todo |
 | LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ⬜ todo |
@@ -2950,6 +2950,42 @@ on every OS. This ends phase 13. Fill the PR description:
 Once CI is green, merge into main (merge commit), then stop and report.
 ```
 
+**Implementation notes (2026-10-17):**
+
+- **The navigation counter** (`back_stack.rs`, pure, 6 tests): Tauri 2.12 can't ask a webview
+  whether it can go back, and the page has no IPC, so the bar's back button follows a trail of
+  this window's finished web-page loads (fragment dropped): the page before the last one loading
+  again is a step back (whoever caused it — the button, Alt+Left, Cmd+[, the page itself), the
+  last one again is a reload, anything else is pushed (at most 100). The app's pages and
+  `about:` never count, so the first web page never offers "back" to the start page. Rust tells
+  the bar `setCanGoBack(<bool>)` on a change and when the bar loads.
+- **Commands** `go_back` and `open_in_browser` (the existing page actions Back and
+  OpenInBrowser) and `core:window:allow-start-dragging` join the bar's capability.
+  `set_overlay(true)` now goes through `focus_bar`, so a click on the domain opens the command
+  bar with the full address selected, exactly like Ctrl/Cmd+L.
+- **The toolbar** (`ui/toolbar/logic.ts`, 9 tests; `toolbar.ts`): back, a drag gap, the site
+  (the command bar's lettered stand-in under the favicon, then the domain), a drag gap, open in
+  browser (an original "box with an arrow" glyph). The domain drops `www.`, shows IPs without the
+  port (`127.0.0.1`), and shortens names past 32 characters in the middle. The icon is only
+  rebuilt for a new site, so the favicon isn't fetched for every page. The field is no longer
+  visible in the toolbar view, so LJ22's "click the address" path (`onFieldPress`, and its test)
+  went away; the domain button replaced it.
+- **macOS title bar:** `TitleBarStyle::Overlay` + hidden title. Tauri's `window::WindowBuilder`
+  (the multi-webview one) has no `traffic_light_position`, only `WebviewWindowBuilder` does —
+  but `WindowBuilder::from_config` reads `WindowConfig.traffic_light_position` (tauri-runtime-wry
+  `lib.rs`), so the macOS builder starts from a `WindowConfig` (label, style, hidden title,
+  lights at x 14, y 20: tao's inset, i.e. the close button's left edge and the height of the
+  title-bar area under the buttons, chosen to centre them in the 40 px toolbar — to be checked
+  in the screenshot). The toolbar leaves 78 px for them; the command bar puts a 40 px draggable
+  strip above its panel on macOS. The bar finds out it's on macOS from its user agent (`isMac`).
+- **Keyboard focus follows the page out of the command bar** (`bar::navigate`): CI's LJ22
+  `page.png` on macOS showed the field still focused after `--show <url>`; with no field in the
+  toolbar any more the page now gets the keyboard whenever opening a page closes the overlay.
+- Not granted (Deferred follow-ups): double-clicking the toolbar to zoom the window on macOS
+  (Tauri's drag script calls `internal_toggle_maximize`, which needs its own permission).
+- `npm run verify`: 134 TS tests, 149 Rust tests, clippy clean. Disk: 13 GiB free;
+  `.cache/target` 1.2 GB.
+
 ### LJ25 — History view · standard · auto
 
 > Phase 14. Branch `lj/p14-history-settings` from `main`.
@@ -3453,6 +3489,18 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   (the engine keeps them). Options: read and set Windows' cookies through webview2-com
   (`ICoreWebView2CookieManager`) to keep the dot, or upstream a raw-domain accessor to
   `cookie` / wry.
+- **Release builds are bigger since `panic = "unwind"`** (surfaced by `lj-step-20-fix2`): CI's
+  installer artifacts grew from 3.56 to 4.48 MB (macOS), 1.31 to 1.78 MB (Windows), and the Linux
+  bundle by about 1 MB. Only macOS needs unwinding (wry's Objective-C exception catch); a
+  target-specific `-C panic=unwind` for macOS with `abort` elsewhere would win most of it back,
+  at the cost of a second place that decides the panic strategy. The owner's call; the README's
+  sizes describe the v0.2.0-beta.1 downloads until the next release.
+- **Double-click the toolbar to zoom the window on macOS** (surfaced by LJ24). Tauri's drag
+  script turns a double click on a drag region into `internal_toggle_maximize`, which needs
+  `core:window:allow-internal-toggle-maximize`; the bar has only `allow-start-dragging` (what
+  LJ24 named), so a double click does nothing.
+- **`history_top` / `history_search` have no caller** since LJ23 (the command bar uses
+  `suggest`). They stay in the bar's capability for the history view (LJ25) to use or remove.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

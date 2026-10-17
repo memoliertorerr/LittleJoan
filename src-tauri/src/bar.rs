@@ -30,6 +30,7 @@ pub use view::{
     set_overlay,
 };
 
+use crate::back_stack::BackStack;
 use crate::history_store;
 use crate::keys;
 use crate::layout::{Mode, Rect, layout};
@@ -47,6 +48,8 @@ pub const PAGE: &str = "joan-page";
 /// start, LJ20), so the engine's address is read only by the in-page check, after a finished
 /// load; everything else uses this.
 static ADDRESS: Mutex<PageAddress> = Mutex::new(PageAddress::new());
+/// This window's trail of web pages, for the toolbar's back button (back_stack.rs).
+static BACK: Mutex<BackStack> = Mutex::new(BackStack::new());
 /// What the bar was last told (`Some(None)` = the start page); reset with each new window.
 static LAST_SHOWN: Mutex<Option<Option<String>>> = Mutex::new(None);
 /// Bumped for every new window, so an old address watcher stops.
@@ -70,6 +73,7 @@ pub fn add_webviews<R: Runtime>(
     data_dir: Option<PathBuf>,
 ) -> tauri::Result<()> {
     *address() = PageAddress::new();
+    *back() = BackStack::new();
     // Every summon opens the command bar: the window is built in Overlay mode.
     view::new_window();
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
@@ -93,8 +97,9 @@ pub fn add_webviews<R: Runtime>(
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 smoke::log("bar-loaded", "");
-                // The bar may have missed a change while it loaded: tell it the current mode.
+                // The bar may have missed a change while it loaded: tell it the current state.
                 view::tell_overlay(&webview, overlay());
+                tell_back(&webview, can_go_back());
             }
         });
     let mut page = WebviewBuilder::new(PAGE, WebviewUrl::App("index.html".into()))
@@ -132,6 +137,10 @@ pub fn add_webviews<R: Runtime>(
                     && navigation::is_external_openable(url);
                 tray::set_page_items_enabled(app, web_page);
                 smoke::log("page-loaded", url.as_str());
+                let changed = back().loaded(url, &keys::app_origin());
+                if changed && let Some(bar) = app.get_webview(BAR) {
+                    tell_back(&bar, can_go_back());
+                }
                 // History records visits natively: the page itself has no IPC.
                 history_store::page_loaded(app, url);
             }
@@ -170,6 +179,22 @@ pub fn add_webviews<R: Runtime>(
 
 fn address() -> std::sync::MutexGuard<'static, PageAddress> {
     ADDRESS.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn back() -> std::sync::MutexGuard<'static, BackStack> {
+    BACK.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Whether the page has an earlier web page in this window to go back to (the toolbar's back
+/// button).
+pub fn can_go_back() -> bool {
+    back().can_go_back()
+}
+
+fn tell_back<R: Runtime>(bar: &Webview<R>, on: bool) {
+    let _ = bar.eval(format!(
+        "window.littleJoan && window.littleJoan.setCanGoBack({on})"
+    ));
 }
 
 /// The page's address: `None` without a window, and until the page has started loading. It
@@ -262,13 +287,18 @@ pub fn focus_page<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Loads `url` in the page and tells the bar. Showing a page closes the command bar.
+/// Loads `url` in the page and tells the bar. Showing a page closes the command bar, and the
+/// keyboard follows the page out of it (the toolbar has no field to keep it).
 pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
     if let Some(page) = app.get_webview(PAGE) {
+        let was_open = overlay();
         set_overlay(app, false);
         address().navigating(url.clone());
         page.navigate(url)?;
         publish_url(app);
+        if was_open {
+            focus_page(app);
+        }
     }
     Ok(())
 }

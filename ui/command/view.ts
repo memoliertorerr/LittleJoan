@@ -29,20 +29,20 @@ function element<E extends ElementLike>(doc: DocumentLike<E>, tag: string, class
 }
 
 /**
- * A row's icon. Sites get their first letter in a tinted circle, with the favicon (straight from
- * the site) drawn over it once it loads; a favicon that fails to load is removed, leaving the
- * letter. Settings gets its own symbol (style.css).
+ * A site's icon: its first letter in a tinted circle, with the favicon (straight from the site)
+ * drawn over it once it loads; a favicon that fails to load is removed, leaving the letter. The
+ * toolbar uses it too. `kind` names the box's extra class.
  */
-function icon<E extends ElementLike>(doc: DocumentLike<E>, row: Row): E {
-  const box = element(doc, "span", `row-icon row-icon-${row.kind}`);
+export function siteIcon<E extends ElementLike>(doc: DocumentLike<E>, host: string, kind: string): E {
+  const box = element(doc, "span", `row-icon row-icon-${kind}`);
   box.setAttribute("aria-hidden", "true");
-  if (row.kind === "settings" || !row.host) {
+  if (!host) {
     return box;
   }
-  const letter = element(doc, "span", "row-letter", letterFor(row.host));
-  letter.style.setProperty("--hue", String(hueFor(row.host)));
+  const letter = element(doc, "span", "row-letter", letterFor(host));
+  letter.style.setProperty("--hue", String(hueFor(host)));
   box.append(letter);
-  const src = faviconUrl(row.host);
+  const src = faviconUrl(host);
   if (src) {
     const img = element(doc, "img", "row-favicon");
     img.setAttribute("alt", "");
@@ -56,6 +56,11 @@ function icon<E extends ElementLike>(doc: DocumentLike<E>, row: Row): E {
     box.append(img);
   }
   return box;
+}
+
+/** A row's icon: its site's, or for Settings its own symbol (style.css). */
+function icon<E extends ElementLike>(doc: DocumentLike<E>, row: Row): E {
+  return siteIcon(doc, row.kind === "settings" ? "" : row.host, row.kind);
 }
 
 /** One row: icon, then "Title — domain" with the domain muted. */

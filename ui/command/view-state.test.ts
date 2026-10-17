@@ -3,7 +3,6 @@ import {
   hasPage,
   initialState,
   onCloseButton,
-  onFieldPress,
   onKey,
   withOverlay,
   withShown,
@@ -26,12 +25,6 @@ describe("views", () => {
     expect(withOverlay(toolbarWithPage, true)).toEqual({ view: "overlay", shown: PAGE });
     expect(withOverlay(withOverlay(toolbarWithPage, true), false)).toEqual(toolbarWithPage);
     expect(hasPage(toolbarWithPage)).toBe(true);
-  });
-
-  it("a press on the field opens the command bar from the toolbar only", () => {
-    expect(onFieldPress(toolbarWithPage)).toBe("openOverlay");
-    expect(onFieldPress(overlayWithPage)).toBe("none");
-    expect(onFieldPress(overlayNoPage)).toBe("none");
   });
 });
 

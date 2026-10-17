@@ -76,11 +76,13 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   ↑/↓ choose a row, Enter opens it (with no row chosen, Enter opens what you typed), Shift+Delete
   removes a page from your history, × or Esc closes the command bar. The last row, **Settings &
   extensions**, opens Settings.
-- **The address bar** stays at the top of the window while a page is open and always shows the
-  page you're on, following links and redirects. Click it (or press Ctrl/Cmd+L) to go somewhere
-  else: the command bar opens with the address selected; Enter opens the address or searches for
-  the text, Esc puts the current address back, and Esc again returns to the page. It hides
-  while a video is fullscreen.
+- **The toolbar** stays at the top of the window while a page is open: a back button (once
+  there is somewhere to go back to), the site's icon and domain in the middle, and **open in
+  your default browser** on the right (the page moves there and Little Joan goes back to sleep).
+  Click the domain (or press Ctrl/Cmd+L) to go somewhere else: the command bar opens with the
+  full address selected; Esc returns to the page. On macOS the window's traffic lights sit in
+  the toolbar, and you can drag the window by its empty parts. The toolbar hides while a video
+  is fullscreen.
 - **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
   narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
   macOS and Linux, Chrome on Android on Windows), so Google, YouTube and others serve their
@@ -98,7 +100,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | Reload | Ctrl+R, F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
-  | Open the page in your browser | tray menu | Cmd+Shift+O |
+  | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |
 
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,

@@ -9,6 +9,8 @@ fn main() {
             "page_url",
             "focus_page",
             "set_overlay",
+            "go_back",
+            "open_in_browser",
             "get_settings",
             "save_settings",
             "suspend_shortcut",

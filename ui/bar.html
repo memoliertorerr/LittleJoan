@@ -7,9 +7,32 @@
     <link rel="stylesheet" href="./style.css" />
     <script type="module" src="./bar.ts"></script>
   </head>
-  <!-- "overlay": the command bar covers the window; "toolbar": the 40 px strip above the page. -->
-  <body class="bar-body overlay">
+  <!-- "overlay": the command bar covers the window; "toolbar": the 40 px strip above the page.
+       data-tauri-drag-region: empty parts drag the window (on macOS there is no title bar). -->
+  <body class="bar-body overlay" data-tauri-drag-region>
     <div class="command">
+      <nav class="toolbar" aria-label="Page" data-tauri-drag-region>
+        <button id="back" class="tool" type="button" aria-label="Back" title="Back" disabled>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
+        </button>
+        <span class="toolbar-gap" data-tauri-drag-region></span>
+        <button id="site" class="site" type="button" aria-label="Edit the address">
+          <span id="domain" class="domain"></span>
+        </button>
+        <span class="toolbar-gap" data-tauri-drag-region></span>
+        <button
+          id="open-browser"
+          class="tool"
+          type="button"
+          aria-label="Open in default browser"
+          title="Open in default browser"
+          disabled
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M9.5 3h3.5v3.5M13 3 7.5 8.5M11.5 9.5v3.5h-8.5v-8.5h3.5" />
+          </svg>
+        </button>
+      </nav>
       <header class="bar-top">
         <svg class="search-icon" viewBox="0 0 16 16" aria-hidden="true">
           <circle cx="7" cy="7" r="4.6" />

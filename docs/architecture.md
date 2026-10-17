@@ -48,6 +48,9 @@ ui/command/rows.ts                 the command bar's rows: order, autofill, keys
 ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document)
 ui/command/command.ts              the command bar's list: suggest() as you type, autofill, keys,
                                    mouse; DOM glue only
+ui/toolbar/logic.ts                the toolbar: the domain shown, back / open-in-browser enabled,
+                                   macOS from the user agent (pure, unit-tested)
+ui/toolbar/toolbar.ts              the toolbar's buttons and site; DOM glue only
 ui/index.html                      the page webview's first page: a plain background, no script
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
 ui/settings.html, ui/settings.ts   the settings window: shortcut recorder, search engine, language
@@ -56,8 +59,9 @@ ui/style.css                       shared styles; light/dark via prefers-color-s
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
 src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
 src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_page, set_overlay,
-                                   hibernate, history_top, history_search, suggest,
-                                   history_remove, open_settings, start_info, set_start_at_login
+                                   go_back, open_in_browser, hibernate, history_top,
+                                   history_search, suggest, history_remove, open_settings,
+                                   start_info, set_start_at_login; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
@@ -84,6 +88,8 @@ src-tauri/src/bar/view.rs          the view state: toolbar / overlay / element f
                                    applied to the webviews (layout, show / hide, Linux packing)
 src-tauri/src/page_address.rs      the page's address from its load events; when the engine may
                                    be asked for it (pure, tested)
+src-tauri/src/back_stack.rs        whether the toolbar's back button has somewhere to go: this
+                                   window's trail of loaded web pages (pure, tested)
 src-tauri/src/layout.rs            where the bar and the page go per mode (Toolbar, Overlay,
                                    Fullscreen), from physical size + scale (pure)
 src-tauri/src/capability_tests.rs  tests: no capability reaches the page webview, its window, or
@@ -93,7 +99,8 @@ src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user ag
 src-tauri/src/placement.rs         where a new window opens (monitor under the cursor)
 src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
                                    with rollback (Registrar trait), suspend while recording
-src-tauri/src/commands.rs          bar: open_input, page_url, focus_page, set_overlay, hibernate,
+src-tauri/src/commands.rs          bar: open_input, page_url, focus_page, set_overlay, go_back,
+                                   open_in_browser, hibernate,
                                    start_info, history_top, history_search, suggest,
                                    history_remove, open_settings; settings:
                                    get_settings, save_settings, suspend_shortcut;
@@ -213,19 +220,22 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-hibernate`, `allow-history-top`, `allow-history-search`, `allow-suggest`, `allow-history-remove`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login` |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-top`, `allow-history-search`, `allow-suggest`, `allow-history-remove`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
-anywhere.
+anywhere; the only core permission is the bar's `core:window:allow-start-dragging` (and the
+settings window's `core:window:allow-close`).
 
 | Command | Called by | Does |
 |---|---|---|
 | `open_input(input)` | the bar, Enter | `input::normalize` with the configured engine → load it in the page webview (the command bar closes), focus the page |
 | `page_url()` | the bar, on load | what the bar shows now (`null` on the start page) |
 | `focus_page()` | the toolbar, Esc | give the keyboard back to the page |
-| `set_overlay(on)` | the bar: a click on the toolbar's address (on), Esc in the command bar with a page (off) | open or close the command bar's overlay; closing gives the keyboard to the page |
+| `set_overlay(on)` | the bar: a click on the toolbar's domain (on), Esc or × in the command bar with a page (off) | open the command bar with the address selected (as Ctrl/Cmd+L), or close it and give the keyboard to the page |
+| `go_back()` | the toolbar's back button | the page action Back (`history.back()` in the page, as Alt+Left / Cmd+[) |
+| `open_in_browser()` | the toolbar's "open in default browser" | the page action OpenInBrowser: the page goes to the default browser, the window hibernates |
 | `hibernate()` | the bar, Esc with no page | close the window (same path as `--hide`) |
 | `start_info()` | the command bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut }` for the hint line and the welcome; `firstRun` is true once |
 | `get_settings()` | settings window | settings + engine and language lists + platform |
@@ -380,9 +390,10 @@ page; it is a separate webview with its own capability, and the page webview has
   doesn't open meanwhile.
 - **When the overlay opens:** every summon (a new window is built with it, before it is shown),
   Ctrl/Cmd+L (page keys and the macOS menu: the address is selected), and a click on the
-  toolbar's address (`set_overlay(true)`). **When it closes:** whenever the app shows a page
-  (`bar::navigate`: Enter in the command bar, `--show <url>`, Translate), Esc with a page behind
-  it (`set_overlay(false)`, which hands the keyboard to the page), and element fullscreen. Rust
+  toolbar's domain (`set_overlay(true)`, which goes through the same `focus_bar`). **When it
+  closes:** whenever the app shows a page (`bar::navigate`: Enter in the command bar, `--show
+  <url>`, Translate; the keyboard moves to the page), Esc or × with a page behind it
+  (`set_overlay(false)`, which hands the keyboard to the page), and element fullscreen. Rust
   tells the bar with `window.littleJoan.setOverlay(<bool>)`, and again when the bar finishes
   loading, so it never misses one; the smoke log gets `overlay true|false`.
 - **Placing the webviews:** Windows and macOS place child webviews by bounds (re-applied on
@@ -396,14 +407,36 @@ page; it is a separate webview with its own capability, and the page webview has
   shrink) and the page widget is hidden — with `no_show_all` set, because tao shows a window
   with `show_all()`, which would bring it back; hiding the bar (fullscreen) hides the frame with
   it and lets the page fill the window.
+- **The toolbar** (`ui/toolbar/`, Little Arc's slim strip): on the left a back button, enabled
+  only once the page has somewhere to go back to in this window — counted natively
+  (`back_stack.rs`, pure): a trail of the web pages that finished loading, where a load of the
+  page before the last one is a step back and a load of the last one again a reload; the app's
+  own pages and `about:` don't count; Rust pushes `window.littleJoan.setCanGoBack(<bool>)` on
+  every change and when the bar loads. In the middle the site's icon (the command bar's lettered
+  stand-in under the favicon) and its domain (`www.` stripped, IPs as they are, long names
+  shortened in the middle; `logic.ts`, tested): a click opens the command bar with the full
+  address selected. On the right "open in default browser": the existing page action (the page
+  goes to the default browser, the window hibernates). Commands `go_back` and
+  `open_in_browser` run the page actions Back and OpenInBrowser. The empty parts of the toolbar
+  carry `data-tauri-drag-region`, and the bar's capability has
+  `core:window:allow-start-dragging`, so they drag the window (Tauri's own drag script, injected
+  in every webview; the page webview's calls are denied).
+- **macOS title bar:** the page window uses `TitleBarStyle::Overlay` with a hidden title, so the
+  content view extends under a transparent title bar and the bar webview starts at y = 0 beneath
+  the traffic lights (LJ10.1 had used `Transparent` to keep content *below* the title bar). The
+  lights are placed inside the 40 px toolbar (`joan::TRAFFIC_LIGHTS`; tauri's `window::WindowBuilder`
+  has no setter for that, so the builder starts from a `WindowConfig` with
+  `trafficLightPosition`), and the toolbar leaves them 78 px on its left; in the command bar a
+  40 px strip above the panel holds them (it drags the window too). The bar knows it is on macOS
+  from its user agent (`isMac`). Windows and Linux keep the native title bar.
 - **Address:** the bar always shows the page's full address (empty, with the placeholder, on the
   start page). Rust pushes changes with `bar.eval("window.littleJoan.setUrl(<json>)")` on
   every page load (started and finished, so redirects land), every title change, after
   navigations the app starts, and from a once-a-second check while the window exists (for
   `history.pushState` / `#anchor` changes, which raise no event). The bar asks once on load
   (`page_url`) so it can't miss the first address. Changes are de-duplicated.
-- **Editing:** click the toolbar's address or press Ctrl/Cmd+L — the command bar opens with the
-  text selected. Enter opens it in the page (address or search, as before) and moves the
+- **Editing:** click the toolbar's domain or press Ctrl/Cmd+L — the command bar opens with the
+  full address selected. Enter opens it in the page (address or search, as before) and moves the
   keyboard to the page. Esc reverts an edit; with nothing to revert it closes the command bar and
   returns to the page, or with no page closes the window — also after a click elsewhere in the
   command bar (the welcome's checkbox), since the keys stay in the bar webview. Leaving the field
@@ -487,7 +520,8 @@ supports (`LJ-SMOKE ready h264=… vp9=… av1=…` in the title).
 - **Open Page in Browser** hands the current web page to the OS default browser and then
   hibernates, like Little Arc's "open in the main browser".
 - Both live in the tray menu (enabled only while a web page is open — updated on page load and
-  on hibernate), the macOS File menu, and (translate only) the page keys.
+  on hibernate), the macOS File menu, and (translate only) the page keys; Open Page in Browser
+  is also the toolbar's right-hand button.
 
 ## Smoke log
 

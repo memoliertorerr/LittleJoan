@@ -4,6 +4,7 @@
 //! docs/architecture.md for the lifecycle.
 
 pub mod autostart;
+pub mod back_stack;
 pub mod bar;
 pub mod cli;
 pub mod commands;
@@ -67,6 +68,8 @@ pub fn run() {
             commands::page_url,
             commands::focus_page,
             commands::set_overlay,
+            commands::go_back,
+            commands::open_in_browser,
             commands::get_settings,
             commands::save_settings,
             commands::suspend_shortcut,

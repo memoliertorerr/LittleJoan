@@ -17,6 +17,10 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **A Little Arc-style toolbar** above the page: back (enabled once the page has somewhere to
+  go back to in this window), the site's icon and domain in the middle — click it to edit the
+  address in the command bar —, and "open in default browser" on the right. On macOS the
+  traffic lights sit inside the toolbar, and its empty parts drag the window.
 - **Suggestions in the command bar,** like Little Arc's: the sites you open most when nothing is
   typed (Wikipedia, YouTube, GitHub and Google Maps until there is history), and while typing
   the best history match — with the address completed in the field when you type the start of a
