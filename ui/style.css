@@ -30,32 +30,12 @@ body {
   color: var(--fg);
 }
 
-.start {
-  padding: 16px;
+/* The page webview's first page, behind the command bar: nothing but the background. */
+.blank {
+  background: var(--bg);
 }
 
-.field {
-  width: 100%;
-  padding: 10px 12px;
-  font: inherit;
-  font-size: 16px;
-  color: var(--fg);
-  background: var(--field-bg);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  outline: none;
-}
-
-.field:focus {
-  border-color: var(--accent);
-}
-
-.start-lead {
-  margin: 8px 2px 0;
-  color: var(--fg);
-}
-
-/* The one-time welcome on the first launch, above the normal start page. */
+/* The one-time welcome on the first launch, in the command bar under the field. */
 .welcome {
   margin: 4px 2px 18px;
   padding-bottom: 14px;
@@ -195,14 +175,45 @@ body {
   opacity: 0.5;
 }
 
-/* The URL bar: a thin strip pinned above the page (its own webview, 40 px tall). */
+/* The bar (its own webview): in the toolbar view a thin strip pinned above the page, 40 px
+   tall; in the overlay view the command bar, covering the whole window. */
 .bar-body {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   height: 100%;
-  padding: 0 8px;
   overflow: hidden;
+}
+
+.bar-top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 40px;
+  padding: 0 8px;
+}
+
+.bar-body.toolbar .bar-top {
   border-bottom: 1px solid var(--field-bg);
+}
+
+.bar-body.toolbar .panel {
+  display: none;
+}
+
+.bar-body.overlay .bar-top {
+  height: auto;
+  padding: 14px 14px 6px;
+}
+
+.bar-body.overlay .bar-field {
+  height: 38px;
+  font-size: 15px;
+}
+
+.panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px 16px;
 }
 
 .bar-field {

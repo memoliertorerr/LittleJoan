@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hintText, lineText, welcome, type StartInfo } from "./start-logic.ts";
+import { hintText, lineText, welcome, type StartInfo } from "./welcome.ts";
 
 const mac: StartInfo = {
   shortcut: "CommandOrControl+Shift+Space",
@@ -10,7 +10,7 @@ const mac: StartInfo = {
   waylandNoShortcut: false,
 };
 
-describe("the normal start page", () => {
+describe("the hint line", () => {
   it("shows the shortcut in the hint once there is one", () => {
     expect(hintText(mac)).toBe("Enter to open · Esc to close · ⌘⇧Space to summon");
     expect(hintText({ ...mac, shortcut: null })).toBe("Enter to open · Esc to close");

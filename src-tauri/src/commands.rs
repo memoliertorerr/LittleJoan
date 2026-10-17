@@ -1,7 +1,8 @@
-//! Commands the local pages may call. build.rs's app manifest makes each one need a permission,
-//! granted per webview: capabilities/bar.json (the URL bar), capabilities/joan.json (the local
-//! start page in the page webview), capabilities/settings.json (the settings window). Remote
-//! pages get no IPC at all.
+//! Commands the app's own pages may call. build.rs's app manifest makes each one need a
+//! permission, granted per webview: capabilities/bar.json (the bar: toolbar, command bar,
+//! welcome) and capabilities/settings.json (the settings window). The page webview (`joan-page`)
+//! has no capability at all, so nothing loaded there — web pages, the start page — can call any
+//! of these.
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
@@ -48,6 +49,16 @@ pub async fn focus_page<R: Runtime>(app: AppHandle<R>) {
     bar::focus_page(&app);
 }
 
+/// Opens (`on`) or closes the command bar's overlay. Closing it (Esc in the command bar with a
+/// page behind it) gives the keyboard back to the page.
+#[tauri::command]
+pub async fn set_overlay<R: Runtime>(app: AppHandle<R>, on: bool) {
+    bar::set_overlay(&app, on);
+    if !on {
+        bar::focus_page(&app);
+    }
+}
+
 /// Closes the page window: back to hibernation.
 #[tauri::command]
 pub async fn hibernate<R: Runtime>(app: AppHandle<R>) {
@@ -61,7 +72,7 @@ pub struct StartInfo {
     shortcut: Option<String>,
     /// `std::env::consts::OS`: "macos", "windows", "linux".
     platform: &'static str,
-    /// The first launch: this start page is the welcome. Reading it clears it, so only the
+    /// The first launch: the command bar shows the welcome. Reading it clears it, so only the
     /// first summon is a welcome.
     first_run: bool,
     /// Where the tray / menu-bar icon is on this OS.
@@ -72,7 +83,7 @@ pub struct StartInfo {
     wayland_no_shortcut: bool,
 }
 
-/// What the start page needs for its hint line and, on the first launch, the welcome.
+/// What the command bar needs for its hint line and, on the first launch, the welcome.
 #[tauri::command]
 pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
     let (shortcut, first_run) = state::with(&app, |s| {

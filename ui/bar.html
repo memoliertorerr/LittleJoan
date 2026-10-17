@@ -3,20 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Little Joan address bar</title>
+    <title>Little Joan bar</title>
     <link rel="stylesheet" href="./style.css" />
     <script type="module" src="./bar.ts"></script>
   </head>
-  <body class="bar-body">
-    <input
-      id="url"
-      class="bar-field"
-      type="text"
-      placeholder="Search or type a URL"
-      autocomplete="off"
-      autocapitalize="off"
-      spellcheck="false"
-      aria-label="Address and search bar"
-    />
+  <!-- "overlay": the command bar covers the window; "toolbar": the 40 px strip above the page. -->
+  <body class="bar-body overlay">
+    <header class="bar-top">
+      <input
+        id="url"
+        class="bar-field"
+        type="text"
+        placeholder="Search or type a URL"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        aria-label="Address and search bar"
+      />
+    </header>
+    <main class="panel">
+      <h1 class="sr-only">Little Joan</h1>
+      <section id="welcome" class="welcome" aria-labelledby="welcome-title" hidden>
+        <h2 id="welcome-title"></h2>
+        <p id="welcome-shortcut"></p>
+        <p id="welcome-tray"></p>
+        <label id="welcome-login-row" class="welcome-login" hidden>
+          <input id="welcome-login" type="checkbox" />
+          <span>Start Little Joan at login</span>
+        </label>
+        <p id="welcome-error" class="error" role="alert" hidden></p>
+        <p id="welcome-close" class="hint"></p>
+      </section>
+      <p id="hint" class="hint">Enter to open · Esc to close</p>
+    </main>
   </body>
 </html>

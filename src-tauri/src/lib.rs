@@ -30,6 +30,8 @@ pub mod toggle;
 pub mod translate;
 pub mod welcome;
 
+#[cfg(test)]
+mod capability_tests;
 #[cfg(target_os = "macos")]
 mod menu;
 mod platform;
@@ -63,6 +65,7 @@ pub fn run() {
             commands::start_info,
             commands::page_url,
             commands::focus_page,
+            commands::set_overlay,
             commands::get_settings,
             commands::save_settings,
             commands::suspend_shortcut,

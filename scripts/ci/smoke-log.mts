@@ -197,6 +197,33 @@ export function evaluate(events: LogEvent[], expect: Expectations, measured: Mea
   if (count(events, "first-run") > 0) {
     failures.push("the main run was a first run (first-run), so it didn't start hibernating");
   }
+  failures.push(...overlayFailures(events, true));
+  return failures;
+}
+
+/**
+ * The command bar's overlay: every new window opens with it (the first `overlay` event after
+ * each `window-created`, before the next window, is `overlay true`). With `pageOpened`, it
+ * also closed (`overlay false`) once the smoke page was opened, before the page reported ready.
+ */
+export function overlayFailures(events: LogEvent[], pageOpened: boolean): string[] {
+  const failures: string[] = [];
+  const windows = events.flatMap((e, i) => (e.event === "window-created" ? [i] : []));
+  windows.forEach((at, n) => {
+    const next = windows[n + 1] ?? events.length;
+    const first = events.find((e, i) => i > at && i < next && e.event === "overlay");
+    if (first?.detail !== "true") {
+      failures.push(`window #${n + 1} didn't open with the command bar (first overlay event: ${first ? `overlay ${first.detail}` : "none"})`);
+    }
+  });
+  if (pageOpened) {
+    const firstWindow = windows[0] ?? -1;
+    const ready = events.findIndex((e) => e.event === "title" && e.detail.startsWith("LJ-SMOKE ready"));
+    const closed = events.some((e, i) => i > firstWindow && i < ready && e.event === "overlay" && e.detail === "false");
+    if (firstWindow < 0 || ready < 0 || !closed) {
+      failures.push('the command bar didn\'t close ("overlay false") when the smoke page was opened');
+    }
+  }
   return failures;
 }
 
@@ -211,7 +238,7 @@ export interface FirstRunCheck {
 }
 
 /**
- * A first launch opens the window once with the welcome (the start page read `firstRun`), saves
+ * A first launch opens the window once with the welcome (the command bar read `firstRun`), saves
  * the default settings, and the next launch on the same folder hibernates.
  */
 export function firstRunFailures(check: FirstRunCheck): string[] {
@@ -229,11 +256,12 @@ export function firstRunFailures(check: FirstRunCheck): string[] {
     failures.push('first launch: the URL bar never loaded ("bar-loaded")');
   }
   if (count(check.first, "welcome") === 0) {
-    failures.push('first launch: the start page never showed the welcome ("welcome")');
+    failures.push('first launch: the command bar never showed the welcome ("welcome")');
   }
   if (count(check.first, "window-created") !== 1) {
     failures.push(`first launch: expected one window, saw ${count(check.first, "window-created")}`);
   }
+  failures.push(...overlayFailures(check.first, false).map((failure) => `first launch: ${failure}`));
   if (!check.settingsSaved) {
     failures.push("first launch: settings.json wasn't saved");
   }

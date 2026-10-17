@@ -6,6 +6,16 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The window opens with a command bar.** Every summon shows the command bar over the whole
+  window — the field at the top, and on the first launch the welcome under it; Enter opens the
+  page and the bar shrinks to the address bar above it. Ctrl/Cmd+L (or a click on the address)
+  brings the command bar back with the address selected; Esc returns to the page, or with no
+  page closes the window. Esc now also works after clicking the welcome's checkbox.
+- **The web view that shows pages has no access to the app at all.** The welcome moved out of
+  it into the bar, so no page loaded there — not even Little Joan's own start page — can call
+  into Little Joan; a test checks that no permission ever reaches it.
+
 ### Added
 - `little-joan --quit` quits the running app, the same way as **Quit Little Joan** in the tray
   menu (handy for scripts; CI uses it to quit gracefully).

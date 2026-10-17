@@ -4,7 +4,8 @@
 //   node scripts/ci/smoke.mts --app <binary> --out <dir> --started-only      launch check only
 //
 // The full run: serve tests/smoke/ on 127.0.0.1, launch the app with LITTLEJOAN_SMOKE_LOG,
-// summon it with `--show` (single-instance forwarding), load the smoke page, click its big
+// summon it with `--show` (single-instance forwarding; the command bar covers the window), load
+// the smoke page (the command bar closes: the 40 px bar above the page), click its big
 // fullscreen button, hibernate with `--hide`, summon and hibernate once more, turn start at
 // login on and off (reading the OS's own login entry each time), check that cookies and
 // localStorage outlive closing the window and quitting (`--quit`, then a relaunch on the same
@@ -413,12 +414,15 @@ screenshot("hibernating.png");
 
 await forward(["--show"]);
 await waitFor("window-created", (e) => count(e, "window-created") > 0, 20_000);
+await waitFor("command bar open (overlay true)", (e) => count(e, "overlay", "true") > 0, 20_000);
 await waitFor("start page title", (e) => count(e, "title", "Little Joan") > 0, 20_000);
 await sleep(1500);
+// The command bar covers the whole window (the page behind it is hidden).
 screenshot("start.png");
 
 await forward(["--show", `http://127.0.0.1:${port}/smoke.html`]);
 await waitFor("smoke page ready", (e) => lastTitle(e, "LJ-SMOKE ready") !== undefined, 30_000);
+await waitFor("command bar closed (overlay false)", (e) => count(e, "overlay", "false") > 0, 5_000);
 await sleep(1500);
 const shownMb = memoryMb(pid);
 const shownOwnMb = ownMemoryMb(pid);

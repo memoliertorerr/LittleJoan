@@ -1,8 +1,9 @@
 //! The page window ("joan") and its lifecycle: created on demand, destroyed on close.
 //!
-//! The window holds two webviews (bar.rs): the URL bar on top and the page below. Nothing here
-//! keeps a webview alive while hibernating: `Destroy` (and the user closing the window) drops
-//! the window and both webviews, so the engine's renderer processes exit.
+//! The window holds two webviews (bar.rs): the bar (the toolbar on top, or the command bar over
+//! the whole window) and the page. It opens with the command bar. Nothing here keeps a webview
+//! alive while hibernating: `Destroy` (and the user closing the window) drops the window and
+//! both webviews, so the engine's renderer processes exit.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
@@ -144,8 +145,10 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
     window.show()?;
     window.set_focus()?;
     bar::apply_layout(&window);
+    // The window was built with the command bar open (bar.rs); this puts the keyboard in it.
     bar::focus_bar(app);
     smoke::log("window-created", "");
+    bar::log_overlay();
     if let Some(url) = url {
         bar::navigate(app, url)?;
     }

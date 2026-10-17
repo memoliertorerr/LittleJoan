@@ -1,7 +1,8 @@
-// The start page under the URL bar: a hint, nothing to type into (the bar has the focus). On the
-// first launch it is also the one-time welcome (start-logic.ts decides what it says).
+// The command bar's panel under the field (DOM glue only): the hint line and, on the first
+// launch, the one-time welcome with its start-at-login checkbox. What it says comes from
+// welcome.ts; the facts from Rust's start_info.
 import { invoke } from "@tauri-apps/api/core";
-import { hintText, welcome, type ShortcutLine, type StartInfo, type Welcome } from "./start-logic.ts";
+import { hintText, welcome, type ShortcutLine, type StartInfo, type Welcome } from "./welcome.ts";
 
 function element<T extends HTMLElement>(selector: string): T | null {
   return document.querySelector<T>(selector);
@@ -24,7 +25,6 @@ function showWelcome(shown: Welcome): void {
   const shortcut = element<HTMLElement>("#welcome-shortcut");
   const tray = element<HTMLElement>("#welcome-tray");
   const close = element<HTMLElement>("#welcome-close");
-  const hint = element<HTMLElement>("#hint");
   if (!section || !title || !shortcut || !tray || !close) {
     return;
   }
@@ -33,9 +33,6 @@ function showWelcome(shown: Welcome): void {
   tray.textContent = shown.tray;
   close.textContent = shown.close;
   section.hidden = false;
-  if (hint) {
-    hint.hidden = true;
-  }
   if (shown.startAtLogin !== null) {
     setUpLoginSwitch(shown.startAtLogin);
   }
@@ -70,17 +67,20 @@ function setUpLoginSwitch(enabled: boolean): void {
   });
 }
 
-invoke<StartInfo>("start_info")
-  .then((info) => {
-    const hint = element<HTMLElement>("#hint");
-    if (hint) {
-      hint.textContent = hintText(info);
-    }
-    const shown = welcome(info);
-    if (shown) {
-      showWelcome(shown);
-    }
-  })
-  .catch(() => {
-    // The hint is decoration.
-  });
+/** Fills the panel: asks Rust once, when the bar loads (the welcome shows on the first run). */
+export function fillPanel(): void {
+  invoke<StartInfo>("start_info")
+    .then((info) => {
+      const hint = element<HTMLElement>("#hint");
+      if (hint) {
+        hint.textContent = hintText(info);
+      }
+      const shown = welcome(info);
+      if (shown) {
+        showWelcome(shown);
+      }
+    })
+    .catch(() => {
+      // The hint is decoration.
+    });
+}

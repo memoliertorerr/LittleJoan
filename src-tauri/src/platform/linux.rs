@@ -1,9 +1,10 @@
 //! Linux. Tauri packs a window's webviews into a vertical GtkBox (so bounds don't apply; GTK
-//! lays them out), which this module uses for the URL bar: the bar is packed at a fixed height
-//! and the page takes the rest. Page keys go through the GTK window's `key-press-event`, which
-//! runs before WebKitGTK receives the key (handlers connected with `connect_*` run before the
-//! class handler). Element fullscreen is followed through WebKitGTK's `enter-fullscreen` and
-//! `leave-fullscreen` signals, to hide the bar meanwhile.
+//! lays them out), which this module uses for the bar: in Toolbar mode it is packed at a fixed
+//! height and the page takes the rest; in Overlay mode it fills the box and the page is hidden.
+//! Page keys go through the GTK window's `key-press-event`, which runs before WebKitGTK receives
+//! the key (handlers connected with `connect_*` run before the class handler). Element
+//! fullscreen is followed through WebKitGTK's `enter-fullscreen` and `leave-fullscreen`
+//! signals, to hide the bar meanwhile.
 
 use gtk::glib::Propagation;
 use gtk::glib::prelude::*;
@@ -36,6 +37,40 @@ pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
     });
     if let Err(err) = result {
         eprintln!("little-joan: could not reach the URL bar: {err}");
+    }
+}
+
+/// The command bar's overlay. GTK lays out the box, so instead of bounds: the bar is packed to
+/// fill the window (its 40 px request stays as a minimum, so the window can still shrink) and the
+/// page widget is hidden; closing it undoes both. tao shows a window with `show_all()`, which
+/// would bring a hidden page back, so the page is kept out of it (`no_show_all`) meanwhile.
+pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: &Webview<R>, on: bool) {
+    let result = page.with_webview(move |webview| {
+        let view = webview.inner();
+        view.set_no_show_all(on);
+        if on {
+            view.hide();
+        } else {
+            view.show_all();
+        }
+    });
+    if let Err(err) = result {
+        eprintln!("little-joan: could not reach the page: {err}");
+    }
+    let result = bar.with_webview(move |webview| {
+        let view = webview.inner();
+        match view
+            .parent()
+            .and_then(|parent| parent.downcast::<gtk::Box>().ok())
+        {
+            Some(container) => {
+                container.set_child_packing(&view, on, on, 0, gtk::PackType::Start);
+            }
+            None => eprintln!("little-joan: the bar is not in a GtkBox; layout is GTK's"),
+        }
+    });
+    if let Err(err) = result {
+        eprintln!("little-joan: could not reach the bar: {err}");
     }
 }
 

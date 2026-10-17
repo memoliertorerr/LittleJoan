@@ -23,9 +23,11 @@ one and drives the installed app (`scripts/ci/smoke.mts`). A pull request needs 
 
 ## Ground rules
 
-- **Web pages never get IPC.** Only Little Joan's own local pages may call app commands, each
-  through a capability that lists exactly what it needs (`src-tauri/capabilities/`). Don't add
-  `remote` URLs to a capability or inject scripts into web pages.
+- **Web pages never get IPC.** Only Little Joan's own screens may call app commands — the bar
+  webview (`joan-bar`) and the settings window — each through a capability that lists exactly
+  what it needs (`src-tauri/capabilities/`). The page webview (`joan-page`) gets no capability at
+  all, not even for local pages (`capability_tests.rs` enforces it). Don't add `remote` URLs to a
+  capability or inject scripts into web pages.
 - **Nothing runs at rest.** No window or webview may exist while Little Joan hibernates.
 - Keep decisions in small, tested, pure modules (`src-tauri/src/*.rs` without Tauri types,
   `ui/*-logic.ts`); keep the native glue thin.

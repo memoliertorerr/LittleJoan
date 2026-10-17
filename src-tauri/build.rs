@@ -8,6 +8,7 @@ fn main() {
             "start_info",
             "page_url",
             "focus_page",
+            "set_overlay",
             "get_settings",
             "save_settings",
             "suspend_shortcut",

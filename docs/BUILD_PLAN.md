@@ -69,7 +69,7 @@
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
-| LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ⬜ todo |
+| LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
 | LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ⬜ todo |
 | LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ⬜ todo |
 | LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ⬜ todo |
@@ -2730,6 +2730,56 @@ mode". Push, open the phase-13 PR into main as a draft, and watch CI until every
 (two honest attempts, then stop). Look at start.png and page.png on every OS.
 ```
 
+**Implementation notes (2026-10-17):**
+
+- **Phase 13 opened with `lj-step-20-fix2`** (notes under LJ20): `main`'s CI after the phase-12
+  merge had aborted on macOS; the fix is the branch's first commit, before this step.
+- **Modes** (`layout::Mode`: `Toolbar`, `Overlay`, `Fullscreen`; `Layout` has an optional page
+  as well as an optional bar). The view state moved out of `bar.rs` into `bar/view.rs`
+  (`bar::` keeps the same functions), so both stay under ~400 lines.
+- **A new window is built in Overlay mode,** before it is shown, so the toolbar never flashes
+  first. `overlay true` is therefore logged right after `window-created` as the state the window
+  was built in (`bar::log_overlay`), not by a change; every later change logs itself.
+- **Showing a page closes the overlay** in `bar::navigate`, so Enter (`open_input`), `--show
+  <url>` (the smoke's path), `Create(url)` and Translate all close it. Opening it: every summon,
+  Ctrl/Cmd+L (`focus_bar`, page keys and the macOS menu) and — not in the prompt, but the
+  editing path the toolbar needs until LJ24 replaces the field — a click on the toolbar's
+  address (`set_overlay(true)` from the bar). Element fullscreen closes it and keeps it from
+  opening.
+- **Linux, a deviation with the same result:** instead of a height request equal to the
+  window's height (a GTK size request is also the window's minimum, so the window couldn't
+  shrink while the command bar is open, and it would need updating on every resize), the bar is
+  re-packed with `expand = fill = true` and keeps its 40 px request as a minimum. The page
+  widget is hidden with `no_show_all` set, because tao shows a window with `show_all()` (tao
+  0.37.1 `linux/window.rs`), which would bring a hidden page back on the first show.
+- **The bar learns its view** from `window.littleJoan.setOverlay` on every change, and again
+  when its own page finishes loading (a change during its load can't be missed); its script
+  starts in the overlay view. Rules in `ui/command/view-state.ts` (tested): Esc reverts an edit,
+  then with no page closes the window, with a page closes the overlay (`set_overlay(false)`,
+  which focuses the page); in the toolbar Esc still just returns to the page. A document-level
+  Esc listener gives the same rules after a click elsewhere in the bar — that resolves the
+  LJ12 follow-up "Esc after a click in the welcome".
+- **Files:** the welcome's logic moved with its tests (`git mv ui/start-logic.ts
+  ui/command/welcome.ts`), its DOM glue into `ui/command/panel.ts`; `ui/start.ts` and
+  `capabilities/joan.json` are gone; `ui/index.html` is a plain page (a `blank` body class, the
+  shared stylesheet, no script); `bar-logic.ts` keeps only the field helpers (`barKey` became
+  `view-state.ts`'s `onKey`). The bar capability gained `allow-start-info`,
+  `allow-set-start-at-login` and the new `allow-set-overlay`.
+- **`capability_tests.rs`** (5 tests): reads every file tauri-build would read
+  (`capabilities/**/*`; only JSON may be there, since TOML/JSON5 couldn't be checked) and inline
+  capabilities in `tauri.conf.json`, accepting the single / list / `{ "capabilities": [...] }`
+  forms; fails if a `webviews` pattern matches `joan-page` or a `windows` pattern matches `joan`
+  (glob `*` / `?`; character classes are refused outright), if any capability has `remote`, or if
+  any source calls `add_capability`; and checks the bar and settings keep theirs. Checked by
+  hand that it fails with the old `joan.json` and with a `"windows": ["jo*"]` file.
+- **Smoke:** `overlayFailures` (unit-tested): after every `window-created` the first `overlay`
+  event, before the next window, is `true`; with the smoke page, an `overlay false` comes after
+  the first window and before `LJ-SMOKE ready`. The first-run check applies the first rule too.
+  `smoke.mts` waits for both before `start.png` / `page.png`. A start-at-login test had a fixed
+  event count (`eventsUntil: 16`) that the longer fixture broke; it now counts the log.
+- `npm run verify`: 93 TS tests, 135 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.2 GB.
+
 ### LJ23 — The command bar · strong · auto
 
 **Verify:** `npm run verify` green, including vitest tests for a pure `ui/command/rows.ts`:
@@ -3288,10 +3338,11 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   means a new user sees only a tray icon — and on GNOME without the AppIndicator extension,
   nothing at all. Option: when no `settings.json` exists yet, show the window once with the
   shortcut hint. → *The user chose the one-time welcome on 2026-10-17: resolved by LJ12.*
-- **Esc after a click in the welcome** (surfaced by LJ12). Clicking the welcome's checkbox moves
+- ~~**Esc after a click in the welcome**~~ (surfaced by LJ12). Clicking the welcome's checkbox moves
   the keyboard into the page webview, where Esc does nothing until the URL bar has the focus
   again; Ctrl/Cmd+W, the close button and the shortcut still close. Options: give the start page
-  `allow-hibernate` for Esc, or a command that hands the focus back to the bar.
+  `allow-hibernate` for Esc, or a command that hands the focus back to the bar. → *Resolved by
+  LJ22: the welcome lives in the bar now, and Esc anywhere in the bar follows the field's rules.*
 - ~~**Start at login**~~ (surfaced by LJ8's README). Without it the shortcut is dead after a
   reboot until the user launches the app; already designed under Later — the most useful next
   step. → *Handled by LJ11.*
