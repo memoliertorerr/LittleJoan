@@ -1372,6 +1372,15 @@ v0.1 only unloaded the page before destroying; the URL bar's webview wasn't. **F
 (lj-step-10.1-fix):** on macOS both webviews are navigated to `about:blank` before the window
 is destroyed (the bar's navigation filter allows `about:blank` for that).
 
+**Third macOS finding (run 38990971632, green, but the screenshot was wrong):** the bar sat
+behind the title bar — only its bottom ~10 px showed — and the page started 40 px below the
+window's top edge. Tauri's default macOS title bar style (`Visible`) turns on
+`NSFullSizeContentViewWindowMask`, so the content view (and y = 0 for child webviews) starts
+under the title bar; a single-webview window never showed it because WKWebView insets itself.
+**Fix (lj-step-10.1-fix):** the page window uses `TitleBarStyle::Transparent` on macOS, which
+keeps the content view below the title bar. Smoke checks can't see pixel placement, so this
+was caught by looking at the screenshot.
+
 ---
 
 ### LJ10.2 — Project files for GitHub · standard · auto

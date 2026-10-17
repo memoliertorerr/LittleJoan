@@ -68,13 +68,19 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
             s.webview_data_dir.clone(),
         )
     });
-    let window = WindowBuilder::new(app, LABEL)
+    let builder = WindowBuilder::new(app, LABEL)
         .title("Little Joan")
         .inner_size(width, height)
         .min_inner_size(f64::from(MIN_WIDTH), f64::from(MIN_HEIGHT))
         .resizable(true)
-        .visible(false)
-        .build()?;
+        .visible(false);
+    // macOS: Tauri's default title bar style extends the content view under the title bar
+    // (NSFullSizeContentViewWindowMask), so child webviews placed at y = 0 would hide behind
+    // it. `Transparent` keeps the content below the title bar; the title bar itself then shows
+    // the window background, which suits the minimal look.
+    #[cfg(target_os = "macos")]
+    let builder = builder.title_bar_style(tauri::TitleBarStyle::Transparent);
+    let window = builder.build()?;
     WAS_FULLSCREEN.store(false, Ordering::Relaxed);
     // Element fullscreen (video): WebView2 needs platform::install_page's handler; WKWebView
     // (wry enables elementFullscreenEnabled) and WebKitGTK (fullscreens the toplevel by
