@@ -3026,6 +3026,18 @@ Once CI is green, merge into main (merge commit), then stop and report.
   in the command bar. **Fix (`lj-step-24-fix`):** the strip is `.toolstrip`; a new
   `ui/bar-markup.test.ts` fails if a view class (`overlay`, `toolbar`) is put on any element but
   `<body>` or styled without `.bar-body` (checked: it fails on the old stylesheet).
+- **After the fixes (run 39072675033, at the plan-status commit): every job green** — verify ×3,
+  package ×3, smoke on Windows, macOS, Linux and Linux at scale 2. `page.png`: Windows and Linux
+  — under the native title bar, the toolbar's light strip with a greyed back chevron (one smoke
+  page per window, so nowhere to go back), the site's "1" stand-in and `127.0.0.1` centred, the
+  open-in-browser glyph on the right; Linux at scale 2 the same, crisp; macOS — the traffic
+  lights inside the toolbar's left end, the back chevron just after them with no overlap, the
+  site centred, the glyph on the right, the page right below (`480x600`). The Linux scale-1
+  `command-typing.png` now has the completed field *and* the smoke page's row selected
+  (`lj-step-23-fix`). Login persistence (`p=1 s=1 l=1` / `p=1 s=0 l=1`), the viewports and
+  "no webview helpers after hibernating" (0 / 0 / 0 per cycle) held on all four.
+- Final `npm run verify`: 138 TS tests, 149 Rust tests, clippy clean. Disk at the end: 13 GiB
+  free; `.cache/target` 1.2 GB.
 
 ### LJ25 — History view · standard · auto
 
