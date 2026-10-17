@@ -7,36 +7,41 @@
 //! - `--hide`          close the window (hibernate)
 //! - `--size WxH`      resize the open window to W×H logical pixels (scripts, tests)
 //! - `--start-at-login on|off`  add or remove the OS login entry; never touches the window
+//! - `--settings [tab]`  open (or focus) Settings on a tab: general, appearance, extensions,
+//!   privacy, about (General without one, or with a name it doesn't know); never touches the
+//!   page window
 //! - `--quit`          quit Little Joan (the tray's Quit); wins over any window flag
 //!
 //! The last recognized window flag wins; unknown arguments are ignored (macOS can add `-psn_…`).
 
 use url::Url;
 
+use crate::settings_window::SettingsTab;
 use crate::toggle::Command;
 
 /// What a command line asks for. `command` goes through the toggle table (the window);
-/// `start_at_login` only changes the OS login entry and is handled before it; `quit` comes last
-/// and replaces the window command.
+/// `start_at_login` only changes the OS login entry and is handled before it; `settings` opens
+/// the settings window; `quit` comes last and replaces the window command.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Args {
     pub command: Option<Command>,
     pub start_at_login: Option<bool>,
+    pub settings: Option<SettingsTab>,
     pub quit: bool,
 }
 
 impl Args {
     /// What a second launch does to the window: its window flag, or `--show` when it had no
-    /// recognized flag at all. A launch that only changes start at login leaves the window alone,
-    /// and one that quits never opens it.
+    /// recognized flag at all. A launch that only changes start at login or opens Settings
+    /// leaves the window alone, and one that quits never opens it.
     pub fn forwarded_command(&self) -> Option<Command> {
         if self.quit {
             return None;
         }
-        match (&self.command, self.start_at_login) {
-            (Some(command), _) => Some(command.clone()),
-            (None, None) => Some(Command::Show(None)),
-            (None, Some(_)) => None,
+        match (&self.command, self.start_at_login, self.settings) {
+            (Some(command), _, _) => Some(command.clone()),
+            (None, None, None) => Some(Command::Show(None)),
+            _ => None,
         }
     }
 }
@@ -45,6 +50,7 @@ impl Args {
 pub fn parse_args(args: &[String]) -> Args {
     let mut command = None;
     let mut start_at_login = None;
+    let mut settings = None;
     let mut quit = false;
     let mut rest = args.iter().skip(1).peekable();
     while let Some(arg) = rest.next() {
@@ -59,6 +65,12 @@ pub fn parse_args(args: &[String]) -> Args {
                 {
                     start_at_login = Some(enabled);
                 }
+            }
+            "--settings" => {
+                let tab = rest
+                    .next_if(|next| !next.starts_with("--"))
+                    .and_then(|value| SettingsTab::from_name(value));
+                settings = Some(tab.unwrap_or_default());
             }
             "--size" => {
                 if let Some((width, height)) = rest
@@ -80,6 +92,7 @@ pub fn parse_args(args: &[String]) -> Args {
     Args {
         command,
         start_at_login,
+        settings,
         quit,
     }
 }
@@ -258,6 +271,7 @@ mod tests {
             Args {
                 command: Some(Command::Toggle),
                 start_at_login: None,
+                settings: None,
                 quit: false,
             }
         );
@@ -270,6 +284,7 @@ mod tests {
             Args {
                 command: Some(Command::Hide),
                 start_at_login: Some(true),
+                settings: None,
                 quit: false,
             }
         );
@@ -292,6 +307,37 @@ mod tests {
         assert_eq!(
             parse_all(&["--toggle"]).forwarded_command(),
             Some(Command::Toggle)
+        );
+    }
+
+    #[test]
+    fn settings_opens_on_a_tab_and_leaves_the_window_alone() {
+        assert_eq!(
+            parse_all(&["--settings"]).settings,
+            Some(SettingsTab::General)
+        );
+        for (value, tab) in [
+            ("general", SettingsTab::General),
+            ("appearance", SettingsTab::Appearance),
+            ("Extensions", SettingsTab::Extensions),
+            ("PRIVACY", SettingsTab::Privacy),
+            ("about", SettingsTab::About),
+            // A name it doesn't know still opens Settings, on General.
+            ("advanced", SettingsTab::General),
+        ] {
+            let parsed = parse_all(&["--settings", value]);
+            assert_eq!(parsed.settings, Some(tab), "{value}");
+            assert_eq!(parsed.command, None, "{value}");
+            assert_eq!(parsed.forwarded_command(), None, "{value}");
+        }
+        // A missing tab doesn't swallow the next flag; window flags still apply next to it.
+        let both = parse_all(&["--settings", "--toggle"]);
+        assert_eq!(both.settings, Some(SettingsTab::General));
+        assert_eq!(both.forwarded_command(), Some(Command::Toggle));
+        assert_eq!(parse_all(&["--toggle"]).settings, None);
+        assert_eq!(
+            parse_all(&["--settings", "about", "--quit"]).forwarded_command(),
+            None
         );
     }
 

@@ -17,6 +17,17 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Settings has tabs:** General (shortcut, search engine, translate language, mobile sites,
+  start at login), Appearance and Extensions (coming next), Privacy (**Remember history**,
+  **Clear history**, and what is kept where), and About (version, license, the project's page),
+  in a sidebar, with Save and Cancel for all of them. **Settings & extensions** in the command
+  bar opens it on Extensions, and `little-joan --settings [tab]` on any tab. Links in Settings
+  open in your default browser.
+- **History view (Ctrl+Y, Cmd+Y on macOS):** the pages you opened, by day — Today, Yesterday,
+  then dates — with their times, a search field, × to remove a page, and **Clear history…** for
+  the last hour, the last 24 hours, the last 7 days, or everything. It opens over the command
+  bar (also from its "History" row, when you type "history"); a click or Enter opens a page, Esc
+  returns to the command bar. Removing and clearing rewrite `history.json` at once.
 - **A Little Arc-style toolbar** above the page: back (enabled once the page has somewhere to
   go back to in this window), the site's icon and domain in the middle — click it to edit the
   address in the command bar —, and "open in default browser" on the right. On macOS the
@@ -33,7 +44,7 @@ All notable changes to Little Joan are recorded here. The format follows
   `history.json` next to the settings — at most 5,000 addresses, ranked by how often and how
   recently you visit them — for the command bar's suggestions to come. It never leaves your
   computer; Little Joan's own pages are never recorded, and the `rememberHistory` setting (on by
-  default) turns recording off. Nothing shows it yet.
+  default) turns recording off.
 - CI now proves that logins survive: on every system the smoke test checks that a persistent
   cookie, a session cookie and localStorage outlive closing the window, and that the persistent
   cookie and localStorage outlive quitting and relaunching.

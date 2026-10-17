@@ -5,6 +5,7 @@
 //! lower case, with a non-default port), all-time visit count, and its last 20 visits (time +
 //! kind). At most 5,000 URLs; the least frecent go first. Never recorded: anything but
 //! http(s), the app's own pages, Tauri's custom-scheme hosts on Windows (`ljext`, `ipc`).
+//! The history view's list and "Clear history" are in history/manage.rs.
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -428,6 +429,10 @@ fn parse_entry(value: &Value, app_origin: &Url) -> Option<Entry> {
         visits,
     })
 }
+
+mod manage;
+
+pub use manage::{ClearRange, Listed};
 
 #[cfg(test)]
 mod tests;

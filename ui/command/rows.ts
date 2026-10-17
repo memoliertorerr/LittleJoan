@@ -21,7 +21,10 @@ export type Action =
   | { kind: "open"; url: string }
   /** What open_input makes of the text: an address or a search. */
   | { kind: "input"; text: string }
-  | { kind: "settings" }
+  /** Open the settings window on a tab. */
+  | { kind: "settings"; tab: string }
+  /** Show the history view (the built-in "History" command). */
+  | { kind: "history" }
   /** An extension's command (LJ30). */
   | { kind: "command"; id: string }
   /** A quick answer's text, to copy (LJ31). */
@@ -35,6 +38,8 @@ export interface Row {
   domain: string;
   /** Whose favicon to show; "" = the row kind's own icon. */
   host: string;
+  /** A built-in symbol instead of the kind's icon (style.css: `row-icon-<icon>`). */
+  icon?: string;
   action: Action;
   /** The history record Shift+Delete removes, if this row is one. */
   removable?: string;
@@ -60,14 +65,37 @@ export interface RowList {
 /** The most suggestion rows; "Settings & extensions" comes after them. */
 export const MAX_SUGGESTIONS = 8;
 
-/** Always the last row — where Little Arc has "Contact the Team". */
+/** Always the last row — where Little Arc has "Contact the Team": Settings, on Extensions. */
 export const SETTINGS_ROW: Row = {
   kind: "settings",
   title: "Settings & extensions",
   domain: "",
   host: "",
-  action: { kind: "settings" },
+  action: { kind: "settings", tab: "extensions" },
 };
+
+/** The built-in "History" command: it opens the history view (also Ctrl/Cmd+Y). */
+export const HISTORY_ROW: Row = {
+  kind: "command",
+  title: "History",
+  domain: "",
+  host: "",
+  icon: "clock",
+  action: { kind: "history" },
+};
+
+const HISTORY_WORD = "history";
+
+/**
+ * The built-in commands for what is typed: "History" when the text starts the word (two letters
+ * or more: "hi", "hist") or contains it ("history", "clear history").
+ */
+export function builtInCommands(query: string): Row[] {
+  const typed = query.trim().toLowerCase();
+  const starts = typed.length >= 2 && HISTORY_WORD.startsWith(typed);
+  const names = typed.split(/\s+/).includes(HISTORY_WORD);
+  return starts || names ? [HISTORY_ROW] : [];
+}
 
 function rowFor(suggestion: Suggestion): Row {
   const title = suggestion.title.trim();
@@ -127,7 +155,8 @@ export function autofillFor(query: string, history: readonly Suggestion[]): stri
 /**
  * The rows for `query`. Nothing typed: the top sites (or the starters), up to 8. Typing: a quick
  * answer if one applies, the best history match, "Search <engine> for …", more history matches,
- * matching commands — at most 8 in all. "Settings & extensions" is always last.
+ * matching commands (the built-in ones, which always find room, then extensions') — at most 8 in
+ * all. "Settings & extensions" is always last.
  */
 export function buildRows(query: string, suggestions: readonly Suggestion[], hooks: Hooks = {}): RowList {
   const typed = query.trim();
@@ -148,7 +177,9 @@ export function buildRows(query: string, suggestions: readonly Suggestion[], hoo
     rows.push(rowFor(best));
   }
   rows.push(searchRow(typed, engine));
-  rows.push(...more.map(rowFor));
+  const builtIn = builtInCommands(typed);
+  rows.push(...more.slice(0, Math.max(0, MAX_SUGGESTIONS - rows.length - builtIn.length)).map(rowFor));
+  rows.push(...builtIn);
   rows.push(...(hooks.commands?.(typed) ?? []));
   const shown = rows.slice(0, MAX_SUGGESTIONS);
   const text = autofillFor(typed, history);

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "bar",
-  "description": "The bar, which holds every screen of the app's own in the page window (toolbar, command bar, welcome): open what was typed in the page, read the page's address, open or close the command bar, go back, open the page in the default browser, drag the window by the toolbar, hand the keyboard back to the page, close, read history suggestions (top sites, matches) and the command bar's suggestions, forget one history record, open Settings, read what the welcome shows and add or remove the login entry from it. The page webview (joan-page) has no capability at all.",
+  "description": "The bar, which holds every screen of the app's own in the page window (toolbar, command bar, welcome, history view): open what was typed in the page, read the page's address, open or close the command bar, go back, open the page in the default browser, drag the window by the toolbar, hand the keyboard back to the page, close, read the command bar's suggestions and the history view's list, forget one history record or clear a range of history, open Settings, read what the welcome shows and add or remove the login entry from it. The page webview (joan-page) has no capability at all.",
   "webviews": ["joan-bar"],
   "permissions": [
     "allow-open-input",
@@ -11,10 +11,10 @@
     "allow-go-back",
     "allow-open-in-browser",
     "allow-hibernate",
-    "allow-history-top",
-    "allow-history-search",
+    "allow-history-list",
     "allow-suggest",
     "allow-history-remove",
+    "allow-history-clear",
     "allow-open-settings",
     "allow-start-info",
     "allow-set-start-at-login",

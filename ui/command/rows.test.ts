@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  HISTORY_ROW,
   MAX_SUGGESTIONS,
   SETTINGS_ROW,
   autofillFor,
   buildRows,
+  builtInCommands,
   faviconUrl,
   hueFor,
   initialSelection,
@@ -50,6 +52,11 @@ describe("rows while nothing is typed", () => {
     expect(rows[0]?.action).toEqual({ kind: "open", url: SMOKE.url });
     expect(rows.at(-1)).toEqual(SETTINGS_ROW);
     expect(autofill).toBeNull();
+  });
+
+  it("ends with Settings & extensions, which opens Settings on Extensions", () => {
+    expect(buildRows("", []).rows).toEqual([SETTINGS_ROW]);
+    expect(SETTINGS_ROW).toMatchObject({ title: "Settings & extensions", action: { kind: "settings", tab: "extensions" } });
   });
 
   it("shows the four starters when there is no history", () => {
@@ -103,6 +110,33 @@ describe("rows while typing", () => {
     expect(rows.slice(0, 2).map((row) => row.kind)).toEqual(["history", "search"]);
     expect(rows.filter((row) => row.kind === "command")).toHaveLength(0);
     expect(rows.at(-1)).toEqual(SETTINGS_ROW);
+  });
+
+  it("offers the History command for its name, after the matches and before extensions'", () => {
+    const command: Row = { kind: "command", title: "Snake", domain: "", host: "", action: { kind: "command", id: "snake" } };
+    const { rows } = buildRows("hist", [SMOKE, GOOGLE], { commands: () => [command] });
+    expect(rows.map((row) => row.title)).toEqual([SMOKE.title, "Search Google for “hist”", "History", "Snake", SETTINGS_ROW.title]);
+    expect(rows[2]).toEqual(HISTORY_ROW);
+    expect(HISTORY_ROW.action).toEqual({ kind: "history" });
+    expect(HISTORY_ROW.icon).toBe("clock");
+  });
+
+  it("keeps room for the History command among many matches", () => {
+    const many = Array.from({ length: 12 }, (_, i): Suggestion => ({ ...EXAMPLE, url: `https://hi${i}.test/`, host: `hi${i}.test` }));
+    const { rows } = buildRows("hi", [...many, GOOGLE]);
+    expect(rows).toHaveLength(MAX_SUGGESTIONS + 1);
+    expect(rows.at(-2)).toEqual(HISTORY_ROW);
+    expect(rows.at(-1)).toEqual(SETTINGS_ROW);
+  });
+
+  it("matches History on its start (two letters or more) or the whole word", () => {
+    for (const query of ["hi", "HIST", " history ", "clear history", "history please"]) {
+      expect(builtInCommands(query), query).toEqual([HISTORY_ROW]);
+    }
+    for (const query of ["h", "", "historyx", "his tory", "story", "chistory"]) {
+      expect(builtInCommands(query), query).toEqual([]);
+    }
+    expect(buildRows("", [], {}).rows).not.toContainEqual(HISTORY_ROW);
   });
 
   it("only history rows can be removed", () => {
@@ -178,7 +212,7 @@ describe("keys", () => {
 
   it("Enter opens the selected row, or with none what the field says", () => {
     expect(listKey(list, 0, "Enter", false, "127")).toEqual({ kind: "act", action: { kind: "open", url: SMOKE.url } });
-    expect(listKey(list, last, "Enter", false, "127")).toEqual({ kind: "act", action: { kind: "settings" } });
+    expect(listKey(list, last, "Enter", false, "127")).toEqual({ kind: "act", action: { kind: "settings", tab: "extensions" } });
     expect(listKey(list, null, "Enter", false, " github.com ")).toEqual({ kind: "act", action: { kind: "input", text: "github.com" } });
     expect(listKey(list, null, "Enter", false, "  ")).toEqual({ kind: "none" });
   });

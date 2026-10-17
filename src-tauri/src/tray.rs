@@ -68,7 +68,7 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             OPEN_ID => joan::dispatch(app, Command::Show(None)),
             TRANSLATE_ID => page_actions::perform(app, PageAction::Translate),
             OPEN_IN_BROWSER_ID => page_actions::perform(app, PageAction::OpenInBrowser),
-            SETTINGS_ID => settings_window::open(app),
+            SETTINGS_ID => settings_window::open(app, None),
             QUIT_ID => joan::quit(app),
             _ => {}
         })

@@ -7,12 +7,13 @@
 // summon it with `--show` (single-instance forwarding; the command bar covers the window), load
 // the smoke page (the command bar closes: the 40 px bar above the page), click its big
 // fullscreen button, hibernate with `--hide`, summon and hibernate once more, summon again for
-// the command bar (the smoke page's site as a top site, then typing "127"), turn start at
-// login on and off (reading the OS's own login entry each time), check that cookies and
-// localStorage outlive closing the window and quitting (`--quit`, then a relaunch on the same
-// data folder), that history.json recorded the smoke page (and that a run with history off
-// records nothing), then check the logs (scripts/ci/smoke-log.mts) and the webview helper
-// processes. The app runs on a fresh
+// the command bar (the smoke page's site as a top site, then typing "127", then Ctrl/Cmd+Y for
+// the history view), turn start at login on and off (reading the OS's own login entry each
+// time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
+// then a relaunch on the same data folder), that history.json recorded the smoke page (and that
+// a run with history off records nothing; that run also opens Settings with `--settings` and
+// `--settings privacy`), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts) and
+// the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
 // data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
@@ -45,7 +46,17 @@ import {
   type LogEvent,
   type Viewport,
 } from "./smoke-log.mts";
-import { commandBarFailures, sawSmokeTopSite, sawTypedMatch, TYPED } from "./smoke-command.mts";
+import {
+  commandBarFailures,
+  historyViewFailures,
+  sawHistoryView,
+  sawSettings,
+  sawSmokeTopSite,
+  sawTypedMatch,
+  settingsFailures,
+  settingsTabs,
+  TYPED,
+} from "./smoke-command.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -239,6 +250,45 @@ for ch in CommandLine.arguments[2] {
     run("xdotool", ["type", "--delay", "120", text]);
   }
   console.log(`typed ${JSON.stringify(text)}`);
+}
+
+/** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
+const MAC_KEYS: Record<string, number> = { y: 16 };
+
+/**
+ * Presses Ctrl+<letter> (Cmd+<letter> on macOS) in the app's window: xdotool on Linux, SendKeys
+ * on Windows (after bringing the window to the front), a key event with the Command flag from a
+ * small Swift script on macOS (best effort, as for typing).
+ */
+function pressShortcut(letter: string, appPid: number): void {
+  if (os === "win32") {
+    powershell(`Add-Type -AssemblyName System.Windows.Forms
+$shell = New-Object -ComObject WScript.Shell
+$null = $shell.AppActivate(${appPid})
+Start-Sleep -Milliseconds 400
+[System.Windows.Forms.SendKeys]::SendWait('^${letter}')`);
+  } else if (os === "darwin") {
+    const swift = join(out, "shortcut.swift");
+    writeFileSync(
+      swift,
+      `import AppKit
+let pid = pid_t(CommandLine.arguments[1]) ?? 0
+let key = CGKeyCode(CommandLine.arguments[2]) ?? 0
+NSRunningApplication(processIdentifier: pid)?.activate(options: [])
+usleep(400000)
+for down in [true, false] {
+  let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)
+  event?.flags = .maskCommand
+  event?.post(tap: .cghidEventTap)
+  usleep(60000)
+}
+`,
+    );
+    run("swift", [swift, String(appPid), String(MAC_KEYS[letter] ?? 0)]);
+  } else {
+    run("xdotool", ["key", `ctrl+${letter}`]);
+  }
+  console.log(`pressed ${os === "darwin" ? "Cmd" : "Ctrl"}+${letter.toUpperCase()}`);
 }
 
 /** Resident memory of `pid` in MB (working set on Windows, RSS elsewhere). */
@@ -546,6 +596,13 @@ const typingDriven = os !== "darwin";
 await waitFor(`command bar: typing "${TYPED}" finds the smoke page`, (e) => sawTypedMatch(e.slice(commandFrom)), 15_000);
 await sleep(1000);
 screenshot("command-typing.png");
+// The history view (LJ25): Ctrl+Y (Cmd+Y on macOS, best effort) opens it over the command bar,
+// the smoke page under Today.
+const historyFrom = events().length;
+pressShortcut("y", pid);
+await waitFor("history view: Ctrl/Cmd+Y lists the history", (e) => sawHistoryView(e.slice(historyFrom)), 15_000);
+await sleep(1000);
+screenshot("history.png");
 await forward(["--hide"]);
 await waitFor("command bar: hibernated", (e) => count(e, "hibernated") > hibernatedBeforeCommand, 20_000);
 
@@ -647,11 +704,24 @@ await forward(["--show", smokePageUrl], historyOffEnv);
 await waitFor("history off: smoke page", (e) => lastTitle(e, "LJ-SMOKE ready") !== undefined, 30_000, historyOffLogPath);
 await forward(["--hide"], historyOffEnv);
 await waitFor("history off: hibernated", (e) => count(e, "hibernated") > 0, 20_000, historyOffLogPath);
+// Settings (LJ26), while hibernating: `--settings` opens it on General, `--settings privacy`
+// switches the open window to Privacy (where "Remember history" is off in this run); neither
+// opens the page window.
+const settingsFrom = events(historyOffLogPath).length;
+await forward(["--settings"], historyOffEnv);
+await waitFor("settings: General", (e) => sawSettings(e.slice(settingsFrom), "general"), 20_000, historyOffLogPath);
+await sleep(1500);
+screenshot("settings-general.png");
+await forward(["--settings", "privacy"], historyOffEnv);
+await waitFor("settings: Privacy", (e) => settingsTabs(e.slice(settingsFrom)).includes("privacy"), 15_000, historyOffLogPath);
+await sleep(1000);
+screenshot("settings-privacy.png");
 await forward(["--quit"], historyOffEnv);
 if (!(await exited(historyOffPid, 15_000))) {
   await quit(historyOffChild, historyOffPid);
 }
 const historyOff = readIfThere(join(historyOffDir, "history.json"));
+const historyOffEvents = events(historyOffLogPath);
 const historyCheck = { main: historyMain, pageUrl: smokePageUrl, off: historyOff };
 console.log(`history: main ${historyMain === undefined ? "no file" : `${historyMain.length} bytes`}, off ${historyOff ?? "no file"}`);
 server.close();
@@ -723,7 +793,9 @@ const summary = {
     topSite: sawSmokeTopSite(log),
     typedMatch: sawTypedMatch(log),
     typingDriven,
+    historyView: sawHistoryView(log),
   },
+  settings: settingsTabs(historyOffEvents),
   history: {
     mainRecords: parseHistory(historyMain)?.length ?? null,
     smokePage: parseHistory(historyMain)?.find((record) => record.url === smokePageUrl) ?? null,
@@ -750,8 +822,10 @@ const failures = evaluate(
   },
 )
   .concat(commandBarFailures(log, { typing: typingDriven }))
+  .concat(historyViewFailures(log, { driven: typingDriven }))
   .concat(persistFailures(log, persistCheck))
   .concat(historyFailures(historyCheck))
+  .concat(settingsFailures(historyOffEvents))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));

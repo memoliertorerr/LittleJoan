@@ -48,22 +48,34 @@ ui/command/rows.ts                 the command bar's rows: order, autofill, keys
 ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document)
 ui/command/command.ts              the command bar's list: suggest() as you type, autofill, keys,
                                    mouse; DOM glue only
+ui/history/logic.ts                the history view: search, grouping by local day (Today,
+                                   Yesterday, dates), times, the "Clear history…" choices, keys
+                                   (pure, unit-tested)
+ui/history/view.ts                 draws the history list by day, as text only (tested with a
+                                   stand-in document)
+ui/history/history.ts              the history view in the overlay: history_list, search, keys,
+                                   mouse, remove, clear; DOM glue only
+ui/history/history.css             the history view's styles (linked by bar.html)
 ui/toolbar/logic.ts                the toolbar: the domain shown, back / open-in-browser enabled,
                                    macOS from the user agent (pure, unit-tested)
 ui/toolbar/toolbar.ts              the toolbar's buttons and site; DOM glue only
 ui/index.html                      the page webview's first page: a plain background, no script
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
-ui/settings.html, ui/settings.ts   the settings window: shortcut recorder, search engine, language
-ui/settings-logic.ts               settings types + change detection, unit-tested
+ui/settings.html, ui/settings.ts   the settings window: tabs (General, Appearance, Extensions,
+                                   Privacy, About), shortcut recorder, lists, switches, clear
+                                   history; DOM glue only
+ui/settings-logic.ts               settings types, tabs, change detection across tabs, the
+                                   Privacy tab's clear action (unit-tested)
+ui/settings.css                    the settings window's styles (style.css has the shared tokens)
 ui/style.css                       shared styles; light/dark via prefers-color-scheme
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
 src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
 src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_page, set_overlay,
-                                   go_back, open_in_browser, hibernate, history_top,
-                                   history_search, suggest, history_remove, open_settings,
-                                   start_info, set_start_at_login; drag the window
+                                   go_back, open_in_browser, hibernate, history_list, suggest,
+                                   history_remove, history_clear, open_settings, start_info,
+                                   set_start_at_login; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
-                                   start at login, close
+                                   start at login, clear history, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
@@ -75,9 +87,12 @@ src-tauri/src/cookies.rs           session cookies kept in memory across close �
 src-tauri/src/history.rs           history: what is recorded, frecency, top sites, typed matching,
                                    the 5,000-URL cap, history.json parse/serialize (pure; tests
                                    in history/tests.rs, with a fixed clock)
+src-tauri/src/history/manage.rs    the history view's list (latest visit first) and "Clear
+                                   history" by range: hour, day, week, all (pure, tested)
 src-tauri/src/history_store.rs     history.json on disk and in AppState while the window exists:
                                    load, record (page load / title events), autosave, atomic save,
-                                   remove one, the command bar's suggestions
+                                   remove one and clear a range (both rewrite the file at once,
+                                   with no window straight on disk), the list, the suggestions
 src-tauri/src/suggest.rs           what the command bar suggests: top sites or the starters,
                                    history matches and a search row (pure, tested)
 src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is, Wayland (pure)
@@ -100,19 +115,21 @@ src-tauri/src/placement.rs         where a new window opens (monitor under the c
 src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
                                    with rollback (Registrar trait), suspend while recording
 src-tauri/src/commands.rs          bar: open_input, page_url, focus_page, set_overlay, go_back,
-                                   open_in_browser, hibernate,
-                                   start_info, history_top, history_search, suggest,
-                                   history_remove, open_settings; settings:
-                                   get_settings, save_settings, suspend_shortcut;
-                                   set_start_at_login (both)
+                                   open_in_browser, hibernate, start_info, history_list, suggest,
+                                   history_remove, open_settings; settings: get_settings,
+                                   save_settings, suspend_shortcut; set_start_at_login and
+                                   history_clear (both)
 src-tauri/src/autostart.rs         start at login: tauri-plugin-autostart (Rust API only), the
                                    macOS translocation guard (pure, tested)
-src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close)
+src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close): its tabs
+                                   (`SettingsTab`, tested), open on a tab or switch an open one,
+                                   links to the default browser
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen
 src-tauri/src/keys.rs              page keys per OS (pure), app origin
 src-tauri/src/page_actions.rs      close / open location / reload / back / forward / translate /
-                                   open in browser; translate_target (skips the start page)
+                                   open in browser / history; translate_target (skips the start
+                                   page)
 src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView) + page keys;
                                    Cmd+Q goes through joan::quit
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
@@ -131,12 +148,13 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
-                                   --start-at-login on|off / --quit parsing
+                                   --start-at-login on|off / --settings [tab] / --quit parsing
 scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide, start at
                                    login on/off, cookies and storage across close and quit),
                                    reads the OS login entry, screenshots
 scripts/ci/smoke-log.mts           CI: smoke-log parsing and pass/fail rules, unit-tested
-scripts/ci/smoke-command.mts       CI: the command bar's smoke-log rules, unit-tested
+scripts/ci/smoke-command.mts       CI: the command bar's and history view's smoke-log rules,
+                                   unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
                                    with ?persist=set|check, the cookie and localStorage check
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
@@ -192,8 +210,8 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   sees the `WebContent` processes gone within 30 s and no growth across summon cycles. WebView2
   and WebKitGTK release theirs on destroy without help.
 - **Single instance:** `tauri-plugin-single-instance` forwards a second launch's arguments to
-  the running app (`--toggle`, `--show [url]`, `--hide`, `--start-at-login on|off`, `--quit`; no
-  flags = `--show`). On Linux it needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
+  the running app (`--toggle`, `--show [url]`, `--hide`, `--start-at-login on|off`,
+  `--settings [tab]`, `--quit`; no flags = `--show`). On Linux it needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
   `--start-at-login` is handled before the toggle table and never touches the window. `--quit`
   takes the tray's Quit path (`joan::quit`) and wins over any window flag; a `--quit` launch with
   nothing running just ends.
@@ -205,7 +223,7 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
 ## Commands and capabilities
 
 **Two trust levels.** The page window holds two webviews. **`joan-bar`** is trusted: every screen
-of the app's own lives there — the toolbar, the command bar, the welcome (and, later, history).
+of the app's own lives there — the toolbar, the command bar, the welcome, the history view.
 **`joan-page`** shows web pages (and, from LJ29, extension panels) and has **no IPC at all**: no
 capability names it or the page window (`joan`), so nothing loaded there can call a command —
 not a remote page, and not a local one either. That matters because Tauri treats every
@@ -220,8 +238,8 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-top`, `allow-history-search`, `allow-suggest`, `allow-history-remove`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
-| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `core:window:allow-close` |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
+| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
@@ -238,19 +256,19 @@ settings window's `core:window:allow-close`).
 | `open_in_browser()` | the toolbar's "open in default browser" | the page action OpenInBrowser: the page goes to the default browser, the window hibernates |
 | `hibernate()` | the bar, Esc with no page | close the window (same path as `--hide`) |
 | `start_info()` | the command bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut }` for the hint line and the welcome; `firstRun` is true once |
-| `get_settings()` | settings window | settings + engine and language lists + platform |
-| `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save |
+| `get_settings()` | settings window, on load | settings + engine and language lists + platform + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version`; logs `settings-loaded` |
+| `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
-| `history_top(n)` | nothing yet (the command bar uses `suggest`; left for the history view) | up to `n` (≤ 50) top sites: `[{ url, title, host, score }]`; read-only |
-| `history_search(query, limit)` | nothing yet (as above) | up to `limit` (≤ 50) records matching every word of `query`, same rows; read-only |
+| `history_list()` | the history view, when it opens and after a change | every record, latest visit first: `[{ url, title, host, lastVisit, visitCount }]` (empty with no window); the view searches, groups and draws them; logs `history-list <n>` |
 | `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → up to 8 top sites, leaving out the open page's site, or the 4 starters when there are none; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) |
-| `history_remove(url)` | the command bar, Shift+Delete on a history row | forget that record (saved with the rest of history); returns whether there was one |
-| `open_settings(tab?)` | the command bar's "Settings & extensions" row | open (or focus) the settings window; `tab` is for LJ26's tabs |
+| `history_remove(url)` | the command bar (Shift+Delete on a history row), the history view (× or Shift+Delete) | forget that record and rewrite `history.json` at once; returns whether there was one |
+| `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
+| `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
-`capabilities/settings.json` grants the `settings` window the last four plus
-`core:window:allow-close` (its Cancel / Save buttons close it). tauri-plugin-autostart is
+`capabilities/settings.json` grants the `settings` window the four settings commands,
+`history_clear` and `core:window:allow-close` (its Cancel / Save buttons close it). tauri-plugin-autostart is
 registered for its Rust API only: no capability grants any `autostart:*` permission, so its own JS
 commands are denied everywhere.
 
@@ -315,6 +333,14 @@ from the sites visited.
   URLs over 4,096 bytes aren't recorded. A bad or missing file is empty history; a bad record
   or visit is skipped alone.
 - **Cap:** 5,000 URLs; past that the least frecent go (on a tie, the least recently visited).
+- **Removing and clearing** (the history view, Settings → Privacy; `history_remove`,
+  `history_clear`) change the window's history and rewrite `history.json` at once; with no
+  window open, `history_clear` reads the file, changes it and writes it back, so nothing is held
+  in memory. Clearing a range forgets the visits in it (rolling windows: the last hour, 24 hours,
+  7 days); a page left without visits goes, one with older visits stays with a lower count;
+  "everything" writes an empty file even when the old one couldn't be read. One lock covers every
+  read-modify-write of the file and every change of the window's history (open, close,
+  autosave, remove, clear), so an autosave's older copy can never land after a clear.
 - **Recording** is native, from the page webview's events (`bar.rs`), so pages need no IPC: a
   finished page load records a visit, a title change updates that URL's record. The visit's
   kind comes from the app: `typed` after `open_input` (a picked suggestion goes through it too),
@@ -343,8 +369,29 @@ from the sites visited.
 | macOS | `~/Library/Application Support/io.github.memoliertorerr.littlejoan/settings.json` |
 | Linux | `~/.config/io.github.memoliertorerr.littlejoan/settings.json` |
 
-The settings window (tray → Settings…, or Cmd+, on macOS) records a shortcut by listening to the
-next key press. While it listens, the active global shortcut is **suspended** (unregistered) so
+**The settings window** (`settings_window.rs`, `ui/settings.*`; about 600×480, not resizable)
+opens from the tray (Settings…), Cmd+, on macOS, the command bar's "Settings & extensions" (on
+Extensions) and `--settings [tab]` (forwarded by single-instance; it never opens the page
+window). A sidebar on the left holds the tabs (↑/↓, Home, End move between them), the tab is on
+the right, and **Save / Cancel** along the bottom cover every tab (change detection compares
+all fields, whichever tab they are on):
+
+| Tab | Holds |
+|---|---|
+| General | shortcut, search engine, translate language, mobile sites, start at login |
+| Appearance | a placeholder until the theme engine (LJ27) |
+| Extensions | a placeholder until extensions (LJ30) |
+| Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
+| About | version, license, the repository link, "Inspired by Little Arc…" as plain text |
+
+A new window gets its first tab from an initialization script (`window.__littleJoanSettingsTab`)
+that runs before the page's own; an open window is focused and switched with
+`window.littleJoanSettings.showTab(<tab>)`. Tab names come from `SettingsTab`, never from user
+text. The window may only navigate within the app's origin; a link (About's) opens in the
+default browser (web URLs only), like the page's new-window requests. Smoke log:
+`settings-window <tab>` (or `focus`), `settings-loaded`.
+
+The General tab records a shortcut by listening to the next key press. While it listens, the active global shortcut is **suspended** (unregistered) so
 pressing it doesn't summon or dismiss the page window; it is resumed when recording stops, when
 Save runs, and when the window closes for any reason. A new shortcut is registered before the
 old one is forgotten: if registration fails, the old one is registered again and the window
@@ -368,6 +415,7 @@ shows the error.
   | Reload | Ctrl+R / F5 (WebView2 built-in) | Ctrl+R / F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right (built-in) | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate page | Ctrl+Shift+T | Ctrl+Shift+T | Cmd+Shift+T |
+  | History view (the command bar's overlay) | Ctrl+Y | Ctrl+Y | Cmd+Y (View menu) |
   | Open page in default browser (then hibernate) | tray menu | tray menu | Cmd+Shift+O, tray menu |
   | Copy / paste / select all | built-in | built-in | Edit menu (needed by WKWebView) |
 
@@ -389,7 +437,8 @@ page; it is a separate webview with its own capability, and the page webview has
   page fills the window. Fullscreen always wins: starting it closes the overlay, and the overlay
   doesn't open meanwhile.
 - **When the overlay opens:** every summon (a new window is built with it, before it is shown),
-  Ctrl/Cmd+L (page keys and the macOS menu: the address is selected), and a click on the
+  Ctrl/Cmd+L (page keys and the macOS menu: the address is selected), Ctrl/Cmd+Y (in its history
+  view, below), and a click on the
   toolbar's domain (`set_overlay(true)`, which goes through the same `focus_bar`). **When it
   closes:** whenever the app shows a page (`bar::navigate`: Enter in the command bar, `--show
   <url>`, Translate; the keyboard moves to the page), Esc or × with a page behind it
@@ -459,8 +508,23 @@ page; it is a separate webview with its own capability, and the page webview has
   `open_input`, so the visit counts as typed. Typing asks `suggest` after 60 ms; only the latest
   answer is drawn. While the field shows the open page's address untouched (Ctrl/Cmd+L), the
   command bar shows the top sites.
-- **Text only:** rows are drawn with `textContent` (`view.ts`), never `innerHTML`: titles come
-  from web pages (and, later, extensions). **Site icons** are
+- **The history view** (`ui/history/`) replaces the command bar's field and rows inside the
+  overlay (the body gets the class `history`): a back button, a search field ("Search
+  history…") and **Clear history…** at the top, then one row per page at its latest visit,
+  grouped by local day — Today, Yesterday, then the date (with the year when it isn't this one) —
+  each with the site's icon, "Title — site", the time and a × that removes the page. It opens
+  with Ctrl/Cmd+Y (the page action History: `bar::show_history` opens the overlay, then
+  `window.littleJoan.showHistory()`) or from the command bar's built-in **History** row (offered
+  when what is typed starts the word, two letters or more, or contains it; built-in commands
+  always find room among the 8 rows). It asks `history_list` and filters as you type (every word
+  in the title or the address), drawing 200 rows at first and 200 more each time the list is
+  scrolled to its end. ↑/↓ choose, Enter opens the chosen page (or the first), Shift+Delete
+  removes it, Esc closes the clear choices, then returns to the command bar; opening a page
+  closes the overlay like any page. **Clear history…** shows four choices (Last hour, Last 24
+  hours, Last 7 days, Everything; the smallest is preselected) with Cancel and Clear, then says
+  what went ("Removed 3 pages from the last hour.").
+- **Text only:** rows are drawn with `textContent` (`view.ts`, `history/view.ts`), never
+  `innerHTML`: titles come from web pages (and, later, extensions). **Site icons** are
   `<img src="https://<site>/favicon.ico" referrerpolicy="no-referrer">` straight from the site,
   shown once loaded over the site's first letter in a tinted circle (a stable hue per site),
   which stays when the icon fails. That is why the CSP's `img-src` allows `https:` (and only
@@ -534,12 +598,15 @@ engine: the window's fullscreen state changed), `element-fullscreen <true|false>
 app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finished loading),
 `bar-url <address | start>` (what the bar was told to show), `hibernated`,
 `start-at-login <true|false>` (the login entry read back after a change),
-`start-at-login-failed <reason>`, `first-run` (no settings.json at launch), `welcome` (the command
+`start-at-login-failed <reason>`, `settings-window <tab | focus>` (Settings opened on a tab, or
+was focused / switched), `settings-loaded` (its page asked for the settings), `first-run` (no
+settings.json at launch), `welcome` (the command
 bar was handed the first run), `quit` (Quit or `--quit` is about to exit),
 `session-cookies-kept <n>` / `session-cookies-restored <n>` (Windows: session cookies kept on
 close, set again in the new window; counts only), `history-visit <kind> <url>` (a visit was
-recorded), `history-saved <records>` (history.json written). Without the variable nothing is
-logged.
+recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl/Cmd+Y opened
+the history view), `history-list <pages>` (the history view asked for the pages; a count only).
+Without the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -570,8 +637,10 @@ The modules below hold every decision the app makes; the native glue only calls 
   the open window); the last flag wins; unknown arguments are ignored; `--show` accepts only
   absolute web URLs. `--start-at-login on|off` (any case; other values are ignored) is a
   separate result next to the window command, so it never maps to one; a second launch whose
-  only flag is `--start-at-login` leaves the window alone. `--quit` is a third result; it
-  replaces the window command (a quitting launch never opens the window).
+  only flag is `--start-at-login` leaves the window alone. `--settings [tab]` (general,
+  appearance, extensions, privacy, about, any case; General without one or for a name it doesn't
+  know) opens Settings and leaves the page window alone too. `--quit` is a third result; it
+  replaces the window command (a quitting launch never opens the window, nor Settings).
 
 ## Building
 
@@ -638,13 +707,16 @@ and pushes to `main`:
   address), the command bar (`overlay true` first after every `window-created`, and `overlay
   false` before the smoke page reports ready; the starters first with no history; after the
   smoke page, a new window's empty command bar offers its site first, and typing `127` — xdotool
-  on Linux, SendKeys on Windows, key events on macOS, best effort — finds it first;
-  `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
+  on Linux, SendKeys on Windows, key events on macOS, best effort — finds it first; then
+  Ctrl+Y (Cmd+Y on macOS, best effort) must log `history-view` and a `history-list` with at
+  least one page; `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`,
+  `history.png`), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
   with the desktop agent** (it reports `innerWidth`, `innerHeight`, the agent kind and
   `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the
   window (followed by process id, so other apps' WebKit helpers on the runner don't count).
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`, `narrow.png`,
-  `wide.png`, `welcome.png`), the logs, and
+  `wide.png`, `command-bar.png`, `command-typing.png`, `history.png`, `settings-general.png`,
+  `settings-privacy.png`, `welcome.png`), the logs, and
   The app runs on a fresh `LITTLEJOAN_DATA_DIR` that already holds the default `settings.json`,
   so it starts hibernating (memory at rest is measured before any window opens). Then the
   **login-persistence check**: the smoke page's `?persist=set&t=<token>` sets a persistent
@@ -656,7 +728,11 @@ and pushes to `main`:
   **history check**: the main run's `history.json` must hold the smoke page's address with its
   `LJ-SMOKE …` title, its host and a visit, and none of the app's own pages; a run whose
   settings say `"rememberHistory": false` loads the smoke page, hibernates and quits, and must
-  leave no records (log `smoke-history-off.log`). Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  leave no records (log `smoke-history-off.log`); before it quits it runs the **settings
+  check**: `--settings` must open Settings on General and its page load (`settings-window
+  general`, `settings-loaded`; screenshot `settings-general.png`), `--settings privacy` must
+  switch it to Privacy (`settings-privacy.png`, where Remember history is off), and the page
+  window must not open. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).

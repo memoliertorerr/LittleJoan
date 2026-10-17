@@ -11,6 +11,7 @@
 //! | Ctrl+R, F5              | native  | yes   | Reload        |
 //! | Alt+Left / Alt+Right    | native  | yes   | Back / Forward|
 //! | Ctrl+Shift+T            | yes     | yes   | Translate     |
+//! | Ctrl+Y                  | yes     | yes   | History view  |
 //!
 //! "native" = WebView2 already handles it as a browser accelerator key.
 
@@ -28,6 +29,8 @@ pub enum PageAction {
     Translate,
     /// Hand the page to the default browser and hibernate (tray and macOS menu only, no key).
     OpenInBrowser,
+    /// Open the command bar's overlay in its history view.
+    History,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +133,7 @@ pub fn action_for(key: Key, mods: Mods, platform: Platform) -> Option<PageAction
         Key::Letter('w') if only_ctrl => Some(PageAction::Close),
         Key::Letter('l') if only_ctrl => Some(PageAction::OpenLocation),
         Key::Letter('t') if ctrl_shift => Some(PageAction::Translate),
+        Key::Letter('y') if only_ctrl => Some(PageAction::History),
         Key::Letter('r') if linux && only_ctrl => Some(PageAction::Reload),
         Key::F5 if linux && none => Some(PageAction::Reload),
         Key::Left if linux && only_alt => Some(PageAction::Back),
@@ -214,6 +218,27 @@ mod tests {
             action_for(Key::Letter('t'), ctrl_shift, Platform::MacOs),
             None
         );
+    }
+
+    #[test]
+    fn ctrl_y_opens_history_on_windows_and_linux() {
+        for platform in [Platform::Windows, Platform::Linux] {
+            assert_eq!(
+                action_for(Key::Letter('y'), CTRL, platform),
+                Some(PageAction::History)
+            );
+            let ctrl_shift = Mods {
+                shift: true,
+                ..CTRL
+            };
+            assert_eq!(action_for(Key::Letter('y'), ctrl_shift, platform), None);
+            assert_eq!(action_for(Key::Letter('y'), NONE, platform), None);
+            assert_eq!(action_for(Key::Letter('y'), ALT, platform), None);
+        }
+        assert_eq!(Key::from_windows_vk(0x59), Key::Letter('y'));
+        assert_eq!(Key::from_gdk_name("y"), Key::Letter('y'));
+        // macOS: Cmd+Y is the app menu's (menu.rs).
+        assert_eq!(action_for(Key::Letter('y'), CTRL, Platform::MacOs), None);
     }
 
     #[test]

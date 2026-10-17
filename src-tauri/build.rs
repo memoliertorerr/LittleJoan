@@ -15,10 +15,10 @@ fn main() {
             "save_settings",
             "suspend_shortcut",
             "set_start_at_login",
-            "history_top",
-            "history_search",
+            "history_list",
             "suggest",
             "history_remove",
+            "history_clear",
             "open_settings",
         ]),
     ))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SETTINGS_ROW, buildRows, type Row } from "./rows.ts";
+import { HISTORY_ROW, SETTINGS_ROW, buildRows, type Row } from "./rows.ts";
 import { renderRows, type DocumentLike, type ElementLike } from "./view.ts";
 
 /** A stand-in element that records what was done to it and refuses HTML. */
@@ -92,6 +92,13 @@ describe("drawing rows", () => {
     const [settings] = draw([SETTINGS_ROW], null);
     expect(settings?.all().some((el) => el.tag === "img")).toBe(false);
     expect(settings?.all().some((el) => el.className.includes("row-icon-settings"))).toBe(true);
+  });
+
+  it("gives the History command its clock and no favicon", () => {
+    const [history] = draw([HISTORY_ROW], null);
+    expect(history?.all().some((el) => el.tag === "img")).toBe(false);
+    expect(history?.all().some((el) => el.className.includes("row-icon-clock"))).toBe(true);
+    expect(history?.text()).toBe("History");
   });
 
   it("numbers the rows for the mouse", () => {

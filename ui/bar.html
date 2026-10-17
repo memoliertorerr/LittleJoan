@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Little Joan bar</title>
     <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./history/history.css" />
     <script type="module" src="./bar.ts"></script>
   </head>
-  <!-- "overlay": the command bar covers the window; "toolbar": the 40 px strip above the page.
+  <!-- "overlay": the command bar covers the window; "toolbar": the 40 px strip above the page;
+       "history" (with "overlay"): the history view instead of the command bar's field and rows.
        data-tauri-drag-region: empty parts drag the window (on macOS there is no title bar). -->
   <body class="bar-body overlay" data-tauri-drag-region>
     <div class="command">
@@ -68,6 +70,40 @@
         </section>
         <ul id="rows" class="rows" role="listbox" aria-label="Suggestions"></ul>
       </main>
+      <section id="history" class="history-panel" aria-label="History" hidden>
+        <header class="bar-top history-top">
+          <button id="history-back" class="close-button history-back" type="button" aria-label="Back to the command bar" title="Back (Esc)">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
+          </button>
+          <input
+            id="history-search"
+            class="bar-field"
+            type="text"
+            placeholder="Search history…"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            aria-label="Search history"
+            aria-controls="history-rows"
+          />
+          <button id="history-clear" class="text-button" type="button" aria-expanded="false" aria-controls="history-clearing">
+            Clear history…
+          </button>
+        </header>
+        <div id="history-clearing" class="history-clearing" hidden>
+          <span class="history-clearing-label">Clear history from</span>
+          <div id="history-ranges" class="choices" role="group" aria-label="How far back"></div>
+          <div class="history-clearing-actions">
+            <button id="history-clear-cancel" class="text-button" type="button">Cancel</button>
+            <button id="history-clear-confirm" class="text-button danger" type="button">Clear</button>
+          </div>
+        </div>
+        <p id="history-status" class="history-status" role="status" hidden></p>
+        <div class="history-scroll">
+          <ul id="history-rows" class="rows history-rows" role="listbox" aria-label="History"></ul>
+          <p id="history-empty" class="history-empty" hidden></p>
+        </div>
+      </section>
     </div>
   </body>
 </html>

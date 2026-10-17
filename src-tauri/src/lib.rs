@@ -53,6 +53,9 @@ pub fn run() {
                 // `set` logs the outcome; there is no window to show an error in.
                 let _ = autostart::set(app, enabled);
             }
+            if let Some(tab) = args.settings.filter(|_| !args.quit) {
+                settings_window::open(app, Some(tab));
+            }
             if args.quit {
                 joan::quit(app);
             } else if let Some(command) = args.forwarded_command() {
@@ -74,10 +77,10 @@ pub fn run() {
             commands::save_settings,
             commands::suspend_shortcut,
             commands::set_start_at_login,
-            commands::history_top,
-            commands::history_search,
+            commands::history_list,
             commands::suggest,
             commands::history_remove,
+            commands::history_clear,
             commands::open_settings
         ])
         .on_window_event(|window, event| {
@@ -101,7 +104,7 @@ pub fn run() {
             tray::create(handle)?;
             shortcut::register_from_settings(handle);
 
-            // A first launch with flags (e.g. `--show <url>`, `--start-at-login on`) acts on
+            // A first launch with flags (e.g. `--show <url>`, `--start-at-login on`, `--settings`) acts on
             // them; without flags Little Joan starts hibernating — except on the very first run
             // (no settings.json yet), which opens the window once with the welcome.
             let args = cli::parse_args(&std::env::args().collect::<Vec<_>>());
@@ -116,6 +119,9 @@ pub fn run() {
             state::with(handle, |s| s.first_run = welcome);
             if let Some(enabled) = args.start_at_login {
                 let _ = autostart::set(handle, enabled);
+            }
+            if let Some(tab) = args.settings.filter(|_| !args.quit) {
+                settings_window::open(handle, Some(tab));
             }
             if args.quit {
                 // `little-joan --quit` with nothing running: nothing to quit, so this one ends.
