@@ -67,6 +67,22 @@
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (starts once the user's secrets exist) | strong | auto | ⬜ todo |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
+| LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ⬜ todo |
+| LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ⬜ todo |
+| LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ⬜ todo |
+| LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ⬜ todo |
+| LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ⬜ todo |
+| LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ⬜ todo |
+| LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ⬜ todo |
+| LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ⬜ todo |
+| LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ⬜ todo |
+| LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ⬜ todo |
+| LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ⬜ todo |
+| LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ⬜ todo |
+| LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ⬜ todo |
+| LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ⬜ todo |
+| LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ⬜ todo |
+| LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ⬜ todo |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
@@ -81,6 +97,14 @@ to `ubuntu-24.04`) and PR #9 (this plan) are merged. Phase 6 (LJ11 → LJ12) is 
 `lj/p6-first-run` (PR #10): LJ11 and LJ12 done, waiting for the user's review and checks. Next:
 phase 7 (LJ13 → LJ14). LJ18 also waits for the user to add the Apple signing secrets (its prompt
 lists them).**
+
+**v0.2 round 2 (planned 2026-10-17): the user checked phase 6 on their Mac (all passed), PR #10
+was merged, and `v0.2.0-beta.1` was published as a GitHub pre-release. The user then asked for
+Little Joan to look and feel like Little Arc: a command bar with suggestions, history, logins
+that survive, themes, and an extension system with bundled extensions (decisions: "Design
+Decisions Already Made → v0.2 round 2"). These phases (12–17, LJ20–LJ35) run NEXT, before phases
+7–10; LJ19 stays the final v0.2.0 release. The user allowed the agent to merge each phase PR
+once its CI is green (CLAUDE.md, standing exception). Next: phase 12 (LJ20 → LJ21).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -121,6 +145,24 @@ Every phase PR's "Needs human check" names the v0.2 must-not-disturb list above.
     fallback, the Gatekeeper evidence.
 11. **LJ19** · standard — `lj/release-0.2.0` → PR into `lj/p10-macos-signing` (or `main`).
     Checkpoint: the user's checklist; merge, tag and release only on their word.
+
+**v0.2 round 2 phases** — **execution order: 6 (done) → 12 → 13 → 14 → 15 → 16 → 17 → 7 → 8
+→ 9 → 10 → 11.** The user lets the agent merge each phase PR into `main` once CI is green, so
+every phase branches from the latest `main` and its PR goes into `main` (no stacking). The
+phases after 17 then branch from `main` too; LJ15 and LJ16 use the toolbar that LJ24 builds.
+
+12. **LJ20 → LJ21** · strong — `lj/p12-logins-history`. Review: what the cookie checks found per
+    OS and what was fixed; the history store's format, size cap and what it never records.
+13. **LJ22 → LJ24** · strong — `lj/p13-command-bar`. Review: no capability names `joan-page`
+    any more; the overlay layout on Linux; the command bar and toolbar screenshots per OS.
+14. **LJ25 → LJ26** · standard — `lj/p14-history-settings`. Review: deleting and clearing
+    history really removes it from disk; the tabbed Settings window.
+15. **LJ27 → LJ28** · standard (LJ27 strong) — `lj/p15-themes`. Review: theme math tests, the
+    screenshots in light and dark, contrast of text on every preset.
+16. **LJ29 → LJ31** · strong — `lj/p16-extensions`. Review: the security model (extensions run
+    only in the IPC-free page webview, the API's request checks, CSP, path traversal), the docs.
+17. **LJ32 → LJ35** · standard — `lj/p17-bundled-extensions`. Ends in a checkpoint: the user's
+    checklist, then `v0.2.0-beta.2` only on their word.
 
 Never start a phase with uncommitted changes in the tree.
 
@@ -242,6 +284,10 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 | *(v0.2)* A real download (a PDF from a site), "Show in folder", zoom keys | **you** — phase 8 PR | The file is in Downloads under its own name; the folder opens with it selected; zoom steps and resets |
 | *(v0.2)* Wayland-native shortcut (GNOME 48+ or KDE Plasma, Wayland session) | **you** — LJ17 (CI has no portal backend) | The desktop asks once to allow the shortcut; it then summons and dismisses the window |
 | *(v0.2)* Gatekeeper on a DMG downloaded with a browser (notarized build) | **you** — LJ18 / LJ19 | It opens without any warning or `xattr` step |
+| *(round 2)* Cookies and storage survive close, quit and relaunch | CI `smoke` (LJ20) | The smoke page reports its persistent cookie, session cookie and localStorage value back after each step, on all three OSes |
+| *(round 2)* No IPC for the page webview, ever | `cargo test` (LJ22) + smoke (LJ29) | A Rust test reads every capability file and finds no `joan-page`; the test extension reports `ipc=denied` |
+| *(round 2)* How the command bar, toolbar, history view, themes and extensions look | the agent from CI screenshots on all three OSes (each step names its screenshots), then **you** — LJ35 | Screenshots match the step's description in light and dark; at LJ35 it feels like Little Arc on your Mac |
+| *(round 2)* Suggestions feel right with real history | **you** — LJ35 | After a few days of use, the empty command bar shows the sites you actually open most, and typing finds them fast |
 
 The agent self-verifies everything a compiler, a test suite, and CI (including headless
 screenshots of the installed app) can show. Everything that needs a real desktop, real input
@@ -304,6 +350,19 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
     signing when they're absent (forks, or before the user has added them).
 17. *(v0.2)* **CHANGELOG:** every user-facing change goes under `## [Unreleased]` in the same
     commit; LJ19 turns it into `[0.2.0]` with the date.
+18. *(round 2)* **The page webview (`joan-page`) has no IPC at all** — no capability may name it
+    (a Rust test enforces this from LJ22 on). Every trusted screen — the toolbar, the command
+    bar, the welcome, the history view — lives in the bar webview (`joan-bar`) or the settings
+    window. Tauri treats custom-scheme pages as local (Landmines), so this is what keeps
+    extension code, which runs in `joan-page`, away from app commands.
+19. *(round 2)* **Extension code never runs in `joan-bar` or `settings`,** and is never served
+    from the app's own origin. It runs only as top-level `ljext:` documents in `joan-page`, with
+    a CSP from its manifest, and reaches the app only through the validated `ljext` API
+    (LJ29). The bar renders anything an extension supplies (titles, keywords) as text, never
+    as HTML.
+20. *(round 2)* **History never leaves the machine.** It lives in the app's config folder, is
+    loaded only while the window is open (nothing extra at rest), and is never sent anywhere;
+    favicons are loaded by the bar straight from the sites the user visited.
 
 ### Stop conditions
 
@@ -454,6 +513,82 @@ condition.
   notarization in CI from the user's secrets, ad-hoc when they're missing. Windows — unsigned
   for v0.2; the user applies to SignPath Foundation (free for open source), and a step is added
   if it's approved. Linux — nothing to sign; `SHA256SUMS.txt` as before.
+
+### v0.2 round 2 (decided 2026-10-17; the user said "you decide, go ahead")
+
+The user's words: look and feel very similar to Little Arc; when first opened, a mix of the
+most frequent sites; logins survive; history; where Little Arc shows "Contact the Team", a way
+into advanced settings; themes (1–3 muted colors that blend, like Arc's); an extension system,
+documented as experimental so others can write extensions later; bundled extensions —
+useful, productive, fun — including Snake. Decisions made from that, with research
+(Arc's help center via search snippets, Firefox/Chrome ranking docs, Figma/VS Code/Raycast
+extension models) and a read of the vendored Tauri/wry sources:
+
+- **Order:** these phases run before phases 7–10. The user lets the agent merge each phase PR
+  once CI is green; tags and releases still need the user's word (`v0.2.0-beta.1` was approved).
+- **Copy the UX patterns, not the brand.** A command bar overlay with suggestion rows ("Title —
+  domain", favicon, a highlighted row), a slim toolbar, theme gradients. Never Arc's name, logo,
+  icons or artwork (Ground Rule 12).
+- **Two webviews, two trust levels.** `joan-bar` holds every trusted screen and becomes an
+  *overlay* covering the whole window while the command bar or history is open (the page
+  webview is hidden meanwhile); otherwise it is the 40 px toolbar. `joan-page` shows web pages
+  and extension panels and has no IPC at all (Ground Rule 18). The phase-6 welcome moves from
+  the start page into the command bar's empty state.
+- **On summon the command bar is open,** like Little Arc: empty state = the welcome (first run
+  only), then up to 8 top sites by frecency; with no history yet, 4 generic starters (Wikipedia,
+  YouTube, GitHub, Google Maps). Typing: a quick answer if one applies, the best history match
+  (autofill only on a host prefix), "Search <engine> for …", more history matches, matching
+  commands. The last row, where Little Arc has "Contact the Team", is **"Settings &
+  extensions"**. Esc on an empty command bar with no page closes the window (as Esc on the
+  start page did); with a page, it returns to the page.
+- **Frecency** (testable with a fixed clock): per host (`www.` stripped), over the last 20
+  visits within 90 days, score = Σ w · 2^(−age / 14 days), w = 2 for a visit the user typed or
+  picked, 1 for a link, 0 for reloads and redirects. Typed matching: every token must match;
+  points host prefix 10, host word boundary 8, title word prefix 6, path word boundary 4,
+  substring 1, times the frecency. No remote search suggestions (Later).
+- **History store:** JSON in the config folder (`history.json`), one record per URL (title,
+  host, visit count, last 20 visit times and kinds), capped at 5,000 URLs (least frecent
+  dropped), saved atomically like settings, loaded when the window opens and dropped when it
+  closes. Never recorded: the app's own pages, `about:`, `ljext:`, and anything when the
+  setting "Remember history" (default on) is off. No SQLite: one small file matches the
+  project's footprint.
+- **Logins:** persistent cookies already live in each engine's persistent store; CI proves it
+  (LJ20). Session cookies are kept in memory across close → summon within one app run
+  (WebView2 otherwise drops them on every close), never written to disk; quitting forgets them,
+  as browsers do. On macOS, Quit waits for the page to unload before exiting, so fresh cookies
+  reach disk.
+- **Toolbar** (LJ24): favicon + domain (click = command bar with the full address selected), a
+  back button when there is somewhere to go back to, and an "open in default browser" button —
+  Little Arc's "Open in…" analogue. macOS: the traffic lights sit inside the toolbar
+  (`TitleBarStyle::Overlay`, drag region on the empty toolbar). Windows and Linux keep the
+  native title bar for now (custom chrome is Later). This replaces LJ10.1's "no buttons in the
+  bar" rule.
+- **Themes:** settings `theme = { mode: system|light|dark, colors: 1–3 hex, intensity 0–1,
+  grain 0–1 }`, default a neutral preset. All color math in TypeScript (`ui/lib/theme.ts`,
+  unit-tested): picks → OKLCH, lightness clamped (light 0.86–0.93, dark 0.22–0.32), chroma capped
+  at 0.12 × intensity, written as sRGB CSS variables; gradients layered (a base linear gradient
+  plus soft radial blobs for colors 2 and 3) with an SVG `feTurbulence` grain overlay. Applied
+  to the toolbar, the command bar, history, settings, and handed to extensions. Presets: about
+  10 muted palettes. Editor: one hue/chroma pad per color (Arc-style dot on a grid), up to
+  three colors, intensity and grain sliders, mode buttons.
+- **Extensions (experimental):** a folder with `extension.json` (id, name, version,
+  description, author, icon, `apiVersion: 1`, permissions, contributes: `commands` that open a
+  panel, `pageActions` that open a panel with the current page's URL and title) and web files.
+  Bundled ones live in `extensions/<id>/` and are embedded at build time; with "Developer mode"
+  on (Settings → Extensions, off by default) unpacked folders in `<config>/extensions/` load
+  too. They run as top-level documents at `ljext:` URLs in `joan-page` (Ground Rule 19), with
+  a CSP built from their permissions (no network unless declared hosts), and use a small API
+  served by Rust on the same scheme (`storage` with a quota, `theme`, `pageInfo`, `openUrl`,
+  `clipboard`, `close`), each call checked against the requesting webview, the page's current
+  URL and the manifest. `little-joan --extension <id>` opens one (also handy for key bindings).
+- **Quick answers** (calculator, unit and time-zone conversion, random / UUID / password,
+  timestamps) are built in: our own TypeScript in the bar, listed under Extensions as
+  "Built-in" and switchable off. Third-party quick-answer providers are Later (they would need
+  code running on every keystroke).
+- **Bundled extensions:** Snake, 2048, Notes, Focus timer, World clock, QR code (page action),
+  Clean link (page action), Wayback Machine (page action), Copy as Markdown link (page action),
+  JSON formatter, Text tools, Color tools. All local; Wayback only opens web.archive.org in the
+  page.
 
 ---
 
@@ -1984,6 +2119,9 @@ Design (decided with the user; do not relitigate):
   and tell the bar. On Finished: log `download-finished <name> ok|failed` and tell the bar.
 - The URL bar (ui/bar.html, ui/bar.ts, ui/bar-logic.ts) gets a small status area at its right
   edge, pushed from Rust like the address: bar.eval("window.littleJoan.setStatus(<json>)").
+  *(Round 2 runs first: by then the bar is LJ24's Little Arc-style toolbar. Put the status
+  area there, left of the open-in-browser button, and keep LJ22's rule that only the bar holds
+  trusted UI.)*
   It shows "Downloading lj-smoke.bin…", then "lj-smoke.bin saved" with a "Show in folder"
   button, or "Download failed". It clears after 8 s, or at once when the user starts editing
   the address. The button calls a new command `reveal_download()`, which reveals the last
@@ -2276,6 +2414,738 @@ committed to directly).
 
 ---
 
+## v0.2 round 2 steps — the Little Arc feel
+
+> Planned 2026-10-17 (decisions: "Design Decisions Already Made → v0.2 round 2"; Ground Rules
+> 18–20). These run BEFORE phases 7–10. Every phase branches from the latest `main`, and its PR
+> goes into `main`. The agent merges the phase PR itself (a merge commit, never squash, never
+> `--delete-branch`) once verify, package and smoke are green on all three OSes. That's the
+> user's standing exception in CLAUDE.md. Steps whose look matters name CI screenshots: download
+> them into `test-results/ci/`, look at them on all three OSes, describe what you saw in the
+> notes, then delete them.
+
+### LJ20 — Logins survive closing and quitting · strong · auto
+
+> Phase 12. Branch `lj/p12-logins-history` from `main`.
+
+**Verify:** `npm run verify` green, including Rust tests for a pure `cookies.rs`: a cookie with
+no expiry is a session cookie; entries are de-duplicated by name + domain + path; at most 500
+are kept; nothing is ever written to disk. `tests/smoke/smoke-logic.mjs` tests cover the new
+persistence report, and `scripts/ci/smoke-log.mts` tests cover the new rules. CI green on all
+three OSes, with this smoke sequence on the installed app:
+- `?persist=set`, then `--hide` and `--show ?persist=check` → `LJ-PERSIST p=1 s=1 l=1`;
+- set a new token, `--quit` within 1 s, relaunch on the same `LITTLEJOAN_DATA_DIR`, check →
+  `p=1 s=0 l=1` (session cookies end with the app run, by design).
+**Commit:** `lj-step-20: logins survive closing and quitting (cookie and storage checks in smoke)`
+
+```text
+The user wants logins (e.g. Instagram) to survive later sessions. They haven't seen a logout
+yet; make it a tested guarantee.
+
+What the vendored sources say (Landmines, round 2):
+- macOS uses WKWebsiteDataStore.defaultDataStore (persistent).
+- Windows and Linux: Tauri forces data_directory to app_local_data_dir when the app sets none,
+  so state.rs's comment "None keeps the engine's default location" is wrong; correct it.
+- Windows: every wry webview gets its own WebView2 environment, which ends when the window is
+  destroyed, so SESSION cookies vanish on every close.
+- macOS: tray Quit → app.exit(0) → process::exit without unloading the webviews, so cookies set
+  just before quitting may not reach disk.
+
+1. Checks first.
+   - tests/smoke/smoke.html (+ smoke-logic.mjs and its test): `?persist=set&t=<token>` sets a
+     persistent cookie `lj_p=<token>; Max-Age=31536000; Path=/; SameSite=Lax`, a session cookie
+     `lj_s=<token>; Path=/`, and localStorage `lj_l=<token>`, then reports `LJ-PERSIST set`.
+   - `?persist=check&t=<token>` reports `LJ-PERSIST p=<0|1> s=<0|1> l=<0|1>` in the title.
+   - Add `--quit` to cli.rs: forwarded through single-instance, it takes the same path as the
+     tray's Quit. Smoke uses it to quit gracefully.
+   - smoke.mts and smoke-log.mts get the sequence from Verify. The smoke server keeps the same
+     port across the relaunch, because localStorage is per origin (cookies ignore the port).
+   - Push and READ which checks fail on which OS before fixing anything; write that down in the
+     notes.
+2. Session cookies across close → summon: in joan::destroy, before the page is released, read
+   the page webview's cookies (tauri 2.12's Webview::cookies) and keep the session ones in
+   AppState (memory only). In joan::create, before the first navigation, put them back with the
+   webview's cookie setter. Check the exact API in the vendored tauri-2.12.4 source; if there
+   is no way to set a cookie, STOP and record it. Keep the selection rules in a pure cookies.rs
+   with tests. Never write session cookies to disk; quitting forgets them.
+3. macOS quit: if the quit-right-after-set check fails, make Quit (tray.rs and --quit) go
+   through the normal destroy path when a window is open, and wait for the destroy (at most
+   1.5 s) before app.exit(0). If the check passes without it, don't add it, and say so.
+4. If a check still fails after that on an OS, it's a stop condition: report what the engine
+   did.
+5. Docs: README (privacy: what Little Joan keeps and where — cookies and site data in the
+   engine's store, session cookies only in memory), docs/architecture.md (a data-locations table
+   per OS, from the Landmines), CHANGELOG ([Unreleased] → Fixed / Added `--quit`), this plan.
+
+Do NOT build history (LJ21) or touch the bar UI.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ20 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-20: logins survive closing and
+quitting (cookie and storage checks in smoke)". Push, open the phase-12 PR into main as a draft,
+and watch CI until verify, package and smoke are green on all three OSes (Ground Rule 3; two
+honest fix attempts, then stop).
+```
+
+### LJ21 — History: recorder, store, frecency · strong · auto
+
+**Verify:** `npm run verify` green, including Rust tests for a pure `history.rs`:
+- **Recording:** fragments are dropped and queries kept; only `http`/`https` URLs are recorded
+  (never the app's pages, `about:` or `ljext:`); a title change updates the latest record; visit
+  kinds are `typed` (`open_input` or a picked suggestion), `link`, and `reload` (the reload page
+  action).
+- **Frecency:** exact values for the decided formula with a fixed clock.
+- **`top_sites(n, exclude)`:** per host, `www.` stripped, ties go to the latest visit; it opens
+  the host's most-visited URL with at most one path segment, else the origin.
+- **`search(query, limit)`:** the decided points, every token must match.
+- **Store:** capped at 5,000 URLs (least frecent dropped); a bad or missing file is empty
+  history, never a crash; saves are atomic.
+
+Settings gain `rememberHistory` (default true, tolerant parse). CI smoke: after the smoke page
+loads, `history.json` in `LITTLEJOAN_DATA_DIR` holds its URL, title and a visit. A run with
+`rememberHistory: false` records nothing.
+**Commit:** `lj-step-21: local history with frecency, top sites and matching`
+
+```text
+History feeds the command bar (LJ23) and the history view (LJ25). This step builds the data
+layer only.
+
+Design (decided; do not relitigate): see "Design Decisions Already Made → v0.2 round 2"
+(Frecency, History store) and Ground Rule 20.
+- Record natively, with no IPC from the page: in bar.rs's page builder, on_page_load(Finished)
+  records a visit; on_document_title_changed updates the title. The visit kind comes from
+  state: open_input (and, from LJ23, a picked suggestion) sets "typed" for the next load, the
+  reload page action sets "reload", and everything else is "link".
+- src-tauri/src/history.rs: pure types and functions (record, frecency, top_sites, search, cap,
+  parse/serialize) with tests that use an injected clock. A thin store glue (history_store.rs,
+  or part of state.rs) loads history.json from the data folder when the window opens, keeps it
+  in AppState while the window exists, saves it atomically on destroy and every 30 s while
+  dirty, and drops it on hibernate (Option → None), so nothing extra is held at rest.
+- Commands (bar capability only, read-only for now): `history_top(n)` and
+  `history_search(query, limit)`, returning rows of { url, title, host, score }.
+- settings.rs: `rememberHistory` (default true). When it is false, nothing is recorded; the
+  existing history stays until LJ25's clear.
+
+Files: src-tauri/src/{history.rs (new), bar.rs, commands.rs, state.rs, settings.rs,
+page_actions.rs (reload kind), lib.rs, build.rs}, src-tauri/capabilities/bar.json,
+scripts/ci/{smoke.mts, smoke-log.mts (+ test)}, docs/architecture.md (history: where, format,
+cap, what is never recorded), CHANGELOG ([Unreleased] → Added: history is kept locally), this plan.
+
+Do NOT build any UI (LJ23, LJ25).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ21 to ✅, add notes, and
+commit: "lj-step-21: local history with frecency, top sites and matching". Push and watch CI until
+every job is green (two honest attempts, then stop). This ends phase 12. Fill the PR description
+from the template ("Needs human check": nothing visible yet; the regression list). Once CI is
+green, merge the PR into main with a merge commit (CLAUDE.md standing exception), then stop and
+report.
+```
+
+### LJ22 — Trusted screens move into the bar; the page webview has no IPC; overlay mode · strong · auto
+
+> Phase 13. Branch `lj/p13-command-bar` from `main`.
+
+**Verify:** `npm run verify` green, including:
+- a Rust test that reads every file in `src-tauri/capabilities/` and fails if any capability
+  names `joan-page`, or uses a window-level scope covering the page window;
+- `layout.rs` tests for the new mode enum (`Toolbar`, `Overlay`, `Fullscreen`) at scale 1, 1.5
+  and 2 (overlay: the bar is the whole window and the page is hidden);
+- vitest tests for the bar's view state (toolbar ↔ overlay, plus the Esc rules: no page →
+  hibernate; page → close the overlay and focus the page).
+
+`capabilities/joan.json` is gone. `start_info` and `set_start_at_login` are granted to the bar.
+`ui/index.html` makes no IPC call. CI green on all three:
+- the smoke log shows `overlay true` right after `window-created`, and `overlay false` once the
+  smoke page is opened;
+- the first-run check still sees `welcome`, now from the bar;
+- screenshots: `start.png` (the overlay fills the window) and `page.png` (40 px bar above the
+  page), including the Linux scale-2 job.
+**Commit:** `lj-step-22: trusted screens live in the bar webview; the page webview has no IPC; overlay mode`
+
+```text
+Tauri treats custom-scheme pages as LOCAL, so anything local in joan-page gets joan-page's
+local capabilities (Landmines). Extensions (LJ29) will run in joan-page, so joan-page must have
+NO capabilities. Every trusted screen moves into joan-bar, which becomes an overlay covering the
+window while the command bar (and, from LJ25, history) is open. Ground Rule 18.
+
+1. layout.rs: a mode enum. Toolbar = today's layout. Overlay = the bar takes the whole window and
+   the page is hidden. Fullscreen = today's element-fullscreen case (the bar hidden). Element
+   fullscreen always wins: starting it closes the overlay. Tests at scale 1, 1.5 and 2.
+2. bar.rs: `set_overlay(app, on)`. Windows/macOS: the bar's bounds become the whole window and
+   page.hide(); turning it off restores the toolbar layout and page.show(). Linux (GtkBox,
+   platform/linux.rs): change the bar's height request to the window's height and hide the
+   page widget, then undo both. Log `overlay true|false` to the smoke log. Open the overlay on
+   every summon, on Ctrl/Cmd+L (page keys and the macOS menu, with the address selected) and
+   from focus_bar. Close it after open_input navigates. Add a command `set_overlay(on)` for
+   the bar (allow-set-overlay) so the bar's own Esc can close it.
+3. Move the phase-6 welcome out of the start page: its markup, logic and tests go from
+   ui/start.ts / start-logic.ts into the bar (a new ui/command/ module; keep files small). It
+   shows in the overlay below the field on the first run. capabilities/bar.json gains
+   allow-start-info and allow-set-start-at-login; delete capabilities/joan.json; ui/index.html
+   becomes a plain page with no script that calls IPC (a neutral background).
+4. The overlay's content for now: the field at the top (as today), the welcome on the first run,
+   and an empty area that LJ23 fills. Esc follows the rules in Verify.
+5. Add the capability test from Verify (it parses the JSON files; use serde_json, which is
+   already a dependency).
+6. Smoke and docs: smoke.mts / smoke-log.mts rules for `overlay`; README (summon opens the
+   command bar), docs/architecture.md (the two trust levels; capabilities table), this plan.
+
+Do NOT build suggestions (LJ23) or restyle the toolbar (LJ24).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ22 to ✅, add notes, and
+commit: "lj-step-22: trusted screens live in the bar webview; the page webview has no IPC; overlay
+mode". Push, open the phase-13 PR into main as a draft, and watch CI until every job is green
+(two honest attempts, then stop). Look at start.png and page.png on every OS.
+```
+
+### LJ23 — The command bar · strong · auto
+
+**Verify:** `npm run verify` green, including vitest tests for a pure `ui/command/rows.ts`:
+- **Rows** from (query, history rows, quick-answer hook, extension commands, engine), in the
+  decided order;
+- **Autofill** only on a host prefix, and only at or above the average score;
+- **At most** 8 suggestion rows, plus "Settings & extensions", which is always last;
+- **Keys:** ↑/↓ move without wrapping, Enter opens, Tab accepts the autofill, and
+  Shift+Delete removes a history row;
+- **Starters:** the 4 generic ones when history is empty;
+- **Text only:** a title containing `<img src=x onerror=…>` renders as text.
+
+Rust: `suggest(query)` returns the rows; `history_remove(url)` exists. The CSP adds `https:` to
+`img-src` only. CI green on all three:
+- after the smoke page is visited and the window re-summoned, the smoke log shows
+  `suggestions <n> first=127.0.0.1`;
+- screenshot `command-bar.png` (the empty state, with the smoke host as a top site);
+- screenshot `command-typing.png` (after typing `127`; xdotool on Linux, SendKeys on Windows,
+  best effort on macOS).
+**Commit:** `lj-step-23: the command bar — top sites, history matches, search, keyboard`
+
+```text
+Build the command bar in the overlay (decisions: "v0.2 round 2", the command-bar and Frecency
+bullets). The look follows the user's screenshot of Little Arc's command bar:
+- a rounded panel with a search icon, the placeholder "Search or enter URL…" and a close (×)
+  button on the right;
+- one row per suggestion: a favicon, then "Title — domain" with the domain muted, and the
+  selected row filled with the accent color;
+- the last row "Settings & extensions" with a gear icon (where Little Arc shows "Contact the
+  Team").
+Keyboard first; the mouse works too.
+
+1. Rust: `suggest(query)` (bar capability). It returns { kind: topSite|history|search|starter,
+   title, url, host } rows from history.rs: top sites when the query is empty (excluding the
+   current page), matches otherwise, and the 4 starters when history is empty. Also
+   `history_remove(url)` for Shift+Delete, and `open_settings(tab?)` (opens the settings window,
+   settings_window.rs; tab is used from LJ26). A picked history row records the next visit as
+   "typed" (LJ21).
+2. ui/command/rows.ts (pure, tested): build the row list as in Verify. A quick-answer hook
+   (empty until LJ31) and a commands hook (empty until LJ30) exist from now on.
+3. ui/command/view.ts: render the rows with textContent only, never innerHTML for anything that
+   came from history or an extension. Favicons are `<img src="https://<host>/favicon.ico">`
+   with a fallback: the host's first letter in a tinted circle. In tauri.conf.json, add `https:`
+   to img-src and nothing else.
+4. Typing debounces suggest() by 60 ms. Enter on the field with no selection keeps today's
+   behavior (open_input: address or search).
+5. Smoke: re-summon after the smoke page and log `suggestions <count> first=<host>` (from the
+   bar). Take both screenshots. Add the smoke-log rules with tests.
+6. Docs: README (the command bar), docs/architecture.md (commands, CSP), CHANGELOG.
+
+Do NOT add quick answers (LJ31), extension commands (LJ30) or the history view (LJ25).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ23 to ✅, add notes, and
+commit: "lj-step-23: the command bar — top sites, history matches, search, keyboard". Push and
+watch CI until every job is green (two honest attempts, then stop). Look at both screenshots on
+every OS.
+```
+
+### LJ24 — The Little Arc-style toolbar · strong · auto
+
+**Verify:** `npm run verify` green, including:
+- vitest tests for the toolbar's pure logic (the domain shown: `www.` stripped, IPs as is, long
+  hosts shortened in the middle; the back button enabled only after the page navigated within
+  this window);
+- Rust tests for the navigation counter that drives it.
+
+CI green on all three; `page.png` shows the favicon, `127.0.0.1`, a back button and an
+"open in default browser" button. On macOS, `TitleBarStyle::Overlay` puts the traffic lights
+inside the toolbar with no overlap, and the screenshot shows it. The bar's capability gains
+`core:window:allow-start-dragging` (the empty toolbar area drags the window).
+**Commit:** `lj-step-24: Little Arc-style toolbar; macOS traffic lights inside it`
+
+```text
+Restyle the 40 px bar (Toolbar mode) after Little Arc: a slim, theme-tinted strip.
+- Left: a back button (enabled once the page has somewhere to go back to, tracked natively by
+  counting this window's page loads and backs).
+- Middle: the favicon and the domain; a click opens the command bar with the full address
+  selected.
+- Right: "open in default browser" (the existing page action, then hibernate, as today).
+
+This replaces LJ10.1's "no buttons in the bar" rule (decided by the user's Little Arc request).
+
+- macOS: the page window uses TitleBarStyle::Overlay with a hidden title, so the traffic lights
+  sit inside the toolbar. Leave about 78 px of padding on the left, and check the overlay
+  command bar too. The bar webview starts at y = 0 under the transparent title bar. The LJ10.1
+  landmine about content under the title bar is the point here; re-check it in the
+  screenshot. Empty toolbar areas get `data-tauri-drag-region`, and the bar's capability gains
+  core:window:allow-start-dragging.
+- Windows and Linux keep the native title bar (custom chrome is Later).
+- Keep keyboard paths: Ctrl/Cmd+L, Alt+Left / Cmd+[, and the tray items all still work.
+
+Files: ui/bar.html, ui/bar.ts, a small ui/toolbar/ module (+ tests), ui/style.css,
+src-tauri/src/{joan.rs, bar.rs, commands.rs if a command is needed}, src-tauri/capabilities/bar.json,
+README, docs/architecture.md, CHANGELOG, this plan.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ24 to ✅, add notes, and
+commit: "lj-step-24: Little Arc-style toolbar; macOS traffic lights inside it". Push and watch CI
+until every job is green (two honest attempts, then stop). Look at page.png and command-bar.png
+on every OS. This ends phase 13. Fill the PR description:
+- Needs human check (at LJ35): dragging the window by the toolbar on macOS.
+- The regression list.
+Once CI is green, merge into main (merge commit), then stop and report.
+```
+
+### LJ25 — History view · standard · auto
+
+> Phase 14. Branch `lj/p14-history-settings` from `main`.
+
+**Verify:** `npm run verify` green, including:
+- vitest tests for `ui/history/logic.ts`: grouping by local day (Today, Yesterday, then dates),
+  a search filter, and the "Clear" range choices;
+- Rust tests: `history_remove(url)` and `history_clear(range: hour|day|week|all)` remove
+  entries from memory AND rewrite `history.json`.
+
+Ctrl/Cmd+Y (page keys and the macOS menu) and a "History" command row open the overlay in its
+history view. CI green; screenshot `history.png` (opened with Ctrl+Y: xdotool on Linux, SendKeys
+on Windows, best effort on macOS) shows the smoke page under Today.
+**Commit:** `lj-step-25: history view (Ctrl/Cmd+Y): by day, search, delete, clear`
+
+```text
+A history view in the overlay (trusted, in joan-bar).
+- A list grouped by day: each row shows the favicon, title, domain and time; a click opens the
+  page.
+- A search field.
+- Each row has a delete (×) button.
+- "Clear history…" offers last hour / today / this week / everything.
+- Esc returns to the command bar.
+
+Rust: history_clear(range) (bar capability, and the settings window's for LJ26's Privacy tab).
+Keys: Ctrl+Y on Windows/Linux and Cmd+Y on macOS (keys.rs, the macOS menu in menu.rs,
+platform/win.rs and linux.rs through keys.rs). The command bar gets a "History" row when the
+query matches "history".
+
+Files: ui/history/ (new, + tests), ui/bar.ts, src-tauri/src/{history.rs, commands.rs, keys.rs,
+menu.rs, page_actions.rs}, build.rs, capabilities/{bar,settings}.json, scripts/ci/smoke.mts (+ log
+rules), README (page keys table), docs/architecture.md, CHANGELOG, this plan.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ25 to ✅, add notes, and
+commit: "lj-step-25: history view (Ctrl/Cmd+Y): by day, search, delete, clear". Push, open the
+phase-14 PR into main as a draft, and watch CI until every job is green (two honest attempts,
+then stop). Look at history.png.
+```
+
+### LJ26 — Settings window with tabs · standard · auto
+
+**Verify:** `npm run verify` green, including vitest tests for `ui/settings-logic.ts` (tab
+state; change detection across tabs; the Privacy tab's clear action). The settings window has
+these tabs:
+- **General:** shortcut, search engine, translate language, mobile sites, start at login.
+- **Appearance:** a placeholder until LJ27.
+- **Extensions:** a placeholder until LJ30.
+- **Privacy:** remember history, clear history, and what is stored where.
+- **About:** version, license, repository link, and the "inspired by Little Arc" line as plain
+  text.
+
+`little-joan --settings [tab]` opens it on a tab, and "Settings & extensions" in the command bar
+opens it on Extensions. CI green; screenshots `settings-general.png` and `settings-privacy.png`
+via `--settings`.
+**Commit:** `lj-step-26: settings window with tabs; "Settings & extensions" opens it`
+
+```text
+Turn the settings window into the "advanced settings" the user asked for, where Little Arc has
+"Contact the Team".
+- Tabs: a sidebar on the left, the content on the right, in a window about 600×480.
+- Save/Cancel stay at the bottom and cover all tabs.
+- The window's capability gains history_clear (from LJ25).
+- `--settings [general|appearance|extensions|privacy|about]` in cli.rs is forwarded through
+  single-instance and opens or focuses the window on that tab (settings_window.rs).
+- open_settings(tab) from LJ23 uses the same path.
+
+Files: ui/settings.{html,ts}, ui/settings-logic.ts (+ test), ui/style.css,
+src-tauri/src/{settings_window.rs, cli.rs, commands.rs, lib.rs}, capabilities/settings.json,
+scripts/ci/smoke.mts (screenshots), README, docs/architecture.md, CHANGELOG, this plan.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ26 to ✅, add notes, and
+commit: "lj-step-26: settings window with tabs; \"Settings & extensions\" opens it". Push and watch
+CI until every job is green (two honest attempts, then stop). Look at both screenshots. This
+ends phase 14: fill the PR description, merge into main once green (merge commit), then stop and
+report.
+```
+
+### LJ27 — Theme engine · strong · auto
+
+> Phase 15. Branch `lj/p15-themes` from `main`.
+
+**Verify:** `npm run verify` green, including:
+- vitest tests for `ui/lib/theme.ts`:
+  - hex ↔ OKLab/OKLCH conversions match known values;
+  - the clamps (light L 0.86–0.93, dark L 0.22–0.32, C ≤ 0.12 × intensity) hold;
+  - the gradient CSS for 1, 2 and 3 colors is deterministic;
+  - text reaches a contrast ratio of at least 4.5:1 against every gradient stop for every
+    preset in both modes;
+  - the grain overlay is an SVG data URI with `feTurbulence` at the grain's opacity;
+- Rust `settings.rs` tests for a tolerant `theme` field: invalid colors are dropped, 1–3 are
+  kept, numbers are clamped, mode is `system|light|dark`, and the default is the neutral preset.
+
+The theme is applied to the toolbar, the command bar, the history view and the settings window,
+and changes reach an open window without reopening it. CI green; with a two-color, grain 0.4
+theme written into `settings.json`, the screenshots `command-bar.png` and `page.png` show the
+gradient, plus a `mode: dark` run's `command-bar-dark.png`.
+**Commit:** `lj-step-27: theme engine — 1–3 muted colors, intensity, grain, light/dark/system`
+
+```text
+Arc-like themes (decisions: "v0.2 round 2", Themes bullet). All color math in TypeScript, so all
+three engines get plain sRGB values.
+1. ui/lib/theme.ts (pure, tested):
+   - conversions between hex and OKLab/OKLCH;
+   - `mute(color, mode, intensity)` with the decided clamps;
+   - `tokens(theme, systemDark)` → CSS variables: --lj-bg-0..2, --lj-fg, --lj-fg-muted,
+     --lj-accent, --lj-field, --lj-row-hover, --lj-row-selected;
+   - `gradientCss(tokens)`: a base linear gradient in sRGB stops, computed in OKLab for the
+     midpoints, plus radial blobs for colors 2 and 3;
+   - `grainUri(grain)`: an SVG feTurbulence tile;
+   - about 10 PRESETS of muted palettes.
+   Text color: pick near-black or near-white so the contrast test holds.
+2. settings.rs: `theme` (tolerant, with tests). get_settings and save_settings carry it.
+3. Applying it:
+   - the bar reads the theme on load (start_info gains it) and exposes
+     window.littleJoan.setTheme;
+   - after a save, Rust pushes the new theme to the bar with eval and to the settings window
+     with an event;
+   - ui/style.css switches to the --lj-* variables; system mode follows prefers-color-scheme;
+   - ui/index.html stays neutral, since it has no IPC.
+4. Smoke: write the theme into settings.json for the screenshot runs (a separate launch, so the
+   main flow's memory numbers don't move), and take the screenshots from Verify.
+5. Docs: README (themes), docs/architecture.md, CHANGELOG, this plan.
+
+Do NOT build the editor (LJ28).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ27 to ✅, add notes, and
+commit: "lj-step-27: theme engine — 1–3 muted colors, intensity, grain, light/dark/system". Push,
+open the phase-15 PR into main as a draft, and watch CI until every job is green (two honest
+attempts, then stop). Look at the screenshots in light and dark.
+```
+
+### LJ28 — Appearance editor · standard · auto
+
+**Verify:** `npm run verify` green, including vitest tests for `ui/settings/appearance-logic.ts`:
+- pad coordinates ↔ hue/chroma (round trip within the muted range);
+- adding and removing colors (1–3);
+- presets (at least 10, all passing LJ27's contrast test);
+- preview vs. saved state (Cancel restores the saved theme).
+
+The Appearance tab has mode buttons (System / Light / Dark), preset swatches, up to three color
+pads (a dot on a hue/chroma grid, like Arc's), intensity and grain sliders, and a live preview of
+the toolbar and the command bar. The open window previews while you edit, and Save keeps it. CI
+green; screenshot `settings-appearance.png` via `--settings appearance`.
+**Commit:** `lj-step-28: appearance editor with color pads, presets and live preview`
+
+```text
+The editor for LJ27's themes, in the settings window's Appearance tab.
+- A color pad is a 2-D grid: x is hue (0–360) and y is chroma (0 to the muted maximum). Drag
+  the dot with the mouse, or move it with the arrow keys for accessibility.
+- "+" adds a color (up to 3); clicking a color's dot selects it, and a button removes it.
+- Presets apply in one click.
+- Intensity and grain are range inputs.
+- While editing, the settings window sends a preview to the page window (an app event; not
+  saved). Cancel restores the saved theme; Save persists it.
+
+Files: ui/settings/ (appearance view and logic, + tests), ui/settings.{html,ts}, ui/style.css,
+src-tauri/src/{commands.rs (preview_theme), lib.rs}, build.rs, capabilities/settings.json,
+scripts/ci/smoke.mts (screenshot), README, CHANGELOG, this plan.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ28 to ✅, add notes, and
+commit: "lj-step-28: appearance editor with color pads, presets and live preview". Push and watch
+CI until every job is green (two honest attempts, then stop). Look at the screenshot. This ends
+phase 15: fill the PR description, merge into main once green, then stop and report.
+```
+
+### LJ29 — Extension runtime · strong · auto
+
+> Phase 16. Branch `lj/p16-extensions` from `main`.
+
+**Verify:** `npm run verify` green, including Rust tests for:
+- **Manifest validation:**
+  - id `^[a-z0-9][a-z0-9-]{1,31}$`, `apiVersion` 1;
+  - permissions only from `storage`, `clipboard`, `pageInfo` and `network:<https host>`
+    (optionally with a leading `*.`);
+  - `contributes.commands` / `pageActions` whose panel paths are inside the folder.
+- **Path resolution:** no `..`, no absolute paths, no percent-encoded traversal, no symlink
+  leaving the folder.
+- **The CSP builder:** `default-src 'self'; script-src 'self'; style-src 'self'
+  'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self'
+  data:; connect-src 'self' <declared hosts>; frame-src 'none'; object-src 'none'; base-uri
+  'none'; form-action 'none'`.
+- **API request checks:**
+  - the webview is `joan-page`;
+  - the Origin is the extension's ljext origin;
+  - the page's current URL is inside that extension;
+  - the request is a POST with the `X-LJ-Api: 1` header;
+  - the method is on the allowlist and the permission is declared;
+  - storage is capped at 1 MB per extension, with keys of 128 characters at most.
+- **The navigation guard:**
+  - `ljext:` URLs are allowed in `joan-page` only when the app opened that extension;
+  - Windows' `http(s)://ljext.localhost` form counts as ljext, never as plain http;
+  - `ljext:` is never allowed in the bar.
+
+CI green on all three:
+- `--extension hello` shows `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked` in the
+  title;
+- the smoke page's own `fetch` to the ljext API reports `ljext-api=blocked`.
+**Commit:** `lj-step-29: extension runtime — manifest, ljext protocol, per-extension CSP, checked API`
+
+```text
+The extension platform (decisions: "v0.2 round 2", Extensions bullet; Ground Rules 18–19;
+Landmines on custom schemes and Windows iframes). Experimental, but the security model is not.
+
+1. src-tauri/src/extensions/ (keep each file under ~400 lines):
+   - manifest.rs: types, parse and validate (pure, tested);
+   - registry.rs: bundled extensions plus, when settings `developerMode` is true (default
+     false), unpacked folders in `<config dir>/extensions/<id>/`; a bad extension is skipped
+     with a logged reason, never a crash;
+   - protocol.rs: register_asynchronous_uri_scheme_protocol("ljext"). It serves files with the
+     CSP from the manifest, the right MIME type, and `X-Content-Type-Options: nosniff`, and
+     answers `/__lj/sdk/v1.js` (the JS SDK, an embedded string) and `/__lj/api/v1/<method>`
+     (api.rs);
+   - api.rs: the request checks from Verify, then these methods: storage.get/set/remove/keys
+     (`<config dir>/extension-data/<id>.json`, saved atomically), theme (the current tokens
+     from LJ27), pageInfo (the URL and title the panel was opened for; pageInfo permission),
+     openUrl({url, where: page|browser}) (http/https only), clipboard.writeText (clipboard
+     permission), and close (back to the previous page, or the command bar).
+2. Bundled extensions: a top-level `extensions/<id>/` folder, embedded at build time by build.rs
+   (it generates `$OUT_DIR/bundled_extensions.rs` with include_bytes!; no new crate). Add
+   `extensions/hello/`, the template and smoke target: it calls storage and theme, tries
+   `window.__TAURI_INTERNALS__?.invoke("start_info")` (must fail or be absent), tries a fetch
+   to https://example.com (the CSP must block it), and reports the line from Verify in its
+   title.
+3. URLs and origins: try one origin per extension (`ljext://<id>/…`) on macOS/Linux, and find
+   what WebView2 maps it to. If Windows can't give each extension its own origin, use
+   `ljext://localhost/<id>/…` everywhere and document that localStorage is shared, so authors
+   must use littleJoan.storage. Record what you find under Landmines.
+4. navigation.rs and bar.rs: the guard from Verify. Opening an extension = closing the overlay
+   and navigating joan-page to its panel URL, with an "expected ljext URL" flag the guard
+   consumes. The toolbar shows the extension's name and icon instead of a domain.
+5. cli.rs: `--extension <id>` (forwarded; it opens the window if needed). Smoke: run it and the
+   smoke page's blocked-API fetch; add the smoke-log rules with tests.
+6. Docs: docs/architecture.md (an extensions section with the trust diagram), CHANGELOG, this
+   plan. (docs/extensions.md comes in LJ30.)
+
+Do NOT show extensions in the command bar or Settings yet (LJ30), and do not add third-party
+quick-answer providers (Later).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ29 to ✅, add notes, and
+commit: "lj-step-29: extension runtime — manifest, ljext protocol, per-extension CSP, checked API".
+Push, open the phase-16 PR into main as a draft, and watch CI until every job is green (two
+honest attempts, then stop).
+```
+
+### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
+
+**Verify:** `npm run verify` green, including vitest tests:
+- extension commands match by title and keywords and render as text with the extension's name;
+- page actions show only while a web page is open (and say "for this page");
+- disabled extensions don't show.
+
+Settings → Extensions lists Built-in, Bundled and Developer extensions, with an
+enable/disable switch for each (settings `disabledExtensions`) and details: version, author, and
+permissions in plain words. It has a Developer mode switch with a warning, "Open extensions
+folder" (revealed with the opener) and "Reload extensions". `docs/extensions.md` exists, marked
+experimental, and the README links it. CI green; screenshot `settings-extensions.png`, plus
+`command-hello.png` (typing "hello": xdotool / SendKeys).
+**Commit:** `lj-step-30: extensions in the command bar and Settings; developer mode; extension docs`
+
+```text
+1. Commands: `extensions_list()` (bar and settings capabilities) returns the enabled
+   extensions' commands and page actions. The command bar's commands hook from LJ23 matches
+   them. Picking a page action opens its panel with the current page's URL and title (when it
+   has pageInfo).
+2. Settings → Extensions tab, as in Verify. settings.rs gains `disabledExtensions: string[]` and
+   `developerMode: bool` (from LJ29), parsed tolerantly.
+3. docs/extensions.md (experimental):
+   - what an extension is and isn't;
+   - a quick start (copy extensions/hello into the extensions folder, turn on Developer mode,
+     run `little-joan --extension hello`);
+   - the manifest reference;
+   - the permissions;
+   - the SDK/API reference with examples;
+   - the CSP and what is blocked;
+   - storage limits;
+   - testing;
+   - the security model (why there is no IPC, and what the checks are);
+   - how bundled extensions get into the repository (a PR).
+   The README links it under "Extensions (experimental)".
+4. extensions/hello/README.md explains each file, as the template.
+
+Files: ui/command/ (+ tests), ui/settings/ (extensions view and logic, + tests),
+src-tauri/src/{extensions/registry.rs, commands.rs, settings.rs}, build.rs, capabilities/,
+docs/extensions.md (new), extensions/hello/README.md, README, CHANGELOG, this plan.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ30 to ✅, add notes, and
+commit: "lj-step-30: extensions in the command bar and Settings; developer mode; extension docs".
+Push and watch CI until every job is green (two honest attempts, then stop). Look at both
+screenshots.
+```
+
+### LJ31 — Built-in quick answers · standard · auto
+
+**Verify:** `npm run verify` green, including vitest tests for `ui/answers/`:
+- **Calculator:** a real parser, never `eval` / `Function`. It handles + − × ÷ ^ %, parentheses,
+  decimals, `pi`, `e`, `sqrt`, `sin`, `cos`, `log`, division by zero, and precision.
+- **Units:** length, mass, temperature, volume, speed and data sizes (`10 km in mi`,
+  `72f to c`).
+- **Time zones:** `time in Tokyo`, `3pm london to new york`. They use Intl with an injected
+  clock and a map of about 150 cities to IANA zones.
+- **Random:** `uuid`, `password 20`, `roll 2d6`, `flip a coin`, `random 1-100`.
+- **Timestamps:** `1700000000`, `now unix`.
+
+The answer row comes first and Enter copies the answer. Each built-in can be switched off in
+Settings → Extensions → Built-in. CI green; screenshot `answer.png` (typing `= 12*7`).
+**Commit:** `lj-step-31: built-in quick answers — calculator, units, time zones, random, timestamps`
+
+```text
+Quick answers are our own code in the bar (decisions: they stay built-in; third-party
+providers are Later). Fill LJ23's quick-answer hook with ui/answers/{calc,units,time,random,
+timestamp}.ts. Each module exports a pure `answer(query, now) -> {title, subtitle, copy} | null`
+plus tests.
+- Copying uses navigator.clipboard.writeText from the trusted bar on the Enter keypress, falling
+  back to a hidden textarea and execCommand; show "Copied" briefly.
+- They are listed as Built-in in Settings → Extensions, switched off through
+  `disabledExtensions` with ids `builtin:calc` and so on.
+
+Files: ui/answers/ (new, + tests), ui/command/rows.ts, ui/settings/ (built-in list),
+scripts/ci/smoke.mts (screenshot), README (examples), docs/extensions.md (built-ins), CHANGELOG,
+this plan.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ31 to ✅, add notes, and
+commit: "lj-step-31: built-in quick answers — calculator, units, time zones, random, timestamps".
+Push and watch CI until every job is green (two honest attempts, then stop). Look at answer.png.
+This ends phase 16:
+- Fill the PR description. The security model is the review focus: list the checks and where
+  each one is tested.
+- Merge into main once green (merge commit), then stop and report.
+```
+
+### LJ32 — Bundled games: Snake and 2048 · standard · auto
+
+> Phase 17. Branch `lj/p17-bundled-extensions` from `main`.
+
+**Verify:** `npm run verify` green. Extensions are plain JavaScript, with no build step, so
+authors can copy them. vitest includes `extensions/**/*.test.ts`, which import each game's pure
+`logic.js`:
+- **Snake:** movement on a grid, growth, wall and self collision, no 180° reversal, speed-up,
+  pause on Space, arrows and WASD.
+- **2048:** one merge per tile per move, spawning, game over, best score.
+
+High scores go through `littleJoan.storage`, and colors come from `littleJoan.theme`. CI green;
+screenshots `snake.png` and `2048.png` via `--extension snake` / `--extension 2048`.
+**Commit:** `lj-step-32: bundled games — Snake and 2048`
+
+```text
+Two small games as bundled extensions in extensions/snake/ and extensions/2048/. Each has
+extension.json (a command "Play Snake" / "Play 2048", permission storage), index.html, logic.js
+(pure, exported), ui.js (canvas or DOM, themed), an icon.svg made from original simple
+geometry, and a test file. Keyboard only; responsive to the panel size, including phone width;
+no network.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ32 to ✅, add notes, and
+commit: "lj-step-32: bundled games — Snake and 2048". Push, open the phase-17 PR into main as a
+draft, and watch CI until every job is green (two honest attempts, then stop). Look at both
+screenshots.
+```
+
+### LJ33 — Bundled productivity: Notes, Focus timer, World clock · standard · auto
+
+**Verify:** `npm run verify` green, including vitest tests for each `logic.js`:
+- **Notes:** several notes, autosave with a debounce, search, copy a note.
+- **Focus timer:** 25 / 5 / 15 cycles, pause and resume. The end time is stored, so reopening
+  shows the time left; there are no background alarms while Little Joan hibernates, and the
+  panel says so.
+- **World clock:** add and remove cities, correct across DST with an injected clock.
+
+CI green; screenshots `notes.png`, `focus.png`, `clock.png` via `--extension`.
+**Commit:** `lj-step-33: bundled productivity — Notes, Focus timer, World clock`
+
+```text
+Three bundled extensions in extensions/notes/, extensions/focus/ and extensions/clock/, with
+the same layout as LJ32. All local, using storage only (Notes: clipboard too). The focus timer
+plays a short WebAudio chime while the panel is open.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ33 to ✅, add notes, and
+commit: "lj-step-33: bundled productivity — Notes, Focus timer, World clock". Push and watch CI
+until every job is green (two honest attempts, then stop). Look at the screenshots.
+```
+
+### LJ34 — Bundled page actions and tools · standard · auto
+
+**Verify:** `npm run verify` green, including vitest tests:
+- **QR code:** a QR encoder (byte mode, versions 1–10, error correction M), compared with
+  reference matrices.
+- **Clean link:** rules that strip `utm_*`, `fbclid`, `gclid`, `igshid`, `mc_eid`, `si`, `ref_src`
+  and similar, while keeping functional parameters.
+- **Markdown link:** escaping.
+- **JSON:** pretty-print, minify, and validation with the error position.
+- **Text tools:** counts, case, base64 and URL encode/decode, sorting lines.
+- **Color tools:** hex / rgb / hsl / oklch conversions and contrast.
+
+The page actions (QR code, Clean link, Wayback Machine, Copy as Markdown link) appear in the
+command bar only while a web page is open, and receive it through pageInfo. Wayback opens
+`https://web.archive.org/web/*/<url>` in the page. CI green; screenshots `qr.png` (on the smoke
+page) and `json.png`.
+**Commit:** `lj-step-34: bundled page actions and tools`
+
+```text
+Bundled extensions: extensions/qr/, extensions/clean-link/, extensions/wayback/ and
+extensions/markdown-link/ (page actions with pageInfo; clean-link and markdown-link also use
+clipboard), plus extensions/json/, extensions/text-tools/ and extensions/color/ (commands). Same
+layout as LJ32. All local; nothing fetches the network (Wayback only opens a page). Write the
+clean-link rules from scratch (don't copy ClearURLs' LGPL rules), with tests.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ34 to ✅, add notes, and
+commit: "lj-step-34: bundled page actions and tools". Push and watch CI until every job is green
+(two honest attempts, then stop). Look at the screenshots.
+```
+
+### LJ35 — Docs, screenshots, the user's checklist · standard · checkpoint
+
+**Verify:** `npm run verify` green. The README's "Using it" covers the command bar, the toolbar,
+history, themes and extensions, with screenshots in `docs/images/` taken from CI (the smoke page
+only, so no personal data). CHANGELOG `[Unreleased]` lists everything from round 2.
+`docs/architecture.md` and `docs/extensions.md` are current. CI green. **Checkpoint:** the
+user ticks the checklist.
+**Commit:** `lj-step-35: docs and screenshots for the command bar, themes and extensions`
+
+```text
+Bring the docs up to date with round 2, then hand the user a checklist.
+
+Fill the PR description. Needs human check, on your Mac with the CI build of this PR (install
+it as before):
+- [ ] Summon: the command bar opens, like Little Arc's. After a day or two of use, the empty
+      state shows the sites you open most, and typing finds them.
+- [ ] The toolbar: domain, back, open in browser; the traffic lights sit inside it; you can drag
+      the window by the toolbar.
+- [ ] Logins: log in to Instagram; close and summon; quit and relaunch; reboot. You stay logged
+      in.
+- [ ] History: ⌘Y, search, delete one, clear the last hour.
+- [ ] Themes: try three presets, then make your own with three colors; light, dark and system.
+- [ ] Extensions: Snake, 2048, Notes, Focus timer, World clock; on a page, QR code, Clean link,
+      Wayback; ⌘L then "= 12*7", "10 km in mi", "time in Tokyo".
+- [ ] The welcome on a fresh profile still works; start at login still works.
+- [ ] The must-not-disturb list.
+
+Merge the PR once CI is green (docs only), then STOP for the checklist. A `v0.2.0-beta.2`
+pre-release happens only on the user's word, the same way as beta.1: bump the versions through
+a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
+`gh release create v0.2.0-beta.2 --prerelease --latest=false --target <main commit>`.
+```
+
+---
+
 ## Deferred follow-ups (cross-step, live tracker)
 
 > Things a step noticed but were out of its own scope. Kept here so they don't get buried in
@@ -2415,6 +3285,38 @@ Populated from real friction, not speculation:
 - *(v0.2 planning)* **Ubuntu 22.04's WebKitGTK has stood still:** jammy has
   2.50.4-0ubuntu0.22.04.1 (2026-01-13), while noble and resolute got 2.52.6 on 2026-08-31
   (Launchpad, checked 2026-10-17). Don't wait on a jammy update.
+- *(beta.1, 2026-10-17)* **A Windows profile can lack `HKCU\…\CurrentVersion\Run`.**
+  auto-launch 0.5 opens it with a plain `?`, so on the beta release PR's runner every start-at-login
+  call failed with "The system cannot find the file specified" (PR #10's runner happened to have
+  the key). Fixed in lj-step-11-fix (`autostart.rs` creates the key first, through `winreg` 0.10,
+  which auto-launch already uses). The Windows smoke now deletes the key before testing.
+- *(round 2 planning, vendored tauri 2.12.4 / wry 0.57)* **Custom-scheme pages count as LOCAL**
+  for capabilities (`webview/mod.rs` `is_local_url`: any registered custom scheme), so an
+  `ljext:` page gets every local capability of its webview label, and a `remote.urls` entry can
+  never match it. That is why `joan-page` must have no capabilities at all (Ground Rule 18).
+- *(round 2 planning)* **Windows injects Tauri's IPC scripts into every frame.** wry adds them with
+  `AddScriptToExecuteOnDocumentCreated`, ignoring "main frame only"; on macOS and Linux they stay in
+  the main frame. Never put untrusted code in an iframe of a trusted page and rely on that.
+  Opaque-origin frames are rejected by the IPC (`Origin: null` doesn't parse), but don't lean on it.
+- *(round 2 planning)* **Where webview data lives:** macOS uses WebKit's `defaultDataStore`, keyed
+  by bundle id; `data_directory` does nothing there. Windows and Linux: when the app sets no
+  `data_directory`, Tauri forces it to `app_local_data_dir` (`%LOCALAPPDATA%\<identifier>`,
+  `~/.local/share/<identifier>`). Linux keeps cookies in a text file there. Dev builds with
+  `LITTLEJOAN_DATA_DIR` use `<dir>/webview` instead, so switching between a dev build and the
+  installed one looks like a logout.
+- *(round 2 planning)* **WebView2 loses session cookies on every window close** (each wry webview
+  has its own environment, which ends with the window). **macOS Quit** goes `app.exit(0)` →
+  `process::exit` without unloading the webviews, so cookies written just before quitting may not
+  reach disk. LJ20 tests both.
+- *(round 2 planning)* **Phone mode changes the user agent** between the phone and desktop ones.
+  Cookies aren't keyed by user agent, but some sessions are bound to it (Cloudflare clearance,
+  some banks and SSO, Google risk checks), so a site may ask to sign in again after the window
+  crosses 600 px. Not fixed; Later has "keep one user agent per signed-in site".
+- *(round 2 planning)* **WKWebView's tracking prevention caps cookies written by JavaScript at
+  7 days** for sites without recent interaction. This is Apple's behavior; a site that keeps a
+  login only in a JS cookie can log out after a week idle.
+- *(round 2 planning)* **`navigation.rs` refuses `ljext:`** on macOS and Linux, frames included,
+  while Windows' `http://ljext.localhost` form passes as plain `http`. LJ29 must handle both.
 
 ---
 
@@ -2439,6 +3341,11 @@ picked up point at their step and stay here for the record.
 | *(v0.2)* **Zoom extras** | Ctrl+mouse wheel and pinch zoom; zoom remembered per site | Wheel/gesture hooks per engine; a per-origin store |
 | *(v0.2)* **Downloads list** | A small list of recent downloads (in Settings or the tray), pause/resume, "ask where to save" | UI + state across summons |
 | *(v0.2)* **Build provenance for release assets** | `actions/attest-build-provenance` in the release run; users check with `gh attestation verify` | A release-workflow step; free, no secrets |
+| *(round 2)* **Search suggestions from the engine while typing** | Rust fetches the engine's suggest endpoint (a webview fetch hits CORS), a setting, off by default | An HTTP client dependency, privacy wording |
+| *(round 2)* **Third-party quick answers** | An extension-provided provider running on every keystroke in a no-IPC context | A sandbox that can be called per keystroke safely; timeouts |
+| *(round 2)* **Extension gallery / signing** | A list of reviewed community extensions in the repository; signed bundles | Review process, a trust model |
+| *(round 2)* **Custom window chrome on Windows and Linux** | Frameless window with our own close / minimize, resize borders | Per-OS hit-testing; accessibility |
+| *(round 2)* **One user agent per signed-in site** | Remember the agent a site was signed in with and keep it across phone-mode switches | Per-host user agent at navigation time |
 
 **When Later work starts:** v0.1's order (start at login, then downloads, then signing) became
 v0.2. What's left, roughly by value: popups inside the app (OAuth), find in page, auto-update
