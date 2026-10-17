@@ -387,12 +387,15 @@ page; it is a separate webview with its own capability, and the page webview has
   loading, so it never misses one; the smoke log gets `overlay true|false`.
 - **Placing the webviews:** Windows and macOS place child webviews by bounds (re-applied on
   `Resized` / `ScaleFactorChanged`) and hide / show them. Linux packs child webviews into the
-  window's vertical GtkBox, where bounds don't apply: in Toolbar mode the bar is packed with
-  `expand = false` at a 40 px height request and the page takes the rest; in Overlay mode
-  (`platform/linux.rs`) the bar is packed with `expand = fill = true` (the 40 px request stays a
-  minimum, so the window can still shrink) and the page widget is hidden — with `no_show_all`
-  set, because tao shows a window with `show_all()`, which would bring it back; hiding the bar
-  (fullscreen) lets the page fill the window.
+  window's vertical GtkBox, where bounds don't apply. The bar sits in a frame (a GtkScrolledWindow
+  with external scrolling around a GtkViewport) because a WebKitGTK view's natural height is its
+  contents size, never smaller than the view: without the frame the bar kept the whole window
+  after the overlay closed. In Toolbar mode the frame is packed with `expand = false` at a 40 px
+  height request and the page takes the rest; in Overlay mode (`platform/linux.rs`) the frame is
+  packed with `expand = fill = true` (the 40 px request stays a minimum, so the window can still
+  shrink) and the page widget is hidden — with `no_show_all` set, because tao shows a window
+  with `show_all()`, which would bring it back; hiding the bar (fullscreen) hides the frame with
+  it and lets the page fill the window.
 - **Address:** the bar always shows the page's full address (empty, with the placeholder, on the
   start page). Rust pushes changes with `bar.eval("window.littleJoan.setUrl(<json>)")` on
   every page load (started and finished, so redirects land), every title change, after

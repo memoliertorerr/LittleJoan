@@ -2779,6 +2779,23 @@ mode". Push, open the phase-13 PR into main as a draft, and watch CI until every
   event count (`eventsUntil: 16`) that the longer fixture broke; it now counts the log.
 - `npm run verify`: 93 TS tests, 135 Rust tests, clippy clean. Disk: 13 GiB free at the start
   and after verify; `.cache/target` 1.2 GB.
+- **CI (run 39069197262): verify ×3, package ×3, smoke macOS and Windows green; both Linux smoke
+  jobs red.** Screenshots: macOS and Windows `start.png` — the command bar fills the window (the
+  field at the top with its focus ring, the hint under it, no page visible); `page.png` — the 40
+  px bar with the smoke page's address above the page; macOS `welcome.png` — the welcome under
+  the field. Linux at scale 2, `start.png`: the overlay fills the window as well. **But on Linux
+  the page came back 1 px tall after the overlay closed** (`viewport=480x1`; `page.png` shows the
+  bar's white page over the whole window) and at scale 2 half the window (`480x300`, `390x280`
+  instead of 600 / 560), so the fullscreen click missed and the viewport checks failed. Cause: a
+  WebKitGTK view's natural height is its page's contents size, never smaller than the view; the
+  overlay made the bar as tall as the window, and once it was packed with `expand = false` again
+  the GtkBox still gave it that natural height first (naturals before `expand`; at scale 2 both
+  views' naturals were large, so they split the window). **Fix (`lj-step-22-fix`):**
+  `platform/linux.rs` moves the bar into a frame — a GtkScrolledWindow with external scrolling
+  (it doesn't pass its child's natural size on) around a GtkViewport with the minimum scroll
+  policy (it sizes the child to itself) — and packs the frame instead; the frame follows the
+  bar's show / hide (element fullscreen). The prompt's "height request = the window's height"
+  would have hit the same natural-size loop (and pinned the window's minimum size).
 
 ### LJ23 — The command bar · strong · auto
 
@@ -3561,6 +3578,11 @@ Populated from real friction, not speculation:
   does — CI saw it in a relaunch right after `process::exit`. Read the page's address through
   `bar::page_url`, which serves it from the load events (`page_address.rs`); only the in-page
   check asks the engine, after a finished load.
+- *(LJ22)* **A WebKitGTK view's natural height is its contents size,** never smaller than the
+  view, and GtkBox gives children their natural size before `expand`. A webview that was made
+  tall once (the command bar's overlay) stays tall when packed with `expand = false` again, and
+  its sibling gets 1 px. Pack a frame that doesn't propagate natural size (GtkScrolledWindow,
+  external scrolling, around a minimum-policy GtkViewport) instead of the view.
 - *(LJ20 fix2)* **`panic = "abort"` breaks wry's Objective-C exception catch on macOS.** Tauri
   answers `tauri://` requests from a tokio worker, and when the page navigates away while one of
   them is in flight (the start page replaced at once by `--show <url>`; the bar unloaded by a
