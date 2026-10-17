@@ -12,6 +12,7 @@ export interface Settings {
   translateTo: string;
   windowWidth: number;
   windowHeight: number;
+  mobileSites: boolean;
 }
 
 export interface SettingsView {
@@ -25,11 +26,12 @@ export interface SettingsInput {
   shortcut: string;
   searchEngine: string;
   translateTo: string;
+  mobileSites: boolean;
 }
 
 /** What the Save button sends: only the fields the window edits. */
-export function toInput(shortcut: string, searchEngine: string, translateTo: string): SettingsInput {
-  return { shortcut, searchEngine, translateTo };
+export function toInput(shortcut: string, searchEngine: string, translateTo: string, mobileSites: boolean): SettingsInput {
+  return { shortcut, searchEngine, translateTo, mobileSites };
 }
 
 /** Whether anything differs from the saved settings (Save is disabled otherwise). */
@@ -37,6 +39,7 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
   return (
     saved.shortcut !== input.shortcut ||
     saved.searchEngine !== input.searchEngine ||
-    saved.translateTo !== input.translateTo
+    saved.translateTo !== input.translateTo ||
+    saved.mobileSites !== input.mobileSites
   );
 }

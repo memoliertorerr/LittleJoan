@@ -9,6 +9,7 @@ use tauri::{AppHandle, Runtime};
 use crate::bar;
 use crate::input::{self, SearchEngine};
 use crate::joan;
+use crate::phone_mode;
 use crate::settings::{self, Settings};
 use crate::shortcut::{self, PluginRegistrar};
 use crate::smoke;
@@ -114,6 +115,7 @@ pub struct SettingsInput {
     shortcut: String,
     search_engine: SearchEngine,
     translate_to: String,
+    mobile_sites: bool,
 }
 
 /// Validates and applies new settings: the shortcut is swapped live (the old one comes back if
@@ -139,10 +141,13 @@ pub async fn save_settings<R: Runtime>(
             shortcut: wanted,
             search_engine: settings.search_engine,
             translate_to: settings.translate_to,
+            mobile_sites: settings.mobile_sites,
             ..s.settings.clone()
         };
         (s.data_dir.clone(), s.settings.clone())
     });
+    // Phone mode on or off takes effect on the open page at once.
+    phone_mode::apply(&app, true);
     settings::save(&dir, &updated)
         .map_err(|err| format!("The new settings work now, but couldn't be saved: {err}"))?;
     Ok(updated)

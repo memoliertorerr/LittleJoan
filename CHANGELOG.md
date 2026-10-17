@@ -17,6 +17,10 @@ global shortcut calls it.
 - **Always-visible address bar** at the top of the window: it shows the current page's address
   (following links and redirects), Ctrl/Cmd+L or a click to edit, Enter to open an address or
   search, Esc to revert. It hides while a video is fullscreen.
+- **Phone mode:** in a window narrower than 600 px, pages get a phone browser's user agent
+  (iPhone Safari on macOS and Linux, Chrome on Android on Windows), so sites serve their mobile
+  versions; crossing 600 px reloads the page with the other agent once the resize settles.
+  On by default; "Mobile sites in a narrow window" in Settings turns it off.
 - **Search** with Google, DuckDuckGo, Bing, or Brave; anything that isn't a web address is
   searched for, so `file:`, `javascript:` and other schemes can never be opened.
 - **Fullscreen video** (a page's fullscreen button fills the screen) on all three systems.
@@ -26,8 +30,8 @@ global shortcut calls it.
   translate; copy and paste on macOS.
 - **Settings window:** shortcut recorder (the old shortcut is kept if the new one is taken),
   search engine, translate language.
-- **Command line:** `--toggle`, `--show [url]`, `--hide`, forwarded to the running app (bind
-  `--toggle` on Linux Wayland, where global shortcuts are unavailable).
+- **Command line:** `--toggle`, `--show [url]`, `--hide`, `--size WxH`, forwarded to the
+  running app (bind `--toggle` on Linux Wayland, where global shortcuts are unavailable).
 - **Installers built in CI:** Windows NSIS (per-user), macOS universal DMG (ad-hoc signed),
   Linux `.deb` and AppImage — each installed and smoke-tested in CI.
 

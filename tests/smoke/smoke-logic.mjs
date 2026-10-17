@@ -58,3 +58,24 @@ export function requestFullscreen(element) {
     element.webkitRequestFullscreen();
   }
 }
+
+/**
+ * Whether a user agent is a phone browser's: iPhone Safari and Chrome on Android both carry a
+ * "Mobile" token, desktop engines don't.
+ * @param {string} userAgent
+ */
+export function isPhoneAgent(userAgent) {
+  return /\bMobile\b/.test(userAgent);
+}
+
+/**
+ * The title that reports what the page sees: its CSS viewport and the kind of user agent.
+ * @param {number} width window.innerWidth
+ * @param {number} height window.innerHeight
+ * @param {string} userAgent navigator.userAgent
+ * @param {number} pixelRatio window.devicePixelRatio
+ */
+export function viewportTitle(width, height, userAgent, pixelRatio) {
+  const agent = isPhoneAgent(userAgent) ? "phone" : "desktop";
+  return `LJ-SMOKE viewport=${Math.round(width)}x${Math.round(height)} ua=${agent} dpr=${pixelRatio}`;
+}

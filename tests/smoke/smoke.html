@@ -55,7 +55,14 @@
       <video id="video" muted playsinline></video>
     </div>
     <script type="module">
-      import { codecSupport, fullscreenTitle, isFullscreen, readyTitle, requestFullscreen } from "./smoke-logic.mjs";
+      import {
+        codecSupport,
+        fullscreenTitle,
+        isFullscreen,
+        readyTitle,
+        requestFullscreen,
+        viewportTitle,
+      } from "./smoke-logic.mjs";
 
       const stage = document.getElementById("stage");
       const status = document.getElementById("status");
@@ -65,6 +72,17 @@
       };
 
       show(readyTitle(codecSupport(document.getElementById("video"), globalThis.MediaSource)));
+
+      // What the page sees (CSS viewport, user agent), reported shortly after load and after
+      // every resize has settled.
+      let resizeTimer = 0;
+      const reportViewport = () =>
+        show(viewportTitle(window.innerWidth, window.innerHeight, navigator.userAgent, window.devicePixelRatio));
+      setTimeout(reportViewport, 300);
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(reportViewport, 300);
+      });
       document.getElementById("go").addEventListener("click", () => requestFullscreen(stage));
       for (const name of ["fullscreenchange", "webkitfullscreenchange"]) {
         document.addEventListener(name, () => show(fullscreenTitle(isFullscreen(document))));

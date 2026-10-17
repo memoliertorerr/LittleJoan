@@ -25,6 +25,8 @@ pub enum Command {
     Show(Option<Url>),
     /// `--hide`.
     Hide,
+    /// `--size <width>x<height>`: resize the open window (logical pixels).
+    Resize { width: u32, height: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +37,10 @@ pub enum Action {
     FocusAndNavigate(Url),
     /// Close and destroy the window: back to hibernation.
     Destroy,
+    Resize {
+        width: u32,
+        height: u32,
+    },
     Nothing,
 }
 
@@ -48,6 +54,10 @@ pub fn decide(state: WindowState, command: Command) -> Action {
         (WindowState::Open { .. }, Command::Show(None)) => Action::Focus,
         (WindowState::Open { .. }, Command::Show(Some(url))) => Action::FocusAndNavigate(url),
         (WindowState::Open { .. }, Command::Hide) => Action::Destroy,
+        (WindowState::Open { .. }, Command::Resize { width, height }) => {
+            Action::Resize { width, height }
+        }
+        (WindowState::Hibernating, Command::Resize { .. }) => Action::Nothing,
     }
 }
 
@@ -90,6 +100,24 @@ mod tests {
             decide(BACKGROUND, Command::Show(Some(url()))),
             Action::FocusAndNavigate(url())
         );
+    }
+
+    #[test]
+    fn resize_applies_to_an_open_window_only() {
+        let resize = Command::Resize {
+            width: 390,
+            height: 600,
+        };
+        assert_eq!(decide(HIBERNATING, resize.clone()), Action::Nothing);
+        for state in [FOCUSED, BACKGROUND] {
+            assert_eq!(
+                decide(state, resize.clone()),
+                Action::Resize {
+                    width: 390,
+                    height: 600
+                }
+            );
+        }
     }
 
     #[test]
