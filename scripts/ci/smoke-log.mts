@@ -48,8 +48,23 @@ export interface Expectations {
 }
 
 export interface Measurements {
-  helpersBefore: number;
-  helpersAfter: number;
+  /**
+   * Webview helper processes that served the page (they appeared while it was shown) and are
+   * still alive after hibernating — the worst sample. Other apps' helpers don't count.
+   */
+  pageHelpersLeft: number;
+}
+
+/** Process ids in `now` that weren't in `before` (the helpers that appeared meanwhile). */
+export function newPids(before: readonly number[], now: readonly number[]): number[] {
+  const old = new Set(before);
+  return now.filter((pid) => !old.has(pid));
+}
+
+/** How many of `ours` are still in `now`. */
+export function survivors(ours: readonly number[], now: readonly number[]): number {
+  const alive = new Set(now);
+  return ours.filter((pid) => alive.has(pid)).length;
 }
 
 /** Checks a full smoke run. Returns the list of failures (empty = pass). */
@@ -71,6 +86,12 @@ export function evaluate(events: LogEvent[], expect: Expectations, measured: Mea
       from = index + 1;
     }
   }
+  if (count(events, "bar-loaded") === 0) {
+    failures.push('the URL bar never loaded ("bar-loaded")');
+  }
+  if (count(events, "bar-url", "http://127.0.0.1") === 0) {
+    failures.push("the URL bar was never told the smoke page's address");
+  }
   if (count(events, "started") !== 1) {
     failures.push(`expected exactly one "started" (single instance), saw ${count(events, "started")}`);
   }
@@ -83,10 +104,8 @@ export function evaluate(events: LogEvent[], expect: Expectations, measured: Mea
   if (count(events, "window-created") < 2 || count(events, "hibernated") < 2) {
     failures.push("summoning again after hibernating did not create and destroy a second window");
   }
-  if (measured.helpersAfter > measured.helpersBefore) {
-    failures.push(
-      `webview helper processes left after hibernating: ${measured.helpersAfter} (before showing: ${measured.helpersBefore})`,
-    );
+  if (measured.pageHelpersLeft > 0) {
+    failures.push(`webview helper processes of the page left after hibernating: ${measured.pageHelpersLeft}`);
   }
   return failures;
 }

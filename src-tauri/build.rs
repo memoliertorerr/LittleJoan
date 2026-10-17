@@ -6,6 +6,8 @@ fn main() {
             "open_input",
             "hibernate",
             "start_info",
+            "page_url",
+            "focus_page",
             "get_settings",
             "save_settings",
             "suspend_shortcut",

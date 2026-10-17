@@ -49,15 +49,19 @@ always be ready.
 
 - **Summon:** press **Ctrl+Shift+Space** (Windows, Linux) or **Cmd+Shift+Space** (macOS), or
   choose **Open Little Joan** in the tray menu. Type an address or a search and press Enter.
-- **Dismiss:** press the shortcut again, press Esc in the empty field, press Ctrl/Cmd+W, or close
-  the window. The page is discarded and Little Joan goes back to sleep. The window remembers its
+- **The address bar** stays at the top of the window and always shows the page you're on,
+  following links and redirects. Click it (or press Ctrl/Cmd+L) to go somewhere else: Enter
+  opens the address or searches for the text, Esc puts the current address back. It hides
+  while a video is fullscreen.
+- **Dismiss:** press the shortcut again, press Ctrl/Cmd+W, close the window, or press Esc in the
+  empty address bar before opening anything. The page is discarded and Little Joan goes back to sleep. The window remembers its
   size.
 - **Keys on a page:**
 
   | | Windows / Linux | macOS |
   |---|---|---|
   | Close (hibernate) | Ctrl+W | Cmd+W |
-  | Go somewhere else | Ctrl+L | Cmd+L |
+  | Edit the address | Ctrl+L | Cmd+L |
   | Reload | Ctrl+R, F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
@@ -113,6 +117,13 @@ Little Joan is built with [Tauri 2](https://tauri.app) (Rust + the operating sys
 webview) and TypeScript. See [docs/architecture.md](docs/architecture.md) for the layout, the
 build commands, and how CI builds and smoke-tests the installers.
 
+## Contributing
+
+Bug reports and ideas are welcome in [issues](https://github.com/memoliertorerr/LittleJoan/issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and check changes, and
+[CHANGELOG.md](CHANGELOG.md) for what's in each version. Please report security problems
+privately as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © 2026 Mehmet Ali Ertorer

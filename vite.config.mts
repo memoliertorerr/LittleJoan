@@ -15,6 +15,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: resolve(ui, "index.html"),
+        bar: resolve(ui, "bar.html"),
         settings: resolve(ui, "settings.html"),
       },
     },

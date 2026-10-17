@@ -1,8 +1,9 @@
-//! What the page keys (keys.rs) and the macOS menu do to the page window.
+//! What the page keys (keys.rs), the tray, and the macOS menu do to the page window.
 
-use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
+use tauri::{AppHandle, Runtime, Webview};
 use url::Url;
 
+use crate::bar;
 use crate::joan;
 use crate::keys::{self, PageAction};
 use crate::navigation;
@@ -19,32 +20,25 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let Some(window) = app.get_webview_window(joan::LABEL) else {
+        let Some(page) = bar::page(&app) else {
             return;
         };
         let result = match action {
-            PageAction::OpenLocation => open_location(&window),
-            PageAction::Reload => window.reload(),
-            PageAction::Back => window.eval("history.back()"),
-            PageAction::Forward => window.eval("history.forward()"),
-            PageAction::Translate => translate_page(&app, &window),
-            PageAction::OpenInBrowser => open_in_browser(&app, &window),
+            PageAction::OpenLocation => {
+                bar::focus_bar(&app);
+                Ok(())
+            }
+            PageAction::Reload => page.reload(),
+            PageAction::Back => page.eval("history.back()"),
+            PageAction::Forward => page.eval("history.forward()"),
+            PageAction::Translate => translate_page(&app, &page),
+            PageAction::OpenInBrowser => open_in_browser(&app, &page),
             PageAction::Close => Ok(()),
         };
         if let Err(err) = result {
             eprintln!("little-joan: page action {action:?} failed: {err}");
         }
     });
-}
-
-/// Shows the start page with the current address pre-filled and selected. On the start page
-/// itself there is nothing to do.
-fn open_location<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
-    let current = window.url()?;
-    match keys::start_page_url(&keys::app_origin(), &current) {
-        Some(url) => window.navigate(url),
-        None => Ok(()),
-    }
 }
 
 /// The translated view of `current`, or `None` for the start page and for pages that can't or
@@ -56,17 +50,17 @@ pub fn translate_target(origin: &Url, current: &Url, lang: &str) -> Option<Url> 
     translate::translate_url(current, lang)
 }
 
-fn translate_page<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) -> tauri::Result<()> {
+fn translate_page<R: Runtime>(app: &AppHandle<R>, page: &Webview<R>) -> tauri::Result<()> {
     let lang = state::with(app, |s| s.settings.translate_to.clone());
-    match translate_target(&keys::app_origin(), &window.url()?, &lang) {
-        Some(url) => window.navigate(url),
+    match translate_target(&keys::app_origin(), &page.url()?, &lang) {
+        Some(url) => bar::navigate(app, url),
         None => Ok(()),
     }
 }
 
 /// Opens the page in the default browser, then hibernates — the page moved to the main browser.
-fn open_in_browser<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) -> tauri::Result<()> {
-    let current = window.url()?;
+fn open_in_browser<R: Runtime>(app: &AppHandle<R>, page: &Webview<R>) -> tauri::Result<()> {
+    let current = page.url()?;
     if keys::is_app_url(&keys::app_origin(), &current)
         || !navigation::is_external_openable(&current)
     {

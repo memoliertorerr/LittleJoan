@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "joan",
-  "description": "The page window's local start page: open what was typed, close, read the hint.",
-  "windows": ["joan"],
-  "permissions": ["allow-open-input", "allow-hibernate", "allow-start-info"]
+  "description": "The local start page in the page webview: read the shortcut for its hint. Remote pages in the same webview get nothing (local only).",
+  "webviews": ["joan-page"],
+  "permissions": ["allow-start-info"]
 }

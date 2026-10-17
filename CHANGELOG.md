@@ -1,0 +1,46 @@
+# Changelog
+
+All notable changes to Little Joan are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/).
+
+## [0.1.0] — unreleased
+
+The first version: a tiny pop-up browser for Windows, macOS, and Linux that hibernates until a
+global shortcut calls it.
+
+### Added
+- **Hibernation by default.** After launch there is only a tray / menu-bar icon: no window, no
+  webview. Closing the window destroys it and its page, so the web engine's processes exit.
+- **Global shortcut** (Cmd/Ctrl+Shift+Space by default) that summons and dismisses a small,
+  resizable window on the monitor under the mouse; the window remembers its size.
+- **Always-visible address bar** at the top of the window: it shows the current page's address
+  (following links and redirects), Ctrl/Cmd+L or a click to edit, Enter to open an address or
+  search, Esc to revert. It hides while a video is fullscreen.
+- **Search** with Google, DuckDuckGo, Bing, or Brave; anything that isn't a web address is
+  searched for, so `file:`, `javascript:` and other schemes can never be opened.
+- **Fullscreen video** (a page's fullscreen button fills the screen) on all three systems.
+- **Translate Page** through Google Translate's web proxy, in a language chosen in Settings.
+- **Open Page in Browser**, and links that open a new window go to the default browser.
+- **Page keys:** close (Ctrl/Cmd+W), edit the address (Ctrl/Cmd+L), reload, back / forward,
+  translate; copy and paste on macOS.
+- **Settings window:** shortcut recorder (the old shortcut is kept if the new one is taken),
+  search engine, translate language.
+- **Command line:** `--toggle`, `--show [url]`, `--hide`, forwarded to the running app (bind
+  `--toggle` on Linux Wayland, where global shortcuts are unavailable).
+- **Installers built in CI:** Windows NSIS (per-user), macOS universal DMG (ad-hoc signed),
+  Linux `.deb` and AppImage — each installed and smoke-tested in CI.
+
+### Security
+- Web pages get no IPC: only Little Joan's own local pages (the address bar, the start page,
+  Settings) can call into the app, each limited to the commands it needs.
+
+### Known issues
+- On Ubuntu 22.04, the system WebKitGTK (2.50.4 at the time of writing) aborts when a page
+  enters fullscreen — reproduced without Little Joan. Ubuntu 24.04 (WebKitGTK 2.52) works. The
+  AppImage currently bundles the 22.04 version.
+- Builds are not notarized (macOS) or Authenticode-signed (Windows), so the first launch shows
+  a Gatekeeper or SmartScreen warning.
+- Linux global shortcuts work on X11 only; on Wayland, bind `little-joan --toggle` instead.
+
+[0.1.0]: https://github.com/memoliertorerr/LittleJoan
