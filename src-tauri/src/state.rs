@@ -20,6 +20,8 @@ pub struct AppState {
     pub webview_data_dir: Option<PathBuf>,
     /// The accelerator currently registered as the global shortcut, if any.
     pub active_shortcut: Option<String>,
+    /// True while the settings window is recording a new shortcut (the active one is paused).
+    pub shortcut_suspended: bool,
 }
 
 pub type SharedState = Mutex<AppState>;
@@ -41,6 +43,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         data_dir,
         webview_data_dir,
         active_shortcut: None,
+        shortcut_suspended: false,
     }));
     Ok(())
 }

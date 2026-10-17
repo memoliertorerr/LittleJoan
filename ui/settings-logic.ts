@@ -1,0 +1,42 @@
+// Types and small pure helpers for the settings window.
+
+export interface Choice {
+  id: string;
+  name: string;
+}
+
+export interface Settings {
+  version: number;
+  shortcut: string;
+  searchEngine: string;
+  translateTo: string;
+  windowWidth: number;
+  windowHeight: number;
+}
+
+export interface SettingsView {
+  settings: Settings;
+  engines: Choice[];
+  languages: Choice[];
+  platform: string;
+}
+
+export interface SettingsInput {
+  shortcut: string;
+  searchEngine: string;
+  translateTo: string;
+}
+
+/** What the Save button sends: only the fields the window edits. */
+export function toInput(shortcut: string, searchEngine: string, translateTo: string): SettingsInput {
+  return { shortcut, searchEngine, translateTo };
+}
+
+/** Whether anything differs from the saved settings (Save is disabled otherwise). */
+export function isChanged(saved: Settings, input: SettingsInput): boolean {
+  return (
+    saved.shortcut !== input.shortcut ||
+    saved.searchEngine !== input.searchEngine ||
+    saved.translateTo !== input.translateTo
+  );
+}

@@ -7,8 +7,12 @@ use tauri::{AppHandle, Runtime};
 
 use crate::keys::PageAction;
 use crate::page_actions;
+use crate::settings_window;
 
+const SETTINGS: &str = "menu-settings";
 const OPEN_LOCATION: &str = "page-open-location";
+const TRANSLATE: &str = "page-translate";
+const OPEN_IN_BROWSER: &str = "page-open-in-browser";
 const RELOAD: &str = "page-reload";
 const BACK: &str = "page-back";
 const FORWARD: &str = "page-forward";
@@ -25,6 +29,8 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         &[
             &PredefinedMenuItem::about(app, Some("About Little Joan"), Some(about))?,
             &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?,
+            &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, Some("Quit Little Joan"))?,
         ],
     )?;
@@ -39,6 +45,20 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 "Open Location…",
                 true,
                 Some("CmdOrCtrl+L"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                TRANSLATE,
+                "Translate Page",
+                true,
+                Some("CmdOrCtrl+Shift+T"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                OPEN_IN_BROWSER,
+                "Open Page in Browser",
+                true,
+                Some("CmdOrCtrl+Shift+O"),
             )?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::close_window(app, Some("Close Window"))?,
@@ -74,7 +94,13 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 /// Menu events (the app menu and the tray menu share this stream; unknown ids are ignored).
 pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let action = match event.id().as_ref() {
+        SETTINGS => {
+            settings_window::open(app);
+            return;
+        }
         OPEN_LOCATION => PageAction::OpenLocation,
+        TRANSLATE => PageAction::Translate,
+        OPEN_IN_BROWSER => PageAction::OpenInBrowser,
         RELOAD => PageAction::Reload,
         BACK => PageAction::Back,
         FORWARD => PageAction::Forward,

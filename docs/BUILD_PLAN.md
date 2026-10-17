@@ -40,13 +40,13 @@
 | LJ3 | Summon / hibernate: global shortcut, the Joan window, start page, single-instance CLI, smoke log | strong | auto | ✅ done |
 | LJ4 | Page behavior: navigation guard, titles, new windows → default browser, page keys (Win / Linux / macOS menu) | strong | auto | ✅ done |
 | LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ✅ done |
-| LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ⬜ todo |
-| LJ7 | Translate page + open in default browser (tray, macOS menu, keys) | standard | auto | ⬜ todo |
+| LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ✅ done |
+| LJ7 | Translate page + open in default browser (tray, macOS menu, keys) | standard | auto | ✅ done |
 | LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ⬜ todo |
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
 
-**Overall status: phases 1–2 done (PRs #1, #2). Next: phase 3 (LJ6 → LJ7).**
+**Overall status: phases 1–3 done (PRs #1–#3). Next: phase 4 (LJ8 → LJ10): installers, install-and-run smoke in CI, docs, human checkpoint.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -911,6 +911,24 @@ red after two honest fix attempts, stop and report — never commit red, never w
 get green.
 ```
 
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 13 GB free at the start; `.cache/target` ~1.6 GB.
+- **`languages()` folded into `get_settings`:** the window gets settings, engine list, language
+  list, and platform in one call (three commands instead of four).
+- **Save closes the window** through `core:window:allow-close` (granted only to `settings`);
+  Cancel does the same.
+- **Suspension is tracked in state** (`shortcut_suspended`) and undone on Save, on recorder
+  stop, and on the window's `Destroyed` event — closing the window mid-recording can't leave the
+  app without a shortcut.
+- **Shift alone doesn't count as a modifier** in the recorder (it would steal capital letters);
+  F13–F24 may be used bare.
+- A Python edit of `build.rs` silently didn't apply (rustfmt had rewrapped the line it matched),
+  which tauri-build caught at once ("Permission allow-get-settings not found"). Later scripted
+  edits assert that the text they replace exists.
+- **Not verified locally:** recording and swapping a real shortcut (LJ10).
+- 54 Rust tests, 33 TS tests.
+
 ---
 
 ### LJ7 — Translate page + open in default browser · standard · auto
@@ -952,6 +970,21 @@ This ends phase 3: push the branch, fill the PR description from the template, m
 once CI is green, then stop (or continue to phase 4 if the user's instructions say the build
 runs end to end).
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 13 GB free at the start; `.cache/target` ~1.6 GB.
+- **`translate_target` takes the app origin as a parameter** so the start-page check is
+  testable on every OS: on Windows the start page is `http://tauri.localhost/…`, an http URL
+  that `translate_url` alone would happily translate.
+- **Tray items' enabled state** is kept in managed state (`PageItems<R>`), set on every
+  finished page load (web page → enabled; start page → disabled) and cleared on hibernate.
+  The macOS menu items stay enabled (the menu bar is hidden) and do nothing without a page.
+- "Open Little Joan" was added at the top of the tray menu (it is the only way to summon the
+  window where the global shortcut can't work, e.g. Wayland with a tray).
+- **Not verified locally:** the Google redirect inside each webview and the tray menu on real
+  desktops (LJ10).
+- 58 Rust tests, 33 TS tests.
 
 ---
 

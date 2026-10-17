@@ -10,6 +10,7 @@
 //! | Ctrl+L                  | yes     | yes   | Open location |
 //! | Ctrl+R, F5              | native  | yes   | Reload        |
 //! | Alt+Left / Alt+Right    | native  | yes   | Back / Forward|
+//! | Ctrl+Shift+T            | yes     | yes   | Translate     |
 //!
 //! "native" = WebView2 already handles it as a browser accelerator key.
 
@@ -22,6 +23,10 @@ pub enum PageAction {
     Reload,
     Back,
     Forward,
+    /// Show the page through Google Translate (translate.rs).
+    Translate,
+    /// Hand the page to the default browser and hibernate (tray and macOS menu only, no key).
+    OpenInBrowser,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,11 +117,18 @@ pub fn action_for(key: Key, mods: Mods, platform: Platform) -> Option<PageAction
             alt: true,
             ..Mods::default()
         };
+    let ctrl_shift = mods
+        == Mods {
+            ctrl: true,
+            shift: true,
+            ..Mods::default()
+        };
     let none = mods == Mods::default();
     let linux = platform == Platform::Linux;
     match key {
         Key::Letter('w') if only_ctrl => Some(PageAction::Close),
         Key::Letter('l') if only_ctrl => Some(PageAction::OpenLocation),
+        Key::Letter('t') if ctrl_shift => Some(PageAction::Translate),
         Key::Letter('r') if linux && only_ctrl => Some(PageAction::Reload),
         Key::F5 if linux && none => Some(PageAction::Reload),
         Key::Left if linux && only_alt => Some(PageAction::Back),
@@ -193,6 +205,25 @@ mod tests {
                 Some(PageAction::OpenLocation)
             );
         }
+    }
+
+    #[test]
+    fn translate_on_windows_and_linux_only() {
+        let ctrl_shift = Mods {
+            shift: true,
+            ..CTRL
+        };
+        for platform in [Platform::Windows, Platform::Linux] {
+            assert_eq!(
+                action_for(Key::Letter('t'), ctrl_shift, platform),
+                Some(PageAction::Translate)
+            );
+            assert_eq!(action_for(Key::Letter('t'), CTRL, platform), None);
+        }
+        assert_eq!(
+            action_for(Key::Letter('t'), ctrl_shift, Platform::MacOs),
+            None
+        );
     }
 
     #[test]
