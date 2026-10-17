@@ -1,12 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "settings",
-  "description": "The settings window: read and save settings, pause the shortcut while recording, close itself.",
+  "description": "The settings window: read and save settings, pause the shortcut while recording, add or remove the login entry, close itself.",
   "windows": ["settings"],
   "permissions": [
     "allow-get-settings",
     "allow-save-settings",
     "allow-suspend-shortcut",
+    "allow-set-start-at-login",
     "core:window:allow-close"
   ]
 }

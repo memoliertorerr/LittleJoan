@@ -3,6 +3,7 @@
 //! At rest the process has a tray icon and nothing else — no window and no webview. See
 //! docs/architecture.md for the lifecycle.
 
+pub mod autostart;
 pub mod bar;
 pub mod cli;
 pub mod commands;
@@ -31,16 +32,22 @@ mod tray;
 
 use tauri::RunEvent;
 
-use crate::toggle::Command;
-
 /// Builds and runs the app. Returns only when the user quits.
 pub fn run() {
     let app = tauri::Builder::default()
         // First: a second launch hands its arguments to the running instance and exits.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            joan::dispatch(app, cli::parse_args(&argv).unwrap_or(Command::Show(None)));
+            let args = cli::parse_args(&argv);
+            if let Some(enabled) = args.start_at_login {
+                // `set` logs the outcome; there is no window to show an error in.
+                let _ = autostart::set(app, enabled);
+            }
+            if let Some(command) = args.forwarded_command() {
+                joan::dispatch(app, command);
+            }
         }))
         .plugin(shortcut::plugin())
+        .plugin(autostart::plugin())
         .invoke_handler(tauri::generate_handler![
             commands::open_input,
             commands::hibernate,
@@ -49,7 +56,8 @@ pub fn run() {
             commands::focus_page,
             commands::get_settings,
             commands::save_settings,
-            commands::suspend_shortcut
+            commands::suspend_shortcut,
+            commands::set_start_at_login
         ])
         .on_window_event(|window, event| {
             joan::on_window_event(window, event);
@@ -72,10 +80,13 @@ pub fn run() {
             tray::create(handle)?;
             shortcut::register_from_settings(handle);
 
-            // A first launch with flags (e.g. `--show <url>`) acts on them; without flags
-            // Little Joan starts hibernating.
-            let args: Vec<String> = std::env::args().collect();
-            if let Some(command) = cli::parse_args(&args) {
+            // A first launch with flags (e.g. `--show <url>`, `--start-at-login on`) acts on
+            // them; without flags Little Joan starts hibernating.
+            let args = cli::parse_args(&std::env::args().collect::<Vec<_>>());
+            if let Some(enabled) = args.start_at_login {
+                let _ = autostart::set(handle, enabled);
+            }
+            if let Some(command) = args.command {
                 joan::dispatch(handle, command);
             }
             Ok(())

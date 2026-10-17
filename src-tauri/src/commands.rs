@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
+use crate::autostart;
 use crate::bar;
 use crate::input::{self, SearchEngine};
 use crate::joan;
@@ -78,6 +79,9 @@ pub struct Choice {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsView {
     settings: Settings,
+    /// Whether the OS login entry exists (`null` when it can't be read). Not in settings.json:
+    /// the entry is the only state.
+    start_at_login: Option<bool>,
     engines: Vec<Choice>,
     languages: Vec<Choice>,
     platform: &'static str,
@@ -87,6 +91,7 @@ pub struct SettingsView {
 pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
     SettingsView {
         settings: state::with(&app, |s| s.settings.clone()),
+        start_at_login: autostart::is_enabled(&app),
         engines: SearchEngine::ALL
             .iter()
             .map(|engine| Choice {
@@ -157,4 +162,13 @@ pub async fn save_settings<R: Runtime>(
 #[tauri::command]
 pub async fn suspend_shortcut<R: Runtime>(app: AppHandle<R>, suspended: bool) {
     shortcut::set_suspended(&app, suspended);
+}
+
+/// Adds or removes the OS login entry; returns whether it exists afterwards.
+#[tauri::command]
+pub async fn set_start_at_login<R: Runtime>(
+    app: AppHandle<R>,
+    enabled: bool,
+) -> Result<bool, String> {
+    autostart::set(&app, enabled)
 }

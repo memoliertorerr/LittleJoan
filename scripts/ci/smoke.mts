@@ -5,23 +5,30 @@
 //
 // The full run: serve tests/smoke/ on 127.0.0.1, launch the app with LITTLEJOAN_SMOKE_LOG,
 // summon it with `--show` (single-instance forwarding), load the smoke page, click its big
-// fullscreen button, hibernate with `--hide`, summon and hibernate once more, then check the
-// log (scripts/ci/smoke-log.mts) and the webview helper processes. Screenshots and a summary
-// land in <out>. Linux runs inside xvfb-run + dbus-run-session with a window manager.
+// fullscreen button, hibernate with `--hide`, summon and hibernate once more, turn start at
+// login on and off (reading the OS's own login entry each time), then check the log
+// (scripts/ci/smoke-log.mts) and the webview helper processes. Screenshots and a summary land
+// in <out>. Linux runs inside xvfb-run + dbus-run-session with a window manager.
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import {
   count,
+  desktopExec,
   evaluate,
   lastTitle,
   newPids,
   parseCodecs,
   parseLog,
+  parseRegValues,
+  plistProgram,
+  pointsAt,
   sawViewport,
   survivors,
+  type LoginEntry,
   type LogEvent,
   type Viewport,
 } from "./smoke-log.mts";
@@ -197,6 +204,38 @@ function helperPids(): number[] {
     .filter((pid) => Number.isInteger(pid) && pid > 0);
 }
 
+/**
+ * The OS's login items that run the installed app (the binary and its canonical path): values
+ * under HKCU's Run key on Windows, LaunchAgent plists on macOS, XDG autostart files on Linux.
+ * Every entry is read, not just the name tauri-plugin-autostart uses, so a renamed entry counts.
+ */
+function loginEntries(): LoginEntry[] {
+  const all: LoginEntry[] = [];
+  if (os === "win32") {
+    const key = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    for (const value of parseRegValues(run("reg", ["query", key]))) {
+      all.push({ where: `${key}\\${value.name}`, command: value.data });
+    }
+  } else {
+    const [dir, extension] =
+      os === "darwin" ? [join(homedir(), "Library", "LaunchAgents"), ".plist"] : [join(homedir(), ".config", "autostart"), ".desktop"];
+    for (const name of existsSync(dir) ? readdirSync(dir).filter((file) => file.endsWith(extension)) : []) {
+      let text = "";
+      try {
+        text = readFileSync(join(dir, name), "utf8");
+      } catch (err) {
+        console.log(`(can't read ${join(dir, name)}: ${String(err)})`);
+      }
+      const command = os === "darwin" ? plistProgram(text) : desktopExec(text);
+      if (command !== undefined) {
+        all.push({ where: join(dir, name), command });
+      }
+    }
+  }
+  const installed = [app as string, realpathSync(app as string)];
+  return all.filter((entry) => pointsAt(entry.command, installed, os === "win32"));
+}
+
 /** Runs a second instance with `args`; single-instance forwards them and it exits. */
 async function forward(args: string[]): Promise<void> {
   console.log(`forward: ${args.join(" ")}`);
@@ -351,6 +390,25 @@ for (const cycle of [2, 3]) {
 }
 console.log(`webview helpers after each hibernate: ${JSON.stringify(helpersPerCycle)}`);
 
+// Start at login: `on` must write the OS's login entry for the INSTALLED binary and `off` must
+// remove it again, without touching the window (hibernating here).
+await forward(["--start-at-login", "on"]);
+await waitFor(
+  "start-at-login true",
+  (e) => count(e, "start-at-login", "true") > 0 || count(e, "start-at-login-failed") > 0,
+  15_000,
+);
+const loginAfterOn = loginEntries();
+console.log(`login entries after on: ${JSON.stringify(loginAfterOn)}`);
+await forward(["--start-at-login", "off"]);
+await waitFor(
+  "start-at-login false",
+  (e) => count(e, "start-at-login", "false") > 0 || count(e, "start-at-login-failed") > 0,
+  15_000,
+);
+const loginAfterOff = loginEntries();
+console.log(`login entries after off: ${JSON.stringify(loginAfterOff)}`);
+
 child.kill();
 server.close();
 
@@ -372,6 +430,11 @@ const summary = {
   codecs: parseCodecs(lastTitle(log, "LJ-SMOKE ready")),
   fullscreen: { page: pageFullscreen, window: count(log, "fullscreen", "true") > 0 },
   shortcut: log.find((e) => e.event.startsWith("shortcut-"))?.event ?? "none",
+  startAtLogin: {
+    reported: log.filter((e) => e.event.startsWith("start-at-login")).map((e) => `${e.event} ${e.detail}`),
+    entriesAfterOn: loginAfterOn,
+    entriesAfterOff: loginAfterOff,
+  },
 };
 writeFileSync(join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 console.log(JSON.stringify(summary, null, 2));
@@ -381,7 +444,10 @@ console.log(JSON.stringify(summary, null, 2));
 const failures = evaluate(
   log,
   { windowFullscreen: windowWanted, pageFullscreen: windowWanted, viewports: [NARROW, WIDE] },
-  { pageHelpersLeft: Math.max(...helpersPerCycle) },
+  {
+    pageHelpersLeft: Math.max(...helpersPerCycle),
+    loginEntry: { afterOn: loginAfterOn, afterOff: loginAfterOff },
+  },
 );
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));

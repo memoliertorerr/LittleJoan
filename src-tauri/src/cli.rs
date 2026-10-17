@@ -6,21 +6,51 @@
 //! - `--show [url]`    open (or focus) the window; with an http(s) URL, load it
 //! - `--hide`          close the window (hibernate)
 //! - `--size WxH`      resize the open window to W×H logical pixels (scripts, tests)
+//! - `--start-at-login on|off`  add or remove the OS login entry; never touches the window
 //!
-//! The last recognized flag wins; unknown arguments are ignored (macOS can add `-psn_…`).
+//! The last recognized window flag wins; unknown arguments are ignored (macOS can add `-psn_…`).
 
 use url::Url;
 
 use crate::toggle::Command;
 
-/// Parses `args` (including argv[0]). Returns `None` when no flag is recognized.
-pub fn parse_args(args: &[String]) -> Option<Command> {
+/// What a command line asks for. `command` goes through the toggle table (the window);
+/// `start_at_login` only changes the OS login entry and is handled before it.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Args {
+    pub command: Option<Command>,
+    pub start_at_login: Option<bool>,
+}
+
+impl Args {
+    /// What a second launch does to the window: its window flag, or `--show` when it had no
+    /// recognized flag at all. A launch that only changes start at login leaves the window alone.
+    pub fn forwarded_command(&self) -> Option<Command> {
+        match (&self.command, self.start_at_login) {
+            (Some(command), _) => Some(command.clone()),
+            (None, None) => Some(Command::Show(None)),
+            (None, Some(_)) => None,
+        }
+    }
+}
+
+/// Parses `args` (including argv[0]).
+pub fn parse_args(args: &[String]) -> Args {
     let mut command = None;
+    let mut start_at_login = None;
     let mut rest = args.iter().skip(1).peekable();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--toggle" => command = Some(Command::Toggle),
             "--hide" => command = Some(Command::Hide),
+            "--start-at-login" => {
+                if let Some(enabled) = rest
+                    .next_if(|next| !next.starts_with("--"))
+                    .and_then(|value| on_off(value))
+                {
+                    start_at_login = Some(enabled);
+                }
+            }
             "--size" => {
                 if let Some((width, height)) = rest
                     .next_if(|next| !next.starts_with("--"))
@@ -38,7 +68,21 @@ pub fn parse_args(args: &[String]) -> Option<Command> {
             _ => {}
         }
     }
-    command
+    Args {
+        command,
+        start_at_login,
+    }
+}
+
+/// `on` / `off` in any case; anything else is not a value.
+fn on_off(value: &str) -> Option<bool> {
+    if value.eq_ignore_ascii_case("on") {
+        Some(true)
+    } else if value.eq_ignore_ascii_case("off") {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 /// `"390x844"` → `(390, 844)`; both sides must be whole numbers from 1 to 10000.
@@ -64,12 +108,16 @@ fn web_url(value: &str) -> Option<Url> {
 mod tests {
     use super::*;
 
-    fn parse(args: &[&str]) -> Option<Command> {
+    fn parse_all(args: &[&str]) -> Args {
         let args: Vec<String> = std::iter::once("little-joan")
             .chain(args.iter().copied())
             .map(String::from)
             .collect();
         parse_args(&args)
+    }
+
+    fn parse(args: &[&str]) -> Option<Command> {
+        parse_all(args).command
     }
 
     fn url(s: &str) -> Url {
@@ -139,6 +187,99 @@ mod tests {
         assert_eq!(
             parse(&["--show", "http://127.0.0.1:8123/smoke.html"]),
             Some(Command::Show(Some(url("http://127.0.0.1:8123/smoke.html"))))
+        );
+    }
+
+    #[test]
+    fn start_at_login_takes_on_or_off_in_any_case() {
+        for (value, want) in [
+            ("on", true),
+            ("ON", true),
+            ("On", true),
+            ("off", false),
+            ("OFF", false),
+        ] {
+            assert_eq!(
+                parse_all(&["--start-at-login", value]).start_at_login,
+                Some(want),
+                "{value}"
+            );
+        }
+        for bad in ["yes", "true", "1", "", "onn"] {
+            assert_eq!(
+                parse_all(&["--start-at-login", bad]).start_at_login,
+                None,
+                "{bad}"
+            );
+        }
+        assert_eq!(parse_all(&["--start-at-login"]).start_at_login, None);
+        assert_eq!(
+            parse_all(&["--start-at-login", "on", "--start-at-login", "off"]).start_at_login,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn start_at_login_never_touches_the_window() {
+        for args in [
+            &["--start-at-login", "on"][..],
+            &["--start-at-login", "off"],
+            &["--start-at-login", "maybe"],
+        ] {
+            let parsed = parse_all(args);
+            assert_eq!(parsed.command, None, "{args:?}");
+        }
+        assert_eq!(
+            parse_all(&["--start-at-login", "on"]).forwarded_command(),
+            None
+        );
+        assert_eq!(
+            parse_all(&["--start-at-login", "off"]).forwarded_command(),
+            None
+        );
+        // A flag without a value is no flag: a plain second launch still shows the window.
+        assert_eq!(
+            parse_all(&["--start-at-login", "maybe"]).forwarded_command(),
+            Some(Command::Show(None))
+        );
+        // A missing value doesn't swallow the next flag.
+        assert_eq!(
+            parse_all(&["--start-at-login", "--toggle"]),
+            Args {
+                command: Some(Command::Toggle),
+                start_at_login: None
+            }
+        );
+    }
+
+    #[test]
+    fn window_flags_still_apply_next_to_start_at_login() {
+        assert_eq!(
+            parse_all(&["--start-at-login", "on", "--hide"]),
+            Args {
+                command: Some(Command::Hide),
+                start_at_login: Some(true)
+            }
+        );
+        assert_eq!(
+            parse_all(&["--hide", "--start-at-login", "off"]).forwarded_command(),
+            Some(Command::Hide)
+        );
+    }
+
+    #[test]
+    fn a_plain_second_launch_shows_the_window() {
+        assert_eq!(
+            parse_all(&[]).forwarded_command(),
+            Some(Command::Show(None))
+        );
+        assert_eq!(
+            parse_all(&["-psn_0_12345"]).forwarded_command(),
+            Some(Command::Show(None))
+        );
+        assert_eq!(
+            parse_all(&["--toggle"]).forwarded_command(),
+            Some(Command::Toggle)
         );
     }
 }

@@ -68,6 +68,65 @@ export interface Measurements {
    * still alive after hibernating — the worst sample. Other apps' helpers don't count.
    */
   pageHelpersLeft: number;
+  /** What `--start-at-login on`, then `off`, left in the OS's login items (omitted: not checked). */
+  loginEntry?: LoginEntryCheck;
+}
+
+/** A login item found in the OS: where it lives and the command it runs. */
+export interface LoginEntry {
+  /** Registry value name, plist file or .desktop file. */
+  where: string;
+  command: string;
+}
+
+export interface LoginEntryCheck {
+  /** Entries pointing at the installed app after `--start-at-login on`. */
+  afterOn: LoginEntry[];
+  /** Entries pointing at the installed app after `--start-at-login off` (should be none). */
+  afterOff: LoginEntry[];
+}
+
+/** Values in `reg query <key>` output: `    <name>    REG_SZ    <data>` lines. */
+export function parseRegValues(output: string): { name: string; type: string; data: string }[] {
+  const values: { name: string; type: string; data: string }[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^ {4}(.+?) {4}(REG_\w+) {4}(.*)$/.exec(line);
+    if (match?.[1] && match[2] && match[3] !== undefined) {
+      values.push({ name: match[1], type: match[2], data: match[3] });
+    }
+  }
+  return values;
+}
+
+/** The program a LaunchAgent plist runs: the first string of its ProgramArguments array. */
+export function plistProgram(plist: string): string | undefined {
+  const array = /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(plist)?.[1];
+  const first = /<string>([\s\S]*?)<\/string>/.exec(array ?? "")?.[1];
+  return first
+    ?.replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+}
+
+/** The command an XDG autostart .desktop file runs (its `Exec=` line). */
+export function desktopExec(desktop: string): string | undefined {
+  return /^Exec=(.*)$/m.exec(desktop)?.[1]?.trim();
+}
+
+/**
+ * Whether a login entry's command runs one of `installed` (the installed binary, and its
+ * canonical path): the path alone, quoted or not, optionally followed by arguments. Windows
+ * paths compare without case.
+ */
+export function pointsAt(command: string, installed: readonly string[], ignoreCase: boolean): boolean {
+  const fold = (text: string) => (ignoreCase ? text.toLowerCase() : text);
+  const cmd = fold(command.trim());
+  return installed.some((path) => {
+    const p = fold(path);
+    return [p, `"${p}"`].some((program) => cmd === program || cmd.startsWith(`${program} `));
+  });
 }
 
 /** Process ids in `now` that weren't in `before` (the helpers that appeared meanwhile). */
@@ -126,6 +185,37 @@ export function evaluate(events: LogEvent[], expect: Expectations, measured: Mea
   }
   if (measured.pageHelpersLeft > 0) {
     failures.push(`webview helper processes of the page left after hibernating: ${measured.pageHelpersLeft}`);
+  }
+  if (measured.loginEntry) {
+    failures.push(...startAtLoginFailures(events, measured.loginEntry));
+  }
+  return failures;
+}
+
+/**
+ * `--start-at-login on` then `off`: the app reports `true` then `false` (read back from the OS),
+ * an entry pointing at the installed app exists in between and is gone after, and neither flag
+ * opened a window.
+ */
+export function startAtLoginFailures(events: LogEvent[], check: LoginEntryCheck): string[] {
+  const failures: string[] = [];
+  const on = events.findIndex((e) => e.event === "start-at-login" && e.detail === "true");
+  const off = events.findIndex((e, i) => i > on && e.event === "start-at-login" && e.detail === "false");
+  if (on < 0 || off < 0) {
+    failures.push('expected "start-at-login true", then "start-at-login false"');
+  }
+  for (const failed of events.filter((e) => e.event === "start-at-login-failed")) {
+    failures.push(`start at login failed: ${failed.detail}`);
+  }
+  if (check.afterOn.length === 0) {
+    failures.push("no login entry pointing at the installed app after --start-at-login on");
+  }
+  if (check.afterOff.length > 0) {
+    failures.push(`login entry left after --start-at-login off: ${check.afterOff.map((e) => e.where).join(", ")}`);
+  }
+  const first = events.findIndex((e) => e.event.startsWith("start-at-login"));
+  if (first >= 0 && events.some((e, i) => i > first && e.event === "window-created")) {
+    failures.push("--start-at-login opened a window");
   }
   return failures;
 }
