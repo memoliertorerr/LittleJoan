@@ -1,18 +1,58 @@
-//! Linux: page keys through the GTK window's `key-press-event`, which runs before WebKitGTK
-//! receives the key (handlers connected with `connect_*` run before the class handler).
+//! Linux. Tauri packs a window's webviews into a vertical GtkBox (so bounds don't apply; GTK
+//! lays them out), which this module uses for the URL bar: the bar is packed at a fixed height
+//! and the page takes the rest. Page keys go through the GTK window's `key-press-event`, which
+//! runs before WebKitGTK receives the key (handlers connected with `connect_*` run before the
+//! class handler). Element fullscreen is followed through WebKitGTK's `enter-fullscreen` and
+//! `leave-fullscreen` signals, to hide the bar meanwhile.
 
 use gtk::glib::Propagation;
+use gtk::glib::prelude::*;
 use gtk::prelude::*;
-use tauri::{Manager, Runtime, WebviewWindow, Window};
+use tauri::{Manager, Runtime, Webview, Window};
 
+use crate::bar;
 use crate::keys::{self, Key, Mods, Platform};
+use crate::layout::BAR_HEIGHT;
 use crate::page_actions;
 
-pub fn install<R: Runtime>(window: &WebviewWindow<R>) {
-    let app = window.app_handle().clone();
+/// The URL bar: a fixed height at the top of the window's box instead of an equal share.
+pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
     // with_webview runs on the GTK main thread, where GTK objects may be touched.
-    let result = window.with_webview(move |webview| {
-        let Some(toplevel) = webview.inner().toplevel() else {
+    let result = bar.with_webview(|webview| {
+        let view = webview.inner();
+        // BAR_HEIGHT is a small constant (40), so the cast is exact.
+        view.set_size_request(-1, BAR_HEIGHT as i32);
+        match view
+            .parent()
+            .and_then(|parent| parent.downcast::<gtk::Box>().ok())
+        {
+            Some(container) => {
+                container.set_child_packing(&view, false, false, 0, gtk::PackType::Start);
+            }
+            None => eprintln!("little-joan: the URL bar is not in a GtkBox; layout is GTK's"),
+        }
+    });
+    if let Err(err) = result {
+        eprintln!("little-joan: could not reach the URL bar: {err}");
+    }
+}
+
+/// The page: page keys for the whole window, and element fullscreen.
+pub fn install_page<R: Runtime>(page: &Webview<R>) {
+    let app = page.app_handle().clone();
+    let result = page.with_webview(move |webview| {
+        let view = webview.inner();
+        for (signal, on) in [("enter-fullscreen", true), ("leave-fullscreen", false)] {
+            let app = app.clone();
+            view.connect_local(signal, false, move |_| {
+                // Hide or show the bar after WebKitGTK has handled the signal.
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move { bar::set_element_fullscreen(&app, on) });
+                // FALSE: let WebKitGTK go on with its own fullscreen handling.
+                Some(false.to_value())
+            });
+        }
+        let Some(toplevel) = view.toplevel() else {
             eprintln!("little-joan: the webview has no toplevel window; page keys are off");
             return;
         };

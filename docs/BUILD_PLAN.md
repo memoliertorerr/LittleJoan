@@ -45,9 +45,12 @@
 | LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ✅ done |
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ✅ done (Linux smoke on 24.04 — see notes) |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ✅ done — waiting for the human check |
+| LJ10.1 | *(added mid-plan 2026-10-17)* Always-visible URL bar: a trusted local webview above the page | strong | auto | ✅ done |
+| LJ10.2 | *(added mid-plan 2026-10-17)* Project files: CHANGELOG, CONTRIBUTING, SECURITY, repo metadata | standard | auto | ⬜ todo |
 
-**Overall status: all ten steps committed; PRs #1–#4 open (stacked). Stopped at LJ10's human
-checkpoint. Open question for the user: Linux fullscreen on Ubuntu 22.04 / the AppImage
+**Overall status: v0.1 (LJ1–LJ10) passed the user's own check on macOS. Phase 5 (LJ10.1–LJ10.2,
+added mid-plan 2026-10-17) adds the always-visible URL bar and the project files; PR #5 into
+`lj/p4-ship`. Open question for the user: Linux fullscreen on Ubuntu 22.04 / the AppImage
 (WebKitGTK 2.50.4 aborts on element fullscreen — see Deferred follow-ups).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
@@ -65,6 +68,10 @@ settled contracts and can run on a standard model.
    shortcut re-registration with rollback, translate.
 4. **LJ8 → LJ10** · strong — `lj/p4-ship` → PR into `lj/p3-settings`. Review: installers, the
    CI smoke screenshots, and the **human checklist**.
+5. **LJ10.1 → LJ10.2** · strong — `lj/p5-url-bar` → PR into `lj/p4-ship` *(added mid-plan
+   2026-10-17)*. Review: the two-webview window (trusted bar, IPC-free page), the `unstable`
+   feature, layout and fullscreen per OS, the project files. No human checkpoint (the user
+   asked for none).
 
 Never start a phase with uncommitted changes in the tree.
 
@@ -1255,6 +1262,129 @@ it ready once CI is green, tell the user exactly what to check and where, then s
   fullscreen check and the macOS "audio stops when you hide" check.
 - **Not verified by the agent:** everything on the checklist — real desktops, real input
   devices, YouTube, Wayland, Gatekeeper/SmartScreen, multi-monitor placement.
+
+---
+
+### LJ10.1 — Always-visible URL bar · strong · auto
+
+> **Added mid-plan 2026-10-17** — not part of the original scope. The user tried v0.1 on their
+> Mac and asked for an "always on url bar on top so i can change site when needed". No human
+> checkpoint: the user asked for none; CI (verify, package, smoke on all three OSes) is the gate.
+
+**Verify:** `npm run verify` green, including Rust tests for `layout::layout` (bar on top at
+`BAR_HEIGHT`, page below; hidden bar → page fills the window; never negative; bar + page tile
+the window exactly) and `bar::bar_text` (start page and `about:` show nothing; web pages show
+their full address), and vitest tests for `ui/bar-logic.ts` (Enter opens the trimmed text, not
+while composing; Esc reverts an edit, then returns to the page, or closes on the start page;
+an address update never clobbers an edit in progress). Capabilities: the bar webview gets only
+`allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-hibernate`; the page webview's
+local start page only `allow-start-info`; no remote URLs anywhere. CI green on ubuntu, windows,
+macos for verify, package, and smoke — the smoke log must show `bar-loaded` and
+`bar-url http://127.0.0.1…` for the smoke page.
+**Commit:** `lj-step-10.1: always-visible URL bar above the page (second, trusted webview)`
+
+```text
+Add an address bar that is always visible above the page, in the existing minimal style.
+
+Design (decided, do not relitigate):
+- The page window becomes a plain tauri::Window holding TWO webviews (Tauri 2 multi-webview):
+  "joan-bar" — a trusted local page (ui/bar.html) pinned to the top, BAR_HEIGHT = 40 logical px
+  — and "joan-page" — the web page below it (no IPC for remote content, as before). No UI is
+  injected into remote pages.
+- Tauri 2.12 keeps the multi-webview API (window::WindowBuilder, Window::add_child,
+  Manager::get_window / get_webview) behind its `unstable` feature: enable it in Cargo.toml and
+  say why in a comment. This is the one new "dependency" change allowed.
+- Layout: pure src-tauri/src/layout.rs (tested). Windows/macOS place child webviews by bounds,
+  so re-apply the layout on Resized / ScaleFactorChanged. Linux packs child webviews into the
+  window's GtkBox (bounds don't apply): pack the bar with expand=false at a fixed height
+  request; the page takes the rest.
+- The bar always shows the page's address ("" + placeholder on the start page). Push updates
+  from Rust with bar.eval("window.littleJoan.setUrl(<json>)") on every page load (Started and
+  Finished — redirects), every title change, after app-started navigations, and a 1 s check
+  while the window exists (history.pushState / #anchor changes raise no event). The bar asks
+  once on load (page_url command) so it never misses the first address.
+- Click the bar or Ctrl/Cmd+L (now "focus the bar", replacing the old start-page round trip):
+  edit; Enter → open_input (same normalization as before) in the PAGE webview, then focus the
+  page; Esc reverts an edit, then (nothing to revert) returns focus to the page, or on the start
+  page closes the window (keeps v0.1's "Esc on the empty field closes"). Leaving the field
+  without Enter reverts it.
+- The page webview's local start page becomes a hint only ("Type an address or a search in the
+  bar above", shortcut hint); the bar has the focus on summon.
+- Element fullscreen: hide the bar and let the page fill the window; bring it back when it
+  ends. Windows: in the ContainsFullScreenElementChanged handler. Linux: WebKitGTK's
+  enter-fullscreen / leave-fullscreen signals (return FALSE so WebKitGTK proceeds). macOS:
+  WebKit shows element fullscreen in its own window, so nothing to do.
+- Keys: install the WebView2 AcceleratorKeyPressed hook on both webviews (Windows); the GTK
+  window-level hook already covers both (Linux); the app menu covers both (macOS).
+- Smoke: the app logs bar-loaded and bar-url <text>; scripts/ci/smoke-log.mts requires both
+  (the smoke page's address must reach the bar).
+
+Files: src-tauri/src/{bar.rs, layout.rs, placement.rs (moved out of joan.rs), joan.rs,
+page_actions.rs, commands.rs, keys.rs, platform/*, lib.rs}, build.rs, capabilities/{bar.json,
+joan.json}, ui/{bar.html, bar.ts, bar-logic.ts (+test), index.html, start.ts, start-logic.ts,
+style.css}, vite.config.mts, scripts/ci/smoke-log.mts (+test), docs, README.
+
+Do NOT add buttons (back/forward/reload) to the bar — the existing design is keys + tray.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ10.1 to ✅ in
+docs/BUILD_PLAN.md and commit everything as one commit: "lj-step-10.1: always-visible URL bar
+above the page (second, trusted webview)". Push (open the phase-5 PR into lj/p4-ship) and watch
+CI until verify, package, and smoke are green on all three OSes; Windows/Linux-only failures
+are fixed per Ground Rule 3. If it is still red after two honest fix attempts, stop and report —
+never commit red, never weaken a check to get green.
+```
+
+**Implementation notes (2026-10-17):**
+
+- **Disk:** 15 GB free at the start; `.cache/target` ~1.7 GB after enabling `unstable`.
+- **`unstable` is required** for `window::WindowBuilder`, `Window::add_child`, and
+  `Manager::get_window` / `get_webview` in Tauri 2.12; the Cargo.toml comment says so.
+- **Linux ignores child-webview bounds.** tauri-runtime-wry builds Linux child webviews with
+  `build_gtk(window.default_vbox())`, i.e. `pack_start(expand, fill)` into a GtkBox — both
+  webviews would split the window evenly. `platform/linux.rs` re-packs the bar with
+  `expand = false` and a 40 px height request; `set_bounds` calls are harmless no-ops there.
+- **Capabilities are per webview label now** (`"webviews": [...]`), not per window: a
+  window-scoped capability would have applied to both the bar and the page webview.
+- **Ctrl/Cmd+L changed meaning:** it used to navigate the page to the start page with the URL
+  pre-filled; now it focuses the bar. `keys::start_page_url` and `ui/start-logic.ts`'s key
+  handling went away with it; the start page is a hint only.
+- **The 1 s address check** is a plain thread per window generation (no tokio dependency); it
+  stops within a second of hibernating or when a newer window replaces it.
+- **WebView2 needs both webviews in one environment,** so they share the data directory.
+- 63 Rust tests, 42 TS tests.
+
+---
+
+### LJ10.2 — Project files for GitHub · standard · auto
+
+> **Added mid-plan 2026-10-17** — the user asked to make it "a whole project on GitHub".
+
+**Verify:** `npm run verify` green; `CHANGELOG.md` (0.1.0 with what it contains),
+`CONTRIBUTING.md` (short: build, verify, conventions), and `SECURITY.md` (report privately
+through GitHub's private vulnerability reporting) exist and are linked from the README; LICENSE
+is MIT, © 2026 Mehmet Ali Ertorer; `gh repo view --repo memoliertorerr/LittleJoan --json
+description,homepageUrl,repositoryTopics` shows the description, the README as homepage, and
+topics. No releases, no tags.
+**Commit:** `lj-step-10.2: changelog, contributing guide, and security policy`
+
+```text
+Make the repository read as a whole project. Add CHANGELOG.md (Keep a Changelog style; 0.1.0,
+unreleased date, listing what v0.1 contains including the URL bar and the known Linux 22.04
+fullscreen issue), CONTRIBUTING.md (how to build with scripts/env.sh, `npm run verify`, the
+CI jobs, the no-IPC-for-remote-pages rule, commit style), SECURITY.md (supported version,
+report privately via GitHub → Security → "Report a vulnerability" — private vulnerability
+reporting; no public issues for security problems). Link them from the README. Check LICENSE
+(MIT, © 2026 Mehmet Ali Ertorer).
+
+Then set the repository metadata with `gh repo edit --repo memoliertorerr/LittleJoan`:
+description, homepage = the README URL, topics (browser, tauri, rust, typescript,
+popup-browser, webview, desktop-app, windows, macos, linux, system-tray). That is the only
+GitHub settings change allowed. Do NOT create releases or tags.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ10.2 to ✅ and commit:
+"lj-step-10.2: changelog, contributing guide, and security policy". Push and watch CI. This
+ends phase 5: fill the PR description from the template, then stop and report.
+```
 
 ---
 

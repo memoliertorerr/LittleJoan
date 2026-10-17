@@ -3,8 +3,10 @@ import { count, evaluate, lastTitle, parseCodecs, parseLog, type LogEvent } from
 
 const GOOD = `1 started
 2 shortcut-registered CommandOrControl+Shift+Space
+3 bar-loaded
 3 window-created
 4 title Little Joan
+5 bar-url http://127.0.0.1:5000/smoke.html
 5 title LJ-SMOKE ready h264=mse vp9=mse av1=no
 6 page-loaded http://127.0.0.1:5000/smoke.html
 7 fullscreen true
@@ -64,6 +66,15 @@ describe("evaluate", () => {
     expect(evaluate(noFullscreen, { windowFullscreen: false, pageFullscreen: false }, NONE)).toEqual([]);
     expect(evaluate(noFullscreen, { windowFullscreen: true, pageFullscreen: false }, NONE)).toHaveLength(1);
     expect(evaluate(noFullscreen, { windowFullscreen: false, pageFullscreen: true }, NONE)).toHaveLength(1);
+  });
+
+  it("requires the URL bar to load and to show the page's address", () => {
+    const noBar = parseLog(GOOD.replace("3 bar-loaded\n", "").replace("5 bar-url http://127.0.0.1:5000/smoke.html\n", ""));
+    const failures = evaluate(noBar, { windowFullscreen: false, pageFullscreen: false }, NONE);
+    expect(failures).toEqual([
+      expect.stringContaining("bar never loaded"),
+      expect.stringContaining("smoke page's address"),
+    ]);
   });
 
   it("fails when webview helpers outlive the window", () => {

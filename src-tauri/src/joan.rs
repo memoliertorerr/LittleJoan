@@ -1,20 +1,18 @@
 //! The page window ("joan") and its lifecycle: created on demand, destroyed on close.
 //!
-//! Nothing here keeps a webview alive while hibernating: `Destroy` (and the user closing the
-//! window) drops the window and its webview, so the engine's renderer processes exit.
+//! The window holds two webviews (bar.rs): the URL bar on top and the page below. Nothing here
+//! keeps a webview alive while hibernating: `Destroy` (and the user closing the window) drops
+//! the window and both webviews, so the engine's renderer processes exit.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
-use tauri::webview::{NewWindowResponse, PageLoadEvent};
-use tauri::{
-    AppHandle, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    Window, WindowEvent,
-};
+use tauri::window::WindowBuilder;
+use tauri::{AppHandle, Manager, Runtime, Window, WindowEvent};
 use url::Url;
 
-use crate::keys;
-use crate::navigation;
+use crate::bar;
+use crate::placement;
 use crate::platform;
 use crate::settings::{self, MIN_HEIGHT, MIN_WIDTH};
 use crate::smoke;
@@ -30,8 +28,8 @@ static LIFECYCLE: Mutex<()> = Mutex::new(());
 /// Last fullscreen state seen, for the smoke log only.
 static WAS_FULLSCREEN: AtomicBool = AtomicBool::new(false);
 
-/// Handles `command` off the main thread. Building a webview window from the main thread can
-/// deadlock on Windows, and shortcut / single-instance / menu callbacks may run there.
+/// Handles `command` off the main thread. Building webviews from the main thread can deadlock
+/// on Windows, and shortcut / single-instance / menu callbacks may run there.
 pub fn dispatch<R: Runtime>(app: &AppHandle<R>, command: Command) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move { handle(&app, command) });
@@ -44,7 +42,7 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
     let result = match action {
         Action::Create(url) => create(app, url),
         Action::Focus => focus(app),
-        Action::FocusAndNavigate(url) => focus(app).and_then(|()| navigate(app, url)),
+        Action::FocusAndNavigate(url) => focus(app).and_then(|()| bar::navigate(app, url)),
         Action::Destroy => destroy(app),
         Action::Nothing => Ok(()),
     };
@@ -54,7 +52,7 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
 }
 
 fn window_state<R: Runtime>(app: &AppHandle<R>) -> WindowState {
-    match app.get_webview_window(LABEL) {
+    match app.get_window(LABEL) {
         None => WindowState::Hibernating,
         Some(window) => WindowState::Open {
             focused: window.is_focused().unwrap_or(false),
@@ -70,63 +68,36 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
             s.webview_data_dir.clone(),
         )
     });
-    let mut builder = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into()))
+    let window = WindowBuilder::new(app, LABEL)
         .title("Little Joan")
         .inner_size(width, height)
         .min_inner_size(f64::from(MIN_WIDTH), f64::from(MIN_HEIGHT))
         .resizable(true)
         .visible(false)
-        // Web pages only: no file:, javascript:, or app-launching schemes (navigation.rs).
-        .on_navigation(navigation::is_allowed_navigation)
-        .on_document_title_changed(|window, title| {
-            let title = title.trim();
-            let title = if title.is_empty() {
-                "Little Joan"
-            } else {
-                title
-            };
-            let _ = window.set_title(title);
-            smoke::log("title", title);
-        })
-        .on_page_load(|window, payload| {
-            if payload.event() == PageLoadEvent::Finished {
-                let url = payload.url();
-                let web_page = !keys::is_app_url(&keys::app_origin(), url)
-                    && navigation::is_external_openable(url);
-                tray::set_page_items_enabled(window.app_handle(), web_page);
-                smoke::log("page-loaded", url.as_str());
-            }
-        })
-        // target=_blank and window.open go to the default browser (web URLs only).
-        .on_new_window(|url, _features| {
-            if navigation::is_external_openable(&url)
-                && let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>)
-            {
-                eprintln!("little-joan: could not open the link in the default browser: {err}");
-            }
-            NewWindowResponse::Deny
-        });
-    if let Some(dir) = webview_data_dir {
-        builder = builder.data_directory(dir);
-    }
-    // Element fullscreen (video): WebView2 needs platform::install's handler; WKWebView (wry
-    // enables elementFullscreenEnabled) and WebKitGTK (fullscreens the toplevel by default)
-    // handle it themselves. See fullscreen.rs.
-    let window = builder.build()?;
+        .build()?;
     WAS_FULLSCREEN.store(false, Ordering::Relaxed);
-    platform::install(&window);
-    place(app, &window, width, height);
+    // Element fullscreen (video): WebView2 needs platform::install_page's handler; WKWebView
+    // (wry enables elementFullscreenEnabled) and WebKitGTK (fullscreens the toplevel by
+    // default) handle it themselves. See fullscreen.rs; the bar hides meanwhile (bar.rs).
+    if let Err(err) = bar::add_webviews(&window, width, height, webview_data_dir) {
+        let _ = window.destroy();
+        return Err(err);
+    }
+    placement::place(app, &window, width, height);
     window.show()?;
     window.set_focus()?;
+    bar::apply_layout(&window);
+    bar::focus_bar(app);
     smoke::log("window-created", "");
     if let Some(url) = url {
-        window.navigate(url)?;
+        bar::navigate(app, url)?;
     }
+    bar::watch_url(app);
     Ok(())
 }
 
 fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    if let Some(window) = app.get_webview_window(LABEL) {
+    if let Some(window) = app.get_window(LABEL) {
         window.unminimize()?;
         window.show()?;
         window.set_focus()?;
@@ -134,18 +105,11 @@ fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
-    match app.get_webview_window(LABEL) {
-        Some(window) => window.navigate(url),
-        None => Ok(()),
-    }
-}
-
 fn destroy<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    match app.get_webview_window(LABEL) {
+    match app.get_window(LABEL) {
         Some(window) => {
             remember_size(app, &window);
-            release_page(&window);
+            release_page(app, &window);
             window.destroy()
         }
         None => Ok(()),
@@ -157,10 +121,10 @@ fn destroy<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 /// the page is unloaded, and WebKit gets a moment before the window is destroyed. Runs off the
 /// main thread (inside `handle`), so the short sleep blocks nothing the user sees.
 #[cfg(target_os = "macos")]
-fn release_page<R: Runtime>(window: &WebviewWindow<R>) {
+fn release_page<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
     let _ = window.hide();
-    if let Ok(blank) = Url::parse("about:blank") {
-        let _ = window.navigate(blank);
+    if let (Some(page), Ok(blank)) = (bar::page(app), Url::parse("about:blank")) {
+        let _ = page.navigate(blank);
     }
     std::thread::sleep(std::time::Duration::from_millis(400));
 }
@@ -168,10 +132,10 @@ fn release_page<R: Runtime>(window: &WebviewWindow<R>) {
 /// WebView2 and WebKitGTK release a page's processes when the window is destroyed (measured in
 /// CI), so nothing extra is needed.
 #[cfg(not(target_os = "macos"))]
-fn release_page<R: Runtime>(_window: &WebviewWindow<R>) {}
+fn release_page<R: Runtime>(_app: &AppHandle<R>, _window: &Window<R>) {}
 
 /// Window events for "joan": route every close through `handle` (so it is hibernated the same
-/// way as with the shortcut), and log hibernation.
+/// way as with the shortcut), keep the bar and the page laid out, and log hibernation.
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if window.label() != LABEL {
         return;
@@ -187,19 +151,23 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
             tray::set_page_items_enabled(window.app_handle(), false);
             smoke::log("hibernated", "");
         }
-        WindowEvent::Resized(_) if smoke::enabled() => {
-            let fullscreen = platform::is_fullscreen(window);
-            if WAS_FULLSCREEN.swap(fullscreen, Ordering::Relaxed) != fullscreen {
-                smoke::log("fullscreen", if fullscreen { "true" } else { "false" });
+        WindowEvent::Resized(_) => {
+            bar::apply_layout(window);
+            if smoke::enabled() {
+                let fullscreen = platform::is_fullscreen(window);
+                if WAS_FULLSCREEN.swap(fullscreen, Ordering::Relaxed) != fullscreen {
+                    smoke::log("fullscreen", if fullscreen { "true" } else { "false" });
+                }
             }
         }
+        WindowEvent::ScaleFactorChanged { .. } => bar::apply_layout(window),
         _ => {}
     }
 }
 
 /// Saves the window's logical size as the size for the next summon. A fullscreen, maximized,
 /// or minimized window says nothing about the size the user wants, so it is skipped.
-fn remember_size<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
+fn remember_size<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
     let unusual = window.is_fullscreen().unwrap_or(true)
         || window.is_maximized().unwrap_or(true)
         || window.is_minimized().unwrap_or(true);
@@ -225,104 +193,5 @@ fn remember_size<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
         && let Err(err) = settings::save(&dir, &updated)
     {
         eprintln!("little-joan: could not save the window size: {err}");
-    }
-}
-
-/// Centres the new window in the work area of the monitor under the mouse cursor (falling back
-/// to the primary monitor, then to the window manager's centre).
-fn place<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, width: f64, height: f64) {
-    let monitor = app
-        .cursor_position()
-        .ok()
-        .and_then(|cursor| app.monitor_from_point(cursor.x, cursor.y).ok().flatten())
-        .or_else(|| app.primary_monitor().ok().flatten());
-    let Some(monitor) = monitor else {
-        let _ = window.center();
-        return;
-    };
-    let scale = monitor.scale_factor();
-    let work = monitor.work_area();
-    let area = Rect {
-        x: work.position.x,
-        y: work.position.y,
-        width: work.size.width,
-        height: work.size.height,
-    };
-    let (x, y) = centered_in(
-        area,
-        (to_physical(width, scale), to_physical(height, scale)),
-    );
-    let _ = window.set_position(PhysicalPosition::new(x, y));
-}
-
-fn to_physical(logical: f64, scale: f64) -> u32 {
-    // Window sizes are clamped to MAX_SIZE in settings, so this never exceeds u32.
-    (logical * scale).round().clamp(0.0, f64::from(u32::MAX)) as u32
-}
-
-/// A monitor work area in physical pixels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Rect {
-    pub x: i32,
-    pub y: i32,
-    pub width: u32,
-    pub height: u32,
-}
-
-/// Top-left position that centres a window of `size` in `area`; a window larger than the area
-/// is aligned to its top-left corner so the title bar stays reachable.
-pub fn centered_in(area: Rect, size: (u32, u32)) -> (i32, i32) {
-    let offset = |available: u32, length: u32| {
-        i32::try_from(available.saturating_sub(length) / 2).unwrap_or(0)
-    };
-    (
-        area.x.saturating_add(offset(area.width, size.0)),
-        area.y.saturating_add(offset(area.height, size.1)),
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn centres_inside_the_work_area() {
-        let area = Rect {
-            x: 0,
-            y: 25,
-            width: 1440,
-            height: 875,
-        };
-        assert_eq!(centered_in(area, (480, 640)), (480, 142));
-    }
-
-    #[test]
-    fn works_on_secondary_monitors_left_of_and_above_the_primary() {
-        let area = Rect {
-            x: -1920,
-            y: -200,
-            width: 1920,
-            height: 1040,
-        };
-        assert_eq!(centered_in(area, (960, 640)), (-1440, 0));
-    }
-
-    #[test]
-    fn oversized_windows_align_to_the_top_left() {
-        let area = Rect {
-            x: 100,
-            y: 50,
-            width: 800,
-            height: 600,
-        };
-        assert_eq!(centered_in(area, (1000, 700)), (100, 50));
-        assert_eq!(centered_in(area, (500, 900)), (250, 50));
-    }
-
-    #[test]
-    fn logical_to_physical_rounds() {
-        assert_eq!(to_physical(480.0, 1.25), 600);
-        assert_eq!(to_physical(333.0, 1.5), 500);
-        assert_eq!(to_physical(-3.0, 2.0), 0);
     }
 }

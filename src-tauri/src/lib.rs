@@ -3,14 +3,17 @@
 //! At rest the process has a tray icon and nothing else — no window and no webview. See
 //! docs/architecture.md for the lifecycle.
 
+pub mod bar;
 pub mod cli;
 pub mod commands;
 pub mod fullscreen;
 pub mod input;
 pub mod joan;
 pub mod keys;
+pub mod layout;
 pub mod navigation;
 pub mod page_actions;
+pub mod placement;
 pub mod settings;
 pub mod settings_window;
 pub mod shortcut;
@@ -40,6 +43,8 @@ pub fn run() {
             commands::open_input,
             commands::hibernate,
             commands::start_info,
+            commands::page_url,
+            commands::focus_page,
             commands::get_settings,
             commands::save_settings,
             commands::suspend_shortcut

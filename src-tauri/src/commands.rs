@@ -1,10 +1,12 @@
-//! Commands the local pages may call. build.rs's app manifest makes each one need a permission:
-//! capabilities/joan.json grants the start page its three, capabilities/settings.json grants the
-//! settings window its three. Remote pages get no IPC at all.
+//! Commands the local pages may call. build.rs's app manifest makes each one need a permission,
+//! granted per webview: capabilities/bar.json (the URL bar), capabilities/joan.json (the local
+//! start page in the page webview), capabilities/settings.json (the settings window). Remote
+//! pages get no IPC at all.
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime, WebviewWindow};
+use tauri::{AppHandle, Runtime};
 
+use crate::bar;
 use crate::input::{self, SearchEngine};
 use crate::joan;
 use crate::settings::{self, Settings};
@@ -14,17 +16,29 @@ use crate::state;
 use crate::toggle::Command;
 use crate::translate::{LANGUAGES, is_valid_lang};
 
-/// Opens what the user typed: a web address, or a search with the configured engine.
+/// Opens what the user typed in the URL bar in the page: a web address, or a search with the
+/// configured engine. The keyboard then moves to the page.
 #[tauri::command]
-pub async fn open_input<R: Runtime>(
-    app: AppHandle<R>,
-    window: WebviewWindow<R>,
-    input: String,
-) -> Result<(), String> {
+pub async fn open_input<R: Runtime>(app: AppHandle<R>, input: String) -> Result<(), String> {
     let engine = state::with(&app, |s| s.settings.search_engine);
     let url = input::normalize(&input, engine)
         .ok_or_else(|| "Type an address or something to search for.".to_owned())?;
-    window.navigate(url).map_err(|err| err.to_string())
+    bar::navigate(&app, url).map_err(|err| err.to_string())?;
+    bar::focus_page(&app);
+    Ok(())
+}
+
+/// What the URL bar should show right now (`null` on the start page). The bar asks once when
+/// it loads; after that the app pushes changes to it.
+#[tauri::command]
+pub async fn page_url<R: Runtime>(app: AppHandle<R>) -> Option<String> {
+    bar::current_text(&app)
+}
+
+/// Gives the keyboard back to the page (Esc in the URL bar).
+#[tauri::command]
+pub async fn focus_page<R: Runtime>(app: AppHandle<R>) {
+    bar::focus_page(&app);
 }
 
 /// Closes the page window: back to hibernation.

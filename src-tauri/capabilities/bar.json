@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "bar",
+  "description": "The URL bar: open what was typed in the page, read the page's address, hand the keyboard back to the page, close.",
+  "webviews": ["joan-bar"],
+  "permissions": ["allow-open-input", "allow-page-url", "allow-focus-page", "allow-hibernate"]
+}

@@ -7,7 +7,7 @@
 //! | Keys                    | Windows | Linux | Action        |
 //! |-------------------------|---------|-------|---------------|
 //! | Ctrl+W                  | yes     | yes   | Close         |
-//! | Ctrl+L                  | yes     | yes   | Open location |
+//! | Ctrl+L                  | yes     | yes   | Focus URL bar |
 //! | Ctrl+R, F5              | native  | yes   | Reload        |
 //! | Alt+Left / Alt+Right    | native  | yes   | Back / Forward|
 //! | Ctrl+Shift+T            | yes     | yes   | Translate     |
@@ -19,6 +19,7 @@ use url::Url;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageAction {
     Close,
+    /// Put the keyboard in the URL bar with the address selected.
     OpenLocation,
     Reload,
     Back,
@@ -148,17 +149,6 @@ pub fn app_origin() -> Url {
     };
     // Constant, valid URLs.
     Url::parse(origin).expect("app origin is a valid URL")
-}
-
-/// The start page with `current` pre-filled (`index.html?u=…`), or `None` when `current` already
-/// is a page of the app.
-pub fn start_page_url(origin: &Url, current: &Url) -> Option<Url> {
-    if is_app_url(origin, current) {
-        return None;
-    }
-    let mut url = origin.join("index.html").ok()?;
-    url.query_pairs_mut().append_pair("u", current.as_str());
-    Some(url)
 }
 
 /// Whether `url` is on the app's origin. Compared by parts: `tauri://` is not a special scheme,
@@ -302,39 +292,23 @@ mod tests {
     }
 
     #[test]
-    fn start_page_url_carries_the_current_address() {
-        let origin = Url::parse("tauri://localhost/").expect("valid");
-        let current = Url::parse("https://example.com/a?b=1&c=d").expect("valid");
-        let got = start_page_url(&origin, &current).expect("a remote page");
-        assert_eq!(
-            got.as_str(),
-            "tauri://localhost/index.html?u=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1%26c%3Dd"
-        );
-        let windows = Url::parse("http://tauri.localhost/").expect("valid");
-        assert_eq!(
-            start_page_url(&windows, &current)
-                .expect("a remote page")
-                .as_str(),
-            "http://tauri.localhost/index.html?u=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1%26c%3Dd"
-        );
-    }
-
-    #[test]
-    fn start_page_url_is_none_on_the_start_page() {
-        for (origin, start) in [
+    fn app_urls_are_recognised_on_both_origins() {
+        for (origin, inside, outside) in [
+            (
+                "tauri://localhost/",
+                "tauri://localhost/bar.html",
+                "tauri://elsewhere/",
+            ),
             (
                 "http://tauri.localhost/",
-                "http://tauri.localhost/index.html?u=x",
+                "http://tauri.localhost/index.html",
+                "http://example.com/",
             ),
-            ("tauri://localhost/", "tauri://localhost/index.html"),
         ] {
             let origin = Url::parse(origin).expect("valid");
-            let start = Url::parse(start).expect("valid");
-            assert_eq!(start_page_url(&origin, &start), None, "{start}");
+            assert!(is_app_url(&origin, &Url::parse(inside).expect("valid")));
+            assert!(!is_app_url(&origin, &Url::parse(outside).expect("valid")));
         }
-        let origin = Url::parse("tauri://localhost/").expect("valid");
-        let other = Url::parse("tauri://elsewhere/").expect("valid");
-        assert!(start_page_url(&origin, &other).is_some());
     }
 
     #[test]

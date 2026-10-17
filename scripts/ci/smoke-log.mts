@@ -71,6 +71,12 @@ export function evaluate(events: LogEvent[], expect: Expectations, measured: Mea
       from = index + 1;
     }
   }
+  if (count(events, "bar-loaded") === 0) {
+    failures.push('the URL bar never loaded ("bar-loaded")');
+  }
+  if (count(events, "bar-url", "http://127.0.0.1") === 0) {
+    failures.push("the URL bar was never told the smoke page's address");
+  }
   if (count(events, "started") !== 1) {
     failures.push(`expected exactly one "started" (single instance), saw ${count(events, "started")}`);
   }

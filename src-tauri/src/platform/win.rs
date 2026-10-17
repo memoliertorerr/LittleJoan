@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
-use tauri::{Manager, Runtime, WebviewWindow};
+use tauri::{AppHandle, Manager, Runtime, Webview, Window};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
     COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
@@ -16,17 +16,29 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 
+use crate::bar;
 use crate::fullscreen::FullscreenTracker;
 use crate::keys::{self, Key, Mods, Platform};
 use crate::page_actions;
-use crate::smoke;
 
-pub fn install<R: Runtime>(window: &WebviewWindow<R>) {
-    let app = window.app_handle().clone();
-    let page_window = window.clone();
-    let result = window.with_webview(move |webview| {
-        let controller = webview.controller();
-        install_fullscreen(&controller, page_window);
+/// The URL bar: page keys only.
+pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
+    install(bar, false);
+}
+
+/// The page: page keys, and element fullscreen.
+pub fn install_page<R: Runtime>(page: &Webview<R>) {
+    install(page, true);
+}
+
+fn install<R: Runtime>(webview: &Webview<R>, with_fullscreen: bool) {
+    let app = webview.app_handle().clone();
+    let window = webview.window();
+    let result = webview.with_webview(move |platform_webview| {
+        let controller = platform_webview.controller();
+        if with_fullscreen {
+            install_fullscreen(&controller, app.clone(), window);
+        }
         let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
             let Some(args) = args else {
                 return Ok(());
@@ -70,10 +82,11 @@ pub fn install<R: Runtime>(window: &WebviewWindow<R>) {
 }
 
 /// Makes the window fullscreen while the page has a fullscreen element (a video's fullscreen
-/// button), and restores it afterwards.
+/// button) and hides the URL bar meanwhile; restores both afterwards.
 fn install_fullscreen<R: Runtime>(
     controller: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller,
-    window: WebviewWindow<R>,
+    app: AppHandle<R>,
+    window: Window<R>,
 ) {
     // SAFETY: reads the core webview of a live controller.
     let core = match unsafe { controller.CoreWebView2() } {
@@ -96,21 +109,19 @@ fn install_fullscreen<R: Runtime>(
             // Resize outside this callback: changing the window re-enters WebView2 (it is resized
             // to the new bounds), so the change is queued from another thread.
             let window = window.clone();
+            let app = app.clone();
             let tracker = Arc::clone(&tracker);
             tauri::async_runtime::spawn(async move {
+                bar::set_element_fullscreen(&app, contains);
                 let window_is_fullscreen = window.is_fullscreen().unwrap_or(false);
                 let change = tracker
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .on_element_change(contains, window_is_fullscreen);
-                if let Some(fullscreen) = change {
-                    match window.set_fullscreen(fullscreen) {
-                        Ok(()) => smoke::log(
-                            "element-fullscreen",
-                            if fullscreen { "true" } else { "false" },
-                        ),
-                        Err(err) => eprintln!("little-joan: could not change fullscreen: {err}"),
-                    }
+                if let Some(fullscreen) = change
+                    && let Err(err) = window.set_fullscreen(fullscreen)
+                {
+                    eprintln!("little-joan: could not change fullscreen: {err}");
                 }
             });
             Ok(())
