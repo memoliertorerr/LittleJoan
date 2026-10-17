@@ -22,6 +22,10 @@ pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
 
 /// Whether the login entry exists, or `None` when it can't be read.
 pub fn is_enabled<R: Runtime>(app: &AppHandle<R>) -> Option<bool> {
+    if let Err(err) = ensure_run_key() {
+        eprintln!("little-joan: can't open the login entries: {err}");
+        return None;
+    }
     match app.autolaunch().is_enabled() {
         Ok(enabled) => Some(enabled),
         Err(err) => {
@@ -46,6 +50,7 @@ pub fn set<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<bool, String
 }
 
 fn apply<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<bool, String> {
+    ensure_run_key()?;
     let manager = app.autolaunch();
     // Only change what differs: Windows' disable fails when there is no value to delete.
     if manager.is_enabled().map_err(|err| err.to_string())? != enabled {
@@ -59,6 +64,25 @@ fn apply<R: Runtime>(app: &AppHandle<R>, enabled: bool) -> Result<bool, String> 
         .map_err(|err| err.to_string())?;
     }
     manager.is_enabled().map_err(|err| err.to_string())
+}
+
+/// Windows: auto-launch opens `HKCU\…\Run` without creating it, and a profile can lack the key
+/// (a CI runner did), which made every read and write fail with "file not found". Create the
+/// standard per-user Run key first; opening an existing one changes nothing.
+#[cfg(windows)]
+fn ensure_run_key() -> Result<(), String> {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+
+    RegKey::predef(HKEY_CURRENT_USER)
+        .create_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
+        .map(|_| ())
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(not(windows))]
+fn ensure_run_key() -> Result<(), String> {
+    Ok(())
 }
 
 /// The plugin records the canonical path of the running executable, so check that one.
