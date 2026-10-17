@@ -27,7 +27,7 @@ declare global {
 const field = document.querySelector<HTMLInputElement>("#url");
 const rowList = document.querySelector<HTMLElement>("#rows");
 const closeButton = document.querySelector<HTMLButtonElement>("#close");
-const toolbarRoot = document.querySelector<HTMLElement>(".toolbar");
+const toolbarRoot = document.querySelector<HTMLElement>(".toolstrip");
 
 // macOS: the traffic lights sit in the bar's top left corner (style.css leaves room for them).
 document.documentElement.classList.toggle("os-macos", isMac(navigator.userAgent));

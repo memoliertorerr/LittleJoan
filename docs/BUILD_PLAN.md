@@ -3011,6 +3011,18 @@ Once CI is green, merge into main (merge commit), then stop and report.
   (Tauri's drag script calls `internal_toggle_maximize`, which needs its own permission).
 - `npm run verify`: 134 TS tests, 149 Rust tests, clippy clean. Disk: 13 GiB free;
   `.cache/target` 1.2 GB.
+- **CI (run 39071547922): every job green — but `page.png` was wrong on every OS:** the 40 px
+  strip above the page was blank (no back, domain or open-in-browser). The toolbar's `<nav>` had
+  the class `toolbar`, which is also the body's view class, so the base rule hiding the strip
+  (`.toolbar { display: none }`) hid the whole body in the toolbar view. Smoke checks can't see
+  pixels; the screenshot did. The rest was right: macOS `start.png` / `command-bar.png` /
+  `command-typing.png` show the traffic lights in a 40 px backdrop strip above the command bar's
+  panel, vertically centred (x 14, y 20 works), no overlap with the search icon or the field, the
+  title bar transparent over the bar's backdrop; in `page.png` the lights sit in the toolbar's
+  strip and the page starts right below it (`viewport=480x600`). Windows and Linux are unchanged
+  in the command bar. **Fix (`lj-step-24-fix`):** the strip is `.toolstrip`; a new
+  `ui/bar-markup.test.ts` fails if a view class (`overlay`, `toolbar`) is put on any element but
+  `<body>` or styled without `.bar-body` (checked: it fails on the old stylesheet).
 
 ### LJ25 — History view · standard · auto
 

@@ -238,8 +238,9 @@ body {
   display: none;
 }
 
-/* Toolbar view: the Little Arc-style strip — back, the site in the middle, open in browser. */
-.toolbar {
+/* Toolbar view: the Little Arc-style strip — back, the site in the middle, open in browser.
+   (The strip is `.toolstrip`: `.toolbar` is the body's view class.) */
+.toolstrip {
   display: none;
 }
 
@@ -247,7 +248,7 @@ body {
   background: var(--toolbar-bg);
 }
 
-.bar-body.toolbar .toolbar {
+.bar-body.toolbar .toolstrip {
   display: flex;
   gap: 4px;
   align-items: center;
@@ -262,7 +263,7 @@ body {
 }
 
 /* macOS: the traffic lights sit in the toolbar's left end (joan.rs places them). */
-.os-macos .bar-body.toolbar .toolbar {
+.os-macos .bar-body.toolbar .toolstrip {
   padding-left: 78px;
 }
 
