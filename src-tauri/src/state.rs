@@ -6,6 +6,7 @@ use std::sync::{Mutex, PoisonError};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::cli::Args;
+use crate::cookies::SessionCookies;
 use crate::settings::{self, SETTINGS_FILE, Settings};
 
 /// Development builds point this at `.cache/dev-data` (see scripts/env.sh). Shipped builds never
@@ -30,6 +31,9 @@ pub struct AppState {
     /// A first run (no settings.json at launch) whose welcome the start page hasn't shown yet.
     /// Setup clears it when the first launch had flags; `start_info` clears it once read.
     pub first_run: bool,
+    /// Session cookies kept from the last window for the next one, in memory only (cookies.rs;
+    /// only where the engine drops them with the window).
+    pub session_cookies: SessionCookies,
 }
 
 pub type SharedState = Mutex<AppState>;
@@ -54,6 +58,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         active_shortcut: None,
         shortcut_suspended: false,
         first_run,
+        session_cookies: SessionCookies::default(),
     }));
     Ok(())
 }

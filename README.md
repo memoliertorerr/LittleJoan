@@ -136,8 +136,13 @@ hints, Word's non-breaking space); change it here if it does.
 - **Translate Page** sends the page's address to Google, and the translated page is served
   through Google's `translate.goog` proxy.
 - Cookies and site data (so logins survive) are kept by the system web engine in Little Joan's
-  own data folder, separate from your other browsers. Closing the window discards the page, not
-  the cookies.
+  own data store, separate from your other browsers: `%LOCALAPPDATA%\io.github.memoliertorerr.littlejoan`
+  on Windows, `~/.local/share/io.github.memoliertorerr.littlejoan` on Linux, WebKit's store for
+  Little Joan on macOS (under `~/Library/WebKit` and `~/Library/HTTPStorages`). Closing the
+  window discards the page, not the cookies; logins also survive quitting and restarting.
+- Session cookies (the "until you close the browser" kind) last while Little Joan runs, across
+  closing and reopening the window. On Windows, Little Joan holds them in memory meanwhile —
+  never on disk — and quitting forgets them, as quitting a browser does.
 - Web pages get no access to Little Joan's internals: only its own two local pages (the start
   field and Settings) can call into the app.
 

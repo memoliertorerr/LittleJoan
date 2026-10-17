@@ -226,6 +226,17 @@ describe("start at login", () => {
     expect(startAtLoginFailures(opened, { afterOn: [entry], afterOff: [] })).toEqual([
       expect.stringContaining("opened a window"),
     ]);
+    // A window right after "off" still counts while the check lasts.
+    const late = parseLog(`${GOOD}12 start-at-login true\n13 start-at-login false\n14 window-created\n`);
+    expect(startAtLoginFailures(late, { afterOn: [entry], afterOff: [], eventsUntil: 16 })).toHaveLength(1);
+  });
+
+  it("ignores windows that later steps open", () => {
+    const text = `${GOOD}12 start-at-login true\n13 start-at-login false\n`;
+    const until = parseLog(text).length;
+    const later = parseLog(`${text}20 window-created\n21 title LJ-PERSIST set\n`);
+    expect(startAtLoginFailures(later, { afterOn: [entry], afterOff: [], eventsUntil: until })).toEqual([]);
+    expect(startAtLoginFailures(later, { afterOn: [entry], afterOff: [] })).toHaveLength(1);
   });
 });
 

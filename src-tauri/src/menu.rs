@@ -5,11 +5,15 @@
 use tauri::menu::{AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Runtime};
 
+use crate::joan;
 use crate::keys::PageAction;
 use crate::page_actions;
 use crate::settings_window;
 
 const SETTINGS: &str = "menu-settings";
+/// Cmd+Q: our own item rather than the standard one, so it quits the way the tray's Quit does
+/// (joan::quit closes the window first). Not "quit": that id is the tray's.
+const QUIT: &str = "menu-quit";
 const OPEN_LOCATION: &str = "page-open-location";
 const TRANSLATE: &str = "page-translate";
 const OPEN_IN_BROWSER: &str = "page-open-in-browser";
@@ -31,7 +35,7 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("Quit Little Joan"))?,
+            &MenuItem::with_id(app, QUIT, "Quit Little Joan", true, Some("CmdOrCtrl+Q"))?,
         ],
     )?;
     let file = Submenu::with_items(
@@ -96,6 +100,10 @@ pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let action = match event.id().as_ref() {
         SETTINGS => {
             settings_window::open(app);
+            return;
+        }
+        QUIT => {
+            joan::quit(app);
             return;
         }
         OPEN_LOCATION => PageAction::OpenLocation,

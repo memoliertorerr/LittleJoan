@@ -9,6 +9,19 @@ All notable changes to Little Joan are recorded here. The format follows
 ### Added
 - `little-joan --quit` quits the running app, the same way as **Quit Little Joan** in the tray
   menu (handy for scripts; CI uses it to quit gracefully).
+- CI now proves that logins survive: on every system the smoke test checks that a persistent
+  cookie, a session cookie and localStorage outlive closing the window, and that the persistent
+  cookie and localStorage outlive quitting and relaunching.
+
+### Fixed
+- **Windows: "until you close the browser" logins no longer end when the window closes.**
+  WebView2 dropped session cookies with every window; Little Joan now keeps them in memory
+  while it runs (never on disk) and sets them again in the next window.
+- **macOS: Quit closes the window first.** Quitting with a page open ended the app without
+  unloading the page, and the next launch's web engine could fail to load anything (and the app
+  then crashed reading the page's address). Quit, `--quit` and Cmd+Q now close the window the
+  normal way first (at most 1.5 s), and the page's address is no longer read before the page has
+  started loading.
 
 ## [0.2.0-beta.1] — 2026-10-17
 

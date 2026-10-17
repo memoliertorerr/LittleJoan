@@ -67,7 +67,7 @@
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (starts once the user's secrets exist) | strong | auto | ⬜ todo |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
-| LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | 🔄 checks pushed first (lj-step-20); results and fixes follow in lj-step-20-fix |
+| LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ⬜ todo |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ⬜ todo |
 | LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ⬜ todo |
@@ -2490,7 +2490,42 @@ honest fix attempts, then stop).
 
 - **Checks first, as the prompt orders.** The step commit (`lj-step-20`) carries only the checks,
   `--quit` and the doc corrections, so CI shows what each engine does before anything is fixed;
-  the fixes follow as `lj-step-20-fix` commits, and the tracker row turns ✅ with the last one.
+  the fixes follow as `lj-step-20-fix` commits, and the tracker row turns ✅ with the fix.
+- **What the checks found before any fix** (run 39063980861, installed builds):
+
+  | | close → summon (want p=1 s=1 l=1) | quit → relaunch (want p=1 s=0 l=1) |
+  |---|---|---|
+  | Windows (WebView2) | **p=1 s=0 l=1** — the session cookie is lost | p=1 s=0 l=1 ✔ (quit 49 ms after the set) |
+  | macOS (WKWebView) | p=1 s=1 l=1 ✔ | **no report**: the relaunched app opened its window, but neither webview ever loaded, and 1.1 s later it aborted — wry 0.57's `url()` unwraps WKWebView's unset URL (`wkwebview/mod.rs:1370`), hit by the address watcher |
+  | Linux (WebKitGTK, scale 1 and 2) | p=1 s=1 l=1 ✔ | p=1 s=0 l=1 ✔ |
+
+  Every smoke job also failed "--start-at-login opened a window": that rule looked at the whole
+  rest of the log, and the new persistence steps open windows after it. It now stops at a count
+  of events taken 1.5 s after `off` (`eventsUntil`, tested both ways).
+- **Fix 1, session cookies (Windows only):** `cookies.rs` (pure): a session cookie has neither
+  an expiry date nor a max-age; one per name + domain (any case) + path, the last read wins; at
+  most 500; a cookie without a name or domain is dropped (WKWebView would refuse it), a missing
+  path becomes `/`, and `SameSite=None` without `Secure` is set without SameSite (Chromium,
+  so WebView2, refuses that pair). `joan::destroy` reads `Webview::cookies()` (off the main thread, as
+  WebView2 needs) before the page is released and keeps the session ones in `AppState`;
+  `joan::create` sets them with `Webview::set_cookie` right after the webviews exist, then reads
+  the cookies once more as a barrier (WebView2's cookie manager answers in order), before any
+  web page loads. `ENGINE_KEEPS_SESSION_COOKIES` (`!cfg!(windows)`) skips both on macOS and
+  Linux: CI showed their engines keep them, and setting them again there would add copies. The
+  module has no file or serialization code (a test reads its source) and its `Debug` prints only
+  a count. Smoke log: `session-cookies-kept <n>`, `session-cookies-restored <n>`.
+- **Fix 2, macOS quit (the prompt's step 3):** `joan::quit` on macOS closes an open window
+  through `handle(Hide)` → `destroy` (the page is unloaded) on its own thread and waits at most
+  1.5 s before `app.exit(0)`. Cmd+Q now goes through it too (`menu.rs` has its own Quit item,
+  id `menu-quit`, instead of the standard one, which ended the process the same way). Windows
+  and Linux passed without it, so they exit at once (the prompt: don't add it where it passes).
+- **Fix 3, the abort:** `bar::page_url` reads the page's address only after the page webview
+  reported a page load in this window (`PAGE_STARTED`, reset per window); `current_text`,
+  `publish_url`, Translate and Open in Browser use it. Before that the bar shows the start page.
+- **Not fixed (Deferred follow-ups, Landmines):** Tauri's cookie type drops the leading dot of a
+  domain cookie, so a session cookie set for `.example.com` comes back for `example.com` only.
+- Disk: checks commit 13 GiB free at the start, 12 GiB after verify; fix commit 13 GiB free;
+  `.cache/target` 1.2 GB.
 - **The smoke page** (`tests/smoke/smoke.html`, logic in `smoke-logic.mjs`): `?persist=set&t=…`
   writes `lj_p` (`Max-Age=31536000; Path=/; SameSite=Lax`), `lj_s` (`Path=/`, no expiry) and
   localStorage `lj_l`, then titles itself `LJ-PERSIST set`; `?persist=check&t=…` titles itself
@@ -2513,7 +2548,6 @@ honest fix attempts, then stop).
 - **`state.rs`'s comment was wrong**: with no `data_directory`, Tauri forces
   `app_local_data_dir` on Windows and Linux (`manager/webview.rs`); macOS ignores it. The
   comment and docs/architecture.md ("Where data lives") now say so.
-- Disk (checks commit): 13 GiB free at the start, 12 GiB after verify; `.cache/target` 1.2 GB.
 
 ### LJ21 — History: recorder, store, frecency · strong · auto
 
@@ -3225,6 +3259,13 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
 - ~~**`ubuntu-latest` moves to Ubuntu 26 from 2026-10-19**~~ (GitHub's notice on run
   39021598084). Handled by PR #8: the Linux `verify` job runs on `ubuntu-24.04`. A later
   ubuntu-26.04 verify job is optional.
+- **Domain-wide session cookies come back host-only on Windows** (surfaced by LJ20). Tauri's
+  cookie type (the `cookie` crate) strips a domain cookie's leading dot when it is read, so a
+  session cookie set for `.example.com` is set again for `example.com` alone, and
+  `www.example.com` no longer gets it after a close → summon. Persistent cookies are untouched
+  (the engine keeps them). Options: read and set Windows' cookies through webview2-com
+  (`ICoreWebView2CookieManager`) to keep the dot, or upstream a raw-domain accessor to
+  `cookie` / wry.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -3344,6 +3385,19 @@ Populated from real friction, not speculation:
 - *(round 2 planning)* **WKWebView's tracking prevention caps cookies written by JavaScript at
   7 days** for sites without recent interaction. This is Apple's behavior; a site that keeps a
   login only in a JS cookie can log out after a week idle.
+- *(LJ20)* **wry 0.57 panics reading an unset WKWebView address** (`url_from_webview`:
+  `webview.URL().unwrap()`), and release builds abort on panic. The address is unset until the
+  first navigation commits, and goes back to unset when that first navigation never does — CI
+  saw it in a relaunch right after `process::exit`. Read the page's address through
+  `bar::page_url`, which waits for the page's first load event.
+- *(LJ20)* **Tauri's `cookie` crate strips a domain cookie's leading dot** (`Cookie::domain`
+  and `domain_raw` both do), and wry passes `domain()` to the engines, so a cookie read with
+  `Webview::cookies` and set again becomes host-only. Deferred follow-ups has the options.
+- *(LJ20)* **`Webview::cookies_for_url` can abort the app**: tauri-runtime-wry's dispatcher does
+  `rx.recv().unwrap()` for it (not for `cookies()`), so a webview gone before the message is
+  handled panics. Use `cookies()`.
+- *(LJ20, macOS)* **After `process::exit` with a page open, the next launch's WebKit may load
+  nothing** (both webviews stayed blank in CI). Quit closes the window through `destroy` first.
 - *(round 2 planning)* **`navigation.rs` refuses `ljext:`** on macOS and Linux, frames included,
   while Windows' `http://ljext.localhost` form passes as plain `http`. LJ29 must handle both.
 

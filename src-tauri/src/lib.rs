@@ -7,6 +7,7 @@ pub mod autostart;
 pub mod bar;
 pub mod cli;
 pub mod commands;
+pub mod cookies;
 pub mod fullscreen;
 pub mod input;
 pub mod joan;

@@ -495,6 +495,9 @@ await waitFor(
 );
 const loginAfterOff = loginEntries();
 console.log(`login entries after off: ${JSON.stringify(loginAfterOff)}`);
+// A window the flags opened by mistake would show up by now; later steps open their own.
+await sleep(1500);
+const loginEventsUntil = events().length;
 
 // Logins survive: the smoke page sets a persistent cookie, a session cookie and a localStorage
 // value. All three must outlive closing the window (`--hide`, then a new window); after a
@@ -631,7 +634,7 @@ const failures = evaluate(
   { windowFullscreen: windowWanted, pageFullscreen: windowWanted, viewports: [NARROW, WIDE] },
   {
     pageHelpersLeft: Math.max(...helpersPerCycle),
-    loginEntry: { afterOn: loginAfterOn, afterOff: loginAfterOff },
+    loginEntry: { afterOn: loginAfterOn, afterOff: loginAfterOff, eventsUntil: loginEventsUntil },
   },
 )
   .concat(persistFailures(log, persistCheck))

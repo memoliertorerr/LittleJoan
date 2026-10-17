@@ -54,8 +54,10 @@ src-tauri/tauri.conf.json          product config: no windows at startup, CSP, b
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
 src-tauri/src/lib.rs               builder: plugins, commands, setup, run loop
-src-tauri/src/state.rs             AppState (settings, data dir, active shortcut, first run) behind
-                                   a Mutex; first-run detection and its bookkeeping (tested)
+src-tauri/src/state.rs             AppState (settings, data dir, active shortcut, first run, kept
+                                   session cookies) behind a Mutex; first-run detection (tested)
+src-tauri/src/cookies.rs           session cookies kept in memory across close → summon where the
+                                   engine drops them (WebView2): which, how many (pure, tested)
 src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is, Wayland (pure)
 src-tauri/src/joan.rs              the page window: create / focus / destroy, window events
 src-tauri/src/bar.rs               its two webviews (URL bar + page): build, layout, fullscreen,
@@ -77,7 +79,8 @@ src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ win
 src-tauri/src/keys.rs              page keys per OS (pure), app origin
 src-tauri/src/page_actions.rs      close / open location / reload / back / forward / translate /
                                    open in browser; translate_target (skips the start page)
-src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView) + page keys
+src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView) + page keys;
+                                   Cmd+Q goes through joan::quit
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
 src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → keys.rs;
                                    ContainsFullScreenElementChanged → window fullscreen
@@ -134,8 +137,15 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   size the user left it (logical pixels, saved on close unless fullscreen/maximized/minimized).
 - **Every close goes through the same path.** The close button, Cmd+W / Alt+F4
   (`CloseRequested` is prevented and turned into `--hide`), Esc on the start page, the shortcut,
-  and `--hide` all end in `joan::destroy`: remember the size, release the page, destroy the
-  window.
+  and `--hide` all end in `joan::destroy`: remember the size, keep the session cookies (Windows,
+  below), release the page, destroy the window.
+- **Quit** (tray, `--quit`, Cmd+Q) is `joan::quit`. On macOS it first closes an open window
+  through `destroy` (so the page is unloaded) and waits for that at most 1.5 s: after a plain
+  `app.exit` (`process::exit`, webviews never unloaded) CI saw the next launch's WebKit never
+  load a page. Windows and Linux exit at once — their stores came through without it.
+- **The page's address is read only after it started loading** (`bar::page_url`): wry 0.57
+  unwraps WKWebView's address, which is unset until the first navigation commits (and again
+  after a first navigation that never did), and that panic aborts a release build.
 - **Releasing the page on macOS:** WKWebView's page processes were measured outliving a
   destroyed window by minutes (which would also let a video's audio keep playing). On macOS
   the window is hidden at once, navigated to `about:blank`, and destroyed 400 ms later; CI then
@@ -216,6 +226,13 @@ sources):
 Switching between a dev build and the installed app therefore looks like a logout on Windows and
 Linux. Both webviews of the window share one data folder (WebView2 requires it). Closing the
 window discards the page, not the store.
+
+**Logins across close and quit** (proved per OS by the CI smoke test, LJ20):
+
+| | Close → summon | Quit → relaunch |
+|---|---|---|
+| Persistent cookies, localStorage | kept by the engine (all three) | on disk (all three; macOS closes the window before quitting, above) |
+| Session cookies (no expiry) | macOS and Linux keep them while the app runs; WebView2 drops them with the window, so on Windows `joan::destroy` reads them (`Webview::cookies`) and keeps up to 500 in memory, and `joan::create` sets them again before the first page (`cookies.rs`) | gone, as when a browser quits — never written to disk by Little Joan |
 
 ## Settings
 
@@ -352,8 +369,9 @@ app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finis
 `bar-url <address | start>` (what the bar was told to show), `hibernated`,
 `start-at-login <true|false>` (the login entry read back after a change),
 `start-at-login-failed <reason>`, `first-run` (no settings.json at launch), `welcome` (the start
-page was handed the first run), `quit` (Quit or `--quit` is about to exit). Without the
-variable nothing is logged.
+page was handed the first run), `quit` (Quit or `--quit` is about to exit),
+`session-cookies-kept <n>` / `session-cookies-restored <n>` (Windows: session cookies kept on
+close, set again in the new window; counts only). Without the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 

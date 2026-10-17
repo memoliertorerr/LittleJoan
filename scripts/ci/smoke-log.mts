@@ -84,6 +84,11 @@ export interface LoginEntryCheck {
   afterOn: LoginEntry[];
   /** Entries pointing at the installed app after `--start-at-login off` (should be none). */
   afterOff: LoginEntry[];
+  /**
+   * How many log events there were once the check was over (taken a moment after `off`): a
+   * window created after that belongs to later steps. Omitted: up to the end of the log.
+   */
+  eventsUntil?: number;
 }
 
 /** Values in `reg query <key>` output: `    <name>    REG_SZ    <data>` lines. */
@@ -266,7 +271,8 @@ export function startAtLoginFailures(events: LogEvent[], check: LoginEntryCheck)
     failures.push(`login entry left after --start-at-login off: ${check.afterOff.map((e) => e.where).join(", ")}`);
   }
   const first = events.findIndex((e) => e.event.startsWith("start-at-login"));
-  if (first >= 0 && events.some((e, i) => i > first && e.event === "window-created")) {
+  const until = check.eventsUntil ?? events.length;
+  if (first >= 0 && events.some((e, i) => i > first && i < until && e.event === "window-created")) {
     failures.push("--start-at-login opened a window");
   }
   return failures;
