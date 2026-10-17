@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
+use crate::autostart;
 use crate::bar;
 use crate::input::{self, SearchEngine};
 use crate::joan;
@@ -16,6 +17,7 @@ use crate::smoke;
 use crate::state;
 use crate::toggle::Command;
 use crate::translate::{LANGUAGES, is_valid_lang};
+use crate::welcome;
 
 /// Opens what the user typed in the URL bar in the page: a web address, or a search with the
 /// configured engine. The keyboard then moves to the page.
@@ -55,14 +57,33 @@ pub struct StartInfo {
     shortcut: Option<String>,
     /// `std::env::consts::OS`: "macos", "windows", "linux".
     platform: &'static str,
+    /// The first launch: this start page is the welcome. Reading it clears it, so only the
+    /// first summon is a welcome.
+    first_run: bool,
+    /// Where the tray / menu-bar icon is on this OS.
+    tray_hint: &'static str,
+    /// Whether the OS login entry exists (`null` when it can't be read).
+    start_at_login: Option<bool>,
+    /// A Linux Wayland session, where the X11 global shortcut can't fire.
+    wayland_no_shortcut: bool,
 }
 
-/// What the start page needs to show its hint line.
+/// What the start page needs for its hint line and, on the first launch, the welcome.
 #[tauri::command]
 pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
+    let (shortcut, first_run) = state::with(&app, |s| {
+        (s.active_shortcut.clone(), std::mem::take(&mut s.first_run))
+    });
+    if first_run {
+        smoke::log("welcome", "");
+    }
     StartInfo {
-        shortcut: state::with(&app, |s| s.active_shortcut.clone()),
+        shortcut,
         platform: std::env::consts::OS,
+        first_run,
+        tray_hint: welcome::tray_hint(std::env::consts::OS),
+        start_at_login: autostart::is_enabled(&app),
+        wayland_no_shortcut: welcome::wayland_no_shortcut_here(),
     }
 }
 
@@ -78,6 +99,9 @@ pub struct Choice {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsView {
     settings: Settings,
+    /// Whether the OS login entry exists (`null` when it can't be read). Not in settings.json:
+    /// the entry is the only state.
+    start_at_login: Option<bool>,
     engines: Vec<Choice>,
     languages: Vec<Choice>,
     platform: &'static str,
@@ -87,6 +111,7 @@ pub struct SettingsView {
 pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
     SettingsView {
         settings: state::with(&app, |s| s.settings.clone()),
+        start_at_login: autostart::is_enabled(&app),
         engines: SearchEngine::ALL
             .iter()
             .map(|engine| Choice {
@@ -157,4 +182,13 @@ pub async fn save_settings<R: Runtime>(
 #[tauri::command]
 pub async fn suspend_shortcut<R: Runtime>(app: AppHandle<R>, suspended: bool) {
     shortcut::set_suspended(&app, suspended);
+}
+
+/// Adds or removes the OS login entry; returns whether it exists afterwards.
+#[tauri::command]
+pub async fn set_start_at_login<R: Runtime>(
+    app: AppHandle<R>,
+    enabled: bool,
+) -> Result<bool, String> {
+    autostart::set(&app, enabled)
 }

@@ -35,8 +35,9 @@ scripts/make-icons.mts             renders the app icon and the macOS tray templ
 scripts/copy-icons.mts             copies the desktop icon set from `tauri icon` output
 ui/bar.html, ui/bar.ts             the URL bar (its own webview above the page); DOM glue only
 ui/bar-logic.ts                    URL bar logic (Enter / Esc / never clobber an edit), unit-tested
-ui/index.html, ui/start.ts         the start page under the bar: a hint, nothing to type into
-ui/start-logic.ts                  the start page's StartInfo type
+ui/index.html, ui/start.ts         the start page under the bar: a hint, nothing to type into;
+                                   on the first launch, the one-time welcome
+ui/start-logic.ts                  StartInfo, the hint line and the welcome's content, unit-tested
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
 ui/settings.html, ui/settings.ts   the settings window: shortcut recorder, search engine, language
 ui/settings-logic.ts               settings types + change detection, unit-tested
@@ -44,13 +45,17 @@ ui/style.css                       shared styles; light/dark via prefers-color-s
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
 src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
 src-tauri/capabilities/bar.json    the URL bar may call open_input, page_url, focus_page, hibernate
-src-tauri/capabilities/joan.json   the page webview's local start page may call start_info
-src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, close
+src-tauri/capabilities/joan.json   the page webview's local start page may call start_info and
+                                   set_start_at_login (the welcome's checkbox)
+src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
+                                   start at login, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
 src-tauri/src/lib.rs               builder: plugins, commands, setup, run loop
-src-tauri/src/state.rs             AppState (settings, data dir, active shortcut) behind a Mutex
+src-tauri/src/state.rs             AppState (settings, data dir, active shortcut, first run) behind
+                                   a Mutex; first-run detection and its bookkeeping (tested)
+src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is, Wayland (pure)
 src-tauri/src/joan.rs              the page window: create / focus / destroy, window events
 src-tauri/src/bar.rs               its two webviews (URL bar + page): build, layout, fullscreen,
                                    pushing the page's address to the bar, focus
@@ -61,7 +66,10 @@ src-tauri/src/placement.rs         where a new window opens (monitor under the c
 src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
                                    with rollback (Registrar trait), suspend while recording
 src-tauri/src/commands.rs          start page: open_input, hibernate, start_info;
-                                   settings: get_settings, save_settings, suspend_shortcut
+                                   settings: get_settings, save_settings, suspend_shortcut,
+                                   set_start_at_login
+src-tauri/src/autostart.rs         start at login: tauri-plugin-autostart (Rust API only), the
+                                   macOS translocation guard (pure, tested)
 src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close)
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen
@@ -83,8 +91,10 @@ src-tauri/src/navigation.rs        which URLs the page may navigate to / hand to
 src-tauri/src/translate.rs         Google Translate proxy URL, language codes, LANGUAGES list
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
-src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH parsing
-scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide), screenshots
+src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
+                                   --start-at-login on|off parsing
+scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide, start at
+                                   login on/off), reads the OS login entry, screenshots
 scripts/ci/smoke-log.mts           CI: smoke-log parsing and pass/fail rules, unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
@@ -104,6 +114,16 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
            window + webview destroyed (page discarded, size remembered) ──► hibernating
 ```
 
+- **First launch:** when `settings.json` doesn't exist as `state::init` runs (a file that exists
+  but can't be read or parsed doesn't count), setup registers the shortcut as usual, logs
+  `first-run`, saves the default settings at once (so the welcome appears only once, even if the
+  user quits straight away), and opens the window with `--show`'s path. The start page asks
+  `start_info`, gets `firstRun: true` once (reading it clears it), and shows the welcome above
+  the usual lead: what the shortcut does (on a Linux Wayland session: bind `little-joan
+  --toggle`), where the icon is (`welcome::tray_hint`), a "Start Little Joan at login" checkbox
+  (`set_start_at_login`), and "Esc or the shortcut closes this window." The URL bar keeps the
+  focus. A first launch with flags (`--show <url>`, `--toggle`, `--start-at-login …`) acts on
+  them instead, still saves the settings, and shows no welcome. Every later launch hibernates.
 - Every request goes through `toggle::decide` (table below) and `joan::handle`, which runs off
   the main thread (`joan::dispatch`): building a webview window from the main thread can
   deadlock on Windows. A lifecycle mutex keeps two quick presses from creating two windows.
@@ -119,8 +139,9 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   sees the `WebContent` processes gone within 30 s and no growth across summon cycles. WebView2
   and WebKitGTK release theirs on destroy without help.
 - **Single instance:** `tauri-plugin-single-instance` forwards a second launch's arguments to
-  the running app (`--toggle`, `--show [url]`, `--hide`; no flags = `--show`). On Linux it
-  needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
+  the running app (`--toggle`, `--show [url]`, `--hide`, `--start-at-login on|off`; no flags =
+  `--show`). On Linux it needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
+  `--start-at-login` is handled before the toggle table and never touches the window.
 - **Global shortcut:** registered from settings; if it fails to parse or is taken, the default
   (`CommandOrControl+Shift+Space`) is tried; if that fails too, the app still runs. Linux
   global shortcuts work on X11 only — on Wayland, bind `little-joan --toggle` in the desktop's
@@ -132,8 +153,9 @@ Remote pages get no IPC. `build.rs` declares the app's commands in an app manife
 each one require a permission, and capabilities grant them **per webview label**:
 `capabilities/bar.json` gives the URL bar (`joan-bar`) `allow-open-input`, `allow-page-url`,
 `allow-focus-page`, `allow-hibernate`; `capabilities/joan.json` gives the page webview
-(`joan-page`) only `allow-start-info`, and only for its local start page — capabilities are
-local unless they list `remote` URLs, and none does. No `core:default` anywhere.
+(`joan-page`) only `allow-start-info` and `allow-set-start-at-login` (the welcome's checkbox),
+and only for its local start page — capabilities are local unless they list `remote` URLs, and
+none does. No `core:default` anywhere.
 
 | Command | Called by | Does |
 |---|---|---|
@@ -141,13 +163,38 @@ local unless they list `remote` URLs, and none does. No `core:default` anywhere.
 | `page_url()` | URL bar, on load | what the bar shows now (`null` on the start page) |
 | `focus_page()` | URL bar, Esc | give the keyboard back to the page |
 | `hibernate()` | URL bar, Esc on the start page | close the window (same path as `--hide`) |
-| `start_info()` | start page, on load | `{ shortcut, platform }` for the hint line |
+| `start_info()` | start page, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut }` for the hint line and the welcome; `firstRun` is true once |
 | `get_settings()` | settings window | settings + engine and language lists + platform |
 | `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
+| `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 
-`capabilities/settings.json` grants the `settings` window the last three plus
-`core:window:allow-close` (its Cancel / Save buttons close it).
+`get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
+`capabilities/settings.json` grants the `settings` window the last four plus
+`core:window:allow-close` (its Cancel / Save buttons close it). tauri-plugin-autostart is
+registered for its Rust API only: no capability grants any `autostart:*` permission, so its own JS
+commands are denied everywhere.
+
+## Start at login
+
+`autostart.rs` wraps tauri-plugin-autostart (which uses the `auto-launch` crate). **The OS login
+entry is the only state** — `settings.json` has no field for it — so removing the entry in the
+OS's own settings shows as off the next time Settings opens. Off by default; turned on only in
+Settings or with `--start-at-login on`.
+
+| OS | Entry (named after the product name, "Little Joan") | Runs |
+|---|---|---|
+| Windows | value `Little Joan` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (and an "enabled" flag under `…\Explorer\StartupApproved\Run`) | the running `little-joan.exe`, unquoted |
+| macOS | `~/Library/LaunchAgents/Little Joan.plist`, `Label` "Little Joan", `RunAtLoad` (never AppleScript: no Automation prompt) | the canonical path of the running executable |
+| Linux | `~/.config/autostart/Little Joan.desktop` | the running binary, or `$APPIMAGE` for the AppImage |
+
+- No launch arguments: a plain launch already hibernates.
+- Only a change is applied (Windows' disable fails when there is no value), and the result is
+  read back from the OS.
+- **macOS translocation guard:** an app opened straight from a disk image or from Downloads runs
+  from a random `/AppTranslocation/` copy, and a LaunchAgent made then would point at nothing
+  after a reboot, so turning it on there fails with "Move Little Joan to Applications first, then
+  turn this on." (`autostart::refusal`, unit-tested).
 
 ## Settings
 
@@ -281,8 +328,10 @@ lines: `started`, `shortcut-registered <accel>`, `shortcut-failed <reason>`,
 `window-created`, `title <page title>`, `page-loaded <url>`, `fullscreen <true|false>` (any
 engine: the window's fullscreen state changed), `element-fullscreen <true|false>` (Windows: the
 app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finished loading),
-`bar-url <address | start>` (what the bar was told to show), `hibernated`. Without the
-variable nothing is logged.
+`bar-url <address | start>` (what the bar was told to show), `hibernated`,
+`start-at-login <true|false>` (the login entry read back after a change),
+`start-at-login-failed <reason>`, `first-run` (no settings.json at launch), `welcome` (the start
+page was handed the first run). Without the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -311,7 +360,9 @@ The modules below hold every decision the app makes; the native glue only calls 
 
 - **cli** — `--toggle`, `--show [http(s) url]`, `--hide`, `--size WxH` (1–10000 each; resizes
   the open window); the last flag wins; unknown arguments are ignored; `--show` accepts only
-  absolute web URLs.
+  absolute web URLs. `--start-at-login on|off` (any case; other values are ignored) is a
+  separate result next to the window command, so it never maps to one; a second launch whose
+  only flag is `--start-at-login` leaves the window alone.
 
 ## Building
 
@@ -367,16 +418,26 @@ and pushes to `main`:
   installed binary: launch with `LITTLEJOAN_SMOKE_LOG`, `--show` (start page), `--show
   http://127.0.0.1:<port>/smoke.html`, click the screen centre (the page's fullscreen button),
   load the page again (leaving fullscreen), `--size 390x600` then `--size 720x600`, `--hide`,
-  summon and hide again, then check the log order, single-instance forwarding, window
+  summon and hide again, `--start-at-login on` then `off` (reading the OS entry each time: the
+  Run key's values, the LaunchAgent plists' `ProgramArguments`, the autostart files' `Exec=` —
+  it must point at the installed binary, then be gone, and no window may open), then check the
+  log order, single-instance forwarding, window
   fullscreen (Windows, Linux), the URL bar (`bar-loaded`, and `bar-url` with the smoke page's
   address), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
   with the desktop agent** (it reports `innerWidth`, `innerHeight`, the agent kind and
   `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the
   window (followed by process id, so other apps' WebKit helpers on the runner don't count).
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`, `narrow.png`,
-  `wide.png`), the log, and
+  `wide.png`, `welcome.png`), the logs, and
+  The app runs on a fresh `LITTLEJOAN_DATA_DIR` that already holds the default `settings.json`,
+  so it starts hibernating (memory at rest is measured before any window opens). Last comes the
+  **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
+  on the same folder: `settings.json` must exist and no window may open within 5 s (logs
+  `smoke-first-run.log`, `smoke-relaunch.log`).
   `summary.json` (memory — resident and the app's own: private bytes / private dirty /
-  physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs)
+  physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs,
+  the login entries found)
   are uploaded as `smoke-<os>`. Linux runs under `xvfb-run` + `dbus-run-session`
   (single-instance needs a session bus) with openbox, and under gdb so a crash leaves a
   backtrace; the AppImage gets a launch check. A second Linux job (`linux-scale-2`) runs the

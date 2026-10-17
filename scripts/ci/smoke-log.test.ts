@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   count,
+  desktopExec,
   evaluate,
+  firstRunFailures,
   lastTitle,
   newPids,
   parseCodecs,
   parseLog,
+  parseRegValues,
+  plistProgram,
+  pointsAt,
+  startAtLoginFailures,
   survivors,
   sawViewport,
   type LogEvent,
@@ -126,5 +132,147 @@ describe("helper attribution", () => {
     // After hibernating: 22 is gone, 30 and 31 are another app's new helpers.
     expect(survivors(ours, [10, 21, 30, 31])).toBe(1);
     expect(survivors(ours, [10, 30, 31])).toBe(0);
+  });
+});
+
+describe("login entries", () => {
+  it("reads values from reg query output, names with spaces included", () => {
+    const output = [
+      "",
+      "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+      "    OneDrive    REG_SZ    \"C:\\Program Files\\OneDrive\\OneDrive.exe\" /background",
+      "    Little Joan    REG_SZ    C:\\Users\\runneradmin\\AppData\\Local\\Little Joan\\little-joan.exe ",
+      "",
+    ].join("\r\n");
+    expect(parseRegValues(output)).toEqual([
+      { name: "OneDrive", type: "REG_SZ", data: '"C:\\Program Files\\OneDrive\\OneDrive.exe" /background' },
+      {
+        name: "Little Joan",
+        type: "REG_SZ",
+        data: "C:\\Users\\runneradmin\\AppData\\Local\\Little Joan\\little-joan.exe ",
+      },
+    ]);
+    expect(parseRegValues("ERROR: The system was unable to find the specified registry key or value.")).toEqual([]);
+  });
+
+  it("reads the program of a LaunchAgent plist (auto-launch's format)", () => {
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+  <key>Label</key>
+  <string>Little Joan</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/runner/work/_temp/Applications/Little Joan.app/Contents/MacOS/little-joan</string></array>
+  <key>RunAtLoad</key>
+  <true/>
+  </dict>
+</plist>`;
+    expect(plistProgram(plist)).toBe("/Users/runner/work/_temp/Applications/Little Joan.app/Contents/MacOS/little-joan");
+    expect(plistProgram("<plist><dict><key>Program</key><string>/x</string></dict></plist>")).toBeUndefined();
+    expect(plistProgram("<key>ProgramArguments</key><array><string>/a &amp; b</string></array>")).toBe("/a & b");
+  });
+
+  it("reads Exec= from an autostart .desktop file", () => {
+    const desktop = "[Desktop Entry]\nType=Application\nName=Little Joan\nExec=/usr/bin/little-joan \nTerminal=false";
+    expect(desktopExec(desktop)).toBe("/usr/bin/little-joan");
+    expect(desktopExec("[Desktop Entry]\nName=x")).toBeUndefined();
+  });
+
+  it("matches the installed binary, quoted or not, with or without arguments", () => {
+    const exe = "C:\\Users\\r\\AppData\\Local\\Little Joan\\little-joan.exe";
+    expect(pointsAt(`${exe} `, [exe], true)).toBe(true);
+    expect(pointsAt(`"${exe}" --flag`, [exe], true)).toBe(true);
+    expect(pointsAt(exe.toUpperCase(), [exe], true)).toBe(true);
+    expect(pointsAt(exe.toUpperCase(), [exe], false)).toBe(false);
+    expect(pointsAt(`${exe}x`, [exe], true)).toBe(false);
+    expect(pointsAt("C:\\Other\\little-joan.exe", [exe], true)).toBe(false);
+    expect(pointsAt("/private/tmp/x/little-joan", ["/tmp/x/little-joan", "/private/tmp/x/little-joan"], false)).toBe(true);
+  });
+});
+
+describe("start at login", () => {
+  const entry = { where: "Little Joan.desktop", command: "/usr/bin/little-joan" };
+  const log = parseLog(`${GOOD}12 start-at-login true\n13 start-at-login false\n`);
+
+  it("passes when the entry appears after on and is gone after off", () => {
+    expect(startAtLoginFailures(log, { afterOn: [entry], afterOff: [] })).toEqual([]);
+    expect(evaluate(log, { windowFullscreen: false, pageFullscreen: false }, { pageHelpersLeft: 0, loginEntry: { afterOn: [entry], afterOff: [] } })).toEqual([]);
+  });
+
+  it("fails without the read-back events, in order", () => {
+    const reversed = parseLog(`${GOOD}12 start-at-login false\n13 start-at-login true\n`);
+    expect(startAtLoginFailures(reversed, { afterOn: [entry], afterOff: [] })).toEqual([
+      expect.stringContaining('"start-at-login true", then "start-at-login false"'),
+    ]);
+    expect(startAtLoginFailures(parseLog(GOOD), { afterOn: [entry], afterOff: [] })).toHaveLength(1);
+  });
+
+  it("fails when the entry is missing, left behind, or the app reported an error", () => {
+    expect(startAtLoginFailures(log, { afterOn: [], afterOff: [] })).toEqual([expect.stringContaining("no login entry")]);
+    expect(startAtLoginFailures(log, { afterOn: [entry], afterOff: [entry] })).toEqual([
+      expect.stringContaining("left after --start-at-login off: Little Joan.desktop"),
+    ]);
+    const failed = parseLog(`${GOOD}12 start-at-login-failed Move Little Joan to Applications first, then turn this on.\n`);
+    expect(startAtLoginFailures(failed, { afterOn: [], afterOff: [] }).join("\n")).toContain(
+      "start at login failed: Move Little Joan to Applications first",
+    );
+  });
+
+  it("fails when the flag opened a window", () => {
+    const opened = parseLog(`${GOOD}12 start-at-login true\n13 window-created\n14 start-at-login false\n`);
+    expect(startAtLoginFailures(opened, { afterOn: [entry], afterOff: [] })).toEqual([
+      expect.stringContaining("opened a window"),
+    ]);
+  });
+});
+
+describe("first run", () => {
+  const first = parseLog(`1 started
+2 shortcut-registered CommandOrControl+Shift+Space
+3 first-run
+4 bar-loaded
+4 welcome
+5 window-created
+6 title Little Joan
+7 hibernated
+`);
+  const relaunch = parseLog("1 started\n2 shortcut-registered CommandOrControl+Shift+Space\n");
+
+  it("passes a welcome once, then a hibernating relaunch", () => {
+    expect(firstRunFailures({ first, relaunch, settingsSaved: true })).toEqual([]);
+  });
+
+  it("fails without the welcome, the saved settings, or the window", () => {
+    const noWelcome = parseLog("1 started\n2 first-run\n3 window-created\n4 bar-loaded\n5 hibernated\n");
+    expect(firstRunFailures({ first: noWelcome, relaunch, settingsSaved: true })).toEqual([
+      expect.stringContaining('never showed the welcome ("welcome")'),
+    ]);
+    expect(firstRunFailures({ first, relaunch, settingsSaved: false })).toEqual([
+      expect.stringContaining("settings.json wasn't saved"),
+    ]);
+    const hibernating = parseLog("1 started\n2 shortcut-registered x\n");
+    expect(firstRunFailures({ first: hibernating, relaunch, settingsSaved: true }).join("\n")).toContain(
+      'missing "first-run"',
+    );
+  });
+
+  it("fails when the relaunch shows a window or is a first run again", () => {
+    const shown = parseLog("1 started\n2 window-created\n");
+    expect(firstRunFailures({ first, relaunch: shown, settingsSaved: true })).toEqual([
+      expect.stringContaining("relaunch: a window opened"),
+    ]);
+    const again = parseLog("1 started\n2 first-run\n3 window-created\n");
+    expect(firstRunFailures({ first, relaunch: again, settingsSaved: true })).toHaveLength(2);
+    expect(firstRunFailures({ first, relaunch: [], settingsSaved: true })).toEqual([
+      expect.stringContaining('relaunch: expected one "started", saw 0'),
+    ]);
+  });
+
+  it("fails the main run if it was a first run", () => {
+    const main = parseLog(`${GOOD}12 first-run\n`);
+    expect(evaluate(main, { windowFullscreen: false, pageFullscreen: false }, { pageHelpersLeft: 0 })).toEqual([
+      expect.stringContaining("the main run was a first run"),
+    ]);
   });
 });

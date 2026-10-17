@@ -58,8 +58,8 @@
 | LJ10.1 | *(added mid-plan 2026-10-17)* Always-visible URL bar: a trusted local webview above the page | strong | auto | ✅ done |
 | LJ10.2 | *(added mid-plan 2026-10-17)* Project files: CHANGELOG, CONTRIBUTING, SECURITY, repo metadata | standard | auto | ✅ done |
 | LJ10.3 | *(added mid-plan 2026-10-17)* Page size at every scale factor; phone mode for narrow windows | strong | auto | ✅ done |
-| LJ11 | *(v0.2)* Start at login: tauri-plugin-autostart, a Settings switch, `--start-at-login on\|off`, the OS entry checked in smoke | strong | auto | ⬜ todo |
-| LJ12 | *(v0.2)* First launch: the window opens once with a welcome (shortcut, where the icon is, start at login) | standard | auto | ⬜ todo |
+| LJ11 | *(v0.2)* Start at login: tauri-plugin-autostart, a Settings switch, `--start-at-login on\|off`, the OS entry checked in smoke | strong | auto | ✅ done |
+| LJ12 | *(v0.2)* First launch: the window opens once with a welcome (shortcut, where the icon is, start at login) | standard | auto | ✅ done |
 | LJ13 | *(v0.2)* AppImage built on Ubuntu 24.04 (WebKitGTK 2.52); the AppImage gets the full smoke | strong | auto | ⬜ todo |
 | LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⬜ todo |
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ⬜ todo |
@@ -76,9 +76,11 @@ installers CI built from the tagged commit. Still open: Linux fullscreen on Ubun
 the AppImage (WebKitGTK 2.50.4 aborts on element fullscreen; see Deferred follow-ups).**
 
 **v0.2 status: planned 2026-10-17 with the user (scope and decisions under "Design Decisions
-Already Made → v0.2"); nothing built yet. PR #8 (housekeeping: `.claude/` ignored, the Linux
-verify runner pinned to `ubuntu-24.04`) came first. Next: phase 6 (LJ11 → LJ12). LJ18 also
-waits for the user to add the Apple signing secrets (its prompt lists them).**
+Already Made → v0.2"). PR #8 (housekeeping: `.claude/` ignored, the Linux verify runner pinned
+to `ubuntu-24.04`) and PR #9 (this plan) are merged. Phase 6 (LJ11 → LJ12) is in progress on
+`lj/p6-first-run` (PR #10): LJ11 and LJ12 done, waiting for the user's review and checks. Next:
+phase 7 (LJ13 → LJ14). LJ18 also waits for the user to add the Apple signing secrets (its prompt
+lists them).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -1676,6 +1678,54 @@ green on all three OSes; fix Windows/Linux-only failures per Ground Rule 3. If i
 after two honest fix attempts, stop and report. Never commit red; never weaken a check.
 ```
 
+**Implementation notes (2026-10-17):**
+
+- **tauri-plugin-autostart 2.5.1** (the newest 2.x; 3.0 is alpha), through `init(MacosLauncher::
+  LaunchAgent, None)` — its `Builder::macos_launcher` exists only on macOS, so `init` is the
+  call that compiles on all three. `cargo tree`: it unifies with Cargo.lock (tauri, serde,
+  thiserror 2 and, through auto-launch, thiserror 1 and Windows' winapi were already there),
+  except **two small second copies on macOS and Linux: `dirs` 4.0.0 and `dirs-sys` 0.3.7**
+  (auto-launch 0.5 pins `dirs ^4`; the lock already had `dirs` 7 / `dirs-sys` 0.5). They depend
+  only on libc. `winreg` 0.10 (Windows) is new but has no other copy. `getrandom` 0.2 /
+  `redox_users` appear in the lock for Redox only and aren't compiled here.
+- **Entry names, read from auto-launch 0.5.0's source** (recorded under Landmines): named after
+  `package_info().name` = the product name "Little Joan" — the Run value `Little Joan`, the
+  plist `~/Library/LaunchAgents/Little Joan.plist` (Label "Little Joan"), the file
+  `~/.config/autostart/Little Joan.desktop` (it always uses `$HOME/.config`, not
+  `$XDG_CONFIG_HOME`). The smoke doesn't rely on the names: it reads every Run value / plist /
+  autostart file and looks for one that runs the installed binary.
+- **Only a change is applied, then read back:** auto-launch's Windows `disable` deletes the Run
+  value and fails if there is none, so `autostart::set` compares with `is_enabled()` first. On
+  Windows `is_enabled()` also honours Task Manager's "disabled" flag (`StartupApproved\Run`), and
+  `enable` resets it — so a login item the user disabled in Task Manager shows as off and turning
+  it on works.
+- **The CLI result is a struct, not a new `Command`:** `cli::parse_args` returns `Args { command,
+  start_at_login }`; `forwarded_command()` keeps v0.1's "a second launch without flags shows the
+  window" and returns nothing for a launch that only says `--start-at-login`. The toggle table
+  is unchanged. Both the CLI and the settings window go through `autostart::set`, which writes
+  the smoke-log line (`start-at-login <read back>` or `start-at-login-failed <reason>`)
+  through the existing `smoke::log`, so `smoke.rs` needed no change.
+- **Settings window:** the switch sits under the shortcut. Save calls `save_settings` only if a
+  setting changed and `set_start_at_login` only if the switch changed (settings first, so a
+  taken shortcut stops Save before the login item changes); an error keeps the window open in
+  the same error line. If the entry can't be read, `startAtLogin` is `null` and the switch is
+  disabled with a note.
+- **macOS guard** checks the canonical path of the executable (the same path the plugin
+  records). It only looks for `/AppTranslocation/`, as the prompt says; an app run from a
+  mounted DMG that isn't quarantined (`/Volumes/…`) isn't caught — not added, since apps on
+  external disks live under `/Volumes` too.
+- **No CI workflow change:** the smoke check lives in `scripts/ci/smoke.mts`, which reads the
+  entries itself (`reg query`, the plists, the `.desktop` files). On macOS the smoke copies the
+  `.app` to `$RUNNER_TEMP/Applications` (not quarantined, so not translocated).
+- Disk: 15 GiB free at the start, 14 GiB after the dependency and verify; `.cache/target` 1.1 GB.
+- **CI (run 39039477975): green on the first push** — verify, package and smoke on Windows,
+  macOS, Linux and Linux at scale 2. The smoke found `HKCU\…\Run\Little Joan` =
+  `C:\Users\runneradmin\AppData\Local\Little Joan\little-joan.exe ` (unquoted, trailing space,
+  as the source said), `~/Library/LaunchAgents/Little Joan.plist` →
+  `$RUNNER_TEMP/Applications/Little Joan.app/Contents/MacOS/little-joan`, and
+  `~/.config/autostart/Little Joan.desktop` → `/usr/bin/little-joan`; all gone after `off`.
+  Memory at rest unchanged (own: 2.2 MB Windows, 11 MB macOS, 19.5 MB Linux).
+
 ### LJ12 — A one-time welcome on the first launch · standard · auto
 
 **Verify:** `npm run verify` green, including Rust tests that a first run is detected only when
@@ -1752,6 +1802,36 @@ works;
 (4) the must-not-disturb list.
 Then mark the PR ready for review and stop.
 ```
+
+**Implementation notes (2026-10-17):**
+
+- **First run = `settings.json` missing** (`state::is_first_run`: `try_exists() == Ok(false)`), so
+  an unreadable or invalid file, or a folder that can't be looked into, is not a first run.
+  `state::finish_first_run` saves the defaults and decides the welcome (no flags only); setup
+  logs `first-run` first, after the shortcut is registered, as the prompt orders.
+- **`firstRun` is cleared by `start_info` (`mem::take`)** and, when the first launch had flags,
+  by setup, so a later summon never turns into a welcome. `start_info` logs `welcome` when it
+  hands the first run over — an extra smoke-log event (not in the prompt) so CI checks that the
+  start page really got it, not only that a window opened.
+- **The tray hint and the Wayland test are pure** in a new `welcome.rs` (`tray_hint(os)`,
+  `wayland_no_shortcut(os, XDG_SESSION_TYPE, WAYLAND_DISPLAY)`): a Wayland session counts even
+  when the app runs on XWayland, since the X11 grab still only sees keys while an X11 window
+  has the focus. LJ17 is where the portal turns it off.
+- **The welcome** sits above the usual lead on the start page (the normal hint line is hidden
+  meanwhile). The checkbox calls `set_start_at_login` at once and shows what the OS reads back;
+  an error (the macOS translocation guard) appears under it and the box flips back. It is left
+  out when the login entry can't be read. Its text follows the prompt; "no shortcut" (when even
+  the default couldn't be registered) points at Settings.
+- **Smoke:** every launch now gets its own `LITTLEJOAN_DATA_DIR` under `$RUNNER_TEMP` (outside
+  the uploaded folder: WebView2 keeps its profile there); the main run's and the AppImage
+  launch check's already hold the default `settings.json`, so both hibernate as before. Between
+  the runs the app is quit and the smoke waits until its process is gone (under gdb the app
+  itself is killed), so the next launch is the single instance. Logs:
+  `smoke-first-run.log`, `smoke-relaunch.log`; `summary.json` gains `firstRun`.
+- **Not done here (Deferred follow-ups):** after a click on the checkbox the keyboard is in the
+  page webview, where Esc does nothing (Ctrl/Cmd+W and the shortcut still close); the start page
+  has no `hibernate` permission and the prompt grants it nothing else.
+- Disk: 14 GiB free before and after verify; `.cache/target` 1.1 GB.
 
 ### LJ13 — Build the AppImage on Ubuntu 24.04 · strong · auto
 
@@ -2201,14 +2281,24 @@ committed to directly).
 > Things a step noticed but were out of its own scope. Kept here so they don't get buried in
 > per-step notes. Strike through when genuinely handled; don't silently delete lines.
 
-- **First-run discoverability** (surfaced by LJ3). Hibernating from the very first launch means a
-  new user sees only a tray icon — and on GNOME without the AppIndicator extension, nothing at
-  all. Option: when no `settings.json` exists yet, show the window once with the shortcut hint.
-  Not done: the brief says "hibernates by default"; this is the user's call. → *The user chose
-  the one-time welcome on 2026-10-17: planned as LJ12.*
-- **Start at login** (surfaced by LJ8's README). Without it the shortcut is dead after a reboot
-  until the user launches the app; already designed under Later — the most useful next step.
-  → *Planned as LJ11.*
+- ~~**First-run discoverability**~~ (surfaced by LJ3). Hibernating from the very first launch
+  means a new user sees only a tray icon — and on GNOME without the AppIndicator extension,
+  nothing at all. Option: when no `settings.json` exists yet, show the window once with the
+  shortcut hint. → *The user chose the one-time welcome on 2026-10-17: resolved by LJ12.*
+- **Esc after a click in the welcome** (surfaced by LJ12). Clicking the welcome's checkbox moves
+  the keyboard into the page webview, where Esc does nothing until the URL bar has the focus
+  again; Ctrl/Cmd+W, the close button and the shortcut still close. Options: give the start page
+  `allow-hibernate` for Esc, or a command that hands the focus back to the bar.
+- ~~**Start at login**~~ (surfaced by LJ8's README). Without it the shortcut is dead after a
+  reboot until the user launches the app; already designed under Later — the most useful next
+  step. → *Handled by LJ11.*
+- **The Windows Run value is unquoted** (surfaced by LJ11). auto-launch 0.5 writes
+  `C:\Users\<you>\AppData\Local\Little Joan\little-joan.exe ` without quotes, and the plugin
+  offers no way to change the path it records. Windows resolves such a command line by trying
+  `…\Local\Little.exe` first, then the real path, so it starts — unless a `Little.exe` exists in
+  `%LOCALAPPDATA%` (only the user can write there). Options: upstream a quoting fix to
+  auto-launch / the plugin, or build the `AutoLaunch` ourselves. Needs a real Windows logon to
+  confirm (CI can't log on).
 - **macOS menu page items are always enabled** (surfaced by LJ7). The menu bar is hidden
   (Accessory app), so only the key equivalents matter, and they do nothing without a page. The
   tray items do track page state.
@@ -2311,6 +2401,17 @@ Populated from real friction, not speculation:
 - *(v0.2 planning)* **`ubuntu-latest` moves to Ubuntu 26 from 2026-10-19** (GitHub's notice on
   run 39021598084). The Linux `verify` job is pinned to `ubuntu-24.04` (PR #8); packaging (22.04)
   and smoke (24.04) were already pinned.
+- *(LJ11)* **tauri-plugin-autostart's entries are named after the product name** (auto-launch
+  0.5.0's source): Windows — the value `Little Joan` under `HKCU\Software\Microsoft\Windows\
+  CurrentVersion\Run`, plus a 12-byte "enabled" flag under `…\Explorer\StartupApproved\Run`
+  that `disable` leaves behind; macOS — `~/Library/LaunchAgents/Little Joan.plist` with `Label`
+  "Little Joan", `ProgramArguments` = [the executable's canonical path], `RunAtLoad`; Linux —
+  `~/.config/autostart/Little Joan.desktop` (always `$HOME/.config`) with `Exec=<binary> ` (a
+  trailing space; `$APPIMAGE` for the AppImage). Renaming the product would orphan existing
+  entries. Windows' value is **unquoted** (Deferred follow-ups), and Windows' `disable` fails
+  when the value is missing.
+- *(LJ11)* **`tauri_plugin_autostart::Builder::macos_launcher` exists only on macOS**
+  (`#[cfg(target_os = "macos")]`); `init(MacosLauncher::LaunchAgent, None)` compiles everywhere.
 - *(v0.2 planning)* **Ubuntu 22.04's WebKitGTK has stood still:** jammy has
   2.50.4-0ubuntu0.22.04.1 (2026-01-13), while noble and resolute got 2.52.6 on 2026-08-31
   (Launchpad, checked 2026-10-17). Don't wait on a jammy update.

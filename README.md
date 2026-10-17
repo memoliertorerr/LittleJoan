@@ -54,9 +54,12 @@ aren't code-signed yet, so the first launch shows a warning; the steps below get
   `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` in the download folder on macOS or Linux, or
   compare against `Get-FileHash <file>` on Windows.
 
-After launch you only see the tray / menu-bar icon — that's hibernation. Little Joan doesn't
-start at login on its own yet; add it to your system's startup apps if you want the shortcut to
-always be ready.
+The very first launch opens the window once with a short welcome: the shortcut, where the icon
+is, and a "Start Little Joan at login" checkbox. Every launch after that only shows the tray /
+menu-bar icon — that's hibernation. To have the shortcut ready after every restart, turn on
+**Start Little Joan at login** (in the welcome or in Settings; it's off until you do). On macOS,
+move Little Joan to Applications first: an app opened straight from the disk image or from
+Downloads runs from a temporary copy, so Little Joan won't add a login item for it.
 
 ## Using it
 
@@ -93,8 +96,8 @@ always be ready.
   (2.52) works. The AppImage currently bundles the 22.04 version.
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
-  and `little-joan --size 390x844` (resize the open window, in logical pixels) talk to the
-  running app. On Linux under Wayland, where global shortcuts can't be registered,
+  `little-joan --size 390x844` (resize the open window, in logical pixels), and
+  `little-joan --start-at-login on|off` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
 - **Quit:** tray menu → **Quit Little Joan** (or Cmd+Q on macOS while it's in front).
 
@@ -112,6 +115,10 @@ front) to change:
 - **Shortcut** — click it, then press the new combination. It needs a modifier (Ctrl, Alt, Cmd,
   or Super; Shift alone doesn't count). If another app already owns it, Little Joan says so and
   keeps the old one.
+- **Start Little Joan at login** — adds Little Joan to your system's login items: a LaunchAgent
+  on macOS (`~/Library/LaunchAgents/Little Joan.plist`), the startup apps on Windows (the
+  registry's Run key), `~/.config/autostart/Little Joan.desktop` on Linux. Little Joan keeps no
+  copy of this setting, so if you remove it in your system's settings, it shows as off here too.
 - **Search with** — Google, DuckDuckGo, Bing, or Brave.
 - **Translate pages to** — the language for "Translate Page".
 

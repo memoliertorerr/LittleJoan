@@ -17,6 +17,8 @@ export interface Settings {
 
 export interface SettingsView {
   settings: Settings;
+  /** Whether the OS login entry exists; `null` when it can't be read. Not part of Settings. */
+  startAtLogin: boolean | null;
   engines: Choice[];
   languages: Choice[];
   platform: string;
@@ -42,4 +44,31 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     saved.translateTo !== input.translateTo ||
     saved.mobileSites !== input.mobileSites
   );
+}
+
+/** What Save has to apply: the settings, the login entry, both, or neither. */
+export interface Changes {
+  settings: boolean;
+  startAtLogin: boolean;
+}
+
+/**
+ * Compares the window with what was saved. The start-at-login switch is the OS login entry, not
+ * a setting, so it is applied by its own call; it can't change when the entry couldn't be read.
+ */
+export function changes(
+  saved: Settings,
+  savedStartAtLogin: boolean | null,
+  input: SettingsInput,
+  startAtLogin: boolean,
+): Changes {
+  return {
+    settings: isChanged(saved, input),
+    startAtLogin: savedStartAtLogin !== null && savedStartAtLogin !== startAtLogin,
+  };
+}
+
+/** Whether Save has anything to do (it is disabled otherwise). */
+export function hasChanges(todo: Changes): boolean {
+  return todo.settings || todo.startAtLogin;
 }

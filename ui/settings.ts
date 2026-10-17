@@ -3,7 +3,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { acceleratorFromEvent, displayShortcut } from "./lib/shortcut.ts";
-import { isChanged, toInput, type Choice, type Settings, type SettingsView } from "./settings-logic.ts";
+import {
+  changes,
+  hasChanges,
+  toInput,
+  type Changes,
+  type Choice,
+  type Settings,
+  type SettingsInput,
+  type SettingsView,
+} from "./settings-logic.ts";
 
 function element<T extends HTMLElement>(selector: string): T {
   const found = document.querySelector<T>(selector);
@@ -15,6 +24,8 @@ function element<T extends HTMLElement>(selector: string): T {
 
 const recorder = element<HTMLButtonElement>("#shortcut");
 const note = element<HTMLElement>("#shortcut-note");
+const login = element<HTMLInputElement>("#login");
+const loginNote = element<HTMLElement>("#login-note");
 const engine = element<HTMLSelectElement>("#engine");
 const language = element<HTMLSelectElement>("#language");
 const mobile = element<HTMLInputElement>("#mobile");
@@ -25,6 +36,7 @@ const cancel = element<HTMLButtonElement>("#cancel");
 const NOTE = "Click, then press the keys you want to use.";
 
 let saved: Settings | null = null;
+let savedLogin: boolean | null = null;
 let isMac = false;
 let shortcut = "";
 let recording = false;
@@ -50,7 +62,29 @@ function refresh(): void {
   recorder.textContent = recording ? "Press keys…" : displayShortcut(shortcut, isMac) || "None";
   recorder.classList.toggle("recording", recording);
   note.textContent = recording ? "Esc cancels." : NOTE;
-  save.disabled = saved === null || !isChanged(saved, toInput(shortcut, engine.value, language.value, mobile.checked));
+  save.disabled = saved === null || !hasChanges(pending(saved));
+}
+
+function input(): SettingsInput {
+  return toInput(shortcut, engine.value, language.value, mobile.checked);
+}
+
+function pending(from: Settings): Changes {
+  return changes(from, savedLogin, input(), login.checked);
+}
+
+/** Applies what changed: settings first, so a taken shortcut stops Save before anything else. */
+async function apply(todo: Changes, wanted: SettingsInput, wantedLogin: boolean): Promise<void> {
+  if (todo.settings) {
+    saved = await invoke<Settings>("save_settings", { settings: wanted });
+  }
+  if (todo.startAtLogin) {
+    savedLogin = await invoke<boolean>("set_start_at_login", { enabled: wantedLogin });
+    login.checked = savedLogin;
+    if (savedLogin !== wantedLogin) {
+      throw new Error("Your system didn't keep the change. Try again, or check its login items.");
+    }
+  }
 }
 
 function stopRecording(): void {
@@ -99,17 +133,20 @@ window.addEventListener(
 engine.addEventListener("change", refresh);
 language.addEventListener("change", refresh);
 mobile.addEventListener("change", refresh);
+login.addEventListener("change", refresh);
 
 save.addEventListener("click", () => {
   stopRecording();
   showError("");
-  invoke<Settings>("save_settings", { settings: toInput(shortcut, engine.value, language.value, mobile.checked) })
-    .then(async (updated) => {
-      saved = updated;
+  if (saved === null) {
+    return;
+  }
+  apply(pending(saved), input(), login.checked)
+    .then(async () => {
       await getCurrentWindow().close();
     })
     .catch((err: unknown) => {
-      showError(String(err));
+      showError(err instanceof Error ? err.message : String(err));
       refresh();
     });
 });
@@ -127,6 +164,12 @@ invoke<SettingsView>("get_settings")
     fill(engine, view.engines, view.settings.searchEngine);
     fill(language, view.languages, view.settings.translateTo);
     mobile.checked = view.settings.mobileSites;
+    savedLogin = view.startAtLogin;
+    login.checked = view.startAtLogin ?? false;
+    login.disabled = view.startAtLogin === null;
+    if (view.startAtLogin === null) {
+      loginNote.textContent = "Couldn't read your system's login items.";
+    }
     refresh();
   })
   .catch((err: unknown) => showError(String(err)));

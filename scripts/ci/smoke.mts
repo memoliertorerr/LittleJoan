@@ -5,23 +5,35 @@
 //
 // The full run: serve tests/smoke/ on 127.0.0.1, launch the app with LITTLEJOAN_SMOKE_LOG,
 // summon it with `--show` (single-instance forwarding), load the smoke page, click its big
-// fullscreen button, hibernate with `--hide`, summon and hibernate once more, then check the
-// log (scripts/ci/smoke-log.mts) and the webview helper processes. Screenshots and a summary
-// land in <out>. Linux runs inside xvfb-run + dbus-run-session with a window manager.
+// fullscreen button, hibernate with `--hide`, summon and hibernate once more, turn start at
+// login on and off (reading the OS's own login entry each time), then check the log
+// (scripts/ci/smoke-log.mts) and the webview helper processes. The app runs on a fresh
+// LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
+// as every launch after the first does. Last, the first-launch check: quit, launch on an empty
+// data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
+// folder (it must hibernate). Screenshots and a summary land in <out>. Linux runs inside
+// xvfb-run + dbus-run-session with a window manager.
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { homedir, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import {
   count,
+  desktopExec,
   evaluate,
+  firstRunFailures,
   lastTitle,
   newPids,
   parseCodecs,
   parseLog,
+  parseRegValues,
+  plistProgram,
+  pointsAt,
   sawViewport,
   survivors,
+  type LoginEntry,
   type LogEvent,
   type Viewport,
 } from "./smoke-log.mts";
@@ -53,18 +65,47 @@ const extraEnv = Object.fromEntries(
     .filter((pair) => pair.includes("="))
     .map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]),
 );
-const env = { ...process.env, ...extraEnv, LITTLEJOAN_SMOKE_LOG: logPath };
+// Data folders live outside <out>, which is uploaded (WebView2 keeps its profile there).
+const dataRoot = process.env.RUNNER_TEMP ?? tmpdir();
+/** A fresh data folder; with `settings`, it already holds a default settings.json. */
+function dataDir(name: string, settings: boolean): string {
+  const dir = mkdtempSync(join(dataRoot, `lj-${name}-`));
+  if (settings) {
+    const defaults = {
+      version: 1,
+      shortcut: "CommandOrControl+Shift+Space",
+      searchEngine: "google",
+      translateTo: "en",
+      windowWidth: 480,
+      windowHeight: 640,
+      mobileSites: true,
+    };
+    writeFileSync(join(dir, "settings.json"), `${JSON.stringify(defaults, null, 2)}\n`);
+  }
+  return dir;
+}
+const env = {
+  ...process.env,
+  ...extraEnv,
+  LITTLEJOAN_SMOKE_LOG: logPath,
+  LITTLEJOAN_DATA_DIR: dataDir(startedOnly ? "started-only" : "main", true),
+};
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-function events(): LogEvent[] {
-  return existsSync(logPath) ? parseLog(readFileSync(logPath, "utf8")) : [];
+function events(path = logPath): LogEvent[] {
+  return existsSync(path) ? parseLog(readFileSync(path, "utf8")) : [];
 }
 
-async function waitFor(what: string, test: (e: LogEvent[]) => boolean, timeoutMs = 30_000): Promise<boolean> {
+async function waitFor(
+  what: string,
+  test: (e: LogEvent[]) => boolean,
+  timeoutMs = 30_000,
+  path = logPath,
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (test(events())) {
+    if (test(events(path))) {
       console.log(`ok: ${what}`);
       return true;
     }
@@ -197,10 +238,42 @@ function helperPids(): number[] {
     .filter((pid) => Number.isInteger(pid) && pid > 0);
 }
 
+/**
+ * The OS's login items that run the installed app (the binary and its canonical path): values
+ * under HKCU's Run key on Windows, LaunchAgent plists on macOS, XDG autostart files on Linux.
+ * Every entry is read, not just the name tauri-plugin-autostart uses, so a renamed entry counts.
+ */
+function loginEntries(): LoginEntry[] {
+  const all: LoginEntry[] = [];
+  if (os === "win32") {
+    const key = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    for (const value of parseRegValues(run("reg", ["query", key]))) {
+      all.push({ where: `${key}\\${value.name}`, command: value.data });
+    }
+  } else {
+    const [dir, extension] =
+      os === "darwin" ? [join(homedir(), "Library", "LaunchAgents"), ".plist"] : [join(homedir(), ".config", "autostart"), ".desktop"];
+    for (const name of existsSync(dir) ? readdirSync(dir).filter((file) => file.endsWith(extension)) : []) {
+      let text = "";
+      try {
+        text = readFileSync(join(dir, name), "utf8");
+      } catch (err) {
+        console.log(`(can't read ${join(dir, name)}: ${String(err)})`);
+      }
+      const command = os === "darwin" ? plistProgram(text) : desktopExec(text);
+      if (command !== undefined) {
+        all.push({ where: join(dir, name), command });
+      }
+    }
+  }
+  const installed = [app as string, realpathSync(app as string)];
+  return all.filter((entry) => pointsAt(entry.command, installed, os === "win32"));
+}
+
 /** Runs a second instance with `args`; single-instance forwards them and it exits. */
-async function forward(args: string[]): Promise<void> {
+async function forward(args: string[], withEnv: NodeJS.ProcessEnv = env): Promise<void> {
   console.log(`forward: ${args.join(" ")}`);
-  const child = spawn(app as string, args, { env, stdio: "ignore" });
+  const child = spawn(app as string, args, { env: withEnv, stdio: "ignore" });
   await new Promise<void>((done) => {
     const timer = setTimeout(() => {
       console.log("(the forwarding instance did not exit within 15 s)");
@@ -229,7 +302,7 @@ function serve(): Promise<Server> {
 }
 
 /** Launches the app; with LJ_SMOKE_GDB=1 (Linux) it runs under gdb so a crash prints a backtrace. */
-function launch(): ChildProcess {
+function launch(withEnv: NodeJS.ProcessEnv = env): ChildProcess {
   const underGdb = os === "linux" && process.env.LJ_SMOKE_GDB === "1";
   const [command, args] = underGdb
     ? [
@@ -237,11 +310,44 @@ function launch(): ChildProcess {
         ["-q", "-batch", "-ex", "run", "-ex", "bt 40", "-ex", "thread apply all bt 8", "--args", app as string],
       ]
     : [app as string, []];
-  const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(command, args, { env: withEnv, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
   child.stderr?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
   child.on("exit", (code, signal) => console.log(`app exited with code ${code} signal ${signal}`));
   return child;
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Quits the app and waits until its process is gone, so the next launch is the only instance
+ * (single-instance would otherwise forward to the old one). Under gdb the app is killed first.
+ */
+async function quit(child: ChildProcess, pid: number): Promise<void> {
+  for (const signal of ["SIGTERM", "SIGKILL"] as const) {
+    if (pid > 0 && alive(pid)) {
+      try {
+        process.kill(pid, signal);
+      } catch {
+        // Already gone.
+      }
+    }
+    child.kill(signal);
+    for (let waited = 0; waited < 5_000 && pid > 0 && alive(pid); waited += 250) {
+      await sleep(250);
+    }
+    if (pid <= 0 || !alive(pid)) {
+      break;
+    }
+  }
+  console.log(pid > 0 && alive(pid) ? `(app ${pid} is still running)` : `app ${pid} has quit`);
 }
 
 /** The pid of the app itself (under gdb, the debuggee is gdb's child). */
@@ -351,8 +457,59 @@ for (const cycle of [2, 3]) {
 }
 console.log(`webview helpers after each hibernate: ${JSON.stringify(helpersPerCycle)}`);
 
-child.kill();
+// Start at login: `on` must write the OS's login entry for the INSTALLED binary and `off` must
+// remove it again, without touching the window (hibernating here).
+await forward(["--start-at-login", "on"]);
+await waitFor(
+  "start-at-login true",
+  (e) => count(e, "start-at-login", "true") > 0 || count(e, "start-at-login-failed") > 0,
+  15_000,
+);
+const loginAfterOn = loginEntries();
+console.log(`login entries after on: ${JSON.stringify(loginAfterOn)}`);
+await forward(["--start-at-login", "off"]);
+await waitFor(
+  "start-at-login false",
+  (e) => count(e, "start-at-login", "false") > 0 || count(e, "start-at-login-failed") > 0,
+  15_000,
+);
+const loginAfterOff = loginEntries();
+console.log(`login entries after off: ${JSON.stringify(loginAfterOff)}`);
+
+await quit(child, pid);
 server.close();
+
+// First launch: an empty data folder means a first run — the window opens once with the welcome
+// and the default settings are saved; the next launch on the same folder hibernates.
+const firstDir = dataDir("first-run", false);
+const firstLogPath = join(out, "smoke-first-run.log");
+const relaunchLogPath = join(out, "smoke-relaunch.log");
+rmSync(firstLogPath, { force: true });
+rmSync(relaunchLogPath, { force: true });
+const firstEnv = { ...env, LITTLEJOAN_DATA_DIR: firstDir, LITTLEJOAN_SMOKE_LOG: firstLogPath };
+const firstChild = launch(firstEnv);
+await waitFor(
+  "first launch: first-run, window-created, bar-loaded, welcome",
+  (e) => ["first-run", "window-created", "bar-loaded", "welcome"].every((event) => count(e, event) > 0),
+  30_000,
+  firstLogPath,
+);
+await sleep(1500);
+screenshot("welcome.png");
+await forward(["--hide"], firstEnv);
+await waitFor("first launch: hibernated", (e) => count(e, "hibernated") > 0, 20_000, firstLogPath);
+await quit(firstChild, appPid(firstChild));
+const settingsSaved = existsSync(join(firstDir, "settings.json"));
+const relaunchChild = launch({ ...firstEnv, LITTLEJOAN_SMOKE_LOG: relaunchLogPath });
+await waitFor("relaunch: started", (e) => count(e, "started") > 0, 30_000, relaunchLogPath);
+// No window may open within 5 s of starting.
+await sleep(5000);
+const relaunch = events(relaunchLogPath);
+await quit(relaunchChild, appPid(relaunchChild));
+const firstRun = { first: events(firstLogPath), relaunch, settingsSaved };
+console.log(
+  `first launch: ${firstRun.first.map((e) => e.event).join(", ")}; relaunch: ${relaunch.map((e) => e.event).join(", ")}; settings saved: ${settingsSaved}`,
+);
 
 const log = events();
 const pageFullscreen = lastTitle(log, "LJ-SMOKE fullscreen=on") !== undefined;
@@ -372,6 +529,16 @@ const summary = {
   codecs: parseCodecs(lastTitle(log, "LJ-SMOKE ready")),
   fullscreen: { page: pageFullscreen, window: count(log, "fullscreen", "true") > 0 },
   shortcut: log.find((e) => e.event.startsWith("shortcut-"))?.event ?? "none",
+  startAtLogin: {
+    reported: log.filter((e) => e.event.startsWith("start-at-login")).map((e) => `${e.event} ${e.detail}`),
+    entriesAfterOn: loginAfterOn,
+    entriesAfterOff: loginAfterOff,
+  },
+  firstRun: {
+    firstLaunch: firstRun.first.map((e) => e.event),
+    relaunch: relaunch.map((e) => e.event),
+    settingsSaved,
+  },
 };
 writeFileSync(join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 console.log(JSON.stringify(summary, null, 2));
@@ -381,11 +548,16 @@ console.log(JSON.stringify(summary, null, 2));
 const failures = evaluate(
   log,
   { windowFullscreen: windowWanted, pageFullscreen: windowWanted, viewports: [NARROW, WIDE] },
-  { pageHelpersLeft: Math.max(...helpersPerCycle) },
-);
+  {
+    pageHelpersLeft: Math.max(...helpersPerCycle),
+    loginEntry: { afterOn: loginAfterOn, afterOff: loginAfterOff },
+  },
+).concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
-  console.log(`\n--- smoke log ---\n${existsSync(logPath) ? readFileSync(logPath, "utf8") : "(none)"}`);
+  for (const path of [logPath, firstLogPath, relaunchLogPath]) {
+    console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
+  }
   process.exit(1);
 }
 console.log("\nSMOKE PASSED");

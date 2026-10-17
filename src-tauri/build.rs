@@ -11,6 +11,7 @@ fn main() {
             "get_settings",
             "save_settings",
             "suspend_shortcut",
+            "set_start_at_login",
         ]),
     ))
     .expect("failed to run tauri-build");
