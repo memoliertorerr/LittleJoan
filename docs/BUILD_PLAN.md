@@ -105,9 +105,12 @@ that survive, themes, and an extension system with bundled extensions (decisions
 Decisions Already Made → v0.2 round 2"). These phases (12–17, LJ20–LJ35) run NEXT, before phases
 7–10; LJ19 stays the final v0.2.0 release. The user allowed the agent to merge each phase PR
 once its CI is green (CLAUDE.md, standing exception). Phase 12 (LJ20 → LJ21: logins survive
-close and quit on all three OSes; local history with frecency) is PR #13 on
-`lj/p12-logins-history`, merged once verify, package and smoke are green. Next: phase 13
-(LJ22 → LJ24).**
+close and quit on all three OSes; local history with frecency) was PR #13, merged. Phase 13
+(LJ22 → LJ24: every trusted screen in the bar webview and no IPC at all for the page webview, the
+command bar with suggestions, the Little Arc-style toolbar with the macOS traffic lights inside
+it; it opened with `lj-step-20-fix2` for the macOS abort `main`'s CI had shown) is PR #14 on
+`lj/p13-command-bar`, merged once verify, package and smoke are green. Next: phase 14 (LJ25 →
+LJ26).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
