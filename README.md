@@ -4,8 +4,8 @@ A tiny pop-up browser for Windows, Linux, and macOS that stays out of the way un
 
 Little Joan hibernates by default: after launch there is no window and no loaded page, just an
 icon in the tray or menu bar. Press a global keyboard shortcut and a small, resizable window
-appears with a single field. Type an address or a search, press Enter, and the page fills the
-window. Close it and Little Joan goes back to sleep — the page is thrown away, so nothing keeps
+appears with its command bar open. Type an address or a search, press Enter, and the page fills
+the window. Close it and Little Joan goes back to sleep — the page is thrown away, so nothing keeps
 using memory in the background.
 
 It uses the web engine your system already has (WebView2 on Windows, WebKit on macOS,
@@ -67,18 +67,29 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 ## Using it
 
 - **Summon:** press **Ctrl+Shift+Space** (Windows, Linux) or **Cmd+Shift+Space** (macOS), or
-  choose **Open Little Joan** in the tray menu. Type an address or a search and press Enter.
-- **The address bar** stays at the top of the window and always shows the page you're on,
-  following links and redirects. Click it (or press Ctrl/Cmd+L) to go somewhere else: Enter
-  opens the address or searches for the text, Esc puts the current address back. It hides
-  while a video is fullscreen.
+  choose **Open Little Joan** in the tray menu. The window opens with the **command bar** over
+  it: type an address or a search and press Enter.
+- **The command bar** suggests as you go. With nothing typed it shows the sites you open most
+  (until there is some history: Wikipedia, YouTube, GitHub and Google Maps). As you type: the
+  best match from your history — and when what you type starts a site's address, the address is
+  completed in the field (Tab accepts it) —, a search with your search engine, then more matches.
+  ↑/↓ choose a row, Enter opens it (with no row chosen, Enter opens what you typed), Shift+Delete
+  removes a page from your history, × or Esc closes the command bar. The last row, **Settings &
+  extensions**, opens Settings.
+- **The toolbar** stays at the top of the window while a page is open: a back button (once
+  there is somewhere to go back to), the site's icon and domain in the middle, and **open in
+  your default browser** on the right (the page moves there and Little Joan goes back to sleep).
+  Click the domain (or press Ctrl/Cmd+L) to go somewhere else: the command bar opens with the
+  full address selected; Esc returns to the page. On macOS the window's traffic lights sit in
+  the toolbar, and you can drag the window by its empty parts. The toolbar hides while a video
+  is fullscreen.
 - **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
   narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
   macOS and Linux, Chrome on Android on Windows), so Google, YouTube and others serve their
   mobile versions; widen it past 600 px and the page reloads in its desktop version once you
   let go. Switch it off in Settings ("Mobile sites in a narrow window").
 - **Dismiss:** press the shortcut again, press Ctrl/Cmd+W, close the window, or press Esc in the
-  empty address bar before opening anything. The page is discarded and Little Joan goes back to sleep. The window remembers its
+  empty command bar before opening anything. The page is discarded and Little Joan goes back to sleep. The window remembers its
   size.
 - **Keys on a page:**
 
@@ -89,7 +100,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | Reload | Ctrl+R, F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
-  | Open the page in your browser | tray menu | Cmd+Shift+O |
+  | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |
 
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,
@@ -143,12 +154,15 @@ hints, Word's non-breaking space); change it here if it does.
 - Session cookies (the "until you close the browser" kind) last while Little Joan runs, across
   closing and reopening the window. On Windows, Little Joan holds them in memory meanwhile —
   never on disk — and quitting forgets them, as quitting a browser does.
+- **Site icons in the command bar** are loaded straight from each suggested site
+  (`https://<site>/favicon.ico`, without a referrer); nothing else is fetched for suggestions.
 - **History stays on your computer.** Little Joan records the pages you open (address, title,
   when) in `history.json` next to its settings, for its own suggestions; it is never sent
   anywhere. Its own pages aren't recorded, and nothing is while `"rememberHistory": false` is
   in `settings.json` (a switch in Settings comes with the history view).
-- Web pages get no access to Little Joan's internals: only its own two local pages (the start
-  field and Settings) can call into the app.
+- Web pages get no access to Little Joan's internals: the web view that shows pages can't call
+  into the app at all. Only Little Joan's own screens — the bar (address bar and command bar) and
+  Settings, each in a web view of its own — can.
 
 ## Build from source
 

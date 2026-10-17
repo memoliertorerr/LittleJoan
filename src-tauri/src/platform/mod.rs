@@ -33,6 +33,17 @@ pub fn install_page<R: Runtime>(page: &Webview<R>) {
     linux::install_page(page);
 }
 
+/// Linux: the command bar's overlay. The bar fills the window's GtkBox and the page widget is
+/// hidden, or both go back (see linux.rs).
+#[cfg(target_os = "linux")]
+pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: &Webview<R>, on: bool) {
+    linux::set_overlay(bar, page, on);
+}
+
+/// Windows and macOS place child webviews by bounds, so bar.rs's layout does it all.
+#[cfg(not(target_os = "linux"))]
+pub fn set_overlay<R: Runtime>(_bar: &Webview<R>, _page: &Webview<R>, _on: bool) {}
+
 /// macOS: the app menu's key equivalents handle page keys (menu.rs), and WebKit shows element
 /// fullscreen in its own window, so the bar needs no hiding.
 #[cfg(not(any(windows, target_os = "linux")))]

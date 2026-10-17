@@ -1,7 +1,8 @@
-//! Commands the local pages may call. build.rs's app manifest makes each one need a permission,
-//! granted per webview: capabilities/bar.json (the URL bar), capabilities/joan.json (the local
-//! start page in the page webview), capabilities/settings.json (the settings window). Remote
-//! pages get no IPC at all.
+//! Commands the app's own pages may call. build.rs's app manifest makes each one need a
+//! permission, granted per webview: capabilities/bar.json (the bar: toolbar, command bar,
+//! welcome) and capabilities/settings.json (the settings window). The page webview (`joan-page`)
+//! has no capability at all, so nothing loaded there — web pages, the start page — can call any
+//! of these.
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
@@ -12,11 +13,15 @@ use crate::history::{Row, VisitKind};
 use crate::history_store;
 use crate::input::{self, SearchEngine};
 use crate::joan;
+use crate::keys::PageAction;
+use crate::page_actions;
 use crate::phone_mode;
 use crate::settings::{self, Settings};
+use crate::settings_window;
 use crate::shortcut::{self, PluginRegistrar};
 use crate::smoke;
 use crate::state;
+use crate::suggest::Suggestion;
 use crate::toggle::Command;
 use crate::translate::{LANGUAGES, is_valid_lang};
 use crate::welcome;
@@ -48,6 +53,32 @@ pub async fn focus_page<R: Runtime>(app: AppHandle<R>) {
     bar::focus_page(&app);
 }
 
+/// Opens (`on`: a click on the toolbar's site; the field gets the keyboard with the address
+/// selected, as with Ctrl/Cmd+L) or closes the command bar's overlay (Esc or × with a page behind
+/// it; the page gets the keyboard back).
+#[tauri::command]
+pub async fn set_overlay<R: Runtime>(app: AppHandle<R>, on: bool) {
+    if on {
+        bar::focus_bar(&app);
+    } else {
+        bar::set_overlay(&app, false);
+        bar::focus_page(&app);
+    }
+}
+
+/// The toolbar's back button: the page goes back (the same page action as Alt+Left / Cmd+[).
+#[tauri::command]
+pub async fn go_back<R: Runtime>(app: AppHandle<R>) {
+    page_actions::perform(&app, PageAction::Back);
+}
+
+/// The toolbar's "open in default browser" button: the page moves to the default browser and
+/// Little Joan hibernates (the same page action as the tray's item).
+#[tauri::command]
+pub async fn open_in_browser<R: Runtime>(app: AppHandle<R>) {
+    page_actions::perform(&app, PageAction::OpenInBrowser);
+}
+
 /// Closes the page window: back to hibernation.
 #[tauri::command]
 pub async fn hibernate<R: Runtime>(app: AppHandle<R>) {
@@ -61,7 +92,7 @@ pub struct StartInfo {
     shortcut: Option<String>,
     /// `std::env::consts::OS`: "macos", "windows", "linux".
     platform: &'static str,
-    /// The first launch: this start page is the welcome. Reading it clears it, so only the
+    /// The first launch: the command bar shows the welcome. Reading it clears it, so only the
     /// first summon is a welcome.
     first_run: bool,
     /// Where the tray / menu-bar icon is on this OS.
@@ -72,7 +103,7 @@ pub struct StartInfo {
     wayland_no_shortcut: bool,
 }
 
-/// What the start page needs for its hint line and, on the first launch, the welcome.
+/// What the command bar needs for its hint line and, on the first launch, the welcome.
 #[tauri::command]
 pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
     let (shortcut, first_run) = state::with(&app, |s| {
@@ -200,6 +231,41 @@ pub async fn history_search<R: Runtime>(
     limit: usize,
 ) -> Vec<Row> {
     history_store::search(&app, &query, limit.min(MAX_ROWS))
+}
+
+/// The command bar's suggestions for what is typed (suggest.rs): top sites (or the starters)
+/// while nothing is, history matches and a search row while something is. The site of the page
+/// that is open isn't suggested.
+#[tauri::command]
+pub async fn suggest<R: Runtime>(app: AppHandle<R>, query: String) -> Vec<Suggestion> {
+    let current = bar::page_url(&app);
+    let engine = state::with(&app, |s| s.settings.search_engine);
+    let rows = history_store::suggest(&app, &query, current.as_ref(), engine);
+    // The smoke log gets counts and the first row's site, never the typed text.
+    smoke::log(
+        "suggestions",
+        &format!(
+            "{} first={} typed={}",
+            rows.len(),
+            rows.first().map_or("-", |row| row.host.as_str()),
+            query.trim().chars().count()
+        ),
+    );
+    rows
+}
+
+/// Forgets one history record (Shift+Delete on a suggestion). Returns whether there was one.
+#[tauri::command]
+pub async fn history_remove<R: Runtime>(app: AppHandle<R>, url: String) -> bool {
+    history_store::remove(&app, &url)
+}
+
+/// Opens the settings window (the command bar's "Settings & extensions" row). `tab` will pick
+/// its tab once Settings has tabs (LJ26); until then it opens as always.
+#[tauri::command]
+pub async fn open_settings<R: Runtime>(app: AppHandle<R>, tab: Option<String>) {
+    let _ = tab;
+    settings_window::open(&app);
 }
 
 /// Pauses (true) or resumes (false) the global shortcut while a new one is being recorded.

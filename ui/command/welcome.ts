@@ -1,12 +1,12 @@
-// Pure logic of the start page (the page webview before anything is opened), including the
-// one-time welcome on the first launch.
-import { displayShortcut } from "./lib/shortcut.ts";
+// The one-time welcome the command bar shows on the first launch (pure, unit-tested). The bar
+// shows it above the suggestions; start_info hands over the facts.
+import { displayShortcut } from "../lib/shortcut.ts";
 
 export interface StartInfo {
   /** The registered global shortcut (accelerator syntax), if any. */
   shortcut: string | null;
   platform: string;
-  /** The first launch: this start page is the welcome (only the first summon is). */
+  /** The first launch: the command bar shows the welcome (only the first summon does). */
   firstRun: boolean;
   /** Where the tray / menu-bar icon is on this OS. */
   trayHint: string;
@@ -14,16 +14,6 @@ export interface StartInfo {
   startAtLogin: boolean | null;
   /** A Linux Wayland session, where the global shortcut can't fire. */
   waylandNoShortcut: boolean;
-}
-
-const BASE_HINT = "Enter to open · Esc to close";
-
-/** The hint line of the normal start page. */
-export function hintText(info: StartInfo | null): string {
-  if (!info?.shortcut) {
-    return BASE_HINT;
-  }
-  return `${BASE_HINT} · ${displayShortcut(info.shortcut, info.platform === "macos")} to summon`;
 }
 
 /** A sentence with one part in monospace: a key combination or a command. */

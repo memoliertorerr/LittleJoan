@@ -4,8 +4,10 @@
 //   node scripts/ci/smoke.mts --app <binary> --out <dir> --started-only      launch check only
 //
 // The full run: serve tests/smoke/ on 127.0.0.1, launch the app with LITTLEJOAN_SMOKE_LOG,
-// summon it with `--show` (single-instance forwarding), load the smoke page, click its big
-// fullscreen button, hibernate with `--hide`, summon and hibernate once more, turn start at
+// summon it with `--show` (single-instance forwarding; the command bar covers the window), load
+// the smoke page (the command bar closes: the 40 px bar above the page), click its big
+// fullscreen button, hibernate with `--hide`, summon and hibernate once more, summon again for
+// the command bar (the smoke page's site as a top site, then typing "127"), turn start at
 // login on and off (reading the OS's own login entry each time), check that cookies and
 // localStorage outlive closing the window and quitting (`--quit`, then a relaunch on the same
 // data folder), that history.json recorded the smoke page (and that a run with history off
@@ -43,6 +45,7 @@ import {
   type LogEvent,
   type Viewport,
 } from "./smoke-log.mts";
+import { commandBarFailures, sawSmokeTopSite, sawTypedMatch, TYPED } from "./smoke-command.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -105,6 +108,8 @@ function readIfThere(path: string): string | undefined {
 }
 const env = {
   ...process.env,
+  // A panic in the app prints a backtrace into the job log (every launch inherits this env).
+  RUST_BACKTRACE: "1",
   ...extraEnv,
   LITTLEJOAN_SMOKE_LOG: logPath,
   LITTLEJOAN_DATA_DIR: dataDir(startedOnly ? "started-only" : "main", true),
@@ -196,6 +201,44 @@ for t in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
     run("xdotool", ["mousemove", String(Math.round((width ?? 1280) / 2)), String(Math.round((height ?? 800) / 2)), "click", "1"]);
   }
   console.log("clicked the screen centre");
+}
+
+/**
+ * Types `text` into the focused window: xdotool on Linux, SendKeys on Windows (after bringing the
+ * app's window to the front), key events from a small Swift script on macOS (best effort: the
+ * runner may not let them through).
+ */
+function typeText(text: string, appPid: number): void {
+  if (os === "win32") {
+    powershell(`Add-Type -AssemblyName System.Windows.Forms
+$shell = New-Object -ComObject WScript.Shell
+$null = $shell.AppActivate(${appPid})
+Start-Sleep -Milliseconds 400
+[System.Windows.Forms.SendKeys]::SendWait('${text}')`);
+  } else if (os === "darwin") {
+    const swift = join(out, "type.swift");
+    writeFileSync(
+      swift,
+      `import AppKit
+let pid = pid_t(CommandLine.arguments[1]) ?? 0
+NSRunningApplication(processIdentifier: pid)?.activate(options: [])
+usleep(400000)
+for ch in CommandLine.arguments[2] {
+  for down in [true, false] {
+    let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+    var units = Array(String(ch).utf16)
+    event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+    event?.post(tap: .cghidEventTap)
+    usleep(60000)
+  }
+}
+`,
+    );
+    run("swift", [swift, String(appPid), text]);
+  } else {
+    run("xdotool", ["type", "--delay", "120", text]);
+  }
+  console.log(`typed ${JSON.stringify(text)}`);
 }
 
 /** Resident memory of `pid` in MB (working set on Windows, RSS elsewhere). */
@@ -411,12 +454,15 @@ screenshot("hibernating.png");
 
 await forward(["--show"]);
 await waitFor("window-created", (e) => count(e, "window-created") > 0, 20_000);
+await waitFor("command bar open (overlay true)", (e) => count(e, "overlay", "true") > 0, 20_000);
 await waitFor("start page title", (e) => count(e, "title", "Little Joan") > 0, 20_000);
 await sleep(1500);
+// The command bar covers the whole window (the page behind it is hidden).
 screenshot("start.png");
 
 await forward(["--show", `http://127.0.0.1:${port}/smoke.html`]);
 await waitFor("smoke page ready", (e) => lastTitle(e, "LJ-SMOKE ready") !== undefined, 30_000);
+await waitFor("command bar closed (overlay false)", (e) => count(e, "overlay", "false") > 0, 5_000);
 await sleep(1500);
 const shownMb = memoryMb(pid);
 const shownOwnMb = ownMemoryMb(pid);
@@ -486,6 +532,22 @@ for (const cycle of [2, 3]) {
   helpersPerCycle.push(survivors(ours, helperPids()));
 }
 console.log(`webview helpers after each hibernate: ${JSON.stringify(helpersPerCycle)}`);
+
+// The command bar (LJ23): after the smoke page was visited, a new window's empty command bar
+// offers its site as a top site; typing "127" finds it in history.
+const commandFrom = events().length;
+const hibernatedBeforeCommand = count(events(), "hibernated");
+await forward(["--show"]);
+await waitFor("command bar: the smoke page's site as a top site", (e) => sawSmokeTopSite(e.slice(commandFrom)), 20_000);
+await sleep(1500);
+screenshot("command-bar.png");
+typeText(TYPED, pid);
+const typingDriven = os !== "darwin";
+await waitFor(`command bar: typing "${TYPED}" finds the smoke page`, (e) => sawTypedMatch(e.slice(commandFrom)), 15_000);
+await sleep(1000);
+screenshot("command-typing.png");
+await forward(["--hide"]);
+await waitFor("command bar: hibernated", (e) => count(e, "hibernated") > hibernatedBeforeCommand, 20_000);
 
 // Start at login: `on` must write the OS's login entry for the INSTALLED binary and `off` must
 // remove it again, without touching the window (hibernating here).
@@ -657,6 +719,11 @@ const summary = {
     relaunch: relaunch.map((e) => e.event),
     settingsSaved,
   },
+  commandBar: {
+    topSite: sawSmokeTopSite(log),
+    typedMatch: sawTypedMatch(log),
+    typingDriven,
+  },
   history: {
     mainRecords: parseHistory(historyMain)?.length ?? null,
     smokePage: parseHistory(historyMain)?.find((record) => record.url === smokePageUrl) ?? null,
@@ -682,6 +749,7 @@ const failures = evaluate(
     loginEntry: { afterOn: loginAfterOn, afterOff: loginAfterOff, eventsUntil: loginEventsUntil },
   },
 )
+  .concat(commandBarFailures(log, { typing: typingDriven }))
   .concat(persistFailures(log, persistCheck))
   .concat(historyFailures(historyCheck))
   .concat(firstRunFailures(firstRun));

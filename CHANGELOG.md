@@ -6,7 +6,27 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The window opens with a command bar.** Every summon shows the command bar over the whole
+  window — the field at the top, and on the first launch the welcome under it; Enter opens the
+  page and the bar shrinks to the address bar above it. Ctrl/Cmd+L (or a click on the address)
+  brings the command bar back with the address selected; Esc returns to the page, or with no
+  page closes the window. Esc now also works after clicking the welcome's checkbox.
+- **The web view that shows pages has no access to the app at all.** The welcome moved out of
+  it into the bar, so no page loaded there — not even Little Joan's own start page — can call
+  into Little Joan; a test checks that no permission ever reaches it.
+
 ### Added
+- **A Little Arc-style toolbar** above the page: back (enabled once the page has somewhere to
+  go back to in this window), the site's icon and domain in the middle — click it to edit the
+  address in the command bar —, and "open in default browser" on the right. On macOS the
+  traffic lights sit inside the toolbar, and its empty parts drag the window.
+- **Suggestions in the command bar,** like Little Arc's: the sites you open most when nothing is
+  typed (Wikipedia, YouTube, GitHub and Google Maps until there is history), and while typing
+  the best history match — with the address completed in the field when you type the start of a
+  site (Tab accepts it) —, "Search <engine> for …", and more matches. Each row shows the site's
+  icon and "Title — site"; ↑/↓, Enter, and Shift+Delete to forget a page. The last row,
+  **Settings & extensions**, opens Settings. Site icons come straight from the sites.
 - `little-joan --quit` quits the running app, the same way as **Quit Little Joan** in the tray
   menu (handy for scripts; CI uses it to quit gracefully).
 - **History, kept locally:** the pages you open (address, title, when and how) are recorded in
@@ -19,6 +39,11 @@ All notable changes to Little Joan are recorded here. The format follows
   cookie and localStorage outlive quitting and relaunching.
 
 ### Fixed
+- **macOS: an occasional crash when a page was opened as the window appeared** (e.g.
+  `little-joan --show <url>` while hibernating). Little Joan's own start page could still be
+  loading when the page replaced it, and the web engine's complaint about the cancelled load
+  ended the app; release builds now let the web view layer handle it. The page's address is also
+  taken from the page's own load events instead of being asked from the engine at risky moments.
 - **Windows: "until you close the browser" logins no longer end when the window closes.**
   WebView2 dropped session cookies with every window; Little Joan now keeps them in memory
   while it runs (never on disk) and sets them again in the next window.

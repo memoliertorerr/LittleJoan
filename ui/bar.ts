@@ -1,46 +1,58 @@
-// The URL bar: a trusted local page pinned above the web page. It always shows the page's
-// address (the app pushes changes with window.littleJoan.setUrl); click it or press Ctrl/Cmd+L
-// to edit, Enter to go, Esc to revert.
+// The bar: the trusted local page above (or over) the web page. In the toolbar view it is the
+// Little Arc-style toolbar — back, the site's icon and domain, "open in default browser" — for
+// the page's address (the app pushes changes with window.littleJoan.setUrl and setCanGoBack); in
+// the overlay view it is the command bar, covering the window: the field at the top with
+// suggestions under it (and the welcome on the first run). Rust switches the view with
+// window.littleJoan.setOverlay; every summon, Ctrl/Cmd+L and a click on the domain open the
+// overlay, opening a page closes it.
 import { invoke } from "@tauri-apps/api/core";
-import { barKey, mayReplace, textFor } from "./bar-logic.ts";
+import { mayReplace, textFor } from "./bar-logic.ts";
+import { commandBar } from "./command/command.ts";
+import { fillPanel } from "./command/panel.ts";
+import { initialState, onCloseButton, onKey, withOverlay, withShown, type KeyOutcome } from "./command/view-state.ts";
+import { isMac } from "./toolbar/logic.ts";
+import { toolbar } from "./toolbar/toolbar.ts";
 
 declare global {
   interface Window {
     littleJoan?: {
       setUrl(url: string | null): void;
+      setOverlay(on: boolean): void;
+      setCanGoBack(on: boolean): void;
       focusField(): void;
     };
   }
 }
 
 const field = document.querySelector<HTMLInputElement>("#url");
+const rowList = document.querySelector<HTMLElement>("#rows");
+const closeButton = document.querySelector<HTMLButtonElement>("#close");
+const toolbarRoot = document.querySelector<HTMLElement>(".toolstrip");
 
-if (field) {
-  let shown = "";
+// macOS: the traffic lights sit in the bar's top left corner (style.css leaves room for them).
+document.documentElement.classList.toggle("os-macos", isMac(navigator.userAgent));
+
+if (field && rowList && toolbarRoot) {
+  let state = initialState();
+  let canGoBack = false;
+  const command = commandBar(field, rowList, () => state.shown);
+  const tools = toolbar(toolbarRoot);
+
+  const render = (): void => {
+    document.body.classList.toggle("overlay", state.view === "overlay");
+    document.body.classList.toggle("toolbar", state.view === "toolbar");
+  };
 
   const setUrl = (url: string | null): void => {
     const next = textFor(url);
-    if (mayReplace(field.value, shown, document.activeElement === field)) {
+    if (mayReplace(field.value, state.shown, document.activeElement === field)) {
       field.value = next;
     }
-    shown = next;
+    state = withShown(state, next);
+    tools.update(next, canGoBack);
   };
 
-  window.littleJoan = {
-    setUrl,
-    focusField() {
-      field.focus();
-      field.select();
-    },
-  };
-
-  field.addEventListener("focus", () => field.select());
-  // Leaving the bar without pressing Enter drops the edit, as browsers do.
-  field.addEventListener("blur", () => {
-    field.value = shown;
-  });
-  field.addEventListener("keydown", (event) => {
-    const outcome = barKey(event.key, field.value, shown, event.isComposing);
+  const act = (outcome: KeyOutcome, event: KeyboardEvent): void => {
     switch (outcome.kind) {
       case "open":
         event.preventDefault();
@@ -50,8 +62,15 @@ if (field) {
         break;
       case "revert":
         event.preventDefault();
-        field.value = shown;
+        field.value = state.shown;
         field.select();
+        if (state.view === "overlay") {
+          command.reset(true);
+        }
+        break;
+      case "closeOverlay":
+        event.preventDefault();
+        void invoke("set_overlay", { on: false });
         break;
       case "focusPage":
         event.preventDefault();
@@ -64,10 +83,70 @@ if (field) {
       case "none":
         break;
     }
+  };
+
+  window.littleJoan = {
+    setUrl,
+    setOverlay(on: boolean) {
+      const changed = (state.view === "overlay") !== on;
+      state = withOverlay(state, on);
+      render();
+      if (changed) {
+        if (!on) {
+          field.value = state.shown;
+        }
+        command.reset(on);
+      }
+    },
+    setCanGoBack(on: boolean) {
+      canGoBack = on;
+      tools.update(state.shown, canGoBack);
+    },
+    focusField() {
+      field.focus();
+      field.select();
+    },
+  };
+
+  field.addEventListener("focus", () => field.select());
+  // Leaving the toolbar's field without pressing Enter drops the edit, as browsers do. (In the
+  // command bar the text stays until it closes: a click on a row or the welcome mustn't lose it.)
+  field.addEventListener("blur", () => {
+    if (state.view === "toolbar") {
+      field.value = state.shown;
+    }
+  });
+  field.addEventListener("input", (event) => {
+    if (state.view === "overlay") {
+      command.onInput(event);
+    }
+  });
+  field.addEventListener("keydown", (event) => {
+    if (state.view === "overlay" && event.key !== "Escape" && command.onKey(event)) {
+      return;
+    }
+    act(onKey(state, event.key, field.value, event.isComposing), event);
+  });
+  // Keys elsewhere in the bar (after a click in the welcome): Esc follows the same rules.
+  document.addEventListener("keydown", (event) => {
+    if (event.target !== field && event.key === "Escape") {
+      act(onKey(state, event.key, state.shown, event.isComposing), event);
+    }
+  });
+  closeButton?.addEventListener("click", () => {
+    if (onCloseButton(state) === "closeOverlay") {
+      void invoke("set_overlay", { on: false });
+    } else {
+      void invoke("hibernate");
+    }
   });
 
+  render();
+  tools.update(state.shown, canGoBack);
+  fillPanel();
   invoke<string | null>("page_url")
     .then(setUrl)
-    .catch(() => setUrl(null));
+    .catch(() => setUrl(null))
+    .finally(() => command.reset(state.view === "overlay"));
   field.focus();
 }

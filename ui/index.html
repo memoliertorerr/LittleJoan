@@ -5,24 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Little Joan</title>
     <link rel="stylesheet" href="./style.css" />
-    <script type="module" src="./start.ts"></script>
   </head>
-  <body>
-    <main class="start">
-      <h1 class="sr-only">Little Joan</h1>
-      <section id="welcome" class="welcome" aria-labelledby="welcome-title" hidden>
-        <h2 id="welcome-title"></h2>
-        <p id="welcome-shortcut"></p>
-        <p id="welcome-tray"></p>
-        <label id="welcome-login-row" class="welcome-login" hidden>
-          <input id="welcome-login" type="checkbox" />
-          <span>Start Little Joan at login</span>
-        </label>
-        <p id="welcome-error" class="error" role="alert" hidden></p>
-        <p id="welcome-close" class="hint"></p>
-      </section>
-      <p class="start-lead">Type an address or a search in the bar above.</p>
-      <p id="hint" class="hint">Enter to open · Esc to close</p>
-    </main>
-  </body>
+  <!-- The page webview's first page, behind the command bar: a plain background, no script. The
+       page webview has no IPC at all; every screen of the app's own lives in the bar. -->
+  <body class="blank"></body>
 </html>

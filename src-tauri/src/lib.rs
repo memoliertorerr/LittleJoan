@@ -4,6 +4,7 @@
 //! docs/architecture.md for the lifecycle.
 
 pub mod autostart;
+pub mod back_stack;
 pub mod bar;
 pub mod cli;
 pub mod commands;
@@ -17,6 +18,7 @@ pub mod keys;
 pub mod layout;
 pub mod navigation;
 pub mod page_actions;
+pub mod page_address;
 pub mod phone;
 pub mod phone_mode;
 pub mod placement;
@@ -25,10 +27,13 @@ pub mod settings_window;
 pub mod shortcut;
 pub mod smoke;
 pub mod state;
+pub mod suggest;
 pub mod toggle;
 pub mod translate;
 pub mod welcome;
 
+#[cfg(test)]
+mod capability_tests;
 #[cfg(target_os = "macos")]
 mod menu;
 mod platform;
@@ -62,12 +67,18 @@ pub fn run() {
             commands::start_info,
             commands::page_url,
             commands::focus_page,
+            commands::set_overlay,
+            commands::go_back,
+            commands::open_in_browser,
             commands::get_settings,
             commands::save_settings,
             commands::suspend_shortcut,
             commands::set_start_at_login,
             commands::history_top,
-            commands::history_search
+            commands::history_search,
+            commands::suggest,
+            commands::history_remove,
+            commands::open_settings
         ])
         .on_window_event(|window, event| {
             joan::on_window_event(window, event);

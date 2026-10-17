@@ -4,6 +4,7 @@ import {
   desktopExec,
   evaluate,
   firstRunFailures,
+  overlayFailures,
   historyFailures,
   lastTitle,
   newPids,
@@ -25,7 +26,9 @@ const GOOD = `1 started
 2 shortcut-registered CommandOrControl+Shift+Space
 3 bar-loaded
 3 window-created
+3 overlay true
 4 title Little Joan
+4 overlay false
 5 bar-url http://127.0.0.1:5000/smoke.html
 5 title LJ-SMOKE ready h264=mse vp9=mse av1=no
 6 page-loaded http://127.0.0.1:5000/smoke.html
@@ -33,6 +36,7 @@ const GOOD = `1 started
 8 title LJ-SMOKE fullscreen=on
 9 hibernated
 10 window-created
+10 overlay true
 11 hibernated
 `;
 
@@ -230,7 +234,7 @@ describe("start at login", () => {
     ]);
     // A window right after "off" still counts while the check lasts.
     const late = parseLog(`${GOOD}12 start-at-login true\n13 start-at-login false\n14 window-created\n`);
-    expect(startAtLoginFailures(late, { afterOn: [entry], afterOff: [], eventsUntil: 16 })).toHaveLength(1);
+    expect(startAtLoginFailures(late, { afterOn: [entry], afterOff: [], eventsUntil: late.length })).toHaveLength(1);
   });
 
   it("ignores windows that later steps open", () => {
@@ -242,6 +246,37 @@ describe("start at login", () => {
   });
 });
 
+describe("the command bar's overlay", () => {
+  it("passes when every window opens with it and the smoke page closes it", () => {
+    expect(overlayFailures(parseLog(GOOD), true)).toEqual([]);
+  });
+
+  it("fails a window that opened without it", () => {
+    const toolbar = parseLog(GOOD.replace("10 overlay true\n", "10 overlay false\n"));
+    expect(overlayFailures(toolbar, true)).toEqual([expect.stringContaining("window #2 didn't open with the command bar")]);
+    const silent = parseLog(GOOD.replace("3 overlay true\n", ""));
+    expect(overlayFailures(silent, true)).toEqual([
+      "window #1 didn't open with the command bar (first overlay event: overlay false)",
+    ]);
+  });
+
+  it("fails when opening the smoke page left it open", () => {
+    const stuck = parseLog(GOOD.replace("4 overlay false\n", ""));
+    expect(overlayFailures(stuck, true)).toEqual([expect.stringContaining('didn\'t close ("overlay false")')]);
+    expect(overlayFailures(stuck, false)).toEqual([]);
+    // Closing it only after the page was ready doesn't count.
+    const late = parseLog(GOOD.replace("4 overlay false\n", "").replace("7 fullscreen true\n", "7 overlay false\n7 fullscreen true\n"));
+    expect(overlayFailures(late, true)).toHaveLength(1);
+  });
+
+  it("is part of the main run's and the first launch's checks", () => {
+    const stuck = parseLog(GOOD.replace("4 overlay false\n", ""));
+    expect(evaluate(stuck, { windowFullscreen: false, pageFullscreen: false }, NONE)).toEqual([
+      expect.stringContaining('didn\'t close ("overlay false")'),
+    ]);
+  });
+});
+
 describe("first run", () => {
   const first = parseLog(`1 started
 2 shortcut-registered CommandOrControl+Shift+Space
@@ -249,6 +284,7 @@ describe("first run", () => {
 4 bar-loaded
 4 welcome
 5 window-created
+5 overlay true
 6 title Little Joan
 7 hibernated
 `);
@@ -259,7 +295,7 @@ describe("first run", () => {
   });
 
   it("fails without the welcome, the saved settings, or the window", () => {
-    const noWelcome = parseLog("1 started\n2 first-run\n3 window-created\n4 bar-loaded\n5 hibernated\n");
+    const noWelcome = parseLog("1 started\n2 first-run\n3 window-created\n3 overlay true\n4 bar-loaded\n5 hibernated\n");
     expect(firstRunFailures({ first: noWelcome, relaunch, settingsSaved: true })).toEqual([
       expect.stringContaining('never showed the welcome ("welcome")'),
     ]);
@@ -270,6 +306,13 @@ describe("first run", () => {
     expect(firstRunFailures({ first: hibernating, relaunch, settingsSaved: true }).join("\n")).toContain(
       'missing "first-run"',
     );
+  });
+
+  it("fails a first window without the command bar", () => {
+    const noOverlay = parseLog("1 started\n2 first-run\n3 window-created\n4 bar-loaded\n4 welcome\n5 hibernated\n");
+    expect(firstRunFailures({ first: noOverlay, relaunch, settingsSaved: true })).toEqual([
+      expect.stringContaining("first launch: window #1 didn't open with the command bar"),
+    ]);
   });
 
   it("fails when the relaunch shows a window or is a first run again", () => {

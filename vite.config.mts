@@ -3,8 +3,9 @@ import { defineConfig } from "vite";
 
 const ui = resolve(import.meta.dirname, "ui");
 
-// The UI is two tiny local pages (the start field, and later settings). Tauri serves the built
-// files from dist/; `tauri dev` uses the dev server on a fixed port.
+// The UI: the bar (toolbar and command bar), the settings window, and the page webview's plain
+// first page. Tauri serves the built files from dist/; `tauri dev` uses the dev server on a fixed
+// port.
 export default defineConfig({
   root: ui,
   clearScreen: false,

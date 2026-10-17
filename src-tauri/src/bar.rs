@@ -1,14 +1,18 @@
-//! The page window's two webviews: the URL bar (`joan-bar`, a trusted local page pinned to
-//! the top) and the page (`joan-page`, where web content loads, with no IPC). Built with Tauri's
-//! multi-webview API (`unstable` feature), laid out by layout.rs.
+//! The page window's two webviews: the bar (`joan-bar`, the trusted local page that holds every
+//! screen of the app's own: the toolbar, the command bar, the welcome) and the page
+//! (`joan-page`, where web content loads, with no IPC at all). Built with Tauri's multi-webview
+//! API (`unstable` feature), laid out by layout.rs: the bar is either the 40 px toolbar above the
+//! page, or an overlay covering the whole window while the command bar is open (the page is
+//! hidden meanwhile). Every summon opens the overlay; showing a page closes it.
 //!
 //! The bar is told about the page's address whenever it may have changed: on every page load
 //! (start and finish, so redirects land too), on every title change, after a navigation the
 //! app starts, and — for in-page changes that raise no event (history.pushState, #anchors) — by
-//! a once-a-second check that runs only while the window exists.
+//! a once-a-second check that runs only while the window exists. The address itself comes from
+//! those events (page_address.rs); the engine is asked only by that check, after a finished load.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
@@ -19,10 +23,19 @@ use tauri::{
 };
 use url::Url;
 
+mod view;
+
+pub use view::{
+    apply_layout, element_fullscreen, log_overlay, mode, overlay, set_element_fullscreen,
+    set_overlay,
+};
+
+use crate::back_stack::BackStack;
 use crate::history_store;
 use crate::keys;
-use crate::layout::{self, layout};
+use crate::layout::{Mode, Rect, layout};
 use crate::navigation;
+use crate::page_address::PageAddress;
 use crate::platform;
 use crate::smoke;
 use crate::tray;
@@ -30,12 +43,13 @@ use crate::tray;
 pub const BAR: &str = "joan-bar";
 pub const PAGE: &str = "joan-page";
 
-/// True while the page shows an element fullscreen (the bar is hidden meanwhile).
-static ELEMENT_FULLSCREEN: AtomicBool = AtomicBool::new(false);
-/// True once the page webview of this window reported a page load. Until then its address may
-/// be unset, and reading an unset WKWebView address panics inside wry 0.57 (an abort in
-/// release builds: CI saw it when WebKit was slow to start, LJ20), so `page_url` waits for it.
-static PAGE_STARTED: AtomicBool = AtomicBool::new(false);
+/// The page's address from its load events and the app's own navigations (page_address.rs).
+/// Reading an unset WKWebView address panics inside wry 0.57 (CI saw it when WebKit was slow to
+/// start, LJ20), so the engine's address is read only by the in-page check, after a finished
+/// load; everything else uses this.
+static ADDRESS: Mutex<PageAddress> = Mutex::new(PageAddress::new());
+/// This window's trail of web pages, for the toolbar's back button (back_stack.rs).
+static BACK: Mutex<BackStack> = Mutex::new(BackStack::new());
 /// What the bar was last told (`Some(None)` = the start page); reset with each new window.
 static LAST_SHOWN: Mutex<Option<Option<String>>> = Mutex::new(None);
 /// Bumped for every new window, so an old address watcher stops.
@@ -58,11 +72,20 @@ pub fn add_webviews<R: Runtime>(
     height: f64,
     data_dir: Option<PathBuf>,
 ) -> tauri::Result<()> {
-    ELEMENT_FULLSCREEN.store(false, Ordering::Relaxed);
-    PAGE_STARTED.store(false, Ordering::Relaxed);
+    *address() = PageAddress::new();
+    *back() = BackStack::new();
+    // Every summon opens the command bar: the window is built in Overlay mode.
+    view::new_window();
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
-    let initial = layout(width, height, true);
-    let bar_rect = initial.bar.unwrap_or(initial.page);
+    let whole = Rect {
+        x: 0.0,
+        y: 0.0,
+        width,
+        height,
+    };
+    let bar_rect = layout(width, height, Mode::Overlay).bar.unwrap_or(whole);
+    // The page starts hidden; these are its bounds for when the overlay closes.
+    let page_rect = layout(width, height, Mode::Toolbar).page.unwrap_or(whole);
 
     let mut bar = WebviewBuilder::new(BAR, WebviewUrl::App("bar.html".into()))
         // The bar is ours and never leaves the app's origin (about:blank only to unload it when
@@ -71,9 +94,12 @@ pub fn add_webviews<R: Runtime>(
             keys::is_app_url(&keys::app_origin(), url) || url.as_str() == "about:blank"
         })
         .on_new_window(|_, _| NewWindowResponse::Deny)
-        .on_page_load(|_, payload| {
+        .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 smoke::log("bar-loaded", "");
+                // The bar may have missed a change while it loaded: tell it the current state.
+                view::tell_overlay(&webview, overlay());
+                tell_back(&webview, can_go_back());
             }
         });
     let mut page = WebviewBuilder::new(PAGE, WebviewUrl::App("index.html".into()))
@@ -95,7 +121,14 @@ pub fn add_webviews<R: Runtime>(
             }
         })
         .on_page_load(|webview, payload| {
-            PAGE_STARTED.store(true, Ordering::Relaxed);
+            match payload.event() {
+                PageLoadEvent::Started => {
+                    address().started(payload.url().clone());
+                }
+                PageLoadEvent::Finished => {
+                    address().finished(payload.url().clone());
+                }
+            }
             let app = webview.app_handle();
             publish_url(app);
             if payload.event() == PageLoadEvent::Finished {
@@ -104,6 +137,10 @@ pub fn add_webviews<R: Runtime>(
                     && navigation::is_external_openable(url);
                 tray::set_page_items_enabled(app, web_page);
                 smoke::log("page-loaded", url.as_str());
+                let changed = back().loaded(url, &keys::app_origin());
+                if changed && let Some(bar) = app.get_webview(BAR) {
+                    tell_back(&bar, can_go_back());
+                }
                 // History records visits natively: the page itself has no IPC.
                 history_store::page_loaded(app, url);
             }
@@ -130,70 +167,42 @@ pub fn add_webviews<R: Runtime>(
     )?;
     let page = window.add_child(
         page,
-        LogicalPosition::new(initial.page.x, initial.page.y),
-        LogicalSize::new(initial.page.width, initial.page.height),
+        LogicalPosition::new(page_rect.x, page_rect.y),
+        LogicalSize::new(page_rect.width, page_rect.height),
     )?;
     platform::install_bar(&bar);
     platform::install_page(&page);
+    platform::set_overlay(&bar, &page, true);
+    let _ = page.hide();
     Ok(())
 }
 
-/// Positions the bar and the page for the window's current size and fullscreen state.
-pub fn apply_layout<R: Runtime>(window: &Window<R>) {
-    let app = window.app_handle();
-    let (Some(bar), Some(page)) = (app.get_webview(BAR), app.get_webview(PAGE)) else {
-        return;
-    };
-    let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) else {
-        return;
-    };
-    // inner_size is physical; the bounds below are logical (layout.rs).
-    let wanted = layout::for_physical_size(
-        size.width,
-        size.height,
-        scale,
-        !ELEMENT_FULLSCREEN.load(Ordering::Relaxed),
-    );
-    match wanted.bar {
-        Some(rect) => {
-            let _ = bar.set_bounds(to_tauri(rect));
-            let _ = bar.show();
-        }
-        None => {
-            let _ = bar.hide();
-        }
-    }
-    let _ = page.set_bounds(to_tauri(wanted.page));
+fn address() -> std::sync::MutexGuard<'static, PageAddress> {
+    ADDRESS.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn to_tauri(rect: layout::Rect) -> tauri::Rect {
-    tauri::Rect {
-        position: LogicalPosition::new(rect.x, rect.y).into(),
-        size: LogicalSize::new(rect.width, rect.height).into(),
-    }
+fn back() -> std::sync::MutexGuard<'static, BackStack> {
+    BACK.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Whether the page shows an element fullscreen right now.
-pub fn element_fullscreen() -> bool {
-    ELEMENT_FULLSCREEN.load(Ordering::Relaxed)
+/// Whether the page has an earlier web page in this window to go back to (the toolbar's back
+/// button).
+pub fn can_go_back() -> bool {
+    back().can_go_back()
 }
 
-/// The page entered or left element fullscreen: hide or bring back the bar.
-pub fn set_element_fullscreen<R: Runtime>(app: &AppHandle<R>, on: bool) {
-    ELEMENT_FULLSCREEN.store(on, Ordering::Relaxed);
-    smoke::log("element-fullscreen", if on { "true" } else { "false" });
-    if let Some(window) = app.get_window(crate::joan::LABEL) {
-        apply_layout(&window);
-    }
+fn tell_back<R: Runtime>(bar: &Webview<R>, on: bool) {
+    let _ = bar.eval(format!(
+        "window.littleJoan && window.littleJoan.setCanGoBack({on})"
+    ));
 }
 
-/// The page's address: `None` without a window, and until the page has started loading (see
-/// `PAGE_STARTED`). Use this rather than `Webview::url` on the page.
+/// The page's address: `None` without a window, and until the page has started loading. It
+/// comes from the page's load events and the app's own navigations (`ADDRESS`); use this rather
+/// than `Webview::url` on the page.
 pub fn page_url<R: Runtime>(app: &AppHandle<R>) -> Option<Url> {
-    if !PAGE_STARTED.load(Ordering::Relaxed) {
-        return None;
-    }
-    app.get_webview(PAGE)?.url().ok()
+    app.get_webview(PAGE)?;
+    address().current().cloned()
 }
 
 /// The page's address as the bar should show it (`None` = start page or no page).
@@ -224,7 +233,9 @@ pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Checks the page's address once a second while this window exists, for in-page changes that
-/// raise no load or title event. Stops when the window goes or a newer one replaces it.
+/// raise no load or title event — the only place the engine's address is read, and only while
+/// the last load event was `Finished` (page_address.rs). Stops when the window goes or a newer
+/// one replaces it.
 pub fn watch_url<R: Runtime>(app: &AppHandle<R>) {
     let generation = GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
     let app = app.clone();
@@ -238,7 +249,20 @@ pub fn watch_url<R: Runtime>(app: &AppHandle<R>) {
                 {
                     break;
                 }
-                publish_url(&app);
+                let Some(token) = address().read_token() else {
+                    continue;
+                };
+                let Some(page) = app.get_webview(PAGE) else {
+                    break;
+                };
+                let Ok(url) = page.url() else {
+                    continue;
+                };
+                // The lock is released before publish_url takes it again.
+                let changed = address().observed(token, url);
+                if changed {
+                    publish_url(&app);
+                }
             }
         });
     if let Err(err) = spawned {
@@ -246,8 +270,10 @@ pub fn watch_url<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Puts the keyboard in the bar with its text selected (Ctrl/Cmd+L, and on summon).
+/// Opens the command bar and puts the keyboard in its field with the text selected
+/// (Ctrl/Cmd+L, and on summon).
 pub fn focus_bar<R: Runtime>(app: &AppHandle<R>) {
+    set_overlay(app, true);
     if let Some(bar) = app.get_webview(BAR) {
         let _ = bar.set_focus();
         let _ = bar.eval("window.littleJoan && window.littleJoan.focusField()");
@@ -261,11 +287,18 @@ pub fn focus_page<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Loads `url` in the page and tells the bar.
+/// Loads `url` in the page and tells the bar. Showing a page closes the command bar, and the
+/// keyboard follows the page out of it (the toolbar has no field to keep it).
 pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
     if let Some(page) = app.get_webview(PAGE) {
+        let was_open = overlay();
+        set_overlay(app, false);
+        address().navigating(url.clone());
         page.navigate(url)?;
         publish_url(app);
+        if was_open {
+            focus_page(app);
+        }
     }
     Ok(())
 }

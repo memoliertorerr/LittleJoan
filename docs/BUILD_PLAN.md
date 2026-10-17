@@ -69,9 +69,9 @@
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
-| LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ⬜ todo |
-| LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ⬜ todo |
-| LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ⬜ todo |
+| LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
+| LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ✅ done |
+| LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ✅ done |
 | LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ⬜ todo |
 | LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ⬜ todo |
 | LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ⬜ todo |
@@ -105,9 +105,12 @@ that survive, themes, and an extension system with bundled extensions (decisions
 Decisions Already Made → v0.2 round 2"). These phases (12–17, LJ20–LJ35) run NEXT, before phases
 7–10; LJ19 stays the final v0.2.0 release. The user allowed the agent to merge each phase PR
 once its CI is green (CLAUDE.md, standing exception). Phase 12 (LJ20 → LJ21: logins survive
-close and quit on all three OSes; local history with frecency) is PR #13 on
-`lj/p12-logins-history`, merged once verify, package and smoke are green. Next: phase 13
-(LJ22 → LJ24).**
+close and quit on all three OSes; local history with frecency) was PR #13, merged. Phase 13
+(LJ22 → LJ24: every trusted screen in the bar webview and no IPC at all for the page webview, the
+command bar with suggestions, the Little Arc-style toolbar with the macOS traffic lights inside
+it; it opened with `lj-step-20-fix2` for the macOS abort `main`'s CI had shown) is PR #14 on
+`lj/p13-command-bar`, merged once verify, package and smoke are green. Next: phase 14 (LJ25 →
+LJ26).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -2529,6 +2532,31 @@ honest fix attempts, then stop).
   → relaunch `p=1 s=0 l=1` on Windows (`session-cookies-kept 1`, `-restored 1`), macOS (the
   window closed 441 ms after `quit`; the relaunch loaded at once) and Linux at scale 1 and 2;
   `--quit` came 51–80 ms after the set; no webview helpers left after any cycle.
+- **Fix 4 (`lj-step-20-fix2`, first commit of phase 13, from `main`'s CI after the phase-12
+  merge):** run 39066776951's `smoke (macos)` aborted ~340 ms after `window-created` of a
+  `--show <persist url>` summon while hibernating (create with a URL), before any page load:
+  `thread 'tokio-rt-worker' panicked at core/src/panicking.rs:225:5: panic in a function that
+  cannot unwind … thread caused non-unwinding panic. aborting.` The same code passed on both PR
+  runs. **The panicking call was not `Webview::url()`** (that runs on the main thread, through
+  tauri-runtime-wry's `webview_getter!`, and would panic there with wry's own `unwrap` message).
+  It was tauri 2.12.4's `tauri://` asset handler (`protocol/tauri.rs`: `async_runtime::spawn` →
+  `responder.respond`), which answers WKURLSchemeTasks **from a tokio worker**: the start page
+  (`index.html`) was still loading when `create` navigated the page to the URL, WebKit stopped
+  its task, and wry 0.57's responder (`wkwebview/class/url_scheme_handler.rs`) raced it — it
+  checks the task, then calls `didReceiveResponse` / `didReceiveData` / `didFinish` inside
+  `objc2::exception::catch` for exactly that "task already stopped" exception. objc2's docs:
+  that catch **cannot work when Rust is compiled with `panic = "abort"`**, our release profile,
+  so the Objective-C exception hit a non-unwinding Rust frame and the process aborted. **Fix:**
+  the release profile uses `panic = "unwind"` (Cargo.toml says why), so wry's catch works for
+  every such race (the page's start page, the bar's own files when a window closes quickly).
+  Asked for at the same time, and done: the smoke run gives the app `RUST_BACKTRACE=1` (release
+  builds are stripped, so frames come without names, but the panicking thread and order show);
+  `bar::page_url` no longer asks the engine — `page_address.rs` (pure, 5 tests) keeps the
+  address from the page's `Started` / `Finished` events and the app's own navigations, and the
+  once-a-second in-page check is the only `Webview::url()` caller, only while the last event
+  was `Finished`, dropping an answer that raced with a newer navigation (a sequence token).
+  `PAGE_STARTED` is gone. The size cost of unwinding is in phase 13's notes (CI's package job).
+  Disk: 13 GiB free; `.cache/target` 1.2 GB.
 - **Not fixed (Deferred follow-ups, Landmines):** Tauri's cookie type drops the leading dot of a
   domain cookie, so a session cookie set for `.example.com` comes back for `example.com` only.
 - Disk: checks commit 13 GiB free at the start, 12 GiB after verify; fix commit 13 GiB free;
@@ -2705,6 +2733,77 @@ mode". Push, open the phase-13 PR into main as a draft, and watch CI until every
 (two honest attempts, then stop). Look at start.png and page.png on every OS.
 ```
 
+**Implementation notes (2026-10-17):**
+
+- **Phase 13 opened with `lj-step-20-fix2`** (notes under LJ20): `main`'s CI after the phase-12
+  merge had aborted on macOS; the fix is the branch's first commit, before this step.
+- **Modes** (`layout::Mode`: `Toolbar`, `Overlay`, `Fullscreen`; `Layout` has an optional page
+  as well as an optional bar). The view state moved out of `bar.rs` into `bar/view.rs`
+  (`bar::` keeps the same functions), so both stay under ~400 lines.
+- **A new window is built in Overlay mode,** before it is shown, so the toolbar never flashes
+  first. `overlay true` is therefore logged right after `window-created` as the state the window
+  was built in (`bar::log_overlay`), not by a change; every later change logs itself.
+- **Showing a page closes the overlay** in `bar::navigate`, so Enter (`open_input`), `--show
+  <url>` (the smoke's path), `Create(url)` and Translate all close it. Opening it: every summon,
+  Ctrl/Cmd+L (`focus_bar`, page keys and the macOS menu) and — not in the prompt, but the
+  editing path the toolbar needs until LJ24 replaces the field — a click on the toolbar's
+  address (`set_overlay(true)` from the bar). Element fullscreen closes it and keeps it from
+  opening.
+- **Linux, a deviation with the same result:** instead of a height request equal to the
+  window's height (a GTK size request is also the window's minimum, so the window couldn't
+  shrink while the command bar is open, and it would need updating on every resize), the bar is
+  re-packed with `expand = fill = true` and keeps its 40 px request as a minimum. The page
+  widget is hidden with `no_show_all` set, because tao shows a window with `show_all()` (tao
+  0.37.1 `linux/window.rs`), which would bring a hidden page back on the first show.
+- **The bar learns its view** from `window.littleJoan.setOverlay` on every change, and again
+  when its own page finishes loading (a change during its load can't be missed); its script
+  starts in the overlay view. Rules in `ui/command/view-state.ts` (tested): Esc reverts an edit,
+  then with no page closes the window, with a page closes the overlay (`set_overlay(false)`,
+  which focuses the page); in the toolbar Esc still just returns to the page. A document-level
+  Esc listener gives the same rules after a click elsewhere in the bar — that resolves the
+  LJ12 follow-up "Esc after a click in the welcome".
+- **Files:** the welcome's logic moved with its tests (`git mv ui/start-logic.ts
+  ui/command/welcome.ts`), its DOM glue into `ui/command/panel.ts`; `ui/start.ts` and
+  `capabilities/joan.json` are gone; `ui/index.html` is a plain page (a `blank` body class, the
+  shared stylesheet, no script); `bar-logic.ts` keeps only the field helpers (`barKey` became
+  `view-state.ts`'s `onKey`). The bar capability gained `allow-start-info`,
+  `allow-set-start-at-login` and the new `allow-set-overlay`.
+- **`capability_tests.rs`** (5 tests): reads every file tauri-build would read
+  (`capabilities/**/*`; only JSON may be there, since TOML/JSON5 couldn't be checked) and inline
+  capabilities in `tauri.conf.json`, accepting the single / list / `{ "capabilities": [...] }`
+  forms; fails if a `webviews` pattern matches `joan-page` or a `windows` pattern matches `joan`
+  (glob `*` / `?`; character classes are refused outright), if any capability has `remote`, or if
+  any source calls `add_capability`; and checks the bar and settings keep theirs. Checked by
+  hand that it fails with the old `joan.json` and with a `"windows": ["jo*"]` file.
+- **Smoke:** `overlayFailures` (unit-tested): after every `window-created` the first `overlay`
+  event, before the next window, is `true`; with the smoke page, an `overlay false` comes after
+  the first window and before `LJ-SMOKE ready`. The first-run check applies the first rule too.
+  `smoke.mts` waits for both before `start.png` / `page.png`. A start-at-login test had a fixed
+  event count (`eventsUntil: 16`) that the longer fixture broke; it now counts the log.
+- `npm run verify`: 93 TS tests, 135 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.2 GB.
+- **CI (run 39069197262): verify ×3, package ×3, smoke macOS and Windows green; both Linux smoke
+  jobs red.** Screenshots: macOS and Windows `start.png` — the command bar fills the window (the
+  field at the top with its focus ring, the hint under it, no page visible); `page.png` — the 40
+  px bar with the smoke page's address above the page; macOS `welcome.png` — the welcome under
+  the field. Linux at scale 2, `start.png`: the overlay fills the window as well. **But on Linux
+  the page came back 1 px tall after the overlay closed** (`viewport=480x1`; `page.png` shows the
+  bar's white page over the whole window) and at scale 2 half the window (`480x300`, `390x280`
+  instead of 600 / 560), so the fullscreen click missed and the viewport checks failed. Cause: a
+  WebKitGTK view's natural height is its page's contents size, never smaller than the view; the
+  overlay made the bar as tall as the window, and once it was packed with `expand = false` again
+  the GtkBox still gave it that natural height first (naturals before `expand`; at scale 2 both
+  views' naturals were large, so they split the window). **Fix (`lj-step-22-fix`):**
+  `platform/linux.rs` moves the bar into a frame — a GtkScrolledWindow with external scrolling
+  (it doesn't pass its child's natural size on) around a GtkViewport with the minimum scroll
+  policy (it sizes the child to itself) — and packs the frame instead; the frame follows the
+  bar's show / hide (element fullscreen). The prompt's "height request = the window's height"
+  would have hit the same natural-size loop (and pinned the window's minimum size).
+- **After the fix (run 39070607023, with LJ23 on top): every job green** — verify ×3, package ×3,
+  smoke on Windows, macOS, Linux and Linux at scale 2. The Linux viewports are right again
+  (`480x600` at both scales, `390x560` / `720x560` after `--size`), and `page.png` at scale 1
+  and 2 shows the 40 px bar above the smoke page.
+
 ### LJ23 — The command bar · strong · auto
 
 **Verify:** `npm run verify` green, including vitest tests for a pure `ui/command/rows.ts`:
@@ -2763,6 +2862,77 @@ watch CI until every job is green (two honest attempts, then stop). Look at both
 every OS.
 ```
 
+**Implementation notes (2026-10-17):**
+
+- **Rust:** `suggest.rs` (pure, 7 tests) builds what `suggest(query)` returns: nothing typed →
+  up to 8 top sites leaving out the open page's site (`exclude`, only for an http(s) page), or
+  the 4 starters (Wikipedia, YouTube, GitHub, Google Maps) when there are no top sites — so also
+  when the only site is the open one; typing → up to 8 history matches and one `search` row
+  (title = the engine's name, url = `SearchEngine::search_url`, host = its site, for the icon).
+  Rows carry the score too (autofill compares it). `History::remove` (+ test) and
+  `history_store::remove` back `history_remove(url)`: the record goes from memory and the file
+  is rewritten with the next save (close, the 30 s autosave, quit) — LJ25 makes removal write at
+  once. `open_settings(tab?)` opens Settings (the tab waits for LJ26). All three are in the
+  bar's capability only.
+- **History loads before the webviews** in `joan::create` now (it closes again if building the
+  webviews fails): the command bar asks for suggestions as soon as it loads, and a request that
+  beat `history_store::open` would have shown the starters instead of the user's sites.
+- **`ui/command/rows.ts`** (pure, 23 tests) as the Verify lists; choices it makes: a search row
+  is built even without Rust's (then Enter goes through `open_input`); a title equal to its site,
+  or empty, shows the site once; the autofill completes the best match's *address* as typed
+  (`typedForm`: no scheme, no `www.`, no lone `/`) — the condition stays a host prefix — so Enter
+  opens exactly what the field shows; ↑ from the first row goes back to the field (no wrap);
+  `queryFor` treats the open page's untouched address (Ctrl/Cmd+L) as "nothing typed". Hooks for
+  quick answers (LJ31) and commands (LJ30) exist and are empty.
+- **`ui/command/view.ts`** draws with `textContent` only, against a small `ElementLike` slice of
+  the DOM, so `view.test.ts` draws into a stand-in document whose `innerHTML` setter throws (a
+  title `<img src=x onerror=…>` comes out as the title's text, and the only image is the site's
+  favicon). jsdom would have been a new dependency. The favicon (`referrerpolicy=no-referrer`)
+  shows once loaded, over the site's first letter in a tinted circle (stable hue per site), and
+  is removed if it fails.
+- **`ui/command/command.ts`** (glue): 60 ms debounce, only the latest answer is drawn, the
+  inline autofill only right after an insertion at the end of the field, hover selects and click
+  opens (mousedown is cancelled so the keyboard stays in the field). In the command bar the field
+  no longer reverts on blur (a click on a row or the welcome mustn't lose the text); the toolbar
+  still reverts. The × button follows Esc's rules (`onCloseButton`).
+- **The hint line is gone** (`hintText` and its test went with it): the rows fill the panel, as
+  in Little Arc; the welcome still says how to close.
+- **CSP:** `img-src 'self' data: https:` — nothing else changed. The command bar's colors are new
+  tokens in `style.css` (backdrop, panel, hairline, shadow, selection), light and dark; LJ27's
+  theme engine replaces them.
+- **Smoke:** `smoke-command.mts` (new, 6 tests; `smoke-log.mts` was already past 400 lines): Rust
+  logs `suggestions <rows> first=<site> typed=<characters>` (never the text). The main run must
+  show the starters first before any page, then — after the smoke page, in a new window —
+  `first=127.0.0.1…` with nothing typed, and after typing `127` the smoke page first (required on
+  Linux and Windows, best effort on macOS). The extra summon comes after the helper cycles: wait
+  for the top site, `command-bar.png`, type `127` (xdotool; `WScript.Shell.AppActivate` +
+  `SendKeys`; a Swift script posting key events after activating the app), `command-typing.png`,
+  `--hide`. `summary.json` gains `commandBar`.
+- `npm run verify`: 126 TS tests, 143 Rust tests, clippy clean. Disk: 13 GiB free;
+  `.cache/target` 1.2 GB.
+- **CI (run 39070607023, together with `lj-step-22-fix`): every job green.** The smoke log has
+  `suggestions 4 first=wikipedia.org typed=0` for the first window on all four jobs, then
+  `first=127.0.0.1:<port>` in every later window and `typed=3` after typing — on macOS too, so
+  its best-effort key events got through. Screenshots, all four alike in layout:
+  `start.png` — the command bar over the whole window: a rounded white panel on a light-grey
+  backdrop, a search icon, "Search or enter URL…" with the caret, × on the right, then
+  Wikipedia, YouTube, GitHub and Google Maps with their real favicons (loaded from the sites) as
+  "Title — domain" with the domain in grey, a hairline, and "Settings & extensions" with the
+  gear; `command-bar.png` — the smoke page as the only top site ("LJ-SMOKE viewport=720x560 …
+  — 127.0.0.1:<port>") with its stand-in icon (a "1" in a tinted circle: the favicon can't load
+  over https from the http-only smoke server) and Settings under it; `command-typing.png` —
+  "127" typed and ".0.0.1:<port>/smoke.html" completed and selected in the field, the smoke page
+  row filled with the accent blue (white text), "Search Google for “127”" with Google's icon,
+  then Settings. At scale 2 everything is crisp and twice the pixels. Text stays text: the long
+  titles are plain, no markup. **One finding, Linux scale 1:** the completed field had *no*
+  selected row: xdotool's second and third keys came 61 ms apart, the answer for "12" completed
+  the field after "7" was typed, and the answer for "127" then found the field no longer equal to
+  the typed text, dropped its autofill (no selection, Tab dead) and left the old completion on
+  screen. **Fix (`lj-step-23-fix`):** `rows.ts`'s `showsTyped` (pure, tested) accepts the typed
+  text followed by our own still-selected completion as "untouched", so the newer answer
+  completes the field again and selects its row; when an answer has no autofill, a completion an
+  earlier one left is taken away.
+
 ### LJ24 — The Little Arc-style toolbar · strong · auto
 
 **Verify:** `npm run verify` green, including:
@@ -2808,6 +2978,66 @@ on every OS. This ends phase 13. Fill the PR description:
 - The regression list.
 Once CI is green, merge into main (merge commit), then stop and report.
 ```
+
+**Implementation notes (2026-10-17):**
+
+- **The navigation counter** (`back_stack.rs`, pure, 6 tests): Tauri 2.12 can't ask a webview
+  whether it can go back, and the page has no IPC, so the bar's back button follows a trail of
+  this window's finished web-page loads (fragment dropped): the page before the last one loading
+  again is a step back (whoever caused it — the button, Alt+Left, Cmd+[, the page itself), the
+  last one again is a reload, anything else is pushed (at most 100). The app's pages and
+  `about:` never count, so the first web page never offers "back" to the start page. Rust tells
+  the bar `setCanGoBack(<bool>)` on a change and when the bar loads.
+- **Commands** `go_back` and `open_in_browser` (the existing page actions Back and
+  OpenInBrowser) and `core:window:allow-start-dragging` join the bar's capability.
+  `set_overlay(true)` now goes through `focus_bar`, so a click on the domain opens the command
+  bar with the full address selected, exactly like Ctrl/Cmd+L.
+- **The toolbar** (`ui/toolbar/logic.ts`, 9 tests; `toolbar.ts`): back, a drag gap, the site
+  (the command bar's lettered stand-in under the favicon, then the domain), a drag gap, open in
+  browser (an original "box with an arrow" glyph). The domain drops `www.`, shows IPs without the
+  port (`127.0.0.1`), and shortens names past 32 characters in the middle. The icon is only
+  rebuilt for a new site, so the favicon isn't fetched for every page. The field is no longer
+  visible in the toolbar view, so LJ22's "click the address" path (`onFieldPress`, and its test)
+  went away; the domain button replaced it.
+- **macOS title bar:** `TitleBarStyle::Overlay` + hidden title. Tauri's `window::WindowBuilder`
+  (the multi-webview one) has no `traffic_light_position`, only `WebviewWindowBuilder` does —
+  but `WindowBuilder::from_config` reads `WindowConfig.traffic_light_position` (tauri-runtime-wry
+  `lib.rs`), so the macOS builder starts from a `WindowConfig` (label, style, hidden title,
+  lights at x 14, y 20: tao's inset, i.e. the close button's left edge and the height of the
+  title-bar area under the buttons, chosen to centre them in the 40 px toolbar — to be checked
+  in the screenshot). The toolbar leaves 78 px for them; the command bar puts a 40 px draggable
+  strip above its panel on macOS. The bar finds out it's on macOS from its user agent (`isMac`).
+- **Keyboard focus follows the page out of the command bar** (`bar::navigate`): CI's LJ22
+  `page.png` on macOS showed the field still focused after `--show <url>`; with no field in the
+  toolbar any more the page now gets the keyboard whenever opening a page closes the overlay.
+- Not granted (Deferred follow-ups): double-clicking the toolbar to zoom the window on macOS
+  (Tauri's drag script calls `internal_toggle_maximize`, which needs its own permission).
+- `npm run verify`: 134 TS tests, 149 Rust tests, clippy clean. Disk: 13 GiB free;
+  `.cache/target` 1.2 GB.
+- **CI (run 39071547922): every job green — but `page.png` was wrong on every OS:** the 40 px
+  strip above the page was blank (no back, domain or open-in-browser). The toolbar's `<nav>` had
+  the class `toolbar`, which is also the body's view class, so the base rule hiding the strip
+  (`.toolbar { display: none }`) hid the whole body in the toolbar view. Smoke checks can't see
+  pixels; the screenshot did. The rest was right: macOS `start.png` / `command-bar.png` /
+  `command-typing.png` show the traffic lights in a 40 px backdrop strip above the command bar's
+  panel, vertically centred (x 14, y 20 works), no overlap with the search icon or the field, the
+  title bar transparent over the bar's backdrop; in `page.png` the lights sit in the toolbar's
+  strip and the page starts right below it (`viewport=480x600`). Windows and Linux are unchanged
+  in the command bar. **Fix (`lj-step-24-fix`):** the strip is `.toolstrip`; a new
+  `ui/bar-markup.test.ts` fails if a view class (`overlay`, `toolbar`) is put on any element but
+  `<body>` or styled without `.bar-body` (checked: it fails on the old stylesheet).
+- **After the fixes (run 39072675033, at the plan-status commit): every job green** — verify ×3,
+  package ×3, smoke on Windows, macOS, Linux and Linux at scale 2. `page.png`: Windows and Linux
+  — under the native title bar, the toolbar's light strip with a greyed back chevron (one smoke
+  page per window, so nowhere to go back), the site's "1" stand-in and `127.0.0.1` centred, the
+  open-in-browser glyph on the right; Linux at scale 2 the same, crisp; macOS — the traffic
+  lights inside the toolbar's left end, the back chevron just after them with no overlap, the
+  site centred, the glyph on the right, the page right below (`480x600`). The Linux scale-1
+  `command-typing.png` now has the completed field *and* the smoke page's row selected
+  (`lj-step-23-fix`). Login persistence (`p=1 s=1 l=1` / `p=1 s=0 l=1`), the viewports and
+  "no webview helpers after hibernating" (0 / 0 / 0 per cycle) held on all four.
+- Final `npm run verify`: 138 TS tests, 149 Rust tests, clippy clean. Disk at the end: 13 GiB
+  free; `.cache/target` 1.2 GB.
 
 ### LJ25 — History view · standard · auto
 
@@ -3263,10 +3493,11 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   means a new user sees only a tray icon — and on GNOME without the AppIndicator extension,
   nothing at all. Option: when no `settings.json` exists yet, show the window once with the
   shortcut hint. → *The user chose the one-time welcome on 2026-10-17: resolved by LJ12.*
-- **Esc after a click in the welcome** (surfaced by LJ12). Clicking the welcome's checkbox moves
+- ~~**Esc after a click in the welcome**~~ (surfaced by LJ12). Clicking the welcome's checkbox moves
   the keyboard into the page webview, where Esc does nothing until the URL bar has the focus
   again; Ctrl/Cmd+W, the close button and the shortcut still close. Options: give the start page
-  `allow-hibernate` for Esc, or a command that hands the focus back to the bar.
+  `allow-hibernate` for Esc, or a command that hands the focus back to the bar. → *Resolved by
+  LJ22: the welcome lives in the bar now, and Esc anywhere in the bar follows the field's rules.*
 - ~~**Start at login**~~ (surfaced by LJ8's README). Without it the shortcut is dead after a
   reboot until the user launches the app; already designed under Later — the most useful next
   step. → *Handled by LJ11.*
@@ -3311,6 +3542,18 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   (the engine keeps them). Options: read and set Windows' cookies through webview2-com
   (`ICoreWebView2CookieManager`) to keep the dot, or upstream a raw-domain accessor to
   `cookie` / wry.
+- **Release builds are bigger since `panic = "unwind"`** (surfaced by `lj-step-20-fix2`): CI's
+  installer artifacts grew from 3.56 to 4.48 MB (macOS), 1.31 to 1.78 MB (Windows), and the Linux
+  bundle by about 1 MB. Only macOS needs unwinding (wry's Objective-C exception catch); a
+  target-specific `-C panic=unwind` for macOS with `abort` elsewhere would win most of it back,
+  at the cost of a second place that decides the panic strategy. The owner's call; the README's
+  sizes describe the v0.2.0-beta.1 downloads until the next release.
+- **Double-click the toolbar to zoom the window on macOS** (surfaced by LJ24). Tauri's drag
+  script turns a double click on a drag region into `internal_toggle_maximize`, which needs
+  `core:window:allow-internal-toggle-maximize`; the bar has only `allow-start-dragging` (what
+  LJ24 named), so a double click does nothing.
+- **`history_top` / `history_search` have no caller** since LJ23 (the command bar uses
+  `suggest`). They stay in the bar's capability for the history view (LJ25) to use or remove.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -3431,10 +3674,23 @@ Populated from real friction, not speculation:
   7 days** for sites without recent interaction. This is Apple's behavior; a site that keeps a
   login only in a JS cookie can log out after a week idle.
 - *(LJ20)* **wry 0.57 panics reading an unset WKWebView address** (`url_from_webview`:
-  `webview.URL().unwrap()`), and release builds abort on panic. The address is unset until the
-  first navigation commits, and goes back to unset when that first navigation never does — CI
-  saw it in a relaunch right after `process::exit`. Read the page's address through
-  `bar::page_url`, which waits for the page's first load event.
+  `webview.URL().unwrap()`, on the main thread, where it can't unwind). The address is unset
+  until the first navigation commits, and goes back to unset when that first navigation never
+  does — CI saw it in a relaunch right after `process::exit`. Read the page's address through
+  `bar::page_url`, which serves it from the load events (`page_address.rs`); only the in-page
+  check asks the engine, after a finished load.
+- *(LJ22)* **A WebKitGTK view's natural height is its contents size,** never smaller than the
+  view, and GtkBox gives children their natural size before `expand`. A webview that was made
+  tall once (the command bar's overlay) stays tall when packed with `expand = false` again, and
+  its sibling gets 1 px. Pack a frame that doesn't propagate natural size (GtkScrolledWindow,
+  external scrolling, around a minimum-policy GtkViewport) instead of the view.
+- *(LJ20 fix2)* **`panic = "abort"` breaks wry's Objective-C exception catch on macOS.** Tauri
+  answers `tauri://` requests from a tokio worker, and when the page navigates away while one of
+  them is in flight (the start page replaced at once by `--show <url>`; the bar unloaded by a
+  quick close), WebKit raises "task already stopped" from `didReceiveResponse` & co. wry wraps
+  those calls in `objc2::exception::catch`, which can't catch under `panic = "abort"`, so the app
+  aborted with "panic in a function that cannot unwind" on `tokio-rt-worker`. Keep the release
+  profile at `panic = "unwind"`.
 - *(LJ20)* **Tauri's `cookie` crate strips a domain cookie's leading dot** (`Cookie::domain`
   and `domain_raw` both do), and wry passes `domain()` to the engines, so a cookie read with
   `Webview::cookies` and set again becomes host-only. Deferred follow-ups has the options.

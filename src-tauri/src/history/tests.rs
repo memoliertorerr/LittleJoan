@@ -477,3 +477,17 @@ fn the_file_round_trips() {
     );
     assert_eq!(History::parse(&json, NOW, &origin()), h);
 }
+
+#[test]
+fn a_record_can_be_removed() {
+    let mut h = history(&[
+        ("https://a.test/x", "A", &[visit(NOW, VisitKind::Typed)]),
+        ("https://a.test/y", "A2", &[visit(NOW, VisitKind::Link)]),
+    ]);
+    assert!(h.remove("https://a.test/x"));
+    assert_eq!(h.entries().len(), 1);
+    assert_eq!(h.entries()[0].url, "https://a.test/y");
+    assert!(!h.remove("https://a.test/x"), "already gone");
+    assert!(!h.remove("https://elsewhere.test/"));
+    assert!(h.search("x", 5, NOW).is_empty());
+}

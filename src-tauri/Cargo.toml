@@ -55,5 +55,10 @@ debug = false
 codegen-units = 1
 lto = true
 opt-level = "s"
-panic = "abort"
+# Not "abort": on macOS, Tauri answers the app's own tauri:// requests from a tokio thread, and
+# wry catches the Objective-C exception WebKit raises when such a request's navigation was
+# cancelled meanwhile ("task already stopped") with objc2::exception::catch, which cannot work
+# under panic = "abort" (objc2's docs): the exception then aborted the app ("panic in a function
+# that cannot unwind", CI run 39066776951). See the plan's Landmines.
+panic = "unwind"
 strip = true
