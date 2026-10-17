@@ -88,7 +88,7 @@ scripts/ci/smoke.mts               CI: drives the installed app (show, page, cli
 scripts/ci/smoke-log.mts           CI: smoke-log parsing and pass/fail rules, unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
-.github/workflows/ci.yml           verify on ubuntu-latest, windows-latest, macos-latest
+.github/workflows/ci.yml           verify on ubuntu-24.04, windows-latest, macos-latest; package; smoke
 ```
 
 ## Lifecycle

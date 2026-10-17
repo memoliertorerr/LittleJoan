@@ -4,6 +4,8 @@ claude.md
 AGENTS.md
 agents.md
 AGENT.md
+# Local agent settings and permissions.
+.claude/
 
 # Toolchains, caches, temp files, and dev app data (scripts/env.sh points everything here).
 .cache/

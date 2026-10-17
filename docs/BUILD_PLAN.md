@@ -176,7 +176,7 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 | Check | Who | "Green" looks like |
 |---|---|---|
 | `npm run verify` (tsc, eslint, vitest, UI build, cargo fmt, clippy `-D warnings`, cargo test) | Agent, on the Mac | Clean exit; test counts in the report |
-| Windows + Linux code paths (`#[cfg(windows)]`, `#[cfg(target_os = "linux")]`) | CI (`verify` job on ubuntu-latest, windows-latest, macos-latest) | All three jobs green on the pushed commit |
+| Windows + Linux code paths (`#[cfg(windows)]`, `#[cfg(target_os = "linux")]`) | CI (`verify` job on ubuntu-24.04, windows-latest, macos-latest) | All three jobs green on the pushed commit |
 | Installers build | CI `package` job (LJ8) | NSIS `.exe`, universal `.dmg`, `.deb`, `.AppImage` uploaded as artifacts |
 | Installed app launches, summons, loads a page, element fullscreen toggles the window, closing frees the webview | CI `smoke` job (LJ9), agent reads the logs and looks at the screenshots | Smoke log shows the expected events; screenshots show the start page and a loaded page |
 | **Nothing regressed** | you, in each PR | Earlier phases' behaviors in the PR's checklist still hold |
@@ -1425,11 +1425,12 @@ ends phase 5: fill the PR description from the template, then stop and report.
   typescript, popup-browser, webview, desktop-app, windows, macos, linux, system-tray,
   hibernation. `gh repo edit` takes the repository as a positional argument (it has no `--repo`
   flag), so the command was `gh repo edit memoliertorerr/LittleJoan …`.
-- **GitHub's private vulnerability reporting is OFF on the repository**
+- ~~**GitHub's private vulnerability reporting is OFF on the repository**
   (`gh api repos/memoliertorerr/LittleJoan/private-vulnerability-reporting` → `enabled: false`).
   SECURITY.md points there, so the owner needs to switch it on (Settings → Code security →
   Private vulnerability reporting → Enable); enabling it was outside the allowed settings
-  change.
+  change.~~ The owner has switched it on since: the same call returns `enabled: true`
+  (checked 2026-10-17).
 - No releases or tags were created.
 
 ---
