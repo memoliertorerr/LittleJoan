@@ -46,7 +46,7 @@
 | LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ✅ done (Linux smoke on 24.04 — see notes) |
 | LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ✅ done — waiting for the human check |
 | LJ10.1 | *(added mid-plan 2026-10-17)* Always-visible URL bar: a trusted local webview above the page | strong | auto | ✅ done |
-| LJ10.2 | *(added mid-plan 2026-10-17)* Project files: CHANGELOG, CONTRIBUTING, SECURITY, repo metadata | standard | auto | ⬜ todo |
+| LJ10.2 | *(added mid-plan 2026-10-17)* Project files: CHANGELOG, CONTRIBUTING, SECURITY, repo metadata | standard | auto | ✅ done |
 
 **Overall status: v0.1 (LJ1–LJ10) passed the user's own check on macOS. Phase 5 (LJ10.1–LJ10.2,
 added mid-plan 2026-10-17) adds the always-visible URL bar and the project files; PR #5 into
@@ -1385,6 +1385,21 @@ Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ10.2 to �
 "lj-step-10.2: changelog, contributing guide, and security policy". Push and watch CI. This
 ends phase 5: fill the PR description from the template, then stop and report.
 ```
+
+**Implementation notes (2026-10-17):**
+
+- LICENSE was already correct (MIT, © 2026 Mehmet Ali Ertorer); unchanged.
+- **Repository metadata set** (the only GitHub settings change made): description,
+  homepage `https://github.com/memoliertorerr/LittleJoan#readme`, topics browser, tauri, rust,
+  typescript, popup-browser, webview, desktop-app, windows, macos, linux, system-tray,
+  hibernation. `gh repo edit` takes the repository as a positional argument (it has no `--repo`
+  flag), so the command was `gh repo edit memoliertorerr/LittleJoan …`.
+- **GitHub's private vulnerability reporting is OFF on the repository**
+  (`gh api repos/memoliertorerr/LittleJoan/private-vulnerability-reporting` → `enabled: false`).
+  SECURITY.md points there, so the owner needs to switch it on (Settings → Code security →
+  Private vulnerability reporting → Enable); enabling it was outside the allowed settings
+  change.
+- No releases or tags were created.
 
 ---
 

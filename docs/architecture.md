@@ -16,6 +16,9 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
 ## Files
 
 ```
+README.md, LICENSE                 what it is, install, use; MIT
+CHANGELOG.md                       what each version contains
+CONTRIBUTING.md, SECURITY.md       how to build and check changes; how to report security problems
 package.json, package-lock.json   npm scripts (verify, icons, dev); all JS tooling is local
 tsconfig.json                      strict TS for ui/, scripts/, tests/, config files
 vite.config.mts                    UI build: root ui/, output dist/ (embedded into the binary)

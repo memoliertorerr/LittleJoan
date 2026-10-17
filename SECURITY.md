@@ -1,0 +1,21 @@
+# Security policy
+
+## Supported versions
+
+Little Joan is young: only the latest version (currently 0.1.x, from the `main` branch) gets
+fixes.
+
+## Reporting a vulnerability
+
+Please report security problems **privately**, not in a public issue or pull request:
+
+1. Open the repository's **Security** tab on GitHub.
+2. Choose **Report a vulnerability** (GitHub's private vulnerability reporting).
+3. Describe the problem, the system and version it affects, and how to reproduce it.
+
+The report is visible only to the maintainer. You'll get an answer as soon as possible; once a
+fix is ready, the advisory can be published with credit to you if you'd like.
+
+Things that matter most here: anything that lets a web page call into Little Joan (pages are
+meant to get no IPC at all), open non-web URLs or local files, or keep running after the window
+is closed.

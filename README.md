@@ -117,6 +117,13 @@ Little Joan is built with [Tauri 2](https://tauri.app) (Rust + the operating sys
 webview) and TypeScript. See [docs/architecture.md](docs/architecture.md) for the layout, the
 build commands, and how CI builds and smoke-tests the installers.
 
+## Contributing
+
+Bug reports and ideas are welcome in [issues](https://github.com/memoliertorerr/LittleJoan/issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and check changes, and
+[CHANGELOG.md](CHANGELOG.md) for what's in each version. Please report security problems
+privately as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © 2026 Mehmet Ali Ertorer
