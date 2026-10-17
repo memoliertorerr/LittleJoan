@@ -59,6 +59,10 @@
         codecSupport,
         fullscreenTitle,
         isFullscreen,
+        persistRequest,
+        persistSet,
+        persistTitle,
+        PERSIST_STORAGE_KEY,
         readyTitle,
         requestFullscreen,
         viewportTitle,
@@ -70,22 +74,44 @@
         document.title = title;
         status.textContent = title;
       };
+      const stored = () => {
+        try {
+          return localStorage.getItem(PERSIST_STORAGE_KEY);
+        } catch {
+          return null;
+        }
+      };
 
-      show(readyTitle(codecSupport(document.getElementById("video"), globalThis.MediaSource)));
+      // ?persist=set|check&t=<token>: the login-persistence check (cookies + localStorage). It
+      // reports only that, so the title stays put for the smoke test to read.
+      const persist = persistRequest(location.search);
+      if (persist) {
+        show(
+          persist.mode === "set"
+            ? persistSet(document, localStorage, persist.token)
+            : persistTitle(document.cookie, stored(), persist.token),
+        );
+      } else {
+        startCodecAndViewportReports();
+      }
 
-      // What the page sees (CSS viewport, user agent), reported shortly after load and after
-      // every resize has settled.
-      let resizeTimer = 0;
-      const reportViewport = () =>
-        show(viewportTitle(window.innerWidth, window.innerHeight, navigator.userAgent, window.devicePixelRatio));
-      setTimeout(reportViewport, 300);
-      window.addEventListener("resize", () => {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(reportViewport, 300);
-      });
-      document.getElementById("go").addEventListener("click", () => requestFullscreen(stage));
-      for (const name of ["fullscreenchange", "webkitfullscreenchange"]) {
-        document.addEventListener(name, () => show(fullscreenTitle(isFullscreen(document))));
+      function startCodecAndViewportReports() {
+        show(readyTitle(codecSupport(document.getElementById("video"), globalThis.MediaSource)));
+
+        // What the page sees (CSS viewport, user agent), reported shortly after load and after
+        // every resize has settled.
+        let resizeTimer = 0;
+        const reportViewport = () =>
+          show(viewportTitle(window.innerWidth, window.innerHeight, navigator.userAgent, window.devicePixelRatio));
+        setTimeout(reportViewport, 300);
+        window.addEventListener("resize", () => {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(reportViewport, 300);
+        });
+        document.getElementById("go").addEventListener("click", () => requestFullscreen(stage));
+        for (const name of ["fullscreenchange", "webkitfullscreenchange"]) {
+          document.addEventListener(name, () => show(fullscreenTitle(isFullscreen(document))));
+        }
       }
     </script>
   </body>

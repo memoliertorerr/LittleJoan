@@ -4,11 +4,15 @@ import {
   desktopExec,
   evaluate,
   firstRunFailures,
+  historyFailures,
   lastTitle,
   newPids,
   parseCodecs,
+  parseHistory,
   parseLog,
+  parsePersist,
   parseRegValues,
+  persistFailures,
   plistProgram,
   pointsAt,
   startAtLoginFailures,
@@ -224,6 +228,17 @@ describe("start at login", () => {
     expect(startAtLoginFailures(opened, { afterOn: [entry], afterOff: [] })).toEqual([
       expect.stringContaining("opened a window"),
     ]);
+    // A window right after "off" still counts while the check lasts.
+    const late = parseLog(`${GOOD}12 start-at-login true\n13 start-at-login false\n14 window-created\n`);
+    expect(startAtLoginFailures(late, { afterOn: [entry], afterOff: [], eventsUntil: 16 })).toHaveLength(1);
+  });
+
+  it("ignores windows that later steps open", () => {
+    const text = `${GOOD}12 start-at-login true\n13 start-at-login false\n`;
+    const until = parseLog(text).length;
+    const later = parseLog(`${text}20 window-created\n21 title LJ-PERSIST set\n`);
+    expect(startAtLoginFailures(later, { afterOn: [entry], afterOff: [], eventsUntil: until })).toEqual([]);
+    expect(startAtLoginFailures(later, { afterOn: [entry], afterOff: [] })).toHaveLength(1);
   });
 });
 
@@ -273,6 +288,133 @@ describe("first run", () => {
     const main = parseLog(`${GOOD}12 first-run\n`);
     expect(evaluate(main, { windowFullscreen: false, pageFullscreen: false }, { pageHelpersLeft: 0 })).toEqual([
       expect.stringContaining("the main run was a first run"),
+    ]);
+  });
+});
+
+describe("persistence", () => {
+  const main = parseLog(`${GOOD}20 title LJ-PERSIST set
+21 hibernated
+22 window-created
+23 title LJ-PERSIST p=1 s=1 l=1
+30000 title LJ-PERSIST set
+30600 quit
+`);
+  const relaunch = parseLog("1 started\n2 shortcut-registered CommandOrControl+Shift+Space\n3 window-created\n4 title LJ-PERSIST p=1 s=0 l=1\n");
+  const good = {
+    afterClose: "LJ-PERSIST p=1 s=1 l=1",
+    afterQuit: "LJ-PERSIST p=1 s=0 l=1",
+    quitExited: true,
+    relaunch,
+  };
+
+  it("reads the page's report", () => {
+    expect(parsePersist("LJ-PERSIST p=1 s=0 l=1")).toEqual({ p: true, s: false, l: true });
+    expect(parsePersist("LJ-PERSIST p=0 s=1 l=0")).toEqual({ p: false, s: true, l: false });
+    for (const bad of [undefined, "", "LJ-PERSIST set", "LJ-PERSIST p=2 s=0 l=1", "LJ-PERSIST p=1 s=0", "x LJ-PERSIST p=1 s=0 l=1"]) {
+      expect(parsePersist(bad), String(bad)).toBeUndefined();
+    }
+  });
+
+  it("passes everything kept across close, and the session cookie gone after quitting", () => {
+    expect(persistFailures(main, good)).toEqual([]);
+  });
+
+  it("names what close → summon lost", () => {
+    expect(persistFailures(main, { ...good, afterClose: "LJ-PERSIST p=1 s=0 l=1" })).toEqual([
+      "close → summon lost the session cookie (p=1 s=0 l=1, want p=1 s=1 l=1)",
+    ]);
+    expect(persistFailures(main, { ...good, afterClose: "LJ-PERSIST p=0 s=0 l=0" })).toEqual([
+      "close → summon lost the persistent cookie, the session cookie, localStorage (p=0 s=0 l=0, want p=1 s=1 l=1)",
+    ]);
+    expect(persistFailures(main, { ...good, afterClose: undefined })).toEqual([
+      "close → summon: the page never reported (got nothing)",
+    ]);
+  });
+
+  it("names what quitting lost, and a session cookie that outlived the app run", () => {
+    expect(persistFailures(main, { ...good, afterQuit: "LJ-PERSIST p=0 s=0 l=0" })).toEqual([
+      "quit → relaunch lost the persistent cookie, localStorage (p=0 s=0 l=0, want p=1 s=0 l=1)",
+    ]);
+    expect(persistFailures(main, { ...good, afterQuit: "LJ-PERSIST p=1 s=1 l=1" })).toEqual([
+      "quit → relaunch kept the session cookie (p=1 s=1 l=1); it must end with the app run",
+    ]);
+    expect(persistFailures(main, { ...good, afterQuit: "LJ-SMOKE ready" })).toEqual([
+      "quit → relaunch: the page never reported (got LJ-SMOKE ready)",
+    ]);
+  });
+
+  it("needs the quit within a second of the set, and the process to end by itself", () => {
+    const late = parseLog("1 started\n10 title LJ-PERSIST set\n1011 quit\n");
+    expect(persistFailures(late, good)).toEqual([
+      "quit → relaunch: the quit came 1001 ms after the set (at most 1000)",
+    ]);
+    const noQuit = parseLog("1 started\n10 title LJ-PERSIST set\n");
+    expect(persistFailures(noQuit, { ...good, quitExited: false })).toEqual([
+      'quit → relaunch: the app never logged "quit" after the set',
+      "--quit did not end the app's process",
+    ]);
+    // A quit logged before the last set doesn't count.
+    const early = parseLog("1 started\n5 quit\n10 title LJ-PERSIST set\n");
+    expect(persistFailures(early, good)).toEqual(['quit → relaunch: the app never logged "quit" after the set']);
+    expect(persistFailures(parseLog(GOOD), good)).toEqual(['quit → relaunch: the page never reported "LJ-PERSIST set"']);
+  });
+
+  it("needs a plain relaunch on the same data folder", () => {
+    expect(persistFailures(main, { ...good, relaunch: parseLog("1 started\n2 first-run\n") })).toEqual([
+      "quit → relaunch: it was a first run (the data folder lost its settings)",
+    ]);
+    expect(persistFailures(main, { ...good, relaunch: [] })).toEqual([
+      'quit → relaunch: expected one "started", saw 0',
+    ]);
+  });
+});
+
+describe("history", () => {
+  const pageUrl = "http://127.0.0.1:5000/smoke.html";
+  const record = (url: string, title = "LJ-SMOKE ready h264=mse", visits = 1) => ({
+    url,
+    title,
+    host: new URL(url).host,
+    visitCount: visits,
+    visits: Array.from({ length: visits }, (_, i) => ({ at: 1000 + i, kind: "link" })),
+  });
+  const file = (...records: object[]) => JSON.stringify({ version: 1, entries: records });
+
+  it("reads history.json", () => {
+    expect(parseHistory(file(record(pageUrl)))?.[0]?.url).toBe(pageUrl);
+    expect(parseHistory(undefined)).toBeUndefined();
+    expect(parseHistory("nope")).toBeUndefined();
+    expect(parseHistory('{"version": 1}')).toBeUndefined();
+  });
+
+  it("passes the smoke page recorded with its title and visits, and nothing with history off", () => {
+    const main = file(record(pageUrl, "LJ-SMOKE viewport=720x560 ua=desktop dpr=1", 3), record(`${pageUrl}?persist=set&t=x`));
+    expect(historyFailures({ main, pageUrl, off: undefined })).toEqual([]);
+    expect(historyFailures({ main, pageUrl, off: file() })).toEqual([]);
+  });
+
+  it("fails without the file, the record, its title or a visit", () => {
+    expect(historyFailures({ main: undefined, pageUrl, off: undefined })).toEqual(["history.json of the main run is missing"]);
+    expect(historyFailures({ main: "{", pageUrl, off: undefined })).toEqual(["history.json of the main run is not history"]);
+    expect(historyFailures({ main: file(record("https://other.test/")), pageUrl, off: undefined })).toEqual([
+      `history.json has no record of ${pageUrl} (1 records)`,
+    ]);
+    expect(historyFailures({ main: file(record(pageUrl, "")), pageUrl, off: undefined })).toEqual([
+      'history: the smoke page\'s title is "", not the page\'s own',
+    ]);
+    expect(historyFailures({ main: file(record(pageUrl, "LJ-SMOKE ready", 0)), pageUrl, off: undefined })).toEqual([
+      "history: the smoke page has no visit",
+    ]);
+  });
+
+  it("fails when the app's own pages were recorded, or history off still wrote records", () => {
+    const own = file(record(pageUrl), record("http://tauri.localhost/index.html"), record("tauri://localhost/index.html"));
+    expect(historyFailures({ main: own, pageUrl, off: undefined })).toEqual([
+      "history recorded the app's own pages: http://tauri.localhost/index.html, tauri://localhost/index.html",
+    ]);
+    expect(historyFailures({ main: file(record(pageUrl)), pageUrl, off: file(record(pageUrl)) })).toEqual([
+      "history off: 1 records were still written",
     ]);
   });
 });

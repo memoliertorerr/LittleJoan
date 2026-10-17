@@ -36,6 +36,9 @@ pub struct Settings {
     pub window_height: u32,
     /// Phone mode: in a narrow window, pages get a phone user agent (phone.rs).
     pub mobile_sites: bool,
+    /// Record visited pages in history.json (history_store.rs). Off: nothing new is recorded;
+    /// what is there stays until it is cleared.
+    pub remember_history: bool,
 }
 
 impl Default for Settings {
@@ -48,6 +51,7 @@ impl Default for Settings {
             window_width: 480,
             window_height: 640,
             mobile_sites: true,
+            remember_history: true,
         }
     }
 }
@@ -97,6 +101,10 @@ pub fn parse(json: &str) -> Settings {
         .get("mobileSites")
         .and_then(Value::as_bool)
         .unwrap_or(defaults.mobile_sites);
+    let remember_history = map
+        .get("rememberHistory")
+        .and_then(Value::as_bool)
+        .unwrap_or(defaults.remember_history);
 
     Settings {
         version: SETTINGS_VERSION,
@@ -106,6 +114,7 @@ pub fn parse(json: &str) -> Settings {
         window_width,
         window_height,
         mobile_sites,
+        remember_history,
     }
 }
 
@@ -189,6 +198,7 @@ mod tests {
             window_width: 900,
             window_height: 500,
             mobile_sites: false,
+            remember_history: false,
             ..Settings::default()
         };
         save(&dir, &settings).expect("save");
@@ -211,6 +221,22 @@ mod tests {
             parse(r#"{"mobileSites": "no"}"#).mobile_sites,
             "a wrong type falls back"
         );
+    }
+
+    #[test]
+    fn history_is_remembered_unless_switched_off() {
+        assert!(Settings::default().remember_history);
+        assert!(
+            parse("{}").remember_history,
+            "settings from before the option existed"
+        );
+        assert!(!parse(r#"{"rememberHistory": false}"#).remember_history);
+        assert!(
+            parse(r#"{"rememberHistory": 0}"#).remember_history,
+            "a wrong type falls back"
+        );
+        let json = serde_json::to_string(&Settings::default()).expect("json");
+        assert!(json.contains(r#""rememberHistory":true"#), "{json}");
     }
 
     #[test]

@@ -79,3 +79,81 @@ export function viewportTitle(width, height, userAgent, pixelRatio) {
   const agent = isPhoneAgent(userAgent) ? "phone" : "desktop";
   return `LJ-SMOKE viewport=${Math.round(width)}x${Math.round(height)} ua=${agent} dpr=${pixelRatio}`;
 }
+
+/** The localStorage key the persistence check writes and reads. */
+export const PERSIST_STORAGE_KEY = "lj_l";
+
+/** The title `?persist=set` reports once it has written everything. */
+export const PERSIST_SET_TITLE = "LJ-PERSIST set";
+
+/**
+ * The persistence check a page URL asks for: `?persist=set&t=<token>` or
+ * `?persist=check&t=<token>`. Tokens are 1–64 letters, digits, `_` or `-` (cookie-safe).
+ * @param {string} search location.search
+ * @returns {{ mode: "set" | "check", token: string } | undefined}
+ */
+export function persistRequest(search) {
+  const params = new URLSearchParams(search);
+  const mode = params.get("persist");
+  const token = params.get("t") ?? "";
+  if ((mode === "set" || mode === "check") && /^[\w-]{1,64}$/.test(token)) {
+    return { mode, token };
+  }
+  return undefined;
+}
+
+/**
+ * The cookies `?persist=set` writes: a persistent one (a year), and a session one (no expiry,
+ * so it must end with the app run).
+ * @param {string} token
+ */
+export function persistCookies(token) {
+  return [`lj_p=${token}; Max-Age=31536000; Path=/; SameSite=Lax`, `lj_s=${token}; Path=/`];
+}
+
+/**
+ * Writes the persistent cookie, the session cookie and the localStorage value; returns the
+ * title to report.
+ * @param {{ cookie: string }} doc document
+ * @param {{ setItem(key: string, value: string): void }} storage localStorage
+ * @param {string} token
+ */
+export function persistSet(doc, storage, token) {
+  for (const cookie of persistCookies(token)) {
+    doc.cookie = cookie;
+  }
+  storage.setItem(PERSIST_STORAGE_KEY, token);
+  return PERSIST_SET_TITLE;
+}
+
+/**
+ * `document.cookie` as name → value (the first of a repeated name wins).
+ * @param {string} header
+ * @returns {Map<string, string>}
+ */
+export function parseCookies(header) {
+  /** @type {Map<string, string>} */
+  const cookies = new Map();
+  for (const pair of header.split(";")) {
+    const at = pair.indexOf("=");
+    const name = at > 0 ? pair.slice(0, at).trim() : "";
+    if (name && !cookies.has(name)) {
+      cookies.set(name, pair.slice(at + 1).trim());
+    }
+  }
+  return cookies;
+}
+
+/**
+ * What survived, as the title `?persist=check` reports: 1 where the persistent cookie (p), the
+ * session cookie (s) or the localStorage value (l) still holds `token`, else 0.
+ * @param {string} cookieHeader document.cookie
+ * @param {string | null} stored localStorage's value (null when missing or unreadable)
+ * @param {string} token
+ */
+export function persistTitle(cookieHeader, stored, token) {
+  const cookies = parseCookies(cookieHeader);
+  /** @param {string | null | undefined} value */
+  const bit = (value) => (value === token ? 1 : 0);
+  return `LJ-PERSIST p=${bit(cookies.get("lj_p"))} s=${bit(cookies.get("lj_s"))} l=${bit(stored)}`;
+}

@@ -67,8 +67,8 @@
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (starts once the user's secrets exist) | strong | auto | ⬜ todo |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
-| LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ⬜ todo |
-| LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ⬜ todo |
+| LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
+| LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ⬜ todo |
 | LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ⬜ todo |
 | LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ⬜ todo |
@@ -104,7 +104,10 @@ Little Joan to look and feel like Little Arc: a command bar with suggestions, hi
 that survive, themes, and an extension system with bundled extensions (decisions: "Design
 Decisions Already Made → v0.2 round 2"). These phases (12–17, LJ20–LJ35) run NEXT, before phases
 7–10; LJ19 stays the final v0.2.0 release. The user allowed the agent to merge each phase PR
-once its CI is green (CLAUDE.md, standing exception). Next: phase 12 (LJ20 → LJ21).**
+once its CI is green (CLAUDE.md, standing exception). Phase 12 (LJ20 → LJ21: logins survive
+close and quit on all three OSes; local history with frecency) is PR #13 on
+`lj/p12-logins-history`, merged once verify, package and smoke are green. Next: phase 13
+(LJ22 → LJ24).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -2486,6 +2489,73 @@ and watch CI until verify, package and smoke are green on all three OSes (Ground
 honest fix attempts, then stop).
 ```
 
+**Implementation notes (2026-10-17):**
+
+- **Checks first, as the prompt orders.** The step commit (`lj-step-20`) carries only the checks,
+  `--quit` and the doc corrections, so CI shows what each engine does before anything is fixed;
+  the fixes follow as `lj-step-20-fix` commits, and the tracker row turns ✅ with the fix.
+- **What the checks found before any fix** (run 39063980861, installed builds):
+
+  | | close → summon (want p=1 s=1 l=1) | quit → relaunch (want p=1 s=0 l=1) |
+  |---|---|---|
+  | Windows (WebView2) | **p=1 s=0 l=1** — the session cookie is lost | p=1 s=0 l=1 ✔ (quit 49 ms after the set) |
+  | macOS (WKWebView) | p=1 s=1 l=1 ✔ | **no report**: the relaunched app opened its window, but neither webview ever loaded, and 1.1 s later it aborted — wry 0.57's `url()` unwraps WKWebView's unset URL (`wkwebview/mod.rs:1370`), hit by the address watcher |
+  | Linux (WebKitGTK, scale 1 and 2) | p=1 s=1 l=1 ✔ | p=1 s=0 l=1 ✔ |
+
+  Every smoke job also failed "--start-at-login opened a window": that rule looked at the whole
+  rest of the log, and the new persistence steps open windows after it. It now stops at a count
+  of events taken 1.5 s after `off` (`eventsUntil`, tested both ways).
+- **Fix 1, session cookies (Windows only):** `cookies.rs` (pure): a session cookie has neither
+  an expiry date nor a max-age; one per name + domain (any case) + path, the last read wins; at
+  most 500; a cookie without a name or domain is dropped (WKWebView would refuse it), a missing
+  path becomes `/`, and `SameSite=None` without `Secure` is set without SameSite (Chromium,
+  so WebView2, refuses that pair). `joan::destroy` reads `Webview::cookies()` (off the main thread, as
+  WebView2 needs) before the page is released and keeps the session ones in `AppState`;
+  `joan::create` sets them with `Webview::set_cookie` right after the webviews exist, then reads
+  the cookies once more as a barrier (WebView2's cookie manager answers in order), before any
+  web page loads. `ENGINE_KEEPS_SESSION_COOKIES` (`!cfg!(windows)`) skips both on macOS and
+  Linux: CI showed their engines keep them, and setting them again there would add copies. The
+  module has no file or serialization code (a test reads its source) and its `Debug` prints only
+  a count. Smoke log: `session-cookies-kept <n>`, `session-cookies-restored <n>`.
+- **Fix 2, macOS quit (the prompt's step 3):** `joan::quit` on macOS closes an open window
+  through `handle(Hide)` → `destroy` (the page is unloaded) on its own thread and waits at most
+  1.5 s before `app.exit(0)`. Cmd+Q now goes through it too (`menu.rs` has its own Quit item,
+  id `menu-quit`, instead of the standard one, which ended the process the same way). Windows
+  and Linux passed without it, so they exit at once (the prompt: don't add it where it passes).
+- **Fix 3, the abort:** `bar::page_url` reads the page's address only after the page webview
+  reported a page load in this window (`PAGE_STARTED`, reset per window); `current_text`,
+  `publish_url`, Translate and Open in Browser use it. Before that the bar shows the start page.
+- **After the fixes** (run 39065170176, every job green): close → summon `p=1 s=1 l=1` and quit
+  → relaunch `p=1 s=0 l=1` on Windows (`session-cookies-kept 1`, `-restored 1`), macOS (the
+  window closed 441 ms after `quit`; the relaunch loaded at once) and Linux at scale 1 and 2;
+  `--quit` came 51–80 ms after the set; no webview helpers left after any cycle.
+- **Not fixed (Deferred follow-ups, Landmines):** Tauri's cookie type drops the leading dot of a
+  domain cookie, so a session cookie set for `.example.com` comes back for `example.com` only.
+- Disk: checks commit 13 GiB free at the start, 12 GiB after verify; fix commit 13 GiB free;
+  `.cache/target` 1.2 GB.
+- **The smoke page** (`tests/smoke/smoke.html`, logic in `smoke-logic.mjs`): `?persist=set&t=…`
+  writes `lj_p` (`Max-Age=31536000; Path=/; SameSite=Lax`), `lj_s` (`Path=/`, no expiry) and
+  localStorage `lj_l`, then titles itself `LJ-PERSIST set`; `?persist=check&t=…` titles itself
+  `LJ-PERSIST p=<0|1> s=<0|1> l=<0|1>` (1 = still the token). In persist mode it skips the codec
+  and viewport reports so the title stays put. Tokens are cookie-safe (`[\w-]{1,64}`).
+- **`--quit`** (`cli.rs`): a third result next to the window command and `--start-at-login`;
+  it wins over window flags, so a quitting launch never opens the window. Single-instance hands
+  it to `joan::quit`, which the tray's Quit now uses too (logs `quit`, then `app.exit(0)`, as
+  before). A `--quit` launch with nothing running just ends (a first run still saves its
+  settings, without the welcome).
+- **The smoke sequence** (`smoke.mts`, after start at login): set → `--hide` → `--show` check;
+  new token → `--quit` as soon as the set is logged (the log is polled every 50 ms) → wait for
+  the process to end by itself (15 s, else it is killed and that fails) → 2 s → relaunch on the
+  same data folder (log `smoke-after-quit.log`) → check → `--quit`. The node server stays up
+  across the relaunch, so the origin (and its localStorage) is the same. `persistFailures`
+  (`smoke-log.mts`, unit-tested) wants `p=1 s=1 l=1` after close → summon, `p=1 s=0 l=1` after
+  quit → relaunch, the app's `quit` within 1000 ms of the page's `LJ-PERSIST set` (both from
+  the app's own log clock, so the check really is "quit right after setting"), one `started`
+  and no `first-run` in the relaunch. `summary.json` gains `persist`.
+- **`state.rs`'s comment was wrong**: with no `data_directory`, Tauri forces
+  `app_local_data_dir` on Windows and Linux (`manager/webview.rs`); macOS ignores it. The
+  comment and docs/architecture.md ("Where data lives") now say so.
+
 ### LJ21 — History: recorder, store, frecency · strong · auto
 
 **Verify:** `npm run verify` green, including Rust tests for a pure `history.rs`:
@@ -2539,6 +2609,44 @@ from the template ("Needs human check": nothing visible yet; the regression list
 green, merge the PR into main with a merge commit (CLAUDE.md standing exception), then stop and
 report.
 ```
+
+**Implementation notes (2026-10-17):**
+
+- **`history.rs`** (pure; its tests are in `history/tests.rs` to keep the file near 400 lines):
+  `recordable` (http/https only, the fragment dropped, the query kept; never the app's origin
+  via `keys::is_app_url`, never Windows' `tauri.localhost` / `ipc.localhost` /
+  `ljext.localhost`, never a URL over 4,096 bytes), `host_key` (lower case, `www.` stripped, a
+  non-default port kept so local servers on different ports are different sites), `record`,
+  `set_title`, `frecency`, `top_sites`, `search`, the cap, `to_json` / `parse`. Titles are cut
+  at 300 characters. The two size limits are additions (not in the prompt) so one page can't
+  bloat the file.
+- **Interpretations, stated so LJ23 can revisit them:** frecency is per host for top sites (as
+  decided) and the same formula over the URL's own visits for matching and the cap — with
+  host frecency, every page of a site would tie and the latest video would beat the site's
+  home page. Matching keeps zero-score matches (visits older than 90 days) at the end instead
+  of hiding them. A top site's "URL with at most one path segment" also needs no query, so a
+  search-results or video page is never a site's tile; sites with no visit in 90 days aren't
+  top sites. `exclude` takes hosts; `history_top` passes none for now.
+- **Recording** (`history_store.rs`, `bar.rs`): `on_page_load(Finished)` records a visit,
+  `on_document_title_changed` updates that URL's record, and a title that arrived before the
+  load is kept for it (`last_title`, same page but for the fragment). The kind: `open_input`
+  sets `typed` for the next load, the Reload page action `reload`; the next finished load takes
+  it, whatever its URL, and everything else is `link`. WebView2's built-in F5 / Ctrl+R never
+  reach the page action, so on Windows those reloads count as `link`.
+- **Store:** loaded in `joan::create` after the webviews exist, saved and dropped in
+  `joan::destroy` before the page is released, every 30 s while dirty (a thread that checks
+  once a second and ends within a second of the window closing), and in `joan::quit` (Windows
+  and Linux exit without `destroy`, so unsaved visits would be lost). Saves share one lock, so
+  the autosave and the close can't write the temp file at once.
+- **Commands** `history_top(n)` and `history_search(query, limit)` (both capped at 50 rows),
+  only in `capabilities/bar.json`; nothing calls them yet (LJ23).
+- **Settings:** `rememberHistory` (default true, a wrong type falls back). `save_settings`
+  keeps fields the window doesn't send, so it survives a Save; the Settings switch is LJ25/26.
+- **Smoke:** after the persistence steps the main run's `history.json` is read (it must hold
+  the smoke page with an `LJ-SMOKE …` title, its host and a visit, and no app page), then a run
+  with `"rememberHistory": false` loads the smoke page, hibernates and quits, and must leave no
+  records (`historyFailures`, unit-tested). Smoke log: `history-visit`, `history-saved`.
+- Disk: 13 GiB free at the start and after verify; `.cache/target` 1.2 GB.
 
 ### LJ22 — Trusted screens move into the bar; the page webview has no IPC; overlay mode · strong · auto
 
@@ -3196,6 +3304,13 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
 - ~~**`ubuntu-latest` moves to Ubuntu 26 from 2026-10-19**~~ (GitHub's notice on run
   39021598084). Handled by PR #8: the Linux `verify` job runs on `ubuntu-24.04`. A later
   ubuntu-26.04 verify job is optional.
+- **Domain-wide session cookies come back host-only on Windows** (surfaced by LJ20). Tauri's
+  cookie type (the `cookie` crate) strips a domain cookie's leading dot when it is read, so a
+  session cookie set for `.example.com` is set again for `example.com` alone, and
+  `www.example.com` no longer gets it after a close → summon. Persistent cookies are untouched
+  (the engine keeps them). Options: read and set Windows' cookies through webview2-com
+  (`ICoreWebView2CookieManager`) to keep the dot, or upstream a raw-domain accessor to
+  `cookie` / wry.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -3315,6 +3430,19 @@ Populated from real friction, not speculation:
 - *(round 2 planning)* **WKWebView's tracking prevention caps cookies written by JavaScript at
   7 days** for sites without recent interaction. This is Apple's behavior; a site that keeps a
   login only in a JS cookie can log out after a week idle.
+- *(LJ20)* **wry 0.57 panics reading an unset WKWebView address** (`url_from_webview`:
+  `webview.URL().unwrap()`), and release builds abort on panic. The address is unset until the
+  first navigation commits, and goes back to unset when that first navigation never does — CI
+  saw it in a relaunch right after `process::exit`. Read the page's address through
+  `bar::page_url`, which waits for the page's first load event.
+- *(LJ20)* **Tauri's `cookie` crate strips a domain cookie's leading dot** (`Cookie::domain`
+  and `domain_raw` both do), and wry passes `domain()` to the engines, so a cookie read with
+  `Webview::cookies` and set again becomes host-only. Deferred follow-ups has the options.
+- *(LJ20)* **`Webview::cookies_for_url` can abort the app**: tauri-runtime-wry's dispatcher does
+  `rx.recv().unwrap()` for it (not for `cookies()`), so a webview gone before the message is
+  handled panics. Use `cookies()`.
+- *(LJ20, macOS)* **After `process::exit` with a page open, the next launch's WebKit may load
+  nothing** (both webviews stayed blank in CI). Quit closes the window through `destroy` first.
 - *(round 2 planning)* **`navigation.rs` refuses `ljext:`** on macOS and Linux, frames included,
   while Windows' `http://ljext.localhost` form passes as plain `http`. LJ29 must handle both.
 

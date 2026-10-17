@@ -84,6 +84,11 @@ export interface LoginEntryCheck {
   afterOn: LoginEntry[];
   /** Entries pointing at the installed app after `--start-at-login off` (should be none). */
   afterOff: LoginEntry[];
+  /**
+   * How many log events there were once the check was over (taken a moment after `off`): a
+   * window created after that belongs to later steps. Omitted: up to the end of the log.
+   */
+  eventsUntil?: number;
 }
 
 /** Values in `reg query <key>` output: `    <name>    REG_SZ    <data>` lines. */
@@ -266,8 +271,170 @@ export function startAtLoginFailures(events: LogEvent[], check: LoginEntryCheck)
     failures.push(`login entry left after --start-at-login off: ${check.afterOff.map((e) => e.where).join(", ")}`);
   }
   const first = events.findIndex((e) => e.event.startsWith("start-at-login"));
-  if (first >= 0 && events.some((e, i) => i > first && e.event === "window-created")) {
+  const until = check.eventsUntil ?? events.length;
+  if (first >= 0 && events.some((e, i) => i > first && i < until && e.event === "window-created")) {
     failures.push("--start-at-login opened a window");
+  }
+  return failures;
+}
+
+/** What the smoke page found in a persistence check: "LJ-PERSIST p=<0|1> s=<0|1> l=<0|1>". */
+export interface Persisted {
+  /** The persistent cookie (Max-Age a year) still held the token. */
+  p: boolean;
+  /** The session cookie (no expiry) still held the token. */
+  s: boolean;
+  /** localStorage still held the token. */
+  l: boolean;
+}
+
+/** Reads a `LJ-PERSIST p=… s=… l=…` title; anything else is undefined. */
+export function parsePersist(title: string | undefined): Persisted | undefined {
+  const match = /^LJ-PERSIST p=([01]) s=([01]) l=([01])$/.exec(title ?? "");
+  if (!match) {
+    return undefined;
+  }
+  return { p: match[1] === "1", s: match[2] === "1", l: match[3] === "1" };
+}
+
+/** A persistence report as text for failure messages, e.g. "p=1 s=0 l=1". */
+function persistText(persisted: Persisted): string {
+  const bit = (on: boolean) => (on ? "1" : "0");
+  return `p=${bit(persisted.p)} s=${bit(persisted.s)} l=${bit(persisted.l)}`;
+}
+
+/** The longest a `--quit` may come after the page reported `LJ-PERSIST set`. */
+export const QUIT_AFTER_SET_MAX_MS = 1000;
+
+/** The login-persistence check: set, close → summon, check; set, quit at once, relaunch, check. */
+export interface PersistCheck {
+  /** The page's report after `?persist=set`, `--hide`, `--show ?persist=check` (same app run). */
+  afterClose: string | undefined;
+  /** The page's report after a new `?persist=set`, `--quit` within 1 s, relaunch, check. */
+  afterQuit: string | undefined;
+  /** The app's process ended by itself after `--quit` (no signal needed). */
+  quitExited: boolean;
+  /** Events of the relaunch on the same data folder. */
+  relaunch: LogEvent[];
+}
+
+/**
+ * Cookies and storage outlive closing the window (all three), and quitting right after they
+ * were set (persistent cookie and localStorage; the session cookie ends with the app run, as in
+ * browsers). `main` is the first app run's log: its last `LJ-PERSIST set` title must be followed
+ * by `quit` within QUIT_AFTER_SET_MAX_MS, or the quit check proves nothing.
+ */
+export function persistFailures(main: LogEvent[], check: PersistCheck): string[] {
+  const failures: string[] = [];
+  const afterClose = parsePersist(check.afterClose);
+  if (!afterClose) {
+    failures.push(`close → summon: the page never reported (got ${check.afterClose ?? "nothing"})`);
+  } else if (!afterClose.p || !afterClose.s || !afterClose.l) {
+    const lost = [!afterClose.p && "the persistent cookie", !afterClose.s && "the session cookie", !afterClose.l && "localStorage"];
+    failures.push(`close → summon lost ${lost.filter(Boolean).join(", ")} (${persistText(afterClose)}, want p=1 s=1 l=1)`);
+  }
+
+  const setIndex = main.findLastIndex((e) => e.event === "title" && e.detail === "LJ-PERSIST set");
+  const quitIndex = main.findIndex((e, i) => i > setIndex && e.event === "quit");
+  const set = main[setIndex];
+  const quit = main[quitIndex];
+  if (setIndex < 0 || !set) {
+    failures.push('quit → relaunch: the page never reported "LJ-PERSIST set"');
+  } else if (quitIndex < 0 || !quit) {
+    failures.push('quit → relaunch: the app never logged "quit" after the set');
+  } else if (quit.millis - set.millis > QUIT_AFTER_SET_MAX_MS) {
+    failures.push(`quit → relaunch: the quit came ${quit.millis - set.millis} ms after the set (at most ${QUIT_AFTER_SET_MAX_MS})`);
+  }
+  if (!check.quitExited) {
+    failures.push("--quit did not end the app's process");
+  }
+  if (count(check.relaunch, "started") !== 1) {
+    failures.push(`quit → relaunch: expected one "started", saw ${count(check.relaunch, "started")}`);
+  }
+  if (count(check.relaunch, "first-run") > 0) {
+    failures.push("quit → relaunch: it was a first run (the data folder lost its settings)");
+  }
+  const afterQuit = parsePersist(check.afterQuit);
+  if (!afterQuit) {
+    failures.push(`quit → relaunch: the page never reported (got ${check.afterQuit ?? "nothing"})`);
+  } else {
+    const lost = [!afterQuit.p && "the persistent cookie", !afterQuit.l && "localStorage"].filter(Boolean);
+    if (lost.length > 0) {
+      failures.push(`quit → relaunch lost ${lost.join(", ")} (${persistText(afterQuit)}, want p=1 s=0 l=1)`);
+    }
+    if (afterQuit.s) {
+      failures.push(`quit → relaunch kept the session cookie (${persistText(afterQuit)}); it must end with the app run`);
+    }
+  }
+  return failures;
+}
+
+/** One record of history.json (src-tauri/src/history.rs). */
+export interface HistoryRecord {
+  url: string;
+  title: string;
+  host: string;
+  visitCount: number;
+  visits: { at: number; kind: string }[];
+}
+
+/** The records of a history.json text; `undefined` when there is no file or it isn't history. */
+export function parseHistory(text: string | undefined): HistoryRecord[] | undefined {
+  if (text === undefined) {
+    return undefined;
+  }
+  try {
+    const file = JSON.parse(text) as { entries?: unknown };
+    return Array.isArray(file.entries) ? (file.entries as HistoryRecord[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The history check: the main run's history.json, and a run with `rememberHistory: false`. */
+export interface HistoryCheck {
+  /** history.json of the main run's data folder (undefined: no file). */
+  main: string | undefined;
+  /** The smoke page's address (no query), which the main run loaded several times. */
+  pageUrl: string;
+  /** history.json of the run with "rememberHistory": false (undefined: no file, as wanted). */
+  off: string | undefined;
+}
+
+/**
+ * The main run's history holds the smoke page with its title (LJ-SMOKE …), its host and at
+ * least one visit, and none of the app's own pages; the run with history off recorded nothing.
+ */
+export function historyFailures(check: HistoryCheck): string[] {
+  const failures: string[] = [];
+  const main = parseHistory(check.main);
+  if (!main) {
+    failures.push(`history.json of the main run is ${check.main === undefined ? "missing" : "not history"}`);
+  } else {
+    const page = main.find((record) => record.url === check.pageUrl);
+    if (!page) {
+      failures.push(`history.json has no record of ${check.pageUrl} (${main.length} records)`);
+    } else {
+      if (!page.title.startsWith("LJ-SMOKE")) {
+        failures.push(`history: the smoke page's title is "${page.title}", not the page's own`);
+      }
+      if (page.host !== new URL(check.pageUrl).host) {
+        failures.push(`history: the smoke page's host is "${page.host}"`);
+      }
+      if (!Array.isArray(page.visits) || page.visits.length === 0 || page.visitCount < 1) {
+        failures.push("history: the smoke page has no visit");
+      }
+    }
+    const own = main.filter((record) => !/^https?:\/\//.test(record.url) || /\/\/(tauri|ipc|ljext)\.localhost[:/]/.test(record.url));
+    if (own.length > 0) {
+      failures.push(`history recorded the app's own pages: ${own.map((record) => record.url).join(", ")}`);
+    }
+  }
+  if (check.off !== undefined) {
+    const off = parseHistory(check.off) ?? [];
+    if (off.length > 0) {
+      failures.push(`history off: ${off.length} records were still written`);
+    }
   }
   return failures;
 }

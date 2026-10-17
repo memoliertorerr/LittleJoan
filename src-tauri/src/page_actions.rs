@@ -1,9 +1,11 @@
 //! What the page keys (keys.rs), the tray, and the macOS menu do to the page window.
 
-use tauri::{AppHandle, Runtime, Webview};
+use tauri::{AppHandle, Runtime};
 use url::Url;
 
 use crate::bar;
+use crate::history::VisitKind;
+use crate::history_store;
 use crate::joan;
 use crate::keys::{self, PageAction};
 use crate::navigation;
@@ -28,11 +30,15 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
                 bar::focus_bar(&app);
                 Ok(())
             }
-            PageAction::Reload => page.reload(),
+            PageAction::Reload => {
+                // A reload is a visit that adds nothing to frecency (history.rs).
+                history_store::set_next_kind(&app, VisitKind::Reload);
+                page.reload()
+            }
             PageAction::Back => page.eval("history.back()"),
             PageAction::Forward => page.eval("history.forward()"),
-            PageAction::Translate => translate_page(&app, &page),
-            PageAction::OpenInBrowser => open_in_browser(&app, &page),
+            PageAction::Translate => translate_page(&app),
+            PageAction::OpenInBrowser => open_in_browser(&app),
             PageAction::Close => Ok(()),
         };
         if let Err(err) = result {
@@ -50,17 +56,22 @@ pub fn translate_target(origin: &Url, current: &Url, lang: &str) -> Option<Url> 
     translate::translate_url(current, lang)
 }
 
-fn translate_page<R: Runtime>(app: &AppHandle<R>, page: &Webview<R>) -> tauri::Result<()> {
+fn translate_page<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let lang = state::with(app, |s| s.settings.translate_to.clone());
-    match translate_target(&keys::app_origin(), &page.url()?, &lang) {
+    let Some(current) = bar::page_url(app) else {
+        return Ok(());
+    };
+    match translate_target(&keys::app_origin(), &current, &lang) {
         Some(url) => bar::navigate(app, url),
         None => Ok(()),
     }
 }
 
 /// Opens the page in the default browser, then hibernates — the page moved to the main browser.
-fn open_in_browser<R: Runtime>(app: &AppHandle<R>, page: &Webview<R>) -> tauri::Result<()> {
-    let current = page.url()?;
+fn open_in_browser<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let Some(current) = bar::page_url(app) else {
+        return Ok(());
+    };
     if keys::is_app_url(&keys::app_origin(), &current)
         || !navigation::is_external_openable(&current)
     {

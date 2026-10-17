@@ -19,6 +19,7 @@ use tauri::{
 };
 use url::Url;
 
+use crate::history_store;
 use crate::keys;
 use crate::layout::{self, layout};
 use crate::navigation;
@@ -31,6 +32,10 @@ pub const PAGE: &str = "joan-page";
 
 /// True while the page shows an element fullscreen (the bar is hidden meanwhile).
 static ELEMENT_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+/// True once the page webview of this window reported a page load. Until then its address may
+/// be unset, and reading an unset WKWebView address panics inside wry 0.57 (an abort in
+/// release builds: CI saw it when WebKit was slow to start, LJ20), so `page_url` waits for it.
+static PAGE_STARTED: AtomicBool = AtomicBool::new(false);
 /// What the bar was last told (`Some(None)` = the start page); reset with each new window.
 static LAST_SHOWN: Mutex<Option<Option<String>>> = Mutex::new(None);
 /// Bumped for every new window, so an old address watcher stops.
@@ -54,6 +59,7 @@ pub fn add_webviews<R: Runtime>(
     data_dir: Option<PathBuf>,
 ) -> tauri::Result<()> {
     ELEMENT_FULLSCREEN.store(false, Ordering::Relaxed);
+    PAGE_STARTED.store(false, Ordering::Relaxed);
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
     let initial = layout(width, height, true);
     let bar_rect = initial.bar.unwrap_or(initial.page);
@@ -82,9 +88,14 @@ pub fn add_webviews<R: Runtime>(
             };
             let _ = webview.window().set_title(title);
             smoke::log("title", title);
-            publish_url(webview.app_handle());
+            let app = webview.app_handle();
+            publish_url(app);
+            if let Some(url) = page_url(app) {
+                history_store::title_changed(app, &url, title);
+            }
         })
         .on_page_load(|webview, payload| {
+            PAGE_STARTED.store(true, Ordering::Relaxed);
             let app = webview.app_handle();
             publish_url(app);
             if payload.event() == PageLoadEvent::Finished {
@@ -93,6 +104,8 @@ pub fn add_webviews<R: Runtime>(
                     && navigation::is_external_openable(url);
                 tray::set_page_items_enabled(app, web_page);
                 smoke::log("page-loaded", url.as_str());
+                // History records visits natively: the page itself has no IPC.
+                history_store::page_loaded(app, url);
             }
         })
         // target=_blank and window.open go to the default browser (web URLs only).
@@ -174,18 +187,23 @@ pub fn set_element_fullscreen<R: Runtime>(app: &AppHandle<R>, on: bool) {
     }
 }
 
+/// The page's address: `None` without a window, and until the page has started loading (see
+/// `PAGE_STARTED`). Use this rather than `Webview::url` on the page.
+pub fn page_url<R: Runtime>(app: &AppHandle<R>) -> Option<Url> {
+    if !PAGE_STARTED.load(Ordering::Relaxed) {
+        return None;
+    }
+    app.get_webview(PAGE)?.url().ok()
+}
+
 /// The page's address as the bar should show it (`None` = start page or no page).
 pub fn current_text<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
-    let url = app.get_webview(PAGE)?.url().ok()?;
-    bar_text(&url, &keys::app_origin())
+    bar_text(&page_url(app)?, &keys::app_origin())
 }
 
 /// Tells the bar the page's address if it changed since the last time.
 pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
-    let Some(page) = app.get_webview(PAGE) else {
-        return;
-    };
-    let Ok(url) = page.url() else {
+    let Some(url) = page_url(app) else {
         return;
     };
     let text = bar_text(&url, &keys::app_origin());

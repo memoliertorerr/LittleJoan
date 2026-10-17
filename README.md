@@ -99,10 +99,11 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   (2.52) works. The AppImage currently bundles the 22.04 version.
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
-  `little-joan --size 390x844` (resize the open window, in logical pixels), and
-  `little-joan --start-at-login on|off` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
+  `little-joan --size 390x844` (resize the open window, in logical pixels),
+  `little-joan --start-at-login on|off`, and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
-- **Quit:** tray menu → **Quit Little Joan** (or Cmd+Q on macOS while it's in front).
+- **Quit:** tray menu → **Quit Little Joan**, `little-joan --quit`, or Cmd+Q on macOS while
+  it's in front.
 
 ## Translate
 
@@ -135,8 +136,17 @@ hints, Word's non-breaking space); change it here if it does.
 - **Translate Page** sends the page's address to Google, and the translated page is served
   through Google's `translate.goog` proxy.
 - Cookies and site data (so logins survive) are kept by the system web engine in Little Joan's
-  own data folder, separate from your other browsers. Closing the window discards the page, not
-  the cookies.
+  own data store, separate from your other browsers: `%LOCALAPPDATA%\io.github.memoliertorerr.littlejoan`
+  on Windows, `~/.local/share/io.github.memoliertorerr.littlejoan` on Linux, WebKit's store for
+  Little Joan on macOS (under `~/Library/WebKit` and `~/Library/HTTPStorages`). Closing the
+  window discards the page, not the cookies; logins also survive quitting and restarting.
+- Session cookies (the "until you close the browser" kind) last while Little Joan runs, across
+  closing and reopening the window. On Windows, Little Joan holds them in memory meanwhile —
+  never on disk — and quitting forgets them, as quitting a browser does.
+- **History stays on your computer.** Little Joan records the pages you open (address, title,
+  when) in `history.json` next to its settings, for its own suggestions; it is never sent
+  anywhere. Its own pages aren't recorded, and nothing is while `"rememberHistory": false` is
+  in `settings.json` (a switch in Settings comes with the history view).
 - Web pages get no access to Little Joan's internals: only its own two local pages (the start
   field and Settings) can call into the app.
 

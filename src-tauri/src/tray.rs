@@ -69,7 +69,7 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             TRANSLATE_ID => page_actions::perform(app, PageAction::Translate),
             OPEN_IN_BROWSER_ID => page_actions::perform(app, PageAction::OpenInBrowser),
             SETTINGS_ID => settings_window::open(app),
-            QUIT_ID => app.exit(0),
+            QUIT_ID => joan::quit(app),
             _ => {}
         })
         .build(app)?;

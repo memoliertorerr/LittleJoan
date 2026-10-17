@@ -8,6 +8,8 @@ use tauri::{AppHandle, Runtime};
 
 use crate::autostart;
 use crate::bar;
+use crate::history::{Row, VisitKind};
+use crate::history_store;
 use crate::input::{self, SearchEngine};
 use crate::joan;
 use crate::phone_mode;
@@ -26,6 +28,8 @@ pub async fn open_input<R: Runtime>(app: AppHandle<R>, input: String) -> Result<
     let engine = state::with(&app, |s| s.settings.search_engine);
     let url = input::normalize(&input, engine)
         .ok_or_else(|| "Type an address or something to search for.".to_owned())?;
+    // The user typed it: the visit counts double for frecency (history.rs).
+    history_store::set_next_kind(&app, VisitKind::Typed);
     bar::navigate(&app, url).map_err(|err| err.to_string())?;
     bar::focus_page(&app);
     Ok(())
@@ -176,6 +180,26 @@ pub async fn save_settings<R: Runtime>(
     settings::save(&dir, &updated)
         .map_err(|err| format!("The new settings work now, but couldn't be saved: {err}"))?;
     Ok(updated)
+}
+
+/// The most rows a history command returns.
+const MAX_ROWS: usize = 50;
+
+/// Up to `n` top sites from history, by frecency (the bar's empty command bar, LJ23).
+/// Read-only; rows are `{ url, title, host, score }`.
+#[tauri::command]
+pub async fn history_top<R: Runtime>(app: AppHandle<R>, n: usize) -> Vec<Row> {
+    history_store::top(&app, n.min(MAX_ROWS))
+}
+
+/// Up to `limit` history records matching every word of `query` (the bar, LJ23). Read-only.
+#[tauri::command]
+pub async fn history_search<R: Runtime>(
+    app: AppHandle<R>,
+    query: String,
+    limit: usize,
+) -> Vec<Row> {
+    history_store::search(&app, &query, limit.min(MAX_ROWS))
 }
 
 /// Pauses (true) or resumes (false) the global shortcut while a new one is being recorded.

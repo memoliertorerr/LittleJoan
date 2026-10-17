@@ -12,6 +12,8 @@ use tauri::{AppHandle, Manager, Runtime, Window, WindowEvent};
 use url::Url;
 
 use crate::bar;
+use crate::cookies::{self, SessionCookies};
+use crate::history_store;
 use crate::phone_mode;
 use crate::placement;
 use crate::platform;
@@ -53,6 +55,48 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
     }
 }
 
+/// The longest Quit waits for the window to close on macOS.
+#[cfg(target_os = "macos")]
+const QUIT_WAIT: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// Quits Little Joan: the tray's "Quit Little Joan", `--quit` (forwarded by single-instance) and,
+/// on macOS, Cmd+Q.
+///
+/// macOS: `app.exit` ends the process without unloading the webviews, and CI saw the next launch
+/// on the same WebKit data store never load a page (LJ20). So an open window is closed first,
+/// through the same path as every close (`destroy`: the page is unloaded), waiting at most
+/// 1.5 s. Windows and Linux kept everything without it, so they exit at once.
+pub fn quit<R: Runtime>(app: &AppHandle<R>) {
+    smoke::log("quit", "");
+    // Visits not saved yet would be lost with the process (the window may still be open).
+    history_store::close(app);
+    #[cfg(target_os = "macos")]
+    {
+        let app = app.clone();
+        let spawned = std::thread::Builder::new()
+            .name("little-joan-quit".into())
+            .spawn(move || {
+                let (done, closed) = std::sync::mpsc::channel();
+                let closing = app.clone();
+                // `handle` must not run on the main thread, and may take a while: its own thread.
+                let worker = std::thread::Builder::new()
+                    .name("little-joan-quit-close".into())
+                    .spawn(move || {
+                        handle(&closing, Command::Hide);
+                        let _ = done.send(());
+                    });
+                if worker.is_ok() && closed.recv_timeout(QUIT_WAIT).is_err() {
+                    eprintln!("little-joan: the window didn't close in time; quitting anyway");
+                }
+                app.exit(0);
+            });
+        if spawned.is_ok() {
+            return;
+        }
+    }
+    app.exit(0);
+}
+
 fn window_state<R: Runtime>(app: &AppHandle<R>) -> WindowState {
     match app.get_window(LABEL) {
         None => WindowState::Hibernating,
@@ -91,6 +135,8 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
         let _ = window.destroy();
         return Err(err);
     }
+    restore_session_cookies(app);
+    history_store::open(app);
     // Phone or desktop user agent for this width, before any web page loads (phone_mode.rs).
     phone_mode::reset();
     phone_mode::apply(app, false);
@@ -133,11 +179,57 @@ fn destroy<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     match app.get_window(LABEL) {
         Some(window) => {
             remember_size(app, &window);
+            history_store::close(app);
+            keep_session_cookies(app);
             release_page(app, &window);
             window.destroy()
         }
         None => Ok(()),
     }
+}
+
+/// Before the page is released: keeps its session cookies in memory for the next window, where
+/// the engine would drop them with this one (WebView2; cookies.rs). A failed read keeps nothing.
+fn keep_session_cookies<R: Runtime>(app: &AppHandle<R>) {
+    if cookies::ENGINE_KEEPS_SESSION_COOKIES {
+        return;
+    }
+    let Some(page) = bar::page(app) else {
+        return;
+    };
+    // Off the main thread (inside `handle`), as WebView2's cookie read requires.
+    let kept = match page.cookies() {
+        Ok(all) => SessionCookies::from_all(all),
+        Err(err) => {
+            eprintln!("little-joan: could not read the page's cookies: {err}");
+            SessionCookies::default()
+        }
+    };
+    smoke::log("session-cookies-kept", &kept.len().to_string());
+    state::with(app, |s| s.session_cookies = kept);
+}
+
+/// A new window: sets the kept session cookies again before any web page loads.
+fn restore_session_cookies<R: Runtime>(app: &AppHandle<R>) {
+    if cookies::ENGINE_KEEPS_SESSION_COOKIES {
+        return;
+    }
+    let kept = state::with(app, |s| s.session_cookies.clone());
+    let Some(page) = bar::page(app) else {
+        return;
+    };
+    if kept.is_empty() {
+        return;
+    }
+    for cookie in kept.cookies() {
+        if let Err(err) = page.set_cookie(cookie.clone()) {
+            eprintln!("little-joan: could not set a kept cookie again: {err}");
+        }
+    }
+    // WebView2's cookie manager answers in order, so once this read returns the cookies above
+    // are in place for the first navigation.
+    let _ = page.cookies();
+    smoke::log("session-cookies-restored", &kept.len().to_string());
 }
 
 /// macOS: the CI smoke test (LJ9) saw WKWebView's processes outlive a destroyed window by

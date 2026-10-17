@@ -7,7 +7,10 @@ pub mod autostart;
 pub mod bar;
 pub mod cli;
 pub mod commands;
+pub mod cookies;
 pub mod fullscreen;
+pub mod history;
+pub mod history_store;
 pub mod input;
 pub mod joan;
 pub mod keys;
@@ -45,7 +48,9 @@ pub fn run() {
                 // `set` logs the outcome; there is no window to show an error in.
                 let _ = autostart::set(app, enabled);
             }
-            if let Some(command) = args.forwarded_command() {
+            if args.quit {
+                joan::quit(app);
+            } else if let Some(command) = args.forwarded_command() {
                 joan::dispatch(app, command);
             }
         }))
@@ -60,7 +65,9 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::suspend_shortcut,
-            commands::set_start_at_login
+            commands::set_start_at_login,
+            commands::history_top,
+            commands::history_search
         ])
         .on_window_event(|window, event| {
             joan::on_window_event(window, event);
@@ -99,7 +106,10 @@ pub fn run() {
             if let Some(enabled) = args.start_at_login {
                 let _ = autostart::set(handle, enabled);
             }
-            if let Some(command) = args.command.or(welcome.then_some(Command::Show(None))) {
+            if args.quit {
+                // `little-joan --quit` with nothing running: nothing to quit, so this one ends.
+                joan::quit(handle);
+            } else if let Some(command) = args.command.or(welcome.then_some(Command::Show(None))) {
                 joan::dispatch(handle, command);
             }
             Ok(())

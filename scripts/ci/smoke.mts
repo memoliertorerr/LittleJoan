@@ -6,8 +6,11 @@
 // The full run: serve tests/smoke/ on 127.0.0.1, launch the app with LITTLEJOAN_SMOKE_LOG,
 // summon it with `--show` (single-instance forwarding), load the smoke page, click its big
 // fullscreen button, hibernate with `--hide`, summon and hibernate once more, turn start at
-// login on and off (reading the OS's own login entry each time), then check the log
-// (scripts/ci/smoke-log.mts) and the webview helper processes. The app runs on a fresh
+// login on and off (reading the OS's own login entry each time), check that cookies and
+// localStorage outlive closing the window and quitting (`--quit`, then a relaunch on the same
+// data folder), that history.json recorded the smoke page (and that a run with history off
+// records nothing), then check the logs (scripts/ci/smoke-log.mts) and the webview helper
+// processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
 // data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
@@ -24,11 +27,14 @@ import {
   desktopExec,
   evaluate,
   firstRunFailures,
+  historyFailures,
   lastTitle,
   newPids,
   parseCodecs,
+  parseHistory,
   parseLog,
   parseRegValues,
+  persistFailures,
   plistProgram,
   pointsAt,
   sawViewport,
@@ -67,8 +73,11 @@ const extraEnv = Object.fromEntries(
 );
 // Data folders live outside <out>, which is uploaded (WebView2 keeps its profile there).
 const dataRoot = process.env.RUNNER_TEMP ?? tmpdir();
-/** A fresh data folder; with `settings`, it already holds a default settings.json. */
-function dataDir(name: string, settings: boolean): string {
+/**
+ * A fresh data folder; with `settings`, it already holds a default settings.json (plus
+ * `overrides`).
+ */
+function dataDir(name: string, settings: boolean, overrides: Record<string, unknown> = {}): string {
   const dir = mkdtempSync(join(dataRoot, `lj-${name}-`));
   if (settings) {
     const defaults = {
@@ -79,10 +88,20 @@ function dataDir(name: string, settings: boolean): string {
       windowWidth: 480,
       windowHeight: 640,
       mobileSites: true,
+      ...overrides,
     };
     writeFileSync(join(dir, "settings.json"), `${JSON.stringify(defaults, null, 2)}\n`);
   }
   return dir;
+}
+
+/** A file's text, or undefined when it doesn't exist (or can't be read). */
+function readIfThere(path: string): string | undefined {
+  try {
+    return existsSync(path) ? readFileSync(path, "utf8") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 const env = {
   ...process.env,
@@ -102,6 +121,7 @@ async function waitFor(
   test: (e: LogEvent[]) => boolean,
   timeoutMs = 30_000,
   path = logPath,
+  pollMs = 250,
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -109,7 +129,7 @@ async function waitFor(
       console.log(`ok: ${what}`);
       return true;
     }
-    await sleep(250);
+    await sleep(pollMs);
   }
   console.log(`TIMEOUT (${timeoutMs} ms): ${what}`);
   return false;
@@ -350,6 +370,16 @@ async function quit(child: ChildProcess, pid: number): Promise<void> {
   console.log(pid > 0 && alive(pid) ? `(app ${pid} is still running)` : `app ${pid} has quit`);
 }
 
+/** Waits up to `timeoutMs` for the process to end on its own (after `--quit`). */
+async function exited(pid: number, timeoutMs: number): Promise<boolean> {
+  for (let waited = 0; waited < timeoutMs && pid > 0 && alive(pid); waited += 250) {
+    await sleep(250);
+  }
+  const gone = pid <= 0 || !alive(pid);
+  console.log(gone ? `app ${pid} ended by itself` : `(app ${pid} still running ${timeoutMs} ms after --quit)`);
+  return gone;
+}
+
 /** The pid of the app itself (under gdb, the debuggee is gdb's child). */
 function appPid(child: ChildProcess): number {
   if (os === "linux" && process.env.LJ_SMOKE_GDB === "1") {
@@ -481,8 +511,87 @@ await waitFor(
 );
 const loginAfterOff = loginEntries();
 console.log(`login entries after off: ${JSON.stringify(loginAfterOff)}`);
+// A window the flags opened by mistake would show up by now; later steps open their own.
+await sleep(1500);
+const loginEventsUntil = events().length;
 
-await quit(child, pid);
+// Logins survive: the smoke page sets a persistent cookie, a session cookie and a localStorage
+// value. All three must outlive closing the window (`--hide`, then a new window); after a
+// `--quit` right after setting new values and a relaunch on the same data folder, the
+// persistent cookie and localStorage must still be there and the session cookie gone (it ends
+// with the app run, as in browsers). The server keeps its port across the relaunch, because
+// localStorage is per origin (cookies ignore the port).
+const persistUrl = (mode: "set" | "check", token: string) => `http://127.0.0.1:${port}/smoke.html?persist=${mode}&t=${token}`;
+const token = (kind: string) => `${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+const closeToken = token("close");
+const quitToken = token("quit");
+const sets = (e: LogEvent[]) => count(e, "title", "LJ-PERSIST set");
+const checks = (e: LogEvent[]) => count(e, "title", "LJ-PERSIST p=");
+
+const setsBeforeClose = sets(events());
+await forward(["--show", persistUrl("set", closeToken)]);
+await waitFor("persist: set", (e) => sets(e) > setsBeforeClose, 30_000);
+const hibernatedBeforeClose = count(events(), "hibernated");
+await forward(["--hide"]);
+await waitFor("persist: hibernated", (e) => count(e, "hibernated") > hibernatedBeforeClose, 20_000);
+await sleep(1000);
+const checksBeforeClose = checks(events());
+await forward(["--show", persistUrl("check", closeToken)]);
+await waitFor("persist: checked after close → summon", (e) => checks(e) > checksBeforeClose, 30_000);
+const persistAfterClose = lastTitle(events(), "LJ-PERSIST p=");
+console.log(`persist after close → summon: ${persistAfterClose ?? "no report"}`);
+
+// New values, then quit at once (polling fast so the quit follows the set within a second).
+const setsBeforeQuit = sets(events());
+await forward(["--show", persistUrl("set", quitToken)]);
+await waitFor("persist: set before quitting", (e) => sets(e) > setsBeforeQuit, 30_000, logPath, 50);
+await forward(["--quit"]);
+const quitExited = await exited(pid, 15_000);
+if (!quitExited) {
+  await quit(child, pid);
+}
+const afterQuitLogPath = join(out, "smoke-after-quit.log");
+rmSync(afterQuitLogPath, { force: true });
+const afterQuitEnv = { ...env, LITTLEJOAN_SMOKE_LOG: afterQuitLogPath };
+// Let the engine's processes of the old run finish before the same data folder is reopened.
+await sleep(2000);
+const afterQuitChild = launch(afterQuitEnv);
+await waitFor("after quit: started", (e) => count(e, "started") > 0, 30_000, afterQuitLogPath);
+await sleep(1500);
+const afterQuitPid = appPid(afterQuitChild);
+await forward(["--show", persistUrl("check", quitToken)], afterQuitEnv);
+await waitFor("persist: checked after quit → relaunch", (e) => checks(e) > 0, 30_000, afterQuitLogPath);
+const afterQuitEvents = events(afterQuitLogPath);
+const persistAfterQuit = lastTitle(afterQuitEvents, "LJ-PERSIST p=");
+console.log(`persist after quit → relaunch: ${persistAfterQuit ?? "no report"}`);
+await forward(["--quit"], afterQuitEnv);
+if (!(await exited(afterQuitPid, 15_000))) {
+  await quit(afterQuitChild, afterQuitPid);
+}
+
+// History (LJ21): the main run's history.json must hold the smoke page; a run whose settings say
+// "rememberHistory": false loads the page too and must record nothing.
+const smokePageUrl = `http://127.0.0.1:${port}/smoke.html`;
+const historyMain = readIfThere(join(env.LITTLEJOAN_DATA_DIR, "history.json"));
+const historyOffDir = dataDir("history-off", true, { rememberHistory: false });
+const historyOffLogPath = join(out, "smoke-history-off.log");
+rmSync(historyOffLogPath, { force: true });
+const historyOffEnv = { ...env, LITTLEJOAN_DATA_DIR: historyOffDir, LITTLEJOAN_SMOKE_LOG: historyOffLogPath };
+const historyOffChild = launch(historyOffEnv);
+await waitFor("history off: started", (e) => count(e, "started") > 0, 30_000, historyOffLogPath);
+await sleep(1500);
+const historyOffPid = appPid(historyOffChild);
+await forward(["--show", smokePageUrl], historyOffEnv);
+await waitFor("history off: smoke page", (e) => lastTitle(e, "LJ-SMOKE ready") !== undefined, 30_000, historyOffLogPath);
+await forward(["--hide"], historyOffEnv);
+await waitFor("history off: hibernated", (e) => count(e, "hibernated") > 0, 20_000, historyOffLogPath);
+await forward(["--quit"], historyOffEnv);
+if (!(await exited(historyOffPid, 15_000))) {
+  await quit(historyOffChild, historyOffPid);
+}
+const historyOff = readIfThere(join(historyOffDir, "history.json"));
+const historyCheck = { main: historyMain, pageUrl: smokePageUrl, off: historyOff };
+console.log(`history: main ${historyMain === undefined ? "no file" : `${historyMain.length} bytes`}, off ${historyOff ?? "no file"}`);
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -518,6 +627,9 @@ console.log(
 );
 
 const log = events();
+const persistCheck = { afterClose: persistAfterClose, afterQuit: persistAfterQuit, quitExited, relaunch: afterQuitEvents };
+const lastSet = log.findLast((e) => e.event === "title" && e.detail === "LJ-PERSIST set");
+const quitLogged = log.findLast((e) => e.event === "quit");
 const pageFullscreen = lastTitle(log, "LJ-SMOKE fullscreen=on") !== undefined;
 const summary = {
   os,
@@ -545,6 +657,17 @@ const summary = {
     relaunch: relaunch.map((e) => e.event),
     settingsSaved,
   },
+  history: {
+    mainRecords: parseHistory(historyMain)?.length ?? null,
+    smokePage: parseHistory(historyMain)?.find((record) => record.url === smokePageUrl) ?? null,
+    offRecords: historyOff === undefined ? "no file" : (parseHistory(historyOff)?.length ?? "not history"),
+  },
+  persist: {
+    afterCloseAndSummon: persistAfterClose ?? null,
+    afterQuitAndRelaunch: persistAfterQuit ?? null,
+    quitExitedByItself: quitExited,
+    quitMsAfterSet: lastSet && quitLogged ? quitLogged.millis - lastSet.millis : null,
+  },
 };
 writeFileSync(join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 console.log(JSON.stringify(summary, null, 2));
@@ -556,12 +679,15 @@ const failures = evaluate(
   { windowFullscreen: windowWanted, pageFullscreen: windowWanted, viewports: [NARROW, WIDE] },
   {
     pageHelpersLeft: Math.max(...helpersPerCycle),
-    loginEntry: { afterOn: loginAfterOn, afterOff: loginAfterOff },
+    loginEntry: { afterOn: loginAfterOn, afterOff: loginAfterOff, eventsUntil: loginEventsUntil },
   },
-).concat(firstRunFailures(firstRun));
+)
+  .concat(persistFailures(log, persistCheck))
+  .concat(historyFailures(historyCheck))
+  .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
-  for (const path of [logPath, firstLogPath, relaunchLogPath]) {
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);
