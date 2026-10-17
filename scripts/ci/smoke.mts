@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, resolve } from "node:path";
-import { count, evaluate, lastTitle, parseCodecs, parseLog, type LogEvent } from "./smoke-log.mts";
+import { count, evaluate, lastTitle, newPids, parseCodecs, parseLog, survivors, type LogEvent } from "./smoke-log.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -170,13 +170,20 @@ function helperListing(): string {
     .join("\n");
 }
 
-/** How many webview engine helper processes are running. */
-function helperCount(): number {
-  if (os === "win32") {
-    return Number(powershell(`@(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'").Count`).trim()) || 0;
-  }
-  const pattern = os === "darwin" ? "com.apple.WebKit.WebContent" : "WebKitWebProcess";
-  return run("pgrep", ["-f", pattern]).split("\n").filter((line) => line.trim().length > 0).length;
+/**
+ * Process ids of the webview engine's helper processes, system-wide. On macOS they are XPC
+ * services whose parent is launchd, so other apps' WebKit helpers show up too; the checks
+ * therefore follow the ids that appeared while our page was shown.
+ */
+function helperPids(): number[] {
+  const output =
+    os === "win32"
+      ? powershell(`(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'").ProcessId`)
+      : run("pgrep", ["-f", os === "darwin" ? "com.apple.WebKit.WebContent" : "WebKitWebProcess"]);
+  return output
+    .split(/\s+/)
+    .map(Number)
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
 }
 
 /** Runs a second instance with `args`; single-instance forwards them and it exits. */
@@ -251,8 +258,8 @@ await sleep(3000);
 const pid = appPid(child);
 const idleMb = memoryMb(pid);
 const idleOwnMb = ownMemoryMb(pid);
-const helpersBefore = helperCount();
-console.log(`hibernating at start: ${idleMb} MB resident, ${idleOwnMb} MB own, ${helpersBefore} webview helpers`);
+const helpersAtStart = helperPids();
+console.log(`hibernating at start: ${idleMb} MB resident, ${idleOwnMb} MB own, ${helpersAtStart.length} webview helpers`);
 screenshot("hibernating.png");
 
 await forward(["--show"]);
@@ -266,7 +273,7 @@ await waitFor("smoke page ready", (e) => lastTitle(e, "LJ-SMOKE ready") !== unde
 await sleep(1500);
 const shownMb = memoryMb(pid);
 const shownOwnMb = ownMemoryMb(pid);
-const helpersShown = helperCount();
+const pageHelpers = newPids(helpersAtStart, helperPids());
 writeFileSync(join(out, "helpers-with-page.txt"), helperListing());
 screenshot("page.png");
 
@@ -288,24 +295,26 @@ let waited = 0;
 for (const at of [2, 10, 30, 60]) {
   await sleep((at - waited) * 1000);
   waited = at;
-  helperSamples[`${at}s`] = helperCount();
+  helperSamples[`${at}s`] = survivors(pageHelpers, helperPids());
 }
 const afterMb = memoryMb(pid);
 const afterOwnMb = ownMemoryMb(pid);
-const helpersAfter = helperSamples["60s"] ?? helperCount();
+const helpersAfter = helperSamples["60s"] ?? survivors(pageHelpers, helperPids());
 writeFileSync(join(out, "helpers-after-hibernate.txt"), helperListing());
 console.log(`hibernating after a page: ${afterMb} MB resident, ${afterOwnMb} MB own, helpers ${JSON.stringify(helperSamples)}`);
 
 // Two more summon/hibernate cycles: helper counts that grow per cycle would mean webviews leak.
 const helpersPerCycle: number[] = [helpersAfter];
 for (const cycle of [2, 3]) {
+  const before = helperPids();
   await forward(["--show"]);
   await waitFor(`window-created #${cycle}`, (e) => count(e, "window-created") >= cycle, 20_000);
   await sleep(1500);
+  const ours = newPids(before, helperPids());
   await forward(["--hide"]);
   await waitFor(`hibernated #${cycle}`, (e) => count(e, "hibernated") >= cycle, 20_000);
   await sleep(10_000);
-  helpersPerCycle.push(helperCount());
+  helpersPerCycle.push(survivors(ours, helperPids()));
 }
 console.log(`webview helpers after each hibernate: ${JSON.stringify(helpersPerCycle)}`);
 
@@ -319,7 +328,13 @@ const summary = {
   app,
   memoryMb: { hibernatingAtStart: idleMb, withSmokePage: shownMb, hibernatingAfterPage: afterMb },
   ownMemoryMb: { hibernatingAtStart: idleOwnMb, withSmokePage: shownOwnMb, hibernatingAfterPage: afterOwnMb },
-  webviewHelpers: { atStart: helpersBefore, withPage: helpersShown, afterHibernate: helperSamples, afterEachCycle: helpersPerCycle },
+  // afterHibernate / afterEachCycle: how many of the helpers that served the page are still alive.
+  webviewHelpers: {
+    atStart: helpersAtStart.length,
+    withPage: pageHelpers.length,
+    afterHibernate: helperSamples,
+    afterEachCycle: helpersPerCycle,
+  },
   extraEnv,
   codecs: parseCodecs(lastTitle(log, "LJ-SMOKE ready")),
   fullscreen: { page: pageFullscreen, window: count(log, "fullscreen", "true") > 0 },
@@ -333,7 +348,7 @@ console.log(JSON.stringify(summary, null, 2));
 const failures = evaluate(
   log,
   { windowFullscreen: windowWanted, pageFullscreen: windowWanted },
-  { helpersBefore, helpersAfter },
+  { pageHelpersLeft: Math.max(...helpersPerCycle) },
 );
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));

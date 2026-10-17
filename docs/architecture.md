@@ -339,7 +339,9 @@ and pushes to `main`:
   installed binary: launch with `LITTLEJOAN_SMOKE_LOG`, `--show` (start page), `--show
   http://127.0.0.1:<port>/smoke.html`, click the screen centre (the page's fullscreen button),
   `--hide`, summon and hide again, then check the log order, single-instance forwarding, window
-  fullscreen (Windows, Linux), and that no webview helper processes outlive the window.
+  fullscreen (Windows, Linux), the URL bar (`bar-loaded`, and `bar-url` with the smoke page's
+  address), and that none of the webview helper processes that served the page outlive the
+  window (followed by process id, so other apps' WebKit helpers on the runner don't count).
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`), the log, and
   `summary.json` (memory — resident and the app's own: private bytes / private dirty /
   physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs)

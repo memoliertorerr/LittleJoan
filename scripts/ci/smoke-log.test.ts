@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { count, evaluate, lastTitle, parseCodecs, parseLog, type LogEvent } from "./smoke-log.mts";
+import { count, evaluate, lastTitle, newPids, parseCodecs, parseLog, survivors, type LogEvent } from "./smoke-log.mts";
 
 const GOOD = `1 started
 2 shortcut-registered CommandOrControl+Shift+Space
@@ -16,7 +16,7 @@ const GOOD = `1 started
 11 hibernated
 `;
 
-const NONE = { helpersBefore: 0, helpersAfter: 0 };
+const NONE = { pageHelpersLeft: 0 };
 
 describe("parseLog", () => {
   it("reads events with and without details, skipping junk", () => {
@@ -77,11 +77,21 @@ describe("evaluate", () => {
     ]);
   });
 
-  it("fails when webview helpers outlive the window", () => {
+  it("fails when the page's webview helpers outlive the window", () => {
     const failures = evaluate(parseLog(GOOD), { windowFullscreen: false, pageFullscreen: false }, {
-      helpersBefore: 0,
-      helpersAfter: 3,
+      pageHelpersLeft: 3,
     });
-    expect(failures).toEqual([expect.stringContaining("helper processes left")]);
+    expect(failures).toEqual([expect.stringContaining("helper processes of the page left")]);
+  });
+});
+
+describe("helper attribution", () => {
+  it("counts only helpers that appeared while the page was shown", () => {
+    // 10 belongs to another app and stays; 21 and 22 served the page.
+    const ours = newPids([10], [10, 21, 22]);
+    expect(ours).toEqual([21, 22]);
+    // After hibernating: 22 is gone, 30 and 31 are another app's new helpers.
+    expect(survivors(ours, [10, 21, 30, 31])).toBe(1);
+    expect(survivors(ours, [10, 30, 31])).toBe(0);
   });
 });

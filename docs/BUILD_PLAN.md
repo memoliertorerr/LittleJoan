@@ -1353,6 +1353,19 @@ never commit red, never weaken a check to get green.
 - **WebView2 needs both webviews in one environment,** so they share the data directory.
 - 63 Rust tests, 42 TS tests.
 
+**CI results (2026-10-17, run 38989508042):** verify ×3 and package ×3 green; smoke green on
+**Windows and Linux** with the bar (screenshots: the 40 px bar showing
+`http://127.0.0.1:…/smoke.html` above the page; during element fullscreen the page alone fills
+the screen — no bar); the smoke log shows `bar-loaded`, `bar-url start`, then the smoke page's
+address, and `element-fullscreen true`. **macOS failed one check:** 3 `WebContent` processes
+were alive 60 s after hibernating — but the listing shows they started ~50 s *after* the window
+was gone, with their own new `Networking` processes, i.e. another app's WebKit on the runner
+(ours had all exited by 2 s). The check counted every WebKit helper on the machine. **Fix
+(lj-step-10.1-fix):** the smoke test now follows the process ids that appeared while our page
+was shown and counts which of those survive (`newPids` / `survivors`, unit-tested); the same
+per summon cycle. The bar on macOS itself worked (`bar-loaded`, `bar-url` with the smoke
+page's address).
+
 ---
 
 ### LJ10.2 — Project files for GitHub · standard · auto
