@@ -5,13 +5,36 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      installers_from_run:
+        description: "Smoke-test the installers of this earlier run (run id); skips verify and package"
+        required: false
+        default: ""
+      extra_env:
+        description: "Extra environment for the app in smoke tests, e.g. WEBKIT_DISABLE_DMABUF_RENDERER=1"
+        required: false
+        default: ""
+      linux_runner:
+        description: "Linux smoke runner (the .deb is built on ubuntu-22.04 and installs on both)"
+        required: false
+        default: ubuntu-24.04
+      linux_plain_webkit_check:
+        description: "Linux smoke: also click fullscreen in a bare WebKitGTK window (no Tauri), to isolate engine crashes"
+        type: boolean
+        default: false
+      linux_window_manager:
+        description: "Linux smoke: window manager to run under Xvfb (openbox, or none)"
+        required: false
+        default: openbox
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # Pushes to a PR replace each other; manual smoke-only runs never cancel anything.
+  group: ci-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || 'push' }}
   cancel-in-progress: true
 
 permissions:
   contents: read
+  actions: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,6 +42,7 @@ env:
 jobs:
   verify:
     name: verify (${{ matrix.os }})
+    if: ${{ !inputs.installers_from_run }}
     strategy:
       fail-fast: false
       matrix:
@@ -68,3 +92,261 @@ jobs:
         run: |
           source scripts/env.sh
           npm run verify
+
+  # Builds what users download. Release builds happen only here, never on a developer machine.
+  package:
+    name: package (${{ matrix.name }})
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            bundles: nsis
+            target: ""
+          - name: macos
+            os: macos-latest
+            bundles: app,dmg
+            target: universal-apple-darwin
+          # The oldest supported Ubuntu runner: an older glibc makes the .deb and AppImage run
+          # on more distributions.
+          - name: linux
+            os: ubuntu-22.04
+            bundles: deb,appimage
+            target: ""
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev build-essential file \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .cache/rustup
+            .cache/cargo/registry
+            .cache/cargo/git
+            .cache/target
+          key: package-${{ matrix.name }}-${{ hashFiles('rust-toolchain.toml', 'src-tauri/Cargo.lock') }}
+          restore-keys: package-${{ matrix.name }}-
+
+      - name: Install npm dependencies
+        run: |
+          source scripts/env.sh
+          npm ci
+
+      - name: Rust toolchain
+        run: |
+          source scripts/env.sh
+          rustup toolchain install
+          if [ "${{ matrix.name }}" = macos ]; then
+            rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          fi
+          rustc --version
+
+      - name: Build installers
+        run: |
+          source scripts/env.sh
+          # The target dir is cached: drop installers from earlier runs so only fresh ones ship.
+          rm -rf "$LJ_ROOT_POSIX"/.cache/target/release/bundle "$LJ_ROOT_POSIX"/.cache/target/*/release/bundle
+          if [ -n "${{ matrix.target }}" ]; then
+            npx tauri build --ci --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"
+          else
+            npx tauri build --ci --bundles "${{ matrix.bundles }}"
+          fi
+
+      - name: Collect installers
+        run: |
+          source scripts/env.sh
+          mkdir -p bundles
+          find "$LJ_ROOT_POSIX/.cache/target" -path '*/release/bundle/*' -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' \) \
+            -exec cp {} bundles/ \;
+          ls -l bundles
+          test -n "$(ls bundles)"
+          {
+            echo "### Installers (${{ matrix.name }})"
+            echo
+            echo "| File | Size |"
+            echo "|---|---|"
+            for f in bundles/*; do
+              echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Inspect the .deb
+        if: runner.os == 'Linux'
+        run: dpkg-deb -I bundles/*.deb
+
+      - name: Inspect the macOS app
+        if: runner.os == 'macOS'
+        run: |
+          source scripts/env.sh
+          app="$(find "$LJ_ROOT_POSIX/.cache/target/universal-apple-darwin/release/bundle/macos" -maxdepth 1 -name '*.app' | head -1)"
+          lipo -archs "$app/Contents/MacOS/little-joan"
+          codesign -dv "$app" 2>&1 | head -5
+          du -sh "$app"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: little-joan-${{ matrix.name }}
+          path: bundles/
+          retention-days: 14
+          if-no-files-found: error
+
+  # Installs each installer the way a user would and drives the installed app: launching the
+  # build folder can pass while the real installer is broken.
+  smoke:
+    name: smoke (${{ matrix.name }})
+    needs: package
+    # Normally after package; with installers_from_run, on its own against that run's installers.
+    if: ${{ always() && (needs.package.result == 'success' || inputs.installers_from_run) }}
+    # Linux mirrors were seen taking 20 minutes to deliver WebKitGTK.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-latest
+          # Ubuntu 22.04's current WebKitGTK (2.50.4) aborts when any page enters element
+          # fullscreen — reproduced with a bare WebKitGTK window, no Tauri involved (see the plan's
+          # Landmines) — so the installed .deb is smoke-tested on 24.04 (WebKitGTK 2.52).
+          - name: linux
+            os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: little-joan-${{ matrix.name }}
+          path: installers
+          run-id: ${{ inputs.installers_from_run || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Install (Windows, NSIS installer, silent)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installers -Filter *-setup.exe | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          $exe = Get-ChildItem $env:LOCALAPPDATA -Recurse -Depth 2 -Filter little-joan.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "little-joan.exe not found after installing" }
+          Get-ChildItem (Split-Path $exe.FullName) | Format-Table Name, Length
+          "APP=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Install (macOS, drag from the DMG)
+        if: runner.os == 'macOS'
+        run: |
+          dmg="$(ls installers/*.dmg | head -1)"
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/lj-dmg "$dmg"
+          mkdir -p "$RUNNER_TEMP/Applications"
+          cp -R "/tmp/lj-dmg/Little Joan.app" "$RUNNER_TEMP/Applications/"
+          hdiutil detach /tmp/lj-dmg
+          app="$RUNNER_TEMP/Applications/Little Joan.app"
+          codesign --verify --verbose "$app"
+          lipo -archs "$app/Contents/MacOS/little-joan"
+          echo "APP=$app/Contents/MacOS/little-joan" >> "$GITHUB_ENV"
+
+      - name: Install (Linux, .deb through apt)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11 gdb
+          echo "APP=$(command -v little-joan)" >> "$GITHUB_ENV"
+
+      - name: Smoke test (Windows, macOS)
+        if: runner.os != 'Linux'
+        env:
+          LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }}
+        run: node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke
+
+      - name: Smoke test (Linux, X11 + session bus + window manager)
+        if: runner.os == 'Linux'
+        env:
+          # Run the app under gdb so a crash leaves a backtrace in the log. (Symbols were tried:
+          # debuginfod downloads time out, and Ubuntu's ddebs have no symbols for WebKitGTK 2.50.4.)
+          LJ_SMOKE_GDB: "1"
+          LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }}
+          LJ_WM: ${{ inputs.linux_window_manager || 'openbox' }}
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c \
+            'if [ "$LJ_WM" != none ]; then openbox & sleep 2; fi; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
+
+      # Diagnostics: the same click in a bare WebKitGTK 4.1 window built with PyGObject (no Tauri,
+      # wry, or tao), to tell an engine crash from an embedding one.
+      - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
+        if: ${{ !cancelled() && runner.os == 'Linux' && inputs.linux_plain_webkit_check }}
+        run: |
+          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1
+          cat > /tmp/plain.html <<'HTML'
+          <!doctype html><title>plain ready</title>
+          <div id="s" style="position:fixed;inset:0;background:#f7c948" onclick="this.requestFullscreen()"></div>
+          <script>document.addEventListener("fullscreenchange", () => { document.title = "plain fullscreen=" + (document.fullscreenElement ? "on" : "off"); });</script>
+          HTML
+          cat > /tmp/plain.py <<'PY'
+          import gi
+          gi.require_version("Gtk", "3.0")
+          gi.require_version("WebKit2", "4.1")
+          from gi.repository import GLib, Gtk, WebKit2
+          window = Gtk.Window()
+          window.set_default_size(480, 640)
+          window.set_position(Gtk.WindowPosition.CENTER)
+          view = WebKit2.WebView()
+          view.connect("notify::title", lambda v, _: print("title:", v.get_title(), flush=True))
+          window.add(view)
+          view.load_uri("file:///tmp/plain.html")
+          window.show_all()
+          GLib.timeout_add_seconds(30, Gtk.main_quit)
+          Gtk.main()
+          print("plain: main loop ended normally", flush=True)
+          PY
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
+            openbox & sleep 2
+            python3 /tmp/plain.py & app=$!
+            sleep 8
+            xdotool mousemove 640 400 click 1
+            sleep 8
+            if kill -0 "$app" 2>/dev/null; then echo "BARE WEBKITGTK: still running after the click"; else wait "$app"; echo "BARE WEBKITGTK: exited with status $?"; fi
+            wait "$app" 2>/dev/null || true
+          '
+
+      - name: AppImage starts (Linux)
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          image="$(ls installers/*.AppImage | head -1)"
+          chmod +x "$image"
+          xvfb-run -a dbus-run-session -- node scripts/ci/smoke.mts --app "$image" --out test-results/smoke --started-only
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: smoke-${{ matrix.name }}
+          path: test-results/smoke/
+          retention-days: 14

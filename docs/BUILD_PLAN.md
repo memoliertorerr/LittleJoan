@@ -42,11 +42,13 @@
 | LJ5 | Fullscreen video: WebView2 handler, engine checks, smoke test page | strong | auto | ✅ done |
 | LJ6 | Settings window: shortcut recorder, search engine, translate language; live shortcut re-register | standard | auto | ✅ done |
 | LJ7 | Translate page + open in default browser (tray, macOS menu, keys) | standard | auto | ✅ done |
-| LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ⬜ todo |
-| LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ⬜ todo |
-| LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ⬜ todo |
+| LJ8 | Packaging in CI: NSIS (Windows), universal DMG (macOS), deb + AppImage (Linux), artifacts uploaded | strong | auto | ✅ done |
+| LJ9 | Install-and-run smoke in CI: install what users download, drive it, screenshots, memory check | strong | auto | ✅ done (Linux smoke on 24.04 — see notes) |
+| LJ10 | Docs + human checkpoint: README, architecture, checklist in the last PR | standard | checkpoint | ✅ done — waiting for the human check |
 
-**Overall status: phases 1–3 done (PRs #1–#3). Next: phase 4 (LJ8 → LJ10): installers, install-and-run smoke in CI, docs, human checkpoint.**
+**Overall status: all ten steps committed; PRs #1–#4 open (stacked). Stopped at LJ10's human
+checkpoint. Open question for the user: Linux fullscreen on Ubuntu 22.04 / the AppImage
+(WebKitGTK 2.50.4 aborts on element fullscreen — see Deferred follow-ups).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -1038,6 +1040,27 @@ CI result, and the artifact sizes. If it is still red after two honest fix attem
 report — never commit red, never weaken a check to get green.
 ```
 
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 13 GB free at the start. No local release build (Ground Rule 8): the bundle config
+  was validated locally only by tauri-build parsing `tauri.conf.json` during clippy.
+- **The CI target dir is cached,** so the build step deletes earlier `release/bundle` folders
+  first; otherwise a stale installer from an older run could be uploaded.
+- The macOS job also prints `lipo -archs` and `codesign -dv` for the `.app`, so the PR shows the
+  universal binary and the ad-hoc signature.
+- Bundle metadata added: publisher, copyright, MIT license, homepage, category Utility, short
+  and long descriptions.
+- **First CI run (run 38922147279, recorded with LJ9's commit): every package job green on the
+  first try.** Sizes: Windows NSIS `Little Joan_0.1.0_x64-setup.exe` **1.21 MiB**; macOS
+  `Little Joan_0.1.0_universal.dmg` **3.25 MiB** (the `.app` is 7.1 MiB, `x86_64 arm64`,
+  `Signature=adhoc`); Linux `Little Joan_0.1.0_amd64.deb` **2.0 MiB** and
+  `Little Joan_0.1.0_amd64.AppImage` **142 MiB** (bundled WebKitGTK + GStreamer). Package job
+  times: Windows 308 s, Linux 309 s, macOS 455 s (universal = two compiles).
+- **The bundler adds the runtime libraries to the `.deb` by itself:** `Depends:` lists our three
+  GStreamer packages plus `libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0`.
+- Installer file names use the product name with its space (`Little Joan_0.1.0_…`); the README
+  quotes them.
+
 ---
 
 ### LJ9 — Install-and-run smoke in CI · strong · auto
@@ -1100,6 +1123,60 @@ app on all three OSes in CI". Push and watch CI until smoke is green. Paste the 
 `git log -1 --stat`, the CI result, and what each screenshot shows. If it is still red after
 two honest fix attempts, stop and report — never commit red, never weaken a check to get green.
 ```
+
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 13 GB free at the start. Nothing is built or run locally for this step beyond
+  `npm run verify` (the harness's pure parts are unit-tested: 40 TS tests).
+- **The smoke page reports through `document.title`,** which the app logs — so the harness
+  needs no IPC, no devtools protocol, and no browser driver.
+- **Second launches are the remote control:** `--show`, `--show <url>`, `--hide` are forwarded
+  by single-instance; the harness also asserts exactly one `started` line, which proves the
+  forwarding worked instead of a second app starting.
+- **Helper processes are counted by name** (`msedgewebview2.exe`, `com.apple.WebKit.WebContent`,
+  `WebKitWebProcess`); the check is "no more after hibernating than before showing".
+- **macOS synthetic clicks may be refused** on the runner (Accessibility permission); the
+  harness therefore requires fullscreen only on Windows and Linux and records what macOS did.
+
+**Implementation notes, CI results (2026-10-16):**
+
+- **Windows passed everything on the first run** (run 38923984196): installed by the NSIS
+  installer to `%LOCALAPPDATA%\Little Joan\little-joan.exe`; hibernating 12.8 MB working set
+  (2.2 MB private); 6 `msedgewebview2.exe` with the smoke page, **0 within 2 s of hibernating**,
+  0 after each of three summon cycles; the click made the window fullscreen; H.264, VP9, and
+  AV1 all report MSE support. Screenshots: the start page (field focused, hint
+  "Enter to open · Esc to close · Ctrl+Shift+Space to summon"), the smoke page in the 480×640
+  window, and the green fullscreen stage covering the whole screen including the taskbar.
+- **macOS worked but leaked time:** the synthetic click was allowed on the runner and the
+  element went fullscreen on its own Space (screenshot: green stage, full screen); but 3
+  `WebContent` processes (plus GPU and Networking) were still alive 60–90 s after hibernating.
+  They did not grow across cycles (`[3,3,2]`, `[3,0,0]`). **Fix (a25263a):** every close now
+  goes through the hibernate path, and on macOS the window is hidden, navigated to
+  `about:blank`, and destroyed 400 ms later. After: 1 helper at 2–10 s, **0 at 30 s**, `[0,0,0]`
+  per cycle; own memory (physical footprint) 11 MB at rest, 23 MB after a page (WebKit's
+  framework state stays loaded).
+- **Linux, Ubuntu 22.04: the app aborts (SIGABRT inside `libwebkit2gtk-4.1.so.0` 2.50.4,
+  from a RunLoop dispatch) the moment a page requests element fullscreen.** Ruled out with
+  smoke-only reruns (`workflow_dispatch`, see architecture.md): the DMABUF renderer and
+  compositing mode switches, the window manager (crashes with openbox and with none), and —
+  decisively — **Little Joan itself: a bare PyGObject WebKitGTK window aborts the same way.**
+  On **Ubuntu 24.04 (WebKitGTK 2.52.6) neither crashes** and both reach fullscreen (screenshot:
+  green stage filling the 1280×800 screen). Symbols weren't obtainable (debuginfod downloads
+  time out under gdb; Ubuntu's ddebs have no 2.50.4 symbols).
+- **Decision taken (the user may revert it):** the Linux smoke installs the `.deb` (still built
+  on 22.04) on **Ubuntu 24.04**, where it tests our code rather than a known engine abort; the
+  22.04 finding is recorded under Landmines and in the human checklist. The checks themselves
+  are unchanged.
+- **Linux window-fullscreen detection was wrong in the harness/app:** WebKitGTK fullscreens the
+  GTK window itself, which tao's `is_fullscreen()` doesn't track, so the smoke log never said
+  `fullscreen true` even when the screenshot showed it. The app now reads the GDK window state
+  on Linux (`platform::is_fullscreen`).
+- **CI friction:** an Azure apt mirror once took 22 minutes to deliver WebKitGTK (smoke timeout
+  raised to 45 min); a scripted `--hide` after the crash started new instances (that's how the
+  "exactly one started" check caught it).
+- Commits: c1682df (harness), d61a271, db058c8, 2b123b4, a25263a, ce384a6, 697fe74, e8b3fa1,
+  2a1a7db, 977390b (`lj-step-9-fix: …`). **d61a271 also carried LJ10's README rewrite and
+  part of its plan edits** (they were in the working tree when the diagnostics were committed).
 
 ---
 
@@ -1166,6 +1243,19 @@ This is a checkpoint and ends phase 4: push the branch, update the PR with the c
 it ready once CI is green, tell the user exactly what to check and where, then stop.
 ```
 
+**Implementation notes (2026-10-16):**
+
+- **Disk:** 14 GB free; the repo folder is 3.3 GB, of which 3.2 GB is `.cache/` (toolchain,
+  registry, debug target, npm cache) and can be deleted.
+- The README rewrite landed early, in d61a271 (see LJ9's notes); this commit finishes it (status
+  line, the Linux fullscreen known issue) together with architecture.md (close routing, the
+  macOS release step, CI diagnostics, measured memory) and this plan (Landmines, Deferred
+  follow-ups, statuses).
+- **Human checklist** is in the phase-4 PR (#4), extended with the Linux 22.04 / AppImage
+  fullscreen check and the macOS "audio stops when you hide" check.
+- **Not verified by the agent:** everything on the checklist — real desktops, real input
+  devices, YouTube, Wayland, Gatekeeper/SmartScreen, multi-monitor placement.
+
 ---
 
 ## Deferred follow-ups (cross-step, live tracker)
@@ -1173,6 +1263,27 @@ it ready once CI is green, tell the user exactly what to check and where, then s
 > Things a step noticed but were out of its own scope. Kept here so they don't get buried in
 > per-step notes. Strike through when genuinely handled; don't silently delete lines.
 
+- **First-run discoverability** (surfaced by LJ3). Hibernating from the very first launch means a
+  new user sees only a tray icon — and on GNOME without the AppIndicator extension, nothing at
+  all. Option: when no `settings.json` exists yet, show the window once with the shortcut hint.
+  Not done: the brief says "hibernates by default"; this is the user's call.
+- **Start at login** (surfaced by LJ8's README). Without it the shortcut is dead after a reboot
+  until the user launches the app; already designed under Later — the most useful next step.
+- **macOS menu page items are always enabled** (surfaced by LJ7). The menu bar is hidden
+  (Accessory app), so only the key equivalents matter, and they do nothing without a page. The
+  tray items do track page state.
+- **Downloads use each engine's default** (surfaced by LJ4). WebView2 saves to Downloads with its
+  own UI; WKWebView and WebKitGTK ignore downloads unless the app handles them. Designed under
+  Later.
+- **Linux fullscreen on Ubuntu 22.04 / the AppImage** (surfaced by LJ9). WebKitGTK 2.50.4
+  aborts on element fullscreen (Landmines). Options for the user: (a) build the AppImage on
+  ubuntu-24.04 so it bundles WebKitGTK 2.52 (raises its glibc floor to 2.39); (b) wait for
+  Ubuntu to ship a fixed 2.50.x/2.52 to 22.04; (c) report upstream with the bare-WebKitGTK
+  reproduction; (d) as a stopgap, handle `enter-fullscreen` and fullscreen only the window
+  (the page wouldn't know it is fullscreen — YouTube's player would stay small).
+- **macOS footprint after the first page stays ~12 MB above the hibernating baseline**
+  (11 → 23 MB) — WebKit's framework state in our process. Acceptable for v0.1; noted so a
+  future memory pass knows where to look.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -1201,6 +1312,36 @@ Populated from real friction, not speculation:
 - **rustup's auto-install is deprecated.** `rustup show active-toolchain` still installs a
   missing toolchain but warns that this will stop; `scripts/setup-rust.sh` uses
   `rustup toolchain install` (reads rust-toolchain.toml).
+- **Scripted text edits fail silently after rustfmt rewraps a line.** A Python `replace` on
+  `build.rs` matched nothing in LJ6 (rustfmt had reflowed it), and only tauri-build's
+  "Permission allow-get-settings not found" revealed it. Scripted edits now assert that their
+  anchor exists.
+- **tauri-codegen 2.7 does not add the IPC origins to a custom CSP** (checked in its source):
+  without `connect-src ipc: http://ipc.localhost`, IPC falls back to postMessage after a CSP
+  violation. `tauri.conf.json` lists them explicitly.
+- **`Manager::get_window` is behind Tauri's `unstable` feature;** lifecycle code uses
+  `get_webview_window` everywhere (LJ3).
+- **`tauri://` URLs have an opaque origin in the `url` crate,** so `a.origin() == b.origin()` is
+  always false for the macOS/Linux app origin; compare scheme/host/port (`keys::is_app_url`).
+- **Installer file names contain a space** (`Little Joan_0.1.0_x64-setup.exe`,
+  `Little Joan_0.1.0_amd64.deb`): quote them in scripts and docs.
+- **WebKitGTK 2.50.4 (Ubuntu 22.04's package in Oct 2026) aborts the process when a page
+  enters element fullscreen** — in CI under Xvfb, with or without a window manager, with the
+  DMABUF renderer or compositing disabled, and in a bare PyGObject WebKitGTK window with no
+  Tauri at all. WebKitGTK 2.52.6 (Ubuntu 24.04) works. The Linux smoke therefore runs the
+  `.deb` on 24.04; the AppImage (built on 22.04) bundles 2.50.4. Whether real 22.04 desktops
+  crash too is a human check.
+- **On Linux, tao doesn't see WebKitGTK's fullscreen.** WebKitGTK fullscreens the GTK window
+  itself; `Window::is_fullscreen()` (tao's own state) stays false. Read the GDK window state
+  (`platform::is_fullscreen`).
+- **macOS keeps a closed WKWebView's page processes alive for minutes** unless the page is
+  unloaded first (hide → `about:blank` → destroy, LJ9 fix). Measured in CI: 3 `WebContent`
+  processes ≥ 90 s before the fix, 0 within 30 s after.
+- **Debugging a WebKitGTK crash in CI:** gdb with debuginfod stalls app start past the smoke
+  timeouts, and Ubuntu's ddebs had no symbols for the updated WebKitGTK. The cheapest
+  discriminator was reproducing with a bare WebKitGTK window (`linux_plain_webkit_check`).
+- **GitHub's Azure apt mirror can take 20+ minutes** for WebKitGTK; the smoke job's timeout
+  is 45 minutes.
 - **Google Translate's proxy picks the UI language from the requester's IP** (`_x_tr_hl=it`
   came back from a plain request), so the translate URL passes `hl=<lang>` too.
 

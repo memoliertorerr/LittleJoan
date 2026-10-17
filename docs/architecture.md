@@ -19,7 +19,9 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
 package.json, package-lock.json   npm scripts (verify, icons, dev); all JS tooling is local
 tsconfig.json                      strict TS for ui/, scripts/, tests/, config files
 vite.config.mts                    UI build: root ui/, output dist/ (embedded into the binary)
-vitest.config.mts                  TS unit tests: ui/**, scripts/**, tests/** *.test.ts
+vitest.config.mts                  TS unit tests: ui/**, scripts/**, tests/** *.test.ts — each
+                                   *.test.ts sits next to the module it tests (Rust tests are
+                                   #[cfg(test)] modules inside each .rs file)
 eslint.config.mjs                  typescript-eslint recommended (type-checked)
 rust-toolchain.toml                pinned Rust (minimal profile + rustfmt + clippy)
 scripts/env.sh                     source first: keeps caches/toolchains/temp/dev data in .cache/
@@ -68,6 +70,8 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide parsing
+scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide), screenshots
+scripts/ci/smoke-log.mts           CI: smoke-log parsing and pass/fail rules, unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
 .github/workflows/ci.yml           verify on ubuntu-latest, windows-latest, macos-latest
@@ -90,6 +94,15 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   deadlock on Windows. A lifecycle mutex keeps two quick presses from creating two windows.
 - The window opens centred in the work area of the monitor under the mouse cursor, at the last
   size the user left it (logical pixels, saved on close unless fullscreen/maximized/minimized).
+- **Every close goes through the same path.** The close button, Cmd+W / Alt+F4
+  (`CloseRequested` is prevented and turned into `--hide`), Esc on the start page, the shortcut,
+  and `--hide` all end in `joan::destroy`: remember the size, release the page, destroy the
+  window.
+- **Releasing the page on macOS:** WKWebView's page processes were measured outliving a
+  destroyed window by minutes (which would also let a video's audio keep playing). On macOS
+  the window is hidden at once, navigated to `about:blank`, and destroyed 400 ms later; CI then
+  sees the `WebContent` processes gone within 30 s and no growth across summon cycles. WebView2
+  and WebKitGTK release theirs on destroy without help.
 - **Single instance:** `tauri-plugin-single-instance` forwards a second launch's arguments to
   the running app (`--toggle`, `--show [url]`, `--hide`; no flags = `--show`). On Linux it
   needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
@@ -253,8 +266,62 @@ single-instance socket in `/tmp`) and registers a system-wide shortcut. Developm
 inside the repo, so the app is exercised in CI (and by people on their own machines); local
 checks are the compiler, clippy, and unit tests.
 
+## Packaging
+
+Installers are built in CI only (`package` job), never on a developer machine:
+
+| OS | Runner | Command | Artifact |
+|---|---|---|---|
+| Windows | windows-latest | `tauri build --bundles nsis` | `Little Joan_<v>_x64-setup.exe` — per-user install (no admin), downloads the WebView2 runtime if missing |
+| macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+ |
+| Linux | ubuntu-22.04 | `tauri build --bundles deb,appimage` | `.deb` (depends on the GStreamer plugins for video) and `.AppImage` (bundles the media framework) |
+
+The release profile optimizes for size (`opt-level = "s"`, LTO, one codegen unit, stripped,
+`panic = "abort"`). Builds are not notarized or Authenticode-signed (see the plan's Later
+section), so macOS Gatekeeper and Windows SmartScreen warn on first launch.
+
 ## CI
 
-`.github/workflows/ci.yml` runs `npm run verify` on Ubuntu, Windows, and macOS for every pull
-request (any base branch — the phase PRs are stacked) and on pushes to `main`. It is the only
-compiler for the Windows- and Linux-specific code paths.
+`.github/workflows/ci.yml`, for every pull request (any base branch — the phase PRs are stacked)
+and pushes to `main`:
+
+- **verify** — `npm run verify` on Ubuntu, Windows, and macOS. It is the only compiler for the
+  Windows- and Linux-specific code paths.
+- **package** — the installers above, uploaded as artifacts `little-joan-<os>` (14 days), with
+  their sizes in the job summary.
+- **smoke** — installs each installer the way a user would (NSIS `/S`; copy the `.app` out of
+  the mounted `.dmg`; `apt install ./….deb`) and runs `scripts/ci/smoke.mts` against the
+  installed binary: launch with `LITTLEJOAN_SMOKE_LOG`, `--show` (start page), `--show
+  http://127.0.0.1:<port>/smoke.html`, click the screen centre (the page's fullscreen button),
+  `--hide`, summon and hide again, then check the log order, single-instance forwarding, window
+  fullscreen (Windows, Linux), and that no webview helper processes outlive the window.
+  Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`), the log, and
+  `summary.json` (memory — resident and the app's own: private bytes / private dirty /
+  physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs)
+  are uploaded as `smoke-<os>`. Linux runs under `xvfb-run` + `dbus-run-session`
+  (single-instance needs a session bus) with openbox, and under gdb so a crash leaves a
+  backtrace; the AppImage gets a launch check.
+- **Smoke-only reruns** (manual `workflow_dispatch`, for diagnosing without rebuilding):
+  `installers_from_run` (smoke the installers of an earlier run; skips verify and package),
+  `extra_env` (e.g. `WEBKIT_DISABLE_DMABUF_RENDERER=1`), `linux_runner` (`ubuntu-24.04`),
+  `linux_window_manager` (`none`), `linux_plain_webkit_check` (repeat the fullscreen click in a
+  bare WebKitGTK window built with PyGObject — no Tauri — to tell engine crashes from ours).
+
+  ```bash
+  gh workflow run ci.yml --repo memoliertorerr/LittleJoan --ref <branch> \
+    -f installers_from_run=<run id> -f linux_plain_webkit_check=true
+  ```
+
+### Measured in CI (v0.1, run 38936095643)
+
+| | Windows (WebView2) | macOS (WKWebView) | Linux (Ubuntu 24.04, WebKitGTK 2.52.6, Xvfb) |
+|---|---|---|---|
+| Hibernating at start: resident / own | 12.8 MB / 2.2 MB private | 66 MB / 11 MB footprint | 97 MB / 19.5 MB private dirty |
+| Hibernating again after a page: own | 4.5 MB | 24 MB | 44.6 MB |
+| Webview helpers while a page is open | 6 `msedgewebview2.exe` | 3 `WebContent` (+ GPU, Networking) | 1 `WebKitWebProcess` |
+| Helpers after hibernating (2 s … 60 s, and after 3 cycles) | 0 | 0 | 0 |
+| Element fullscreen after a click | window fullscreen ✔ | own Space ✔ | window fullscreen ✔ (Ubuntu 22.04's WebKitGTK 2.50.4 aborts — see the plan's Landmines) |
+| Codecs (H.264 / VP9 / AV1 via MSE) | ✔ / ✔ / ✔ | ✔ / ✔ / ✔ | ✔ / ✔ / ✔ |
+
+Resident memory counts shared system libraries (WebKit is large); the "own" column is what the
+app itself holds.
