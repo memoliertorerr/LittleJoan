@@ -17,6 +17,7 @@ pub mod keys;
 pub mod layout;
 pub mod navigation;
 pub mod page_actions;
+pub mod page_address;
 pub mod phone;
 pub mod phone_mode;
 pub mod placement;

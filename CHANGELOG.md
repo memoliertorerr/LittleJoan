@@ -19,6 +19,11 @@ All notable changes to Little Joan are recorded here. The format follows
   cookie and localStorage outlive quitting and relaunching.
 
 ### Fixed
+- **macOS: an occasional crash when a page was opened as the window appeared** (e.g.
+  `little-joan --show <url>` while hibernating). Little Joan's own start page could still be
+  loading when the page replaced it, and the web engine's complaint about the cancelled load
+  ended the app; release builds now let the web view layer handle it. The page's address is also
+  taken from the page's own load events instead of being asked from the engine at risky moments.
 - **Windows: "until you close the browser" logins no longer end when the window closes.**
   WebView2 dropped session cookies with every window; Little Joan now keeps them in memory
   while it runs (never on disk) and sets them again in the next window.

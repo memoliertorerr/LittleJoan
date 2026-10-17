@@ -105,6 +105,8 @@ function readIfThere(path: string): string | undefined {
 }
 const env = {
   ...process.env,
+  // A panic in the app prints a backtrace into the job log (every launch inherits this env).
+  RUST_BACKTRACE: "1",
   ...extraEnv,
   LITTLEJOAN_SMOKE_LOG: logPath,
   LITTLEJOAN_DATA_DIR: dataDir(startedOnly ? "started-only" : "main", true),

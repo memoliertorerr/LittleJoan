@@ -68,6 +68,8 @@ src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray ico
 src-tauri/src/joan.rs              the page window: create / focus / destroy, window events
 src-tauri/src/bar.rs               its two webviews (URL bar + page): build, layout, fullscreen,
                                    pushing the page's address to the bar, focus
+src-tauri/src/page_address.rs      the page's address from its load events; when the engine may
+                                   be asked for it (pure, tested)
 src-tauri/src/layout.rs            where the bar and the page go, from physical size + scale (pure)
 src-tauri/src/phone.rs             phone mode decisions: 600 px threshold, user agents, debounce
 src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user agent, reload
@@ -149,9 +151,12 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   through `destroy` (so the page is unloaded) and waits for that at most 1.5 s: after a plain
   `app.exit` (`process::exit`, webviews never unloaded) CI saw the next launch's WebKit never
   load a page. Windows and Linux exit at once — their stores came through without it.
-- **The page's address is read only after it started loading** (`bar::page_url`): wry 0.57
+- **The page's address comes from its load events** (`page_address.rs`, `bar::page_url`): the
+  `Started` / `Finished` events carry it, and the app's own navigations set it at once. wry 0.57
   unwraps WKWebView's address, which is unset until the first navigation commits (and again
-  after a first navigation that never did), and that panic aborts a release build.
+  after a first navigation that never did), and that panic ends the app, so the engine is asked
+  (`Webview::url`) only by the once-a-second check for in-page changes, and only while the last
+  load event was `Finished`; an answer that raced with a newer navigation is dropped.
 - **Releasing the page on macOS:** WKWebView's page processes were measured outliving a
   destroyed window by minutes (which would also let a video's audio keep playing). On macOS
   the window is hidden at once, navigated to `about:blank`, and destroyed 400 ms later; CI then
@@ -486,8 +491,10 @@ Installers are built in CI only (`package` job), never on a developer machine:
 | macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+ |
 | Linux | ubuntu-22.04 | `tauri build --bundles deb,appimage` | `.deb` (depends on the GStreamer plugins for video) and `.AppImage` (bundles the media framework) |
 
-The release profile optimizes for size (`opt-level = "s"`, LTO, one codegen unit, stripped,
-`panic = "abort"`). Builds are not notarized or Authenticode-signed (see the plan's Later
+The release profile optimizes for size (`opt-level = "s"`, LTO, one codegen unit, stripped)
+but keeps `panic = "unwind"`: on macOS, wry catches the Objective-C exception WebKit raises when
+Tauri answers a `tauri://` request (from a tokio thread) whose navigation was cancelled
+meanwhile, and that catch cannot work under `panic = "abort"` — CI saw the app abort. Builds are not notarized or Authenticode-signed (see the plan's Later
 section), so macOS Gatekeeper and Windows SmartScreen warn on first launch.
 
 ## CI

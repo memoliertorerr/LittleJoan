@@ -5,7 +5,8 @@
 //! The bar is told about the page's address whenever it may have changed: on every page load
 //! (start and finish, so redirects land too), on every title change, after a navigation the
 //! app starts, and — for in-page changes that raise no event (history.pushState, #anchors) — by
-//! a once-a-second check that runs only while the window exists.
+//! a once-a-second check that runs only while the window exists. The address itself comes from
+//! those events (page_address.rs); the engine is asked only by that check, after a finished load.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -23,6 +24,7 @@ use crate::history_store;
 use crate::keys;
 use crate::layout::{self, layout};
 use crate::navigation;
+use crate::page_address::PageAddress;
 use crate::platform;
 use crate::smoke;
 use crate::tray;
@@ -32,10 +34,11 @@ pub const PAGE: &str = "joan-page";
 
 /// True while the page shows an element fullscreen (the bar is hidden meanwhile).
 static ELEMENT_FULLSCREEN: AtomicBool = AtomicBool::new(false);
-/// True once the page webview of this window reported a page load. Until then its address may
-/// be unset, and reading an unset WKWebView address panics inside wry 0.57 (an abort in
-/// release builds: CI saw it when WebKit was slow to start, LJ20), so `page_url` waits for it.
-static PAGE_STARTED: AtomicBool = AtomicBool::new(false);
+/// The page's address from its load events and the app's own navigations (page_address.rs).
+/// Reading an unset WKWebView address panics inside wry 0.57 (CI saw it when WebKit was slow to
+/// start, LJ20), so the engine's address is read only by the in-page check, after a finished
+/// load; everything else uses this.
+static ADDRESS: Mutex<PageAddress> = Mutex::new(PageAddress::new());
 /// What the bar was last told (`Some(None)` = the start page); reset with each new window.
 static LAST_SHOWN: Mutex<Option<Option<String>>> = Mutex::new(None);
 /// Bumped for every new window, so an old address watcher stops.
@@ -59,7 +62,7 @@ pub fn add_webviews<R: Runtime>(
     data_dir: Option<PathBuf>,
 ) -> tauri::Result<()> {
     ELEMENT_FULLSCREEN.store(false, Ordering::Relaxed);
-    PAGE_STARTED.store(false, Ordering::Relaxed);
+    *address() = PageAddress::new();
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
     let initial = layout(width, height, true);
     let bar_rect = initial.bar.unwrap_or(initial.page);
@@ -95,7 +98,14 @@ pub fn add_webviews<R: Runtime>(
             }
         })
         .on_page_load(|webview, payload| {
-            PAGE_STARTED.store(true, Ordering::Relaxed);
+            match payload.event() {
+                PageLoadEvent::Started => {
+                    address().started(payload.url().clone());
+                }
+                PageLoadEvent::Finished => {
+                    address().finished(payload.url().clone());
+                }
+            }
             let app = webview.app_handle();
             publish_url(app);
             if payload.event() == PageLoadEvent::Finished {
@@ -187,13 +197,16 @@ pub fn set_element_fullscreen<R: Runtime>(app: &AppHandle<R>, on: bool) {
     }
 }
 
-/// The page's address: `None` without a window, and until the page has started loading (see
-/// `PAGE_STARTED`). Use this rather than `Webview::url` on the page.
+fn address() -> std::sync::MutexGuard<'static, PageAddress> {
+    ADDRESS.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The page's address: `None` without a window, and until the page has started loading. It
+/// comes from the page's load events and the app's own navigations (`ADDRESS`); use this rather
+/// than `Webview::url` on the page.
 pub fn page_url<R: Runtime>(app: &AppHandle<R>) -> Option<Url> {
-    if !PAGE_STARTED.load(Ordering::Relaxed) {
-        return None;
-    }
-    app.get_webview(PAGE)?.url().ok()
+    app.get_webview(PAGE)?;
+    address().current().cloned()
 }
 
 /// The page's address as the bar should show it (`None` = start page or no page).
@@ -224,7 +237,9 @@ pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Checks the page's address once a second while this window exists, for in-page changes that
-/// raise no load or title event. Stops when the window goes or a newer one replaces it.
+/// raise no load or title event — the only place the engine's address is read, and only while
+/// the last load event was `Finished` (page_address.rs). Stops when the window goes or a newer
+/// one replaces it.
 pub fn watch_url<R: Runtime>(app: &AppHandle<R>) {
     let generation = GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
     let app = app.clone();
@@ -238,7 +253,20 @@ pub fn watch_url<R: Runtime>(app: &AppHandle<R>) {
                 {
                     break;
                 }
-                publish_url(&app);
+                let Some(token) = address().read_token() else {
+                    continue;
+                };
+                let Some(page) = app.get_webview(PAGE) else {
+                    break;
+                };
+                let Ok(url) = page.url() else {
+                    continue;
+                };
+                // The lock is released before publish_url takes it again.
+                let changed = address().observed(token, url);
+                if changed {
+                    publish_url(&app);
+                }
             }
         });
     if let Err(err) = spawned {
@@ -264,6 +292,7 @@ pub fn focus_page<R: Runtime>(app: &AppHandle<R>) {
 /// Loads `url` in the page and tells the bar.
 pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
     if let Some(page) = app.get_webview(PAGE) {
+        address().navigating(url.clone());
         page.navigate(url)?;
         publish_url(app);
     }

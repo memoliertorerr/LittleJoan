@@ -2529,6 +2529,31 @@ honest fix attempts, then stop).
   → relaunch `p=1 s=0 l=1` on Windows (`session-cookies-kept 1`, `-restored 1`), macOS (the
   window closed 441 ms after `quit`; the relaunch loaded at once) and Linux at scale 1 and 2;
   `--quit` came 51–80 ms after the set; no webview helpers left after any cycle.
+- **Fix 4 (`lj-step-20-fix2`, first commit of phase 13, from `main`'s CI after the phase-12
+  merge):** run 39066776951's `smoke (macos)` aborted ~340 ms after `window-created` of a
+  `--show <persist url>` summon while hibernating (create with a URL), before any page load:
+  `thread 'tokio-rt-worker' panicked at core/src/panicking.rs:225:5: panic in a function that
+  cannot unwind … thread caused non-unwinding panic. aborting.` The same code passed on both PR
+  runs. **The panicking call was not `Webview::url()`** (that runs on the main thread, through
+  tauri-runtime-wry's `webview_getter!`, and would panic there with wry's own `unwrap` message).
+  It was tauri 2.12.4's `tauri://` asset handler (`protocol/tauri.rs`: `async_runtime::spawn` →
+  `responder.respond`), which answers WKURLSchemeTasks **from a tokio worker**: the start page
+  (`index.html`) was still loading when `create` navigated the page to the URL, WebKit stopped
+  its task, and wry 0.57's responder (`wkwebview/class/url_scheme_handler.rs`) raced it — it
+  checks the task, then calls `didReceiveResponse` / `didReceiveData` / `didFinish` inside
+  `objc2::exception::catch` for exactly that "task already stopped" exception. objc2's docs:
+  that catch **cannot work when Rust is compiled with `panic = "abort"`**, our release profile,
+  so the Objective-C exception hit a non-unwinding Rust frame and the process aborted. **Fix:**
+  the release profile uses `panic = "unwind"` (Cargo.toml says why), so wry's catch works for
+  every such race (the page's start page, the bar's own files when a window closes quickly).
+  Asked for at the same time, and done: the smoke run gives the app `RUST_BACKTRACE=1` (release
+  builds are stripped, so frames come without names, but the panicking thread and order show);
+  `bar::page_url` no longer asks the engine — `page_address.rs` (pure, 5 tests) keeps the
+  address from the page's `Started` / `Finished` events and the app's own navigations, and the
+  once-a-second in-page check is the only `Webview::url()` caller, only while the last event
+  was `Finished`, dropping an answer that raced with a newer navigation (a sequence token).
+  `PAGE_STARTED` is gone. The size cost of unwinding is in phase 13's notes (CI's package job).
+  Disk: 13 GiB free; `.cache/target` 1.2 GB.
 - **Not fixed (Deferred follow-ups, Landmines):** Tauri's cookie type drops the leading dot of a
   domain cookie, so a session cookie set for `.example.com` comes back for `example.com` only.
 - Disk: checks commit 13 GiB free at the start, 12 GiB after verify; fix commit 13 GiB free;
@@ -3431,10 +3456,18 @@ Populated from real friction, not speculation:
   7 days** for sites without recent interaction. This is Apple's behavior; a site that keeps a
   login only in a JS cookie can log out after a week idle.
 - *(LJ20)* **wry 0.57 panics reading an unset WKWebView address** (`url_from_webview`:
-  `webview.URL().unwrap()`), and release builds abort on panic. The address is unset until the
-  first navigation commits, and goes back to unset when that first navigation never does — CI
-  saw it in a relaunch right after `process::exit`. Read the page's address through
-  `bar::page_url`, which waits for the page's first load event.
+  `webview.URL().unwrap()`, on the main thread, where it can't unwind). The address is unset
+  until the first navigation commits, and goes back to unset when that first navigation never
+  does — CI saw it in a relaunch right after `process::exit`. Read the page's address through
+  `bar::page_url`, which serves it from the load events (`page_address.rs`); only the in-page
+  check asks the engine, after a finished load.
+- *(LJ20 fix2)* **`panic = "abort"` breaks wry's Objective-C exception catch on macOS.** Tauri
+  answers `tauri://` requests from a tokio worker, and when the page navigates away while one of
+  them is in flight (the start page replaced at once by `--show <url>`; the bar unloaded by a
+  quick close), WebKit raises "task already stopped" from `didReceiveResponse` & co. wry wraps
+  those calls in `objc2::exception::catch`, which can't catch under `panic = "abort"`, so the app
+  aborted with "panic in a function that cannot unwind" on `tokio-rt-worker`. Keep the release
+  profile at `panic = "unwind"`.
 - *(LJ20)* **Tauri's `cookie` crate strips a domain cookie's leading dot** (`Cookie::domain`
   and `domain_raw` both do), and wry passes `domain()` to the engines, so a cookie read with
   `Webview::cookies` and set again becomes host-only. Deferred follow-ups has the options.
