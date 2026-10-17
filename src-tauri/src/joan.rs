@@ -132,12 +132,14 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
     // Element fullscreen (video): WebView2 needs platform::install_page's handler; WKWebView
     // (wry enables elementFullscreenEnabled) and WebKitGTK (fullscreens the toplevel by
     // default) handle it themselves. See fullscreen.rs; the bar hides meanwhile (bar.rs).
+    // History first: the command bar asks for suggestions as soon as it loads.
+    history_store::open(app);
     if let Err(err) = bar::add_webviews(&window, width, height, webview_data_dir) {
+        history_store::close(app);
         let _ = window.destroy();
         return Err(err);
     }
     restore_session_cookies(app);
-    history_store::open(app);
     // Phone or desktop user agent for this width, before any web page loads (phone_mode.rs).
     phone_mode::reset();
     phone_mode::apply(app, false);

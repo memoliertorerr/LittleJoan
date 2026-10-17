@@ -18,9 +18,11 @@ use tauri::{AppHandle, Runtime};
 use url::Url;
 
 use crate::history::{HISTORY_FILE, History, Row, VisitKind};
+use crate::input::SearchEngine;
 use crate::keys;
 use crate::smoke;
 use crate::state;
+use crate::suggest::{self, Suggestion};
 
 /// How often unsaved visits are written while the window is open.
 const AUTOSAVE_EVERY: Duration = Duration::from_secs(30);
@@ -192,6 +194,33 @@ pub fn title_changed<R: Runtime>(app: &AppHandle<R>, url: &Url, title: &str) {
         open.last_title = Some((url.clone(), title.to_owned()));
         open.dirty |= open.history.set_title(url, title, &keys::app_origin());
     });
+}
+
+/// Forgets the record of `url` (Shift+Delete on a suggestion). Returns whether there was one.
+/// History that isn't loaded (no window) is left alone.
+pub fn remove<R: Runtime>(app: &AppHandle<R>, url: &str) -> bool {
+    state::with(app, |s| {
+        let Some(open) = s.history.as_mut() else {
+            return false;
+        };
+        let removed = open.history.remove(url);
+        open.dirty |= removed;
+        removed
+    })
+}
+
+/// The command bar's suggestions for `query` (suggest.rs); with no window open, those of empty
+/// history.
+pub fn suggest<R: Runtime>(
+    app: &AppHandle<R>,
+    query: &str,
+    current: Option<&Url>,
+    engine: SearchEngine,
+) -> Vec<Suggestion> {
+    state::with(app, |s| match s.history.as_ref() {
+        Some(open) => suggest::suggestions(&open.history, query, current, engine, now_millis()),
+        None => suggest::suggestions(&History::default(), query, current, engine, now_millis()),
+    })
 }
 
 /// Up to `n` top sites (empty while no window is open).

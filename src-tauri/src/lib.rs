@@ -26,6 +26,7 @@ pub mod settings_window;
 pub mod shortcut;
 pub mod smoke;
 pub mod state;
+pub mod suggest;
 pub mod toggle;
 pub mod translate;
 pub mod welcome;
@@ -71,7 +72,10 @@ pub fn run() {
             commands::suspend_shortcut,
             commands::set_start_at_login,
             commands::history_top,
-            commands::history_search
+            commands::history_search,
+            commands::suggest,
+            commands::history_remove,
+            commands::open_settings
         ])
         .on_window_event(|window, event| {
             joan::on_window_event(window, event);

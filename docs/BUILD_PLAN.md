@@ -70,7 +70,7 @@
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
-| LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ⬜ todo |
+| LJ23 | *(v0.2, round 2)* The command bar: suggestions when empty, history + search + commands while typing, keyboard, favicons | strong | auto | ✅ done |
 | LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ⬜ todo |
 | LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ⬜ todo |
 | LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ⬜ todo |
@@ -2837,6 +2837,55 @@ commit: "lj-step-23: the command bar — top sites, history matches, search, key
 watch CI until every job is green (two honest attempts, then stop). Look at both screenshots on
 every OS.
 ```
+
+**Implementation notes (2026-10-17):**
+
+- **Rust:** `suggest.rs` (pure, 7 tests) builds what `suggest(query)` returns: nothing typed →
+  up to 8 top sites leaving out the open page's site (`exclude`, only for an http(s) page), or
+  the 4 starters (Wikipedia, YouTube, GitHub, Google Maps) when there are no top sites — so also
+  when the only site is the open one; typing → up to 8 history matches and one `search` row
+  (title = the engine's name, url = `SearchEngine::search_url`, host = its site, for the icon).
+  Rows carry the score too (autofill compares it). `History::remove` (+ test) and
+  `history_store::remove` back `history_remove(url)`: the record goes from memory and the file
+  is rewritten with the next save (close, the 30 s autosave, quit) — LJ25 makes removal write at
+  once. `open_settings(tab?)` opens Settings (the tab waits for LJ26). All three are in the
+  bar's capability only.
+- **History loads before the webviews** in `joan::create` now (it closes again if building the
+  webviews fails): the command bar asks for suggestions as soon as it loads, and a request that
+  beat `history_store::open` would have shown the starters instead of the user's sites.
+- **`ui/command/rows.ts`** (pure, 23 tests) as the Verify lists; choices it makes: a search row
+  is built even without Rust's (then Enter goes through `open_input`); a title equal to its site,
+  or empty, shows the site once; the autofill completes the best match's *address* as typed
+  (`typedForm`: no scheme, no `www.`, no lone `/`) — the condition stays a host prefix — so Enter
+  opens exactly what the field shows; ↑ from the first row goes back to the field (no wrap);
+  `queryFor` treats the open page's untouched address (Ctrl/Cmd+L) as "nothing typed". Hooks for
+  quick answers (LJ31) and commands (LJ30) exist and are empty.
+- **`ui/command/view.ts`** draws with `textContent` only, against a small `ElementLike` slice of
+  the DOM, so `view.test.ts` draws into a stand-in document whose `innerHTML` setter throws (a
+  title `<img src=x onerror=…>` comes out as the title's text, and the only image is the site's
+  favicon). jsdom would have been a new dependency. The favicon (`referrerpolicy=no-referrer`)
+  shows once loaded, over the site's first letter in a tinted circle (stable hue per site), and
+  is removed if it fails.
+- **`ui/command/command.ts`** (glue): 60 ms debounce, only the latest answer is drawn, the
+  inline autofill only right after an insertion at the end of the field, hover selects and click
+  opens (mousedown is cancelled so the keyboard stays in the field). In the command bar the field
+  no longer reverts on blur (a click on a row or the welcome mustn't lose the text); the toolbar
+  still reverts. The × button follows Esc's rules (`onCloseButton`).
+- **The hint line is gone** (`hintText` and its test went with it): the rows fill the panel, as
+  in Little Arc; the welcome still says how to close.
+- **CSP:** `img-src 'self' data: https:` — nothing else changed. The command bar's colors are new
+  tokens in `style.css` (backdrop, panel, hairline, shadow, selection), light and dark; LJ27's
+  theme engine replaces them.
+- **Smoke:** `smoke-command.mts` (new, 6 tests; `smoke-log.mts` was already past 400 lines): Rust
+  logs `suggestions <rows> first=<site> typed=<characters>` (never the text). The main run must
+  show the starters first before any page, then — after the smoke page, in a new window —
+  `first=127.0.0.1…` with nothing typed, and after typing `127` the smoke page first (required on
+  Linux and Windows, best effort on macOS). The extra summon comes after the helper cycles: wait
+  for the top site, `command-bar.png`, type `127` (xdotool; `WScript.Shell.AppActivate` +
+  `SendKeys`; a Swift script posting key events after activating the app), `command-typing.png`,
+  `--hide`. `summary.json` gains `commandBar`.
+- `npm run verify`: 126 TS tests, 143 Rust tests, clippy clean. Disk: 13 GiB free;
+  `.cache/target` 1.2 GB.
 
 ### LJ24 — The Little Arc-style toolbar · strong · auto
 

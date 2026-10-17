@@ -40,10 +40,14 @@ ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above 
 ui/bar-logic.ts                    the address field: never clobber an edit (unit-tested)
 ui/command/view-state.ts           the bar's two views (toolbar, overlay) and what Enter / Esc do
                                    in each (unit-tested)
-ui/command/welcome.ts              StartInfo, the hint line and the first launch's welcome
-                                   (unit-tested)
-ui/command/panel.ts                the command bar's panel under the field: hint, welcome, the
-                                   start-at-login checkbox; DOM glue only
+ui/command/welcome.ts              StartInfo and the first launch's welcome (unit-tested)
+ui/command/panel.ts                the welcome in the command bar, with its start-at-login
+                                   checkbox; DOM glue only
+ui/command/rows.ts                 the command bar's rows: order, autofill, keys, site icons
+                                   (pure, unit-tested)
+ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document)
+ui/command/command.ts              the command bar's list: suggest() as you type, autofill, keys,
+                                   mouse; DOM glue only
 ui/index.html                      the page webview's first page: a plain background, no script
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
 ui/settings.html, ui/settings.ts   the settings window: shortcut recorder, search engine, language
@@ -52,8 +56,8 @@ ui/style.css                       shared styles; light/dark via prefers-color-s
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
 src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
 src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_page, set_overlay,
-                                   hibernate, history_top, history_search, start_info,
-                                   set_start_at_login (the welcome's checkbox)
+                                   hibernate, history_top, history_search, suggest,
+                                   history_remove, open_settings, start_info, set_start_at_login
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
@@ -68,7 +72,10 @@ src-tauri/src/history.rs           history: what is recorded, frecency, top site
                                    the 5,000-URL cap, history.json parse/serialize (pure; tests
                                    in history/tests.rs, with a fixed clock)
 src-tauri/src/history_store.rs     history.json on disk and in AppState while the window exists:
-                                   load, record (page load / title events), autosave, atomic save
+                                   load, record (page load / title events), autosave, atomic save,
+                                   remove one, the command bar's suggestions
+src-tauri/src/suggest.rs           what the command bar suggests: top sites or the starters,
+                                   history matches and a search row (pure, tested)
 src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is, Wayland (pure)
 src-tauri/src/joan.rs              the page window: create / focus / destroy, window events
 src-tauri/src/bar.rs               its two webviews (bar + page): build, pushing the page's
@@ -87,7 +94,8 @@ src-tauri/src/placement.rs         where a new window opens (monitor under the c
 src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
                                    with rollback (Registrar trait), suspend while recording
 src-tauri/src/commands.rs          bar: open_input, page_url, focus_page, set_overlay, hibernate,
-                                   start_info, history_top, history_search; settings:
+                                   start_info, history_top, history_search, suggest,
+                                   history_remove, open_settings; settings:
                                    get_settings, save_settings, suspend_shortcut;
                                    set_start_at_login (both)
 src-tauri/src/autostart.rs         start at login: tauri-plugin-autostart (Rust API only), the
@@ -121,6 +129,7 @@ scripts/ci/smoke.mts               CI: drives the installed app (show, page, cli
                                    login on/off, cookies and storage across close and quit),
                                    reads the OS login entry, screenshots
 scripts/ci/smoke-log.mts           CI: smoke-log parsing and pass/fail rules, unit-tested
+scripts/ci/smoke-command.mts       CI: the command bar's smoke-log rules, unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
                                    with ?persist=set|check, the cookie and localStorage check
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
@@ -204,7 +213,7 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-hibernate`, `allow-history-top`, `allow-history-search`, `allow-start-info`, `allow-set-start-at-login` |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-hibernate`, `allow-history-top`, `allow-history-search`, `allow-suggest`, `allow-history-remove`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login` |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
@@ -223,8 +232,11 @@ anywhere.
 | `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
-| `history_top(n)` | the bar (from LJ23) | up to `n` (≤ 50) top sites: `[{ url, title, host, score }]`; read-only |
-| `history_search(query, limit)` | the bar (from LJ23) | up to `limit` (≤ 50) records matching every word of `query`, same rows; read-only |
+| `history_top(n)` | nothing yet (the command bar uses `suggest`; left for the history view) | up to `n` (≤ 50) top sites: `[{ url, title, host, score }]`; read-only |
+| `history_search(query, limit)` | nothing yet (as above) | up to `limit` (≤ 50) records matching every word of `query`, same rows; read-only |
+| `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → up to 8 top sites, leaving out the open page's site, or the 4 starters when there are none; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) |
+| `history_remove(url)` | the command bar, Shift+Delete on a history row | forget that record (saved with the rest of history); returns whether there was one |
+| `open_settings(tab?)` | the command bar's "Settings & extensions" row | open (or focus) the settings window; `tab` is for LJ26's tabs |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
 `capabilities/settings.json` grants the `settings` window the last four plus
@@ -279,7 +291,7 @@ window discards the page, not the store.
 ## History
 
 Little Joan keeps a local history for the command bar's suggestions (LJ23) and the history view
-(LJ25). It never leaves the machine: no sync, no remote suggestions; favicons will come straight
+(LJ25). It never leaves the machine: no sync, no remote suggestions; favicons come straight
 from the sites visited.
 
 - **Where:** `history.json` next to `settings.json` (the table above; `LITTLEJOAN_DATA_DIR`
@@ -295,7 +307,7 @@ from the sites visited.
 - **Cap:** 5,000 URLs; past that the least frecent go (on a tie, the least recently visited).
 - **Recording** is native, from the page webview's events (`bar.rs`), so pages need no IPC: a
   finished page load records a visit, a title change updates that URL's record. The visit's
-  kind comes from the app: `typed` after `open_input` (and, from LJ23, a picked suggestion),
+  kind comes from the app: `typed` after `open_input` (a picked suggestion goes through it too),
   `reload` after the Reload page action, `link` otherwise (WebView2's own F5 / Ctrl+R reload
   counts as `link`).
 - **Never recorded:** anything but `http`/`https` (`about:`, `ljext:`, `data:`, `file:` …), the
@@ -394,8 +406,29 @@ page; it is a separate webview with its own capability, and the page webview has
   command bar (the welcome's checkbox), since the keys stay in the bar webview. Leaving the field
   without Enter drops the edit. An address update never overwrites an edit in progress.
   (`ui/command/view-state.ts` holds these rules.)
-- **The command bar's content** (for now): the field at the top, the welcome on the first run,
-  and the hint line; suggestions come with LJ23.
+- **The command bar** (`ui/command/`): a rounded panel with a search icon, the field
+  ("Search or enter URL…") and a × button (back to the page, or with no page, close the window);
+  under it the welcome on the first run, then the rows — a site icon, then "Title — domain" with
+  the domain muted; the selected row is filled with the accent color; **"Settings & extensions"**
+  (a gear) is always the last row. Rows (`rows.ts`): nothing typed → the top sites (or the
+  starters); typing → a quick answer (LJ31's hook, empty now), the best history match, "Search
+  <engine> for …", more matches, extension commands (LJ30's hook, empty now) — at most 8, then
+  Settings. **Autofill:** when the best match's site starts with what was typed (a host prefix)
+  and its score is at least the matches' average, the field completes it with that address
+  (scheme and `www.` left out), the completion selected and its row selected; only right after
+  typing at the end of the field, never after a deletion. **Keys:** ↑/↓ move without wrapping (↑
+  from the first row goes back to the field), Enter opens the selected row — or with none,
+  `open_input` on the field's text, as before —, Tab accepts the autofill, Shift+Delete removes a
+  history row; the mouse selects on hover and opens on click. Picking a row goes through
+  `open_input`, so the visit counts as typed. Typing asks `suggest` after 60 ms; only the latest
+  answer is drawn. While the field shows the open page's address untouched (Ctrl/Cmd+L), the
+  command bar shows the top sites.
+- **Text only:** rows are drawn with `textContent` (`view.ts`), never `innerHTML`: titles come
+  from web pages (and, later, extensions). **Site icons** are
+  `<img src="https://<site>/favicon.ico" referrerpolicy="no-referrer">` straight from the site,
+  shown once loaded over the site's first letter in a tinted circle (a stable hue per site),
+  which stays when the icon fails. That is why the CSP's `img-src` allows `https:` (and only
+  `img-src`); history itself is never sent anywhere.
 - **Element fullscreen:** Windows hides the bar in the `ContainsFullScreenElementChanged`
   handler; Linux on WebKitGTK's `enter-fullscreen` / `leave-fullscreen` signals; macOS needs
   nothing (WebKit shows the element in its own fullscreen window).
@@ -457,7 +490,8 @@ supports (`LJ-SMOKE ready h264=… vp9=… av1=…` in the title).
 
 When `LITTLEJOAN_SMOKE_LOG` names a file, the app appends `<unix millis> <event>[ <detail>]`
 lines: `started`, `shortcut-registered <accel>`, `shortcut-failed <reason>`,
-`window-created`, `overlay <true|false>` (the command bar opened or closed; once right after
+`window-created`, `suggestions <rows> first=<site> typed=<characters>` (each `suggest` call:
+counts and the first row's site, never the typed text), `overlay <true|false>` (the command bar opened or closed; once right after
 `window-created` for the state a new window starts in), `title <page title>`, `page-loaded <url>`, `fullscreen <true|false>` (any
 engine: the window's fullscreen state changed), `element-fullscreen <true|false>` (Windows: the
 app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finished loading),
@@ -565,7 +599,10 @@ and pushes to `main`:
   log order, single-instance forwarding, window
   fullscreen (Windows, Linux), the bar (`bar-loaded`, and `bar-url` with the smoke page's
   address), the command bar (`overlay true` first after every `window-created`, and `overlay
-  false` before the smoke page reports ready), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
+  false` before the smoke page reports ready; the starters first with no history; after the
+  smoke page, a new window's empty command bar offers its site first, and typing `127` — xdotool
+  on Linux, SendKeys on Windows, key events on macOS, best effort — finds it first;
+  `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
   with the desktop agent** (it reports `innerWidth`, `innerHeight`, the agent kind and
   `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the
   window (followed by process id, so other apps' WebKit helpers on the runner don't count).

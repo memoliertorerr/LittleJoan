@@ -32,7 +32,7 @@ pub const MAX_URL_BYTES: usize = 4096;
 const SCHEME_HOSTS: [&str; 3] = ["tauri.localhost", "ipc.localhost", "ljext.localhost"];
 const DAY_MS: f64 = 86_400_000.0;
 
-/// How a visit started. `Typed`: the user typed or picked it (open_input, from LJ23 a picked
+/// How a visit started. `Typed`: the user typed or picked it (open_input, also for a picked
 /// suggestion); `Reload`: the reload page action; `Link`: everything else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -198,6 +198,14 @@ impl History {
             }
             _ => false,
         }
+    }
+
+    /// Forgets the record of `url` (an address as the bar got it in a suggestion). Returns
+    /// whether there was one.
+    pub fn remove(&mut self, url: &str) -> bool {
+        let before = self.entries.len();
+        self.entries.retain(|entry| entry.url != url);
+        self.entries.len() != before
     }
 
     /// Keeps the MAX_URLS most frecent URLs (on a tie, the most recently visited).

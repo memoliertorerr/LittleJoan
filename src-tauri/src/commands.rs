@@ -15,9 +15,11 @@ use crate::input::{self, SearchEngine};
 use crate::joan;
 use crate::phone_mode;
 use crate::settings::{self, Settings};
+use crate::settings_window;
 use crate::shortcut::{self, PluginRegistrar};
 use crate::smoke;
 use crate::state;
+use crate::suggest::Suggestion;
 use crate::toggle::Command;
 use crate::translate::{LANGUAGES, is_valid_lang};
 use crate::welcome;
@@ -211,6 +213,41 @@ pub async fn history_search<R: Runtime>(
     limit: usize,
 ) -> Vec<Row> {
     history_store::search(&app, &query, limit.min(MAX_ROWS))
+}
+
+/// The command bar's suggestions for what is typed (suggest.rs): top sites (or the starters)
+/// while nothing is, history matches and a search row while something is. The site of the page
+/// that is open isn't suggested.
+#[tauri::command]
+pub async fn suggest<R: Runtime>(app: AppHandle<R>, query: String) -> Vec<Suggestion> {
+    let current = bar::page_url(&app);
+    let engine = state::with(&app, |s| s.settings.search_engine);
+    let rows = history_store::suggest(&app, &query, current.as_ref(), engine);
+    // The smoke log gets counts and the first row's site, never the typed text.
+    smoke::log(
+        "suggestions",
+        &format!(
+            "{} first={} typed={}",
+            rows.len(),
+            rows.first().map_or("-", |row| row.host.as_str()),
+            query.trim().chars().count()
+        ),
+    );
+    rows
+}
+
+/// Forgets one history record (Shift+Delete on a suggestion). Returns whether there was one.
+#[tauri::command]
+pub async fn history_remove<R: Runtime>(app: AppHandle<R>, url: String) -> bool {
+    history_store::remove(&app, &url)
+}
+
+/// Opens the settings window (the command bar's "Settings & extensions" row). `tab` will pick
+/// its tab once Settings has tabs (LJ26); until then it opens as always.
+#[tauri::command]
+pub async fn open_settings<R: Runtime>(app: AppHandle<R>, tab: Option<String>) {
+    let _ = tab;
+    settings_window::open(&app);
 }
 
 /// Pauses (true) or resumes (false) the global shortcut while a new one is being recorded.

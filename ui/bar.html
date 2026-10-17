@@ -9,32 +9,42 @@
   </head>
   <!-- "overlay": the command bar covers the window; "toolbar": the 40 px strip above the page. -->
   <body class="bar-body overlay">
-    <header class="bar-top">
-      <input
-        id="url"
-        class="bar-field"
-        type="text"
-        placeholder="Search or type a URL"
-        autocomplete="off"
-        autocapitalize="off"
-        spellcheck="false"
-        aria-label="Address and search bar"
-      />
-    </header>
-    <main class="panel">
-      <h1 class="sr-only">Little Joan</h1>
-      <section id="welcome" class="welcome" aria-labelledby="welcome-title" hidden>
-        <h2 id="welcome-title"></h2>
-        <p id="welcome-shortcut"></p>
-        <p id="welcome-tray"></p>
-        <label id="welcome-login-row" class="welcome-login" hidden>
-          <input id="welcome-login" type="checkbox" />
-          <span>Start Little Joan at login</span>
-        </label>
-        <p id="welcome-error" class="error" role="alert" hidden></p>
-        <p id="welcome-close" class="hint"></p>
-      </section>
-      <p id="hint" class="hint">Enter to open · Esc to close</p>
-    </main>
+    <div class="command">
+      <header class="bar-top">
+        <svg class="search-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.6" />
+          <path d="M10.4 10.4 14 14" />
+        </svg>
+        <input
+          id="url"
+          class="bar-field"
+          type="text"
+          placeholder="Search or enter URL…"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          aria-label="Search or enter URL"
+          aria-controls="rows"
+        />
+        <button id="close" class="close-button" type="button" aria-label="Close">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
+        </button>
+      </header>
+      <main class="panel">
+        <h1 class="sr-only">Little Joan</h1>
+        <section id="welcome" class="welcome" aria-labelledby="welcome-title" hidden>
+          <h2 id="welcome-title"></h2>
+          <p id="welcome-shortcut"></p>
+          <p id="welcome-tray"></p>
+          <label id="welcome-login-row" class="welcome-login" hidden>
+            <input id="welcome-login" type="checkbox" />
+            <span>Start Little Joan at login</span>
+          </label>
+          <p id="welcome-error" class="error" role="alert" hidden></p>
+          <p id="welcome-close" class="hint"></p>
+        </section>
+        <ul id="rows" class="rows" role="listbox" aria-label="Suggestions"></ul>
+      </main>
+    </div>
   </body>
 </html>

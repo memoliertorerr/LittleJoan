@@ -1,8 +1,7 @@
-// The command bar's panel under the field (DOM glue only): the hint line and, on the first
-// launch, the one-time welcome with its start-at-login checkbox. What it says comes from
-// welcome.ts; the facts from Rust's start_info.
+// The welcome in the command bar's panel on the first launch (DOM glue only), with its
+// start-at-login checkbox. What it says comes from welcome.ts; the facts from Rust's start_info.
 import { invoke } from "@tauri-apps/api/core";
-import { hintText, welcome, type ShortcutLine, type StartInfo, type Welcome } from "./welcome.ts";
+import { welcome, type ShortcutLine, type StartInfo, type Welcome } from "./welcome.ts";
 
 function element<T extends HTMLElement>(selector: string): T | null {
   return document.querySelector<T>(selector);
@@ -67,20 +66,16 @@ function setUpLoginSwitch(enabled: boolean): void {
   });
 }
 
-/** Fills the panel: asks Rust once, when the bar loads (the welcome shows on the first run). */
+/** Asks Rust once, when the bar loads; on the first run the welcome shows. */
 export function fillPanel(): void {
   invoke<StartInfo>("start_info")
     .then((info) => {
-      const hint = element<HTMLElement>("#hint");
-      if (hint) {
-        hint.textContent = hintText(info);
-      }
       const shown = welcome(info);
       if (shown) {
         showWelcome(shown);
       }
     })
     .catch(() => {
-      // The hint is decoration.
+      // Without the facts there is no welcome; the command bar works the same.
     });
 }

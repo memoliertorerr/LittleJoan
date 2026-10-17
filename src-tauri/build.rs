@@ -15,6 +15,9 @@ fn main() {
             "set_start_at_login",
             "history_top",
             "history_search",
+            "suggest",
+            "history_remove",
+            "open_settings",
         ]),
     ))
     .expect("failed to run tauri-build");

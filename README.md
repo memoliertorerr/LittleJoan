@@ -69,6 +69,13 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Summon:** press **Ctrl+Shift+Space** (Windows, Linux) or **Cmd+Shift+Space** (macOS), or
   choose **Open Little Joan** in the tray menu. The window opens with the **command bar** over
   it: type an address or a search and press Enter.
+- **The command bar** suggests as you go. With nothing typed it shows the sites you open most
+  (until there is some history: Wikipedia, YouTube, GitHub and Google Maps). As you type: the
+  best match from your history — and when what you type starts a site's address, the address is
+  completed in the field (Tab accepts it) —, a search with your search engine, then more matches.
+  ↑/↓ choose a row, Enter opens it (with no row chosen, Enter opens what you typed), Shift+Delete
+  removes a page from your history, × or Esc closes the command bar. The last row, **Settings &
+  extensions**, opens Settings.
 - **The address bar** stays at the top of the window while a page is open and always shows the
   page you're on, following links and redirects. Click it (or press Ctrl/Cmd+L) to go somewhere
   else: the command bar opens with the address selected; Enter opens the address or searches for
@@ -145,6 +152,8 @@ hints, Word's non-breaking space); change it here if it does.
 - Session cookies (the "until you close the browser" kind) last while Little Joan runs, across
   closing and reopening the window. On Windows, Little Joan holds them in memory meanwhile —
   never on disk — and quitting forgets them, as quitting a browser does.
+- **Site icons in the command bar** are loaded straight from each suggested site
+  (`https://<site>/favicon.ico`, without a referrer); nothing else is fetched for suggestions.
 - **History stays on your computer.** Little Joan records the pages you open (address, title,
   when) in `history.json` next to its settings, for its own suggestions; it is never sent
   anywhere. Its own pages aren't recorded, and nothing is while `"rememberHistory": false` is

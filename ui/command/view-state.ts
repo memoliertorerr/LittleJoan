@@ -77,3 +77,8 @@ export function onKey(state: BarState, key: string, value: string, composing: bo
 export function onFieldPress(state: BarState): "openOverlay" | "none" {
   return state.view === "toolbar" ? "openOverlay" : "none";
 }
+
+/** The × button: like Esc with nothing to revert — back to the page, or with no page, close. */
+export function onCloseButton(state: BarState): "closeOverlay" | "hibernate" {
+  return hasPage(state) ? "closeOverlay" : "hibernate";
+}

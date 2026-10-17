@@ -1,5 +1,5 @@
-// What the command bar says when nothing is typed yet: the hint line and, on the first launch,
-// the one-time welcome (pure, unit-tested). The bar shows it; start_info hands over the facts.
+// The one-time welcome the command bar shows on the first launch (pure, unit-tested). The bar
+// shows it above the suggestions; start_info hands over the facts.
 import { displayShortcut } from "../lib/shortcut.ts";
 
 export interface StartInfo {
@@ -14,16 +14,6 @@ export interface StartInfo {
   startAtLogin: boolean | null;
   /** A Linux Wayland session, where the global shortcut can't fire. */
   waylandNoShortcut: boolean;
-}
-
-const BASE_HINT = "Enter to open · Esc to close";
-
-/** The hint line under the command bar's field while nothing is open. */
-export function hintText(info: StartInfo | null): string {
-  if (!info?.shortcut) {
-    return BASE_HINT;
-  }
-  return `${BASE_HINT} · ${displayShortcut(info.shortcut, info.platform === "macos")} to summon`;
 }
 
 /** A sentence with one part in monospace: a key combination or a command. */

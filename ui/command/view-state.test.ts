@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { hasPage, initialState, onFieldPress, onKey, withOverlay, withShown, type BarState } from "./view-state.ts";
+import {
+  hasPage,
+  initialState,
+  onCloseButton,
+  onFieldPress,
+  onKey,
+  withOverlay,
+  withShown,
+  type BarState,
+} from "./view-state.ts";
 
 const PAGE = "https://example.com/a";
 const overlayNoPage: BarState = initialState();
@@ -65,5 +74,12 @@ describe("Esc", () => {
 describe("other keys", () => {
   it("are ignored", () => {
     expect(onKey(overlayWithPage, "a", "a", false)).toEqual({ kind: "none" });
+  });
+});
+
+describe("the × button", () => {
+  it("returns to the page, or with no page closes the window", () => {
+    expect(onCloseButton(overlayWithPage)).toBe("closeOverlay");
+    expect(onCloseButton(overlayNoPage)).toBe("hibernate");
   });
 });

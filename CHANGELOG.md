@@ -17,6 +17,12 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Suggestions in the command bar,** like Little Arc's: the sites you open most when nothing is
+  typed (Wikipedia, YouTube, GitHub and Google Maps until there is history), and while typing
+  the best history match — with the address completed in the field when you type the start of a
+  site (Tab accepts it) —, "Search <engine> for …", and more matches. Each row shows the site's
+  icon and "Title — site"; ↑/↓, Enter, and Shift+Delete to forget a page. The last row,
+  **Settings & extensions**, opens Settings. Site icons come straight from the sites.
 - `little-joan --quit` quits the running app, the same way as **Quit Little Joan** in the tray
   menu (handy for scripts; CI uses it to quit gracefully).
 - **History, kept locally:** the pages you open (address, title, when and how) are recorded in
