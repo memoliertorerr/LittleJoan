@@ -20,26 +20,39 @@ affiliated with or endorsed by The Browser Company.
 
 ## Install
 
-Installers are built by CI for every change: open the latest successful
-[ci run](https://github.com/memoliertorerr/LittleJoan/actions/workflows/ci.yml), scroll to
-**Artifacts**, and download the one for your system. (There are no signed releases yet.)
+Download the installer for your system from the
+**[latest release](https://github.com/memoliertorerr/LittleJoan/releases/latest)**. The builds
+aren't code-signed yet, so the first launch shows a warning; the steps below get past it.
+(Development builds of every change are also kept as artifacts of the
+[CI workflow](https://github.com/memoliertorerr/LittleJoan/actions/workflows/ci.yml).)
 
-- **Windows 10/11** — `little-joan-windows` → run `Little Joan_0.1.0_x64-setup.exe` (about
-  1.2 MB). It installs for your user only (no admin). Windows SmartScreen may warn about an
-  unknown publisher: choose **More info → Run anyway**. Windows 10 without the WebView2 runtime
-  gets it during setup.
-- **macOS 12.3 or later** (Intel or Apple silicon) — `little-joan-macos` → open the `.dmg`
-  (about 3.3 MB) and drag Little Joan to Applications. The app isn't notarized, so the first
-  time, right-click it and choose **Open**, or run
-  `xattr -dr com.apple.quarantine "/Applications/Little Joan.app"`. It lives in the menu bar
-  (no Dock icon).
-- **Linux** — `little-joan-linux`:
-  - Debian/Ubuntu: `sudo apt install "./Little Joan_0.1.0_amd64.deb"` (about 2 MB; pulls in
-    WebKitGTK and the GStreamer plugins video needs).
-  - Elsewhere: `chmod +x "Little Joan_0.1.0_amd64.AppImage"` and run it (about 140 MB: it
-    carries its own WebKitGTK and media framework).
+- **Windows 10/11 (x64):** `LittleJoan-<version>-windows-x64-setup.exe` (about 1.3 MB). It
+  installs for your user only, no admin needed. Windows SmartScreen may warn about an unknown
+  publisher: choose **More info → Run anyway**. Windows 10 without the WebView2 runtime gets it
+  during setup.
+- **macOS 12.3 or later (Intel or Apple silicon):** `LittleJoan-<version>-macos-universal.dmg`
+  (about 3.4 MB). Open it and drag Little Joan to Applications. It isn't notarized, so macOS
+  blocks the first launch. Either run this once:
+
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/Little Joan.app"
+  ```
+
+  or try to open the app, then click **Open Anyway** in **System Settings → Privacy &
+  Security**. (Right-click → Open no longer gets past this on macOS 15 and later.) Little Joan
+  lives in the menu bar, with no Dock icon.
+- **Linux (x86_64):**
+  - Debian/Ubuntu: `sudo apt install ./LittleJoan-<version>-linux-amd64.deb` (about 2 MB; it
+    pulls in WebKitGTK and the GStreamer plugins that video needs). Ubuntu 24.04 or later is
+    recommended: on 22.04 the system WebKitGTK crashes when a page goes fullscreen.
+  - Elsewhere: `chmod +x LittleJoan-<version>-linux-x86_64.AppImage` and run it (about 140 MB;
+    it carries its own WebKitGTK and media framework). It currently bundles the WebKitGTK version
+    with the fullscreen crash, so prefer the `.deb` where you can.
   - The tray icon needs an AppIndicator host (on GNOME, the "AppIndicator and
     KStatusNotifierItem Support" extension).
+- **Check a download (optional):** each release includes `SHA256SUMS.txt`. Run
+  `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` in the download folder on macOS or Linux, or
+  compare against `Get-FileHash <file>` on Windows.
 
 After launch you only see the tray / menu-bar icon — that's hibernation. Little Joan doesn't
 start at login on its own yet; add it to your system's startup apps if you want the shortcut to
