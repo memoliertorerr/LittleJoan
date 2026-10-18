@@ -133,6 +133,10 @@ describe("Settings → Extensions in the developer run", () => {
 
   it("passes when the tab listed hello and the developer copy, the broken one skipped", () => {
     expect(settingsExtensionsFailures(parseLog(GOOD_SETTINGS))).toEqual([]);
+    // With more bundled extensions, they all count.
+    const three = GOOD_SETTINGS.replace("4 extensions-list 2 skipped=1", "4 extensions-list 4 skipped=1");
+    expect(settingsExtensionsFailures(parseLog(three), 3)).toEqual([]);
+    expect(settingsExtensionsFailures(parseLog(GOOD_SETTINGS), 3).join()).toMatch(/didn't list the 3 bundled/);
   });
 
   it("fails without the tab, the right counts or the skipped reason", () => {

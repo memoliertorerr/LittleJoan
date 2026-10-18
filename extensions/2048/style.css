@@ -1,0 +1,291 @@
+/* Little Joan's colors come from littleJoan.theme.apply() (the --lj-* variables on <html>); the
+   fallbacks show only until it answers. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background-color: var(--lj-bg-0, Canvas);
+  background-image: var(--lj-grain, none), var(--lj-gradient, none);
+  color: var(--lj-fg, CanvasText);
+  -webkit-font-smoothing: antialiased;
+  opacity: 0;
+  /* Shown once the theme is on (ui.js), or after a moment whatever happens. */
+  animation: reveal 0s 700ms forwards;
+}
+html.ready body {
+  opacity: 1;
+  animation: none;
+  transition: opacity 120ms ease-out;
+}
+@keyframes reveal {
+  to {
+    opacity: 1;
+  }
+}
+:focus-visible {
+  outline: 2px solid var(--lj-accent, Highlight);
+  outline-offset: 2px;
+}
+.btn {
+  appearance: none;
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  color: inherit;
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--lj-row-hover, rgba(127, 127, 127, 0.16));
+}
+.card {
+  background: var(--lj-panel, Canvas);
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-radius: 14px;
+  box-shadow: 0 12px 32px -16px var(--lj-shadow, rgba(0, 0, 0, 0.3));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  margin: 0 1px;
+  padding: 1px 5px;
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  font: 600 11px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  text-align: center;
+}
+.hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  margin: 0;
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 12px;
+}
+
+.btn.primary {
+  border-color: transparent;
+  background: var(--lj-row-selected, AccentColor);
+  color: var(--lj-on-selected, #ffffff);
+}
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+/* The game. */
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 14px 16px 16px;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo {
+  border-radius: 7px;
+}
+h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.stats {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+}
+.stats div {
+  min-width: 56px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  text-align: center;
+}
+.stats dt {
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.stats dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.board-box {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: center;
+}
+.board {
+  --side: 320px;
+  --gap: 10px;
+  --cell: 67.5px;
+  position: relative;
+  width: var(--side);
+  height: var(--side);
+  border-radius: 14px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.12));
+  box-shadow: inset 0 0 0 1px var(--lj-hairline, rgba(127, 127, 127, 0.2));
+}
+/* The board takes the keys for the game; it isn't a control, so no focus ring. */
+.board:focus,
+.board:focus-visible {
+  outline: none;
+}
+.cells {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap);
+  padding: var(--gap);
+}
+.cells i {
+  border-radius: 8px;
+  background: var(--lj-row-hover, rgba(127, 127, 127, 0.08));
+}
+.tiles {
+  position: absolute;
+  inset: 0;
+}
+.tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: var(--cell);
+  height: var(--cell);
+  place-items: center;
+  border-radius: 8px;
+  box-shadow: 0 1px 0 var(--lj-hairline, rgba(0, 0, 0, 0.12)), 0 6px 14px -10px var(--lj-shadow, rgba(0, 0, 0, 0.3));
+  font-size: calc(var(--cell) * 0.42);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  transform: translate(calc(var(--gap) + var(--x) * (var(--cell) + var(--gap))), calc(var(--gap) + var(--y) * (var(--cell) + var(--gap))));
+  transition: transform 110ms ease-in-out;
+  z-index: 1;
+}
+.tile[data-digits="3"] {
+  font-size: calc(var(--cell) * 0.36);
+}
+.tile[data-digits="4"] {
+  font-size: calc(var(--cell) * 0.3);
+}
+.tile[data-digits="5"] {
+  font-size: calc(var(--cell) * 0.24);
+}
+.tile.gone {
+  z-index: 0;
+}
+.tile.new {
+  animation: appear 150ms ease-out 100ms backwards;
+}
+.tile.merged {
+  animation: pop 170ms ease-out;
+  z-index: 2;
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+}
+@keyframes pop {
+  50% {
+    scale: 1.12;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile {
+    transition: none;
+  }
+  .tile.new,
+  .tile.merged {
+    animation: none;
+  }
+}
+.message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--lj-row-hover, rgba(127, 127, 127, 0.1));
+  z-index: 3;
+}
+.message[hidden] {
+  display: none;
+}
+.message .card {
+  display: grid;
+  gap: 6px;
+  max-width: 280px;
+  padding: 16px 18px;
+  text-align: center;
+}
+.message strong {
+  font-size: 18px;
+}
+.message span {
+  color: var(--lj-fg-muted, GrayText);
+}
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+@media (max-width: 380px) {
+  .app {
+    padding: 10px 10px 12px;
+  }
+  .top {
+    gap: 6px;
+  }
+  h1 {
+    font-size: 16px;
+  }
+  .stats div {
+    min-width: 46px;
+    padding: 3px 6px;
+  }
+  .btn {
+    padding: 6px 9px;
+  }
+}

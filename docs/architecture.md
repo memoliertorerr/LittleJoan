@@ -24,7 +24,7 @@ CONTRIBUTING.md, SECURITY.md       how to build and check changes; how to report
 package.json, package-lock.json   npm scripts (verify, icons, dev); all JS tooling is local
 tsconfig.json                      strict TS for ui/, scripts/, tests/, config files
 vite.config.mts                    UI build: root ui/, output dist/ (embedded into the binary)
-vitest.config.mts                  TS unit tests: ui/**, scripts/**, tests/** *.test.ts — each
+vitest.config.mts                  TS unit tests: ui/**, scripts/**, tests/**, extensions/** *.test.ts — each
                                    *.test.ts sits next to the module it tests (Rust tests are
                                    #[cfg(test)] modules inside each .rs file)
 eslint.config.mjs                  typescript-eslint recommended (type-checked)
@@ -38,7 +38,17 @@ scripts/theme-css.mts              writes ui/lib/theme-defaults.css (`npm run th
 scripts/copy-icons.mts             copies the desktop icon set from `tauri icon` output
 extensions/<id>/                   bundled extensions (embedded at build time by build.rs): an
                                    extension.json and plain web files; hello/ is the example and
-                                   the smoke test's target
+                                   the smoke test's target. The others share one layout:
+                                   index.html (the SDK, then `<script type="module" src="ui.js">`),
+                                   ui.js (DOM glue), logic.js (pure, an ES module the tests import),
+                                   logic.test.ts, style.css (the theme's --lj-* variables), icon.svg
+extensions/snake/, extensions/2048/  the bundled games: Snake (a canvas; grid, turns without 180°
+                                   reversal, growth, walls and self, speed-up, Space pauses) and 2048
+                                   (DOM tiles keyed by id so they slide; one merge per tile per move;
+                                   the game in progress is saved); best scores in littleJoan.storage
+extensions/bundled.test.ts         every bundled extension: folder = id, the SDK first and no inline
+                                   script, no network API and no `network:` host, text drawn as text,
+                                   a pure logic.js with tests
 extensions/sdk/v1.js, v1.d.ts      the extension SDK (served to panels at /__lj/sdk/v1.js) and its
                                    types
 ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above the page, or the
@@ -221,6 +231,9 @@ scripts/ci/smoke-command.mts       CI: the command bar's and history view's smok
                                    unit-tested
 scripts/ci/smoke-theme.mts         CI: the theme runs (themes, screenshots) and their rules,
                                    unit-tested
+scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which panels open, and when a
+                                   panel counts as up (its URL with the nonce, its own theme call,
+                                   the toolbar's label, none of its requests refused); unit-tested
 scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report, the probe),
                                    unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
@@ -971,7 +984,12 @@ and pushes to `main`:
   page with `?ext=race` keeps putting hello's panel URL (no nonce) into iframes and `window.open`
   while `--extension hello` opens it — hello must report again, every extension URL that loads
   must carry the app's nonce, at least one racer must be refused, and the toolbar may name hello
-  only right after hello's own panel loaded (`extension-race.png`). Then the **theme runs**
+  only right after hello's own panel loaded (`extension-race.png`). Then the **bundled extensions
+  run** (`smoke-bundled.mts`), its own launch: `--extension <id>` for each bundled panel in turn
+  (Snake, 2048) — each must come up (its URL with the app's nonce, its script's own `theme` call,
+  the toolbar naming it, none of its requests refused) and is screenshotted (`snake.png`,
+  `2048.png`); 2048 gets four arrow keys first (whether they reached it — its own save — goes into
+  `summary.json`, informational) (log `smoke-bundled.log`). Then the **theme runs**
   (`smoke-theme.mts`), each its own launch on a
   fresh data folder whose `settings.json` carries a theme (so the main run's memory numbers
   don't move): a two-color theme with grain 0.4 in light (`theme/page.png`,

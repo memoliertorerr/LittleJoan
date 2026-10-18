@@ -13,7 +13,8 @@
 // then a relaunch on the same data folder), that history.json recorded the smoke page (and that
 // a run with history off records nothing; that run also opens Settings with `--settings` and
 // `--settings privacy`), then the extension run (its own launch: `--extension hello`, then the
-// smoke page's probe of what a web page can't do to an extension), then the theme runs (each its
+// smoke page's probe of what a web page can't do to an extension), then the bundled extensions
+// run (its own launch: `--extension <id>` for each bundled panel, screenshots), then the theme runs (each its
 // own launch with a theme in settings.json:
 // the page, the command bar, the history view and Settings in a two-color theme, light and dark,
 // and the default theme in dark; screenshots in <out>/theme/), then check the logs
@@ -73,9 +74,12 @@ import {
   parseStore,
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
+import { BUNDLED_PANELS, bundledFailures, keysReached, panelUp } from "./smoke-bundled.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
+/** How many extensions the app bundles: the repository's extensions/<id>/ with a manifest. */
+const bundledCount = readdirSync(join(root, "extensions")).filter((name) => existsSync(join(root, "extensions", name, "extension.json"))).length;
 const os = process.platform;
 
 function arg(name: string): string | undefined {
@@ -287,10 +291,10 @@ for ch in CommandLine.arguments[2] {
 }
 
 /** macOS virtual key codes of the keys `pressKeys` sends. */
-const MAC_NAMED_KEYS: Record<string, number> = { Down: 125, Return: 36 };
-const SEND_KEYS: Record<string, string> = { Down: "{DOWN}", Return: "{ENTER}" };
+const MAC_NAMED_KEYS: Record<string, number> = { Left: 123, Right: 124, Down: 125, Up: 126, Return: 36 };
+const SEND_KEYS: Record<string, string> = { Left: "{LEFT}", Right: "{RIGHT}", Down: "{DOWN}", Up: "{UP}", Return: "{ENTER}" };
 
-/** Presses named keys (Down, Return) in the app's window, as typeText does (best effort on macOS). */
+/** Presses named keys (arrows, Return) in the app's window, as typeText does (best effort on macOS). */
 function pressKeys(keys: string[], appPid: number): void {
   if (os === "win32") {
     powershell(`$shell = New-Object -ComObject WScript.Shell
@@ -989,6 +993,41 @@ async function extensionRun(): Promise<{ events: LogEvent[]; store: string | und
 const extensionCheck = await extensionRun();
 console.log(`extensions: hello ${lastTitle(extensionCheck.events, "LJ-EXT hello") ?? "no report"}; probe ${lastTitle(extensionCheck.events, "LJ-EXTPROBE") ?? "no report"}`);
 
+/**
+ * The bundled extensions run (LJ32–LJ34): its own launch on a fresh data folder. Each bundled
+ * panel in BUNDLED_PANELS opens with `--extension <id>` and is screenshotted once it is up (some
+ * get a few keys first — whether they reached the panel is recorded, informational).
+ */
+async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, boolean> }> {
+  const logFile = join(out, "smoke-bundled.log");
+  rmSync(logFile, { force: true });
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dataDir("bundled", true), LITTLEJOAN_SMOKE_LOG: logFile };
+  const runChild = launch(runEnv);
+  await waitFor("bundled: started", (e) => count(e, "started") > 0, 30_000, logFile);
+  await sleep(1500);
+  const runPid = appPid(runChild);
+  const keys: Record<string, boolean> = {};
+  for (const panel of BUNDLED_PANELS) {
+    await forward(["--extension", panel.id], runEnv);
+    await waitFor(`bundled: ${panel.id} is up`, (e) => panelUp(e, panel.id), 30_000, logFile);
+    await sleep(1200);
+    if (panel.keys) {
+      pressKeys(panel.keys, runPid);
+      await sleep(1200);
+      keys[panel.id] = keysReached(events(logFile), panel.id);
+    }
+    screenshot(panel.shot);
+  }
+  await forward(["--quit"], runEnv);
+  if (!(await exited(runPid, 15_000))) {
+    await quit(runChild, runPid);
+  }
+  return { events: events(logFile), keys };
+}
+
+const bundledCheck = await bundledRun();
+console.log(`bundled: keys reached ${JSON.stringify(bundledCheck.keys)}`);
+
 mkdirSync(join(out, "theme"), { recursive: true });
 const themeRuns: { run: ThemeRun; events: LogEvent[] }[] = [];
 for (const run of THEME_RUNS) {
@@ -1073,6 +1112,11 @@ const summary = {
     store: parseStore(extensionCheck.store) ?? null,
     answerCopied: clipboard,
   },
+  bundled: {
+    count: bundledCount,
+    up: BUNDLED_PANELS.filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
+    keysReached: bundledCheck.keys,
+  },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1111,14 +1155,16 @@ const failures = evaluate(
   .concat(extensionFailures(extensionCheck.events, parseStore(extensionCheck.store)))
   .concat(raceFailures(extensionCheck.events))
   .concat(commandHelloFailures(extensionCheck.events, { driven: typingDriven }))
-  .concat(settingsExtensionsFailures(historyOffEvents))
+  .concat(settingsExtensionsFailures(historyOffEvents, bundledCount))
+  .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
   const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
   const extensionLog = join(out, "smoke-extensions.log");
-  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, ...themeLogs, firstLogPath, relaunchLogPath]) {
+  const bundledLog = join(out, "smoke-bundled.log");
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

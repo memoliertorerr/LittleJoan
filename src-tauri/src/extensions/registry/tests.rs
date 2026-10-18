@@ -32,6 +32,24 @@ fn the_shipped_extensions_are_all_valid() {
             .icon_data_uri()
             .is_some_and(|uri| uri.starts_with("data:image/svg+xml;base64,"))
     );
+    // Every bundled extension: its icon and every panel it names are served, and it declares no
+    // network host (bundled extensions are local tools).
+    for extension in registry.all() {
+        let id = extension.id();
+        assert!(extension.icon_data_uri().is_some(), "{id} has an icon");
+        let manifest = &extension.manifest;
+        for item in manifest.commands.iter().chain(&manifest.page_actions) {
+            assert!(
+                extension.read(&item.panel).is_some(),
+                "{id}: {}",
+                item.panel.as_str()
+            );
+        }
+        assert!(manifest.network_hosts().is_empty(), "{id} fetches nothing");
+    }
+    for id in ["snake", "2048"] {
+        assert!(registry.get(id).is_some(), "{id} is bundled");
+    }
 }
 
 #[test]

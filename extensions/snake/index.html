@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Snake</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>Snake</h1>
+        <dl class="stats">
+          <div><dt>Score</dt><dd id="score">0</dd></div>
+          <div><dt>Best</dt><dd id="best">0</dd></div>
+        </dl>
+        <button id="new-game" class="btn" type="button">New game</button>
+      </header>
+      <div id="board-box" class="board-box">
+        <canvas id="board" tabindex="0" role="img" aria-label="Snake"></canvas>
+        <div id="message" class="message" role="status" aria-live="polite">
+          <div class="card">
+            <strong id="message-title">Snake</strong>
+            <span id="message-text">Press an arrow key, WASD or Space to start.</span>
+          </div>
+        </div>
+      </div>
+      <p class="hint">
+        <span><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> steer</span>
+        <span><kbd>Space</kbd> pause</span>
+        <span><kbd>Esc</kbd> close</span>
+      </p>
+    </main>
+  </body>
+</html>

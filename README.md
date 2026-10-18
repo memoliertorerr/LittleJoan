@@ -190,7 +190,14 @@ name (or what it does) in the command bar, or run `little-joan --extension <id>`
 extensions that work on the page you're looking at — show up in the command bar only while a web
 page is open. Each extension runs in a sandbox of its own: no access to Little Joan's internals or
 to the pages you open, its own storage, and network access only to the hosts it declares.
-**Hello** is the bundled example.
+
+Bundled with Little Joan (type the name in the command bar, or use `little-joan --extension <id>`):
+
+| Extension | What it does |
+|---|---|
+| **Snake** (`snake`) | The classic, in your theme's colors: arrows or WASD steer, Space pauses, Esc closes; it speeds up as you eat. Keeps your best score. |
+| **2048** (`2048`) | Slide the tiles with the arrows or WASD; equal tiles merge. Your game in progress and your best score wait for you. |
+| **Hello** (`hello`) | The example extension: it shows what an extension can and can't do. |
 
 You can write your own with plain HTML, CSS and JavaScript — see
 **[docs/extensions.md](docs/extensions.md)** (experimental: the API may still change). Turn on

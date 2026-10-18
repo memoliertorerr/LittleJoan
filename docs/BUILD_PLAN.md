@@ -79,7 +79,7 @@
 | LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ✅ done |
 | LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ✅ done |
 | LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ✅ done |
-| LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ⬜ todo |
+| LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ✅ done |
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ⬜ todo |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ⬜ todo |
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ⬜ todo |
@@ -120,7 +120,10 @@ Settings with developer mode and `docs/extensions.md`, and the built-in quick an
 `lj/p16-extensions`. It is security-critical, so it is **not** merged by the agent. An
 independent security review (2026-10-18) found no Critical/High issues; its findings, and what the
 new request log showed while fixing them, are fixed in `lj-step-29-fix4` → `fix8` (LJ29's notes,
-"Security review"); the merge decision is the owner's. Next after it: phase 17 (LJ32 → LJ35).**
+"Security review"); the merge decision is the owner's; it was merged on 2026-10-18, and `main`'s CI for the merge
+commit is green (run 39116954733). Phase 17 (LJ32 → LJ35: the
+bundled extensions — games, productivity, page actions and tools — then the docs and the owner's
+checklist) is in progress on `lj/p17-bundled-extensions`.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -4178,6 +4181,63 @@ commit: "lj-step-32: bundled games — Snake and 2048". Push, open the phase-17 
 draft, and watch CI until every job is green (two honest attempts, then stop). Look at both
 screenshots.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **One layout for every bundled extension after hello** (documented in architecture.md and
+  extensions.md): `index.html` loads the SDK (a classic script) and then `<script type="module"
+  src="ui.js">`; `ui.js` is the DOM glue and imports `./logic.js`, the pure rules (an ES module,
+  JSDoc-typed, `// @ts-check`), which `logic.test.ts` imports too; `style.css` paints with the
+  theme's `--lj-*` variables (fallbacks until `littleJoan.theme.apply()` answers; the body fades in
+  once it did, or after 700 ms whatever happens); `icon.svg` is original geometry. Module scripts
+  over `ljext:` work on every engine the way the app's own Vite pages do over `tauri:` (same-origin
+  CORS-mode fetches; WebKitGTK registers both schemes alike, as secure). vitest now includes
+  `extensions/**/*.test.ts`. Esc closes a panel (`littleJoan.close()`) — in Snake it first pauses a
+  running game; Ctrl/Alt/Cmd presses are left to Little Joan and the system.
+- **Snake** (`extensions/snake/`, permission `storage`): an 18 × 18 grid on a canvas sized to the
+  largest whole-cell square that fits (sharp at any device pixel ratio, down to phone width). Rules
+  (`logic.js`, 13 tests): movement one cell per step, growth on food, walls and the body end it (the
+  cell the tail leaves is free unless it grows), no 180° reversal — also not through two quick
+  presses, since a turn is compared with the last *waiting* one (up to two wait, so a U-turn in two
+  steps works) —, food on a random free cell (none left = a win), 140 ms per step minus 4 per food,
+  never under 60 ms; Space pauses / resumes / starts, a turn resumes, Enter starts again; arrows and
+  WASD by `KeyboardEvent.code` (the same place on AZERTY). The snake is the accent, fading toward
+  `--lj-surface` at the tail; the food is the accent turned 180° and a little more saturated; eyes
+  look where it goes next. The loop runs on `requestAnimationFrame` only while a game runs; it
+  pauses when the panel loses focus. Best score in storage.
+- **2048** (`extensions/2048/`, permission `storage`): DOM tiles keyed by id so they slide (CSS
+  transforms, 110 ms; the merged-away tile slides under its partner and goes, the doubled one pops,
+  the new one appears; none of it with reduced motion). Rules (`logic.js`, 11 tests): lines packed
+  toward the move's edge, one merge per tile per move (`[2,2,2,2] → [4,4]`, `[4,4,8] → [8,8]`), the
+  tile nearer the edge survives a merge, a new 2 (a 4 one time in ten) only after a real move, game
+  over with a full board and no equal neighbours, won at 2048 (Enter keeps playing), N for a new
+  game. Tile colors come from the theme (`palette`): light mode from `--lj-surface` to
+  `--lj-row-selected`, dark mode from a lifted surface to `--lj-accent` (so tiles always stand out
+  from the empty cells), with whichever of `--lj-fg`, `--lj-on-selected` and `--lj-surface` reads
+  best — tested at ≥ 3:1 (large bold text) for every tile up to 2^17 in both default palettes. The
+  game in progress and the best score are saved 400 ms after the last move (storage takes 20 writes
+  a second at most), and before Esc closes the panel; a saved game is checked from scratch when read
+  (`restore`).
+- **`extensions/bundled.test.ts`** checks every bundled extension (folder = id, icon and panels
+  exist, the SDK first, no inline script or event handler, no network API or `network:` host, no
+  `innerHTML` / `eval`, a pure `logic.js` with tests); the Rust test
+  `the_shipped_extensions_are_all_valid` now also wants every bundled extension's icon and panels
+  served and no network host, and Snake and 2048 present.
+- **Smoke** (`scripts/ci/smoke-bundled.mts`, 5 tests): a launch of its own, `--extension snake` then
+  `--extension 2048`; each panel must come up — `extension-opened`, its URL with the nonce in
+  `page-started`, its script's own `ext-api <id> theme ok`, `toolbar-label <id>`, none of its
+  requests refused (the engine's favicon aside), no failed call — then `snake.png` / `2048.png`.
+  2048 gets ← ↑ → ↓ first; whether they reached the panel (its own save) is recorded in
+  `summary.json`, informational. `pressKeys` learned the arrows (SendKeys, xdotool, macOS key codes).
+  Settings → Extensions' rule now counts the bundled extensions (`extensions-list <bundled + 1>
+  skipped=1`).
+- Files beyond the prompt: `vitest.config.mts`, `extensions/bundled.test.ts`,
+  `scripts/ci/smoke-bundled.mts` (+ test), `scripts/ci/smoke.mts`, `scripts/ci/smoke-extensions.mts`
+  (+ test), `src-tauri/src/extensions/registry/tests.rs`, README (a table of the bundled
+  extensions), CHANGELOG, architecture.md, extensions.md. Checked locally in a plain browser with a
+  stand-in SDK (a dev aid, not committed): both games at 480 × 600 and 360 × 560, light and dark.
+- `npm run verify`: 324 TS tests, 256 Rust tests, clippy clean. Disk: 15 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
 
 ### LJ33 — Bundled productivity: Notes, Focus timer, World clock · standard · auto
 

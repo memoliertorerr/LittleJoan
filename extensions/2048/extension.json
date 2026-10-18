@@ -1,0 +1,20 @@
+{
+  "id": "2048",
+  "name": "2048",
+  "version": "1.0.0",
+  "description": "Slide the tiles with the arrow keys or WASD; equal tiles merge. Reach 2048 — or keep going. Your game waits for you.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "play",
+        "title": "Play 2048",
+        "keywords": ["2048", "game", "play", "puzzle", "tiles"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}
