@@ -274,3 +274,47 @@ fn a_new_opening_is_uncommitted_until_its_own_commit() {
     assert!(!page_may_navigate(&first, &mut gate, now, Platform::MacOs));
     assert_eq!(gate.committed(), Some("hello"));
 }
+
+#[test]
+fn an_opening_waits_for_the_bar_then_opens() {
+    // LJ38: a panel opened with a new window waits until the bar's script runs (start_info).
+    let ready = std::sync::Arc::new(crate::bar::Ready::new());
+    let marker = std::sync::Arc::clone(&ready);
+    let started = Instant::now();
+    let setter = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(60));
+        marker.set();
+    });
+    let mut opened = None;
+    after_bar(&ready, BAR_WAIT, |was_ready| opened = Some(was_ready));
+    setter.join().expect("the setter thread");
+    assert_eq!(opened, Some(true));
+    let waited = started.elapsed();
+    assert!(waited >= Duration::from_millis(50), "{waited:?}");
+    assert!(waited < BAR_WAIT, "{waited:?}");
+}
+
+#[test]
+fn an_opening_goes_on_without_the_bar_after_the_limit() {
+    let ready = crate::bar::Ready::new();
+    let started = Instant::now();
+    let mut opened = None;
+    after_bar(&ready, Duration::from_millis(80), |was_ready| {
+        opened = Some(was_ready);
+    });
+    // It opens anyway, saying the bar wasn't ready (the glue logs `bar-ready timeout`).
+    assert_eq!(opened, Some(false));
+    assert!(started.elapsed() >= Duration::from_millis(80));
+    assert_eq!(BAR_WAIT, Duration::from_secs(5));
+}
+
+#[test]
+fn with_the_bar_ready_an_opening_goes_at_once() {
+    let ready = crate::bar::Ready::new();
+    ready.set();
+    let started = Instant::now();
+    let mut opened = None;
+    after_bar(&ready, BAR_WAIT, |was_ready| opened = Some(was_ready));
+    assert_eq!(opened, Some(true));
+    assert!(started.elapsed() < Duration::from_millis(50));
+}

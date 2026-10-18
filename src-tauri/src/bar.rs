@@ -21,12 +21,14 @@ use tauri::{
 };
 use url::Url;
 
+mod boot;
 mod view;
 mod watch;
 
+pub use boot::{BAR_READY, Ready, early_theme, mark_ready, set_theme, theme_script};
 pub use view::{
-    apply_layout, element_fullscreen, log_overlay, mode, overlay, set_element_fullscreen,
-    set_overlay,
+    after_webkit_fullscreen, apply_layout, element_fullscreen, log_overlay, mode, overlay,
+    page_in_webkit_fullscreen, set_element_fullscreen, set_overlay,
 };
 pub use watch::watch_url;
 
@@ -37,6 +39,7 @@ use crate::keys;
 use crate::layout::{Mode, Rect, layout};
 use crate::navigation;
 use crate::page_address::PageAddress;
+use crate::phone_mode;
 use crate::platform;
 use crate::smoke;
 use crate::tray;
@@ -78,6 +81,12 @@ pub fn add_webviews<R: Runtime>(
     *back() = BackStack::new();
     // Every summon opens the command bar: the window is built in Overlay mode.
     view::new_window();
+    // The bar's script hasn't run yet in this window (panels opened now wait for it: boot.rs).
+    BAR_READY.reset();
+    // The theme it paints first: the preview while Settings edits one, else the saved one (what
+    // start_info hands out too).
+    let theme = crate::state::with(window.app_handle(), |s| s.shown_theme());
+    boot::set_early_theme(theme.clone());
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
     let whole = Rect {
         x: 0.0,
@@ -90,6 +99,8 @@ pub fn add_webviews<R: Runtime>(
     let page_rect = layout(width, height, Mode::Toolbar).page.unwrap_or(whole);
 
     let mut bar = WebviewBuilder::new(BAR, WebviewUrl::App("bar.html".into()))
+        // Its theme before its first paint (the bar only: the page webview never gets a script).
+        .initialization_script(theme_script(&theme))
         // The bar is ours and never leaves the app's origin (about:blank only to unload it when
         // the window closes on macOS, see joan::release_page).
         .on_navigation(|url| navigation::is_allowed_bar_navigation(url, &keys::app_origin()))
@@ -131,6 +142,8 @@ pub fn add_webviews<R: Runtime>(
                     // What the toolbar shows, and what the extension handler serves beyond a
                     // panel's document: an extension only once its panel committed here.
                     extensions::session::page_committed(webview.app_handle(), payload.url());
+                    // A page the page itself opened gets its site's user agent (phone_mode.rs).
+                    phone_mode::page_started(webview.app_handle(), payload.url());
                 }
                 PageLoadEvent::Finished => {
                     address().finished(payload.url().clone());
@@ -255,8 +268,11 @@ pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Opens the command bar and puts the keyboard in its field with the text selected
-/// (Ctrl/Cmd+L, and on summon).
+/// (Ctrl/Cmd+L, and on summon). Not while WebKit shows the page fullscreen (macOS).
 pub fn focus_bar<R: Runtime>(app: &AppHandle<R>) {
+    if page_in_webkit_fullscreen(app) {
+        return;
+    }
     set_overlay(app, true);
     if let Some(bar) = app.get_webview(BAR) {
         let _ = bar.set_focus();
@@ -265,9 +281,9 @@ pub fn focus_bar<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Opens the command bar's overlay in its history view, the keyboard in its search field
-/// (Ctrl/Cmd+Y: page keys and the macOS menu). Not during element fullscreen, which always wins.
+/// (Ctrl+H: page keys; Cmd+Y: the macOS menu). Not during element fullscreen, which always wins.
 pub fn show_history<R: Runtime>(app: &AppHandle<R>) {
-    if element_fullscreen() {
+    if element_fullscreen() || page_in_webkit_fullscreen(app) {
         return;
     }
     // Opening the overlay tells the bar first, so the history view comes after (evals run in
@@ -280,22 +296,6 @@ pub fn show_history<R: Runtime>(app: &AppHandle<R>) {
     smoke::log("history-view", "");
 }
 
-/// Shows `theme` in the open window's bar at once (after Settings saves one).
-pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme) {
-    let Some(bar) = app.get_webview(BAR) else {
-        return;
-    };
-    // Checked hex colors, a mode name and two numbers: the JSON is a safe script literal.
-    match serde_json::to_string(theme) {
-        Ok(json) => {
-            let _ = bar.eval(format!(
-                "window.littleJoan && window.littleJoan.setTheme({json})"
-            ));
-        }
-        Err(err) => eprintln!("little-joan: could not send the theme to the bar: {err}"),
-    }
-}
-
 /// Gives the keyboard back to the page.
 pub fn focus_page<R: Runtime>(app: &AppHandle<R>) {
     if let Some(page) = app.get_webview(PAGE) {
@@ -304,17 +304,26 @@ pub fn focus_page<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Loads `url` in the page and tells the bar. Showing a page closes the command bar, and the
-/// keyboard follows the page out of it (the toolbar has no field to keep it).
+/// keyboard follows the page out of it (the toolbar has no field to keep it). The page gets its
+/// site's user agent first (phone_mode.rs, which may load a known phone address's desktop one).
 pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
-    if let Some(page) = app.get_webview(PAGE) {
+    if app.get_webview(PAGE).is_some() {
         let was_open = overlay();
         set_overlay(app, false);
-        address().navigating(url.clone());
-        page.navigate(url)?;
-        publish_url(app);
+        load(app, phone_mode::prepare(app, url))?;
         if was_open {
             focus_page(app);
         }
+    }
+    Ok(())
+}
+
+/// Loads `url` in the page and tells the bar, leaving the view as it is.
+pub fn load<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
+    if let Some(page) = app.get_webview(PAGE) {
+        address().navigating(url.clone());
+        page.navigate(url)?;
+        publish_url(app);
     }
     Ok(())
 }

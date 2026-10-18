@@ -101,9 +101,9 @@
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — the owner's checklist passed 2026-10-18 (one YouTube fullscreen bug, see notes); v0.2.0-beta.2 released |
-| LJ36 | *(round 3)* YouTube's fullscreen on macOS (the phone site, confirmed by the owner): reproduce in CI; guard WebKit's fullscreen; youtube.com on the desktop agent on WebKit (a minimal per-site table) | strong | auto | ⬜ todo |
-| LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ⬜ todo |
-| LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ⬜ todo |
+| LJ36 | *(round 3)* YouTube's fullscreen on macOS (the phone site, confirmed by the owner): reproduce in CI; guard WebKit's fullscreen; youtube.com on the desktop agent on WebKit (a minimal per-site table) | strong | auto | ✅ done (reproduced, then lj-step-36-fix — see notes) |
+| LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ✅ done |
+| LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ✅ done |
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ⬜ todo |
 | LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ⬜ todo |
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
@@ -192,6 +192,14 @@ the owner's word. LJ18 runs only if the owner's Apple signing secrets exist, and
 recorded as skipped. CLAUDE.md's standing exception covers the approved plan's v0.2 and v0.3
 phases (confirmed 2026-10-18 for round 3), so v0.3's `auto` phases (23, 25) merge when green like
 v0.2's (Ground Rule 24).
+
+**Phase 18 (LJ36 → LJ38, 2026-10-18)** is PR #21 on `lj/p18-fixes`, merged by the agent once
+verify, package and smoke were green on every OS job (the standing exception). CI reproduced
+YouTube's macOS fullscreen bug — our layout and phone mode acting inside WebKit's fullscreen window —
+and the guard fixed it on every element path; YouTube gets the desktop agent on WebKit; Ctrl+H
+opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
+first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
+(LJ39 → LJ40)**, which ends in a checkpoint.
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -5086,6 +5094,134 @@ If it is still red after two honest fix attempts, stop and report. Never commit 
 a check.
 ```
 
+**Implementation notes (2026-10-18) — the reproduction (`lj-step-36`):**
+
+- **The smoke page's `?fs=both`** (`tests/smoke/smoke.html`, logic in `tests/smoke/fullscreen-logic.mjs`
+  + test): "Element fullscreen" (a container `requestFullscreen()`s itself, prefixed fallback) on
+  the top third, "Phone player" (a `<video>` playing a `canvas.captureStream(30)`) on the bottom
+  third, a gap around the middle; in fullscreen a big Exit in the middle of the screen (25–75 % ×
+  30–70 %). `playerPath(ua)`: an iPhone agent takes the iOS route (`webkitEnterFullscreen()`, a 1 s
+  wait for `webkitbeginfullscreen`, then `screen.orientation.lock("landscape")` in a try; a click on
+  the fullscreen video is the player's exit), anything else element fullscreen of the player. One
+  `FsAttempt` per click watches `fullscreenchange`, `webkitfullscreenchange`,
+  `webkitbeginfullscreen`, `webkitendfullscreen` and a 100 ms poll (`fullscreenElement` /
+  `webkitDisplayingFullscreen`), gives up 4 s after a click that never entered or 6 s after
+  entering (then leaves fullscreen itself, so the next attempt starts windowed), and reports
+  `LJ-FS <element|phone> width= ua= entered= held_ms= exited_by_page= events=<list>`; a player
+  without `captureStream` or metadata reports `unavailable=<why>`. Ready: `LJ-FS ready width= ua=`.
+- **Where to click:** the windows aren't centred after `--size` (the top-left stays), so the app
+  logs `page-screen <x>,<y>,<w>,<h> scale=<s>` (smoke mode, every layout: the window's inner
+  position + the page's bounds, physical pixels) and the run clicks each button's centre there
+  (points on macOS); exits are clicked at the screen's centre, which the fullscreen Exit covers.
+  `clickCentre` became `clickAt(point | "centre")` with the old behaviour for `"centre"`.
+- **The run** (`scripts/ci/smoke-fullscreen.mts` + test; `smoke.mts` passes a small driver):
+  its own launch after the theme runs; `--show smoke.html?fs=both`, then per size (`--size
+  390x600`, phone agent; `--size 720x600`, desktop agent) it waits for the page's ready title
+  after its last `page-started` (phone mode's reload) and steady for 1.5 s, clicks "Element
+  fullscreen", screenshots 1 s later (`fs/element-<w>.png`), clicks Exit 2 s after the click
+  (skipped when the attempt already reported), waits for the report; the same for "Phone player"
+  (`fs/phone-390.png`). `fullscreenFailures` (the rules) and `fullscreenSummary` exist; in this
+  commit the results only go to `summary.json` (`fullscreenRun`: the reports, WebKit's states,
+  the window's events during it, what the rules would say).
+- **macOS instrumentation** (smoke mode only): `platform/mac.rs` polls `fullscreenState`
+  (`respondsToSelector:` first) every 100 ms while a page window exists and logs `wk-fullscreen
+  <not|entering|in|exiting>` on each change (`fullscreen::WebKitFullscreen`, an unknown value
+  counts as `in`); `bar/view.rs`'s `place()` logs `page-bounds` / `page-visible` for the page on
+  every OS; `joan::on_window_event` logs `wk-window resized|focused|moved` while the last state
+  logged isn't `not`.
+- `npm run verify`: 482 TS tests, 257 Rust tests, clippy clean. Disk: 12 GiB free at the start of
+  the phase, 11 GiB after verify; `.cache/target` 1.4 GB.
+
+**What CI showed (run 39147876852, every job green — the run was informational):**
+
+| | Element, 390 px (phone agent) | Phone player, 390 px | Element, 720 px (desktop agent) | Phone player, 720 px |
+|---|---|---|---|---|
+| Windows (Android agent: every path is element fullscreen) | held 3.3 s, left by its Exit | held 3.4 s, left by its Exit | held 3.3 s, left by its Exit | held 2.9 s, left by its Exit |
+| Linux, scale 1 and 2 | held 2.2 s / 2.3 s, left by its Exit | iOS route: entered (`fullscreenchange`, no `webkitbeginfullscreen`, no `screen.orientation.lock`), left by its `webkitExitFullscreen` | held, left by its Exit (scale 2: the exit seen by the poll) | held, left by its Exit |
+| **macOS** | **entered, then the Exit did nothing (6 s timeout)** | iOS route: entered, held 3.4 s, left by its own exit | **no report: the page reloaded 300 ms into fullscreen** | (on the phone agent by then) iOS route, held 3.4 s, left by its own exit |
+
+- **macOS, the cause (the log):** while WebKit entered element fullscreen (`wk-fullscreen entering`),
+  tao delivered `Moved`, `Resized` and `Moved` for the Little Joan window — `resized 480x640`, the
+  size the window was created at, not its 390×600 —, and `apply_layout` set the page's bounds
+  (`page-bounds 0,40,480,600`). wry's `set_bounds` sets the WKWebView's frame in its current
+  superview, WebKit's fullscreen window: `fs/element-390.png` shows that black fullscreen window
+  with the page shrunk to a 480×600 frame in its top-left corner — the owner's "drops back to
+  the normal size at once" —, the centred Exit out of reach of the click at the screen's centre
+  ("the exit button does nothing"). At 720 px the same spurious 480 px width also crossed phone
+  mode's 600 px: `user-agent phone` and a reload ended the fullscreen (`fs/element-720.png` caught
+  the aborted transition, the window behind it) and left the page on the phone agent at 720 px.
+  The phone player's iOS route on macOS, by contrast, held until its own exit in both runs, with
+  no window events: it is the element route, and our layout during it, that broke. The phone
+  site makes it likelier only through phone mode (the 600 px switch).
+- **Screenshots:** Windows and Linux (scale 1 and 2) — the element fills the whole screen
+  (yellow, the Exit in the middle; the fullscreen color rule lost to the id's, fixed in the fix
+  commit), the phone player's element route fills it in blue, Linux's iOS route shows the video
+  with WebKitGTK's media controls; macOS — `element-390.png` as above, `phone-390.png` the video
+  fullscreen with WebKit's native controls ("Live Broadcast"), `element-720.png` the aborted
+  transition.
+
+**Implementation notes — the fix (`lj-step-36-fix`):**
+
+- **The guard (macOS):** `fullscreen::page_layout_allowed(state, in_own_window)` (pure, tested):
+  only while `fullscreenState` is "not in fullscreen" (`None` on macOS 12) **and** the page's
+  WKWebView sits in the Little Joan window — both, so CI's macOS 15 runs test the window check
+  too. `platform::page_in_webkit_fullscreen(page)` reads them on the main thread
+  (`mac::webkit_fullscreen`: `with_webview`, which runs at once on the main thread and is
+  answered within 500 ms elsewhere; no answer counts as "not"). `bar/view.rs`'s `apply_layout`
+  still lays out the bar but sets no bounds on, shows or hides the page meanwhile; `set_overlay(true)`,
+  `focus_bar` and `show_history` don't open the command bar; `phone_mode` doesn't switch. A
+  skipped layout or switch starts one checker (`after_webkit_fullscreen`, every 100 ms, smoke log
+  `layout-deferred` / `layout-resumed`) that applies the layout and phone mode once when the
+  fullscreen has ended, and stops with the window. Windows and Linux keep their hooks (the
+  function is `false` there).
+- **`siteModes`** (`settings/site_modes.rs`): keys through `site_key` (the `url` crate's host:
+  lower case, IDNs in ASCII, `www.` dropped; a scheme, port, path, user or space drops the entry;
+  IPv6 as `[::1]`), values `auto` / `phone` / `desktop`, the first of two spellings of one site
+  wins, at most 500 (in key order, serde_json's map being sorted). `candidates` walks a name up to
+  its last two labels and returns an IP address (or a single label) alone. Settings saves keep it
+  (`save_settings` only changes the fields Settings sends).
+- **`phone.rs`:** `site_mode(host, platform, overrides)` — a user entry for the host or its
+  nearest parent wins (`auto` too), else `WEBKIT_DESKTOP_SITES = ["youtube.com"]` on macOS and
+  Linux (subdomains included), else auto; `wants_mobile(enabled, width, mode)`; `desktop_url`
+  (`m.youtube.com` → `www.youtube.com`, `<lang>.m.wikipedia.org` → `<lang>.wikipedia.org`, http(s)
+  only, nothing else).
+- **`phone_mode.rs`:** the agent follows the page's host (web pages only — the app's pages and
+  extension panels are auto). `prepare` (called by `bar::navigate`, so typed addresses, picked
+  rows, `--show <url>` and Translate) sets the target's agent first and turns a known phone address
+  of a site on `desktop` into its desktop one; `page_started` (the page's `Started` event, handled
+  off the engine's callback) switches for a navigation the page made itself and loads the page
+  once more when the agent really changed — never twice in a row for the same URL; the reload
+  counts as a reload visit. Going to the desktop agent on a known phone host loads its desktop
+  address (`bar::load`, which leaves the view alone) instead of reloading.
+- **The smoke** turns the rules on (`fullscreenFailures`) and adds the second launch with
+  `"siteModes": { "127.0.0.1": "desktop" }` at 390×600 (`fs/desktop-site-390.png`).
+- `npm run verify`: 482 TS tests, 271 Rust tests, clippy clean. Disk: 13 GiB free at the start of
+  the fix and after verify; `.cache/target` 1.4 GB.
+
+**CI for the fix (run 39149305504):** verify, package and smoke green on Windows and both Linux
+jobs; **macOS smoke red on one rule, a race in the instrumentation**: every element path now held
+until the page's own Exit (390 px: 3.6 s; 720 px: 3.7 s; the siteModes launch reported
+`ua=desktop` at 390 and its player took element fullscreen, 3.7 s), the layout during WebKit's
+entry was skipped (`layout-deferred`) and applied once it ended (`layout-resumed`) — but the
+resumed layout's `page-bounds` landed 4 ms before the 100 ms poll logged `wk-fullscreen not`,
+although the guard itself had read "not" (and the view back in its window) for that decision.
+**`lj-step-36-fix2`:** the guard's own read logs the state too (`note_state`, on the main thread,
+before the caller acts), so the log shows what each decision saw; the rule is unchanged.
+Also seen: **WebKit's element fullscreen puts the Little Joan window back to the size it was
+created at** — after a `--size 390x600` the window came back from fullscreen 480×640 (`resized
+480x640` during the entry, and the resumed layout at that size; the page then reported 480 px, and
+at 720 px phone mode rightly switched to the phone agent for the 480 px window). Whether a window
+resized by dragging does the same on a real Mac is the owner's check; recorded under Deferred
+follow-ups (not fixed here: it isn't the fullscreen bug, and restoring the size would be new
+behavior).
+**CI for fix2 (run 39150759131):** all ten jobs green. Every element-fullscreen path held until its
+own Exit on every OS (macOS 3.3 s at 390 and 720 px; Windows 3.3–5.5 s; Linux 2.1–2.6 s at scale 1
+and 2), the iOS route held too where it ran (macOS, Linux), the siteModes launch reported the
+desktop agent at 390 px with its player in element fullscreen everywhere, and no layout touched
+the page during WebKit's fullscreen. Screenshots: macOS `element-390.png` and `desktop-site-390.png`
+now show the element filling the whole screen (green, the Exit in the middle), as Windows and
+Linux do.
+
 ### LJ37 — Ctrl+H opens history on Windows and Linux; double-clicking the toolbar zooms the window · standard · auto
 
 **Verify:** `npm run verify` green, including `keys.rs` tests: Ctrl+H → `PageAction::History` on
@@ -5136,6 +5272,34 @@ Windows and Linux; double-clicking the toolbar zooms the window". Push and watch
 package and smoke are green on all three OSes (Ground Rule 3). If it is still red after two honest
 fix attempts, stop and report. Never commit red; never weaken a check.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **The history key:** `keys.rs`'s `'y'` arm became `'h'` (Ctrl+H → History on Windows and
+  Linux); Ctrl+Y now reaches the page (redo in WebView2's text fields). Tests: Ctrl+H on both;
+  Ctrl+Shift+H, Ctrl+Alt+H (AltGr), Alt+H and a plain H nothing; `Key::from_windows_vk(0x48)` and
+  `Key::from_gdk_name("h")` → `Letter('h')`; Ctrl+Y nothing anywhere; macOS nothing from
+  `keys.rs` (Cmd+Y stays the View menu's item). `menu.rs` and `bar::show_history` unchanged; the
+  comments in `ui/bar.ts`, `ui/command/rows.ts`, `bar.rs`, the smoke scripts, the README and
+  architecture.md say "Ctrl+H (Cmd+Y on macOS)".
+- **Smoke:** the history key is Ctrl+H on Windows (SendKeys `^h`) and Linux (xdotool `ctrl+h`),
+  Cmd+Y on macOS (`HISTORY_KEY`; the theme runs too); then, Windows and Linux, Esc (back to the
+  command bar) and Ctrl+Y: the log of the next 2 s must hold no `history-view`
+  (`historyViewFailures`' `afterCtrlY`, with a test). `pressKeys` learned Escape.
+- **Double-click:** `capabilities/bar.json` gains exactly `core:window:allow-internal-toggle-maximize`
+  (its description says so); `capability_tests.rs`' `only_the_bar_may_toggle_maximize` fails if any
+  other capability grants it — or `core:window:default` / `core:default`, which hold it — and if the
+  bar loses it. Tauri's drag script was left alone, and so was the toolbar's markup. On Windows and
+  Linux the toolbar's empty parts are drag regions under the native title bar too, so a double
+  click there maximizes like the title bar does — kept, as the prompt says. It always zooms;
+  macOS's "Double-click a window's title bar to: Minimize" preference isn't read (Deferred
+  follow-ups). CI can't usefully double-click on its fixed screens: a human check.
+- `npm run verify`: 483 TS tests, 273 Rust tests, clippy clean. Disk: 13 GiB free at the start and
+  after verify.
+- **CI (run 39151866041):** all ten jobs green. Windows and both Linux jobs: `pressed Ctrl+H` →
+  `history-view` and the list; Esc, then `pressed Ctrl+Y` → nothing at all in the next 2 s. macOS:
+  Cmd+Y opened the view as before (the theme run's too). The screenshots look as before
+  (`history.png` on every OS: the history view over the command bar, the smoke page under Today).
 
 ### LJ38 — The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar · strong · auto
 
@@ -5229,6 +5393,59 @@ Once verify, package and smoke are green on every OS job, merge the PR into main
 commit (`gh pr merge <n> --merge --repo memoliertorerr/LittleJoan`; never squash, never
 --delete-branch), then stop and report.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **The theme before the first paint:** `bar/boot.rs` (new; `bar.rs` was at its ~400-line limit,
+  so `set_theme` moved there too): `theme_script(&Theme)` checks the theme again
+  (`settings::theme::parse`) and returns `window.__littleJoanTheme = <json>;` — tests: a two-color
+  theme's exact script; hostile colors (`</script>…`, a newline and a second statement), an
+  infinite intensity, a negative grain, the extremes: no `<`, no line break, one `;`, bad colors
+  dropped and numbers clamped. `add_webviews` adds it to the bar's `WebviewBuilder` only, with
+  `AppState::shown_theme()` (the preview while Settings edits one, else the saved theme), and
+  remembers it for the log. A test reads `bar.rs` and finds exactly one `initialization_script`,
+  between the bar's builder and the page's, and no other source file but `settings_window.rs`
+  (its tab) has one — the page webview never gets a script. `ui/bar-boot.ts` (+ test):
+  `earlyTheme` (an object with a mode string and a colors list, then `themeFrom`'s checks; else
+  null — today's path), `bootTheme` (applies it before it returns — the test sees the call
+  synchronously), `needsTheme` (start_info's theme only when it differs). `bar.ts` calls it first
+  at top level; its first `set_theme_tokens` report carries `early: true`, and `start_info` is
+  asked only after that report settled, so the log's order is the bar's (`set_theme_tokens` is an
+  async command and could otherwise land after `start_info`). Rust logs `theme-early <mode>
+  colors=<n>` for a report that passed the checks (the checks unchanged).
+- **Panels from hibernation wait for the bar:** `bar::Ready` (a flag and a condition variable,
+  per window: reset in `add_webviews`), set by `start_info` through `bar::mark_ready`, which logs
+  `bar-ready` once per window. `joan`'s `CreateExtension` builds the window, then
+  `session::open_when_bar_ready` opens the panel from a thread of its own after `after_bar`
+  (waits at most `BAR_WAIT`, then opens anyway and logs `bar-ready timeout`; 2 s as the prompt
+  said, raised to 5 s by `lj-step-38-fix`, below); a failed
+  thread spawn opens at once, as before. `FocusAndExtension` and the command bar's rows open at
+  once. The nonce, the commit rule and the detour are untouched: the wait comes before `open`.
+  Tests: an opening waits until the bar is ready (set 60 ms later), goes on after the limit
+  without it, and goes at once when it is ready.
+- **Smoke:** `themeFailures` gains `earlyThemeFailures` (every `theme` after a `theme-early` of the
+  run's theme since the previous one; tests for both); the extension run's `barReadyFailures`
+  (`bar-ready` before hello's panel's `page-started`, no `bar-ready timeout`; tests).
+- `npm run verify`: 493 TS tests, 280 Rust tests, clippy clean. Disk: 12 GiB free at the start and
+  after verify; `.cache/target` 1.4 GB.
+- **CI (run 39153143119):** all ten jobs green. Every theme run, on every OS, logged `theme-early`
+  with the run's theme before each window's `theme` (two windows per run). The extension run's
+  `--extension hello` from hibernation logged `bar-ready` before hello's panel committed on every
+  OS (macOS: `theme-early` → `bar-ready` + `theme` → `extension-opened hello` → `page-started
+  ljext://hello…` 100 ms later; no `bar-ready timeout` anywhere). **`extension-hello.png`:** the
+  toolbar shows hello's icon, "Hello" and the Extension badge on macOS (the traffic lights beside
+  it — before LJ38 it was an empty field there), Windows, Linux and Linux at scale 2. The theme
+  runs' screenshots look as before (macOS's dark command bar, Windows' light two-color toolbar
+  above the smoke page).
+- **`lj-step-38-fix` — the wait is 5 s, not 2 s (a deviation from the prompt).** The docs commit's
+  CI (run 39154369426) went red on macOS only: `bar-ready timeout` in the extension run. That cold
+  launch needed 2.08 s from `window-created` to the bar's `start_info` (the page's start page took
+  1 s to commit, the bar's page 1.1 s to load, and its sync `start_info` 0.8 s more on the busy
+  main thread); LJ38's own run needed 1.61 s, and LJ36's fullscreen run, before LJ38, already
+  showed 1.3 s from the bar's load to `start_info` on macOS CI. The panel still committed after `bar-ready` there (both
+  were queued behind the same busy main thread), but that is luck. A real Mac runs the bar well
+  within a second; the limit only bounds a bar that never runs, so 5 s keeps the wait's purpose on
+  slow machines at no cost to fast ones. The smoke rule stays as strict (no timeout allowed).
 
 ### LJ39 — Live resize like Little Arc · strong · auto
 
@@ -6649,24 +6866,35 @@ and where, then stop.
   at the cost of a second place that decides the panic strategy. The owner's call; the README's
   sizes describe the v0.2.0-beta.1 downloads until the next release.~~ → *The owner decided
   2026-10-18: keep `unwind` everywhere ("installers can grow").*
-- **Double-click the toolbar to zoom the window on macOS** (surfaced by LJ24). Tauri's drag
+- ~~**Double-click the toolbar to zoom the window on macOS**~~ (surfaced by LJ24). Tauri's drag
   script turns a double click on a drag region into `internal_toggle_maximize`, which needs
   `core:window:allow-internal-toggle-maximize`; the bar has only `allow-start-dragging` (what
-  LJ24 named), so a double click does nothing. → *Planned as LJ37 (round 3).*
+  LJ24 named), so a double click does nothing. → *Planned as LJ37 (round 3). Handled by LJ37: the
+  bar has the permission (and only the bar, a test says).*
+- **A double click on the toolbar always zooms** (surfaced by LJ37). Tauri's
+  `internal_toggle_maximize` maximizes or restores; macOS's "Double-click a window's title bar
+  to: Minimize" (System Settings → Desktop & Dock; `AppleActionOnDoubleClick`) isn't followed.
+  Option: read that preference (read-only, Ground Rule 21) and minimize instead — it would need
+  our own double-click handling in the bar instead of Tauri's drag script.
 - ~~**`history_top` / `history_search` have no caller**~~ since LJ23 (the command bar uses
   `suggest`). They stay in the bar's capability for the history view (LJ25) to use or remove. →
   *Removed by LJ25: the history view uses `history_list` and filters in TypeScript.*
-- **Ctrl+Y on a page is no longer redo on Windows** (surfaced by LJ25). The plan's history key
+- ~~**Ctrl+Y on a page is no longer redo on Windows**~~ (surfaced by LJ25). The plan's history key
   is Ctrl+Y on Windows and Linux, caught natively before the page sees it; in WebView2 (as in
   Chromium) Ctrl+Y was also "redo" in text fields, so pages lose it there (Ctrl+Shift+Z still
   redoes). WebKitGTK has no Ctrl+Y binding. Option: Ctrl+H (Chrome's history key) on Windows and
   Linux instead — the owner's call. → *Decided 2026-10-18: Ctrl+H on Windows and Linux, in the
-  next version (see "Requested for the next version" under LJ35). Planned as LJ37.*
+  next version (see "Requested for the next version" under LJ35). Planned as LJ37. Handled by LJ37:
+  Ctrl+H opens history, Ctrl+Y is the page's again (CI presses it and sees nothing open).*
 - **A custom theme may show the default theme for a frame** (surfaced by LJ27). The bar applies
   the theme when `start_info` answers, a moment after its page (with `theme-defaults.css`) first
   paints, so a summon can flash the default Mist colors before the user's. Not visible in CI's
   screenshots. Option: also hand the bar the theme in an initialization script (as the settings
-  window gets its tab), applied before the first paint. → *Planned as LJ38 (round 3).*
+  window gets its tab), applied before the first paint. → *Planned as LJ38 (round 3). LJ38 gives the bar its theme in an initialization script, applied
+  before its first frame; CI's theme runs log `theme-early` before every `theme`. Whether a flash
+  is gone on a real Mac is the owner's check (phase 18's PR) — if one remains, the next move is
+  handing the bar the painted `--lj-*` variables themselves (its last report, kept in `AppState`
+  across windows).*
 - **A panel can leave for any web address** (surfaced by LJ29). `network:` limits what a panel
   can fetch (CSP `connect-src`), not where it can go: `location.href`, a link, `openUrl` or
   `window.open` (→ the default browser) can carry data in a URL to any site — visible to the
@@ -6740,7 +6968,7 @@ and where, then stop.
   runner), possibly real; the owner's checklist asks whether the games take the keys without a
   click. Option, if real: make the page webview first responder when a panel commits
   (`focus_page`).
-- **macOS: a panel opened from hibernation can leave the toolbar unpainted** (surfaced by LJ32's
+- ~~**macOS: a panel opened from hibernation can leave the toolbar unpainted**~~ (surfaced by LJ32's
   CI). With `--extension <id>` while hibernating, the window is built with the command bar and the
   panel's commit can arrive before the bar's own page has loaded; on macOS the toolbar then showed
   an empty field instead of the extension's name (hello in run 39118669089; the label was sent
@@ -6748,8 +6976,10 @@ and where, then stop.
   from the command bar (the window already open) isn't affected. Options: have the bar ask for its
   label and overlay state in one call when it loads (`start_info` already forces the label); or
   open the panel only after the bar reported `bar-loaded`. → *Planned as LJ38 (round 3): the
-  second option, keyed on the bar's `start_info`.*
-- **YouTube's fullscreen button on macOS** (the owner's checklist, 2026-10-18). The player's own
+  second option, keyed on the bar's `start_info`. Handled by LJ38: from hibernation the opening
+  waits for the bar's `start_info` (CI: `bar-ready` before hello's panel commits on every OS, and
+  macOS's `extension-hello.png` shows the toolbar naming hello).*
+- ~~**YouTube's fullscreen button on macOS**~~ (the owner's checklist, 2026-10-18). The player's own
   fullscreen button enters fullscreen and drops back to the normal size at once; YouTube's F key
   fullscreens fine, and then the player's exit button does nothing (Esc exits). CI's smoke page
   (a click on a big `requestFullscreen` button) passes on macOS, so something YouTube does
@@ -6761,7 +6991,18 @@ and where, then stop.
   (m.youtube.com under the iPhone agent) failed; desktop YouTube works. The round-3 research adds
   that m.youtube.com's player waits for iOS events that never fire on macOS, and that wry's
   `set_bounds` would resize the webview inside WebKit's fullscreen window. Planned as LJ36:
-  reproduce in CI, guard WebKit's fullscreen, and youtube.com on the desktop agent on WebKit.*
+  reproduce in CI, guard WebKit's fullscreen, and youtube.com on the desktop agent on WebKit.
+  Handled by LJ36: CI reproduced it (our layout and phone mode acting inside WebKit's fullscreen
+  window) and, with the guard, every element path holds until its own exit on all four smoke jobs
+  (run 39150759131). The owner's eyes on real YouTube are phase 18's human check.*
+- **macOS: a video's fullscreen may put the window back to the size it opened at** (surfaced by
+  LJ36's CI). WebKit's element-fullscreen entry moves and resizes the Little Joan window (tao's
+  `Moved` / `Resized`), and in CI the window came back 480×640 — its size at creation — after a
+  `--size 390x600`. The guard keeps the page alone during the fullscreen and lays it out for the
+  restored size afterwards, but the user's size is lost. Unknown whether a window resized by
+  dragging (not `set_size`) does the same on a real Mac. Options, if it does: remember the window's
+  frame when WebKit's fullscreen starts and set it again when it ends (macOS only); or find what
+  AppKit restores (tao's `set_inner_size` uses `setContentSize:` asynchronously).
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -7007,6 +7248,14 @@ Populated from real friction, not speculation:
   window gets a narrow layout only from the page's own CSS; only Windows could emulate a mobile
   viewport (CDP `Emulation.setDeviceMetricsOverride`), and macOS has only private SPI. Phase 19
   doesn't emulate viewports.
+- *(LJ36, CI runs 39147876852, 39149305504)* **macOS: WebKit's element fullscreen moves and resizes
+  the Little Joan window** — tao reports `Moved` / `Resized` during the entry, to the size the
+  window was created at (480×640 after a `--size 390x600`), and the window keeps that size after
+  the fullscreen (Deferred follow-ups). Anything that lays out the page or
+  switches phone mode on `Resized` then acts inside WebKit's fullscreen window: CI saw the page
+  shrunk to 480×600 in a black fullscreen window, and at 720 px phone mode's reload ending the
+  fullscreen. Lay out the page on macOS only through `bar::apply_layout`, which asks
+  `platform::page_in_webkit_fullscreen` first.
 - *(round 3 research, to watch)* **macOS 26 / 27: an `.accessory` app's element fullscreen may
   leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
   and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after

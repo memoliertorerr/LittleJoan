@@ -2,14 +2,17 @@
 // Little Arc-style toolbar — back, the site's icon and domain, "open in default browser" — for
 // the page's address (the app pushes changes with window.littleJoan.setUrl and setCanGoBack); in
 // the overlay view it is the command bar, covering the window: the field at the top with
-// suggestions under it (and the welcome on the first run), or the history view (Ctrl/Cmd+Y,
-// which Rust passes on as window.littleJoan.showHistory, or the command bar's "History" row; Esc
+// suggestions under it (and the welcome on the first run), or the history view (Ctrl+H, Cmd+Y on
+// macOS, which Rust passes on as window.littleJoan.showHistory, or the command bar's "History" row; Esc
 // returns to the command bar). Rust switches the view with window.littleJoan.setOverlay; every
 // summon, Ctrl/Cmd+L and a click on the domain open the overlay, opening a page closes it. The
 // theme comes with start_info as the bar loads, and window.littleJoan.setTheme changes it (after
 // Settings saves one); the bar reports the colors it painted (set_theme_tokens) for extension
-// panels. window.littleJoan.setExtension names the extension whose panel the page shows.
+// panels. window.littleJoan.setExtension names the extension whose panel the page shows. Before all
+// of that, at the top: the theme Rust's initialization script left (bar-boot.ts), so the first
+// frame isn't the default theme.
 import { invoke } from "@tauri-apps/api/core";
+import { bootTheme, needsTheme } from "./bar-boot.ts";
 import { mayReplace, textFor } from "./bar-logic.ts";
 import { commandBar } from "./command/command.ts";
 import { fillPanel } from "./command/panel.ts";
@@ -40,6 +43,29 @@ const rowList = document.querySelector<HTMLElement>("#rows");
 const closeButton = document.querySelector<HTMLButtonElement>("#close");
 const toolbarRoot = document.querySelector<HTMLElement>(".toolstrip");
 const historyRoot = document.querySelector<HTMLElement>("#history");
+
+/** The next theme report is the early theme's (the smoke log's `theme-early`, LJ38). */
+let reportEarly = false;
+/** That report, which start_info waits for, so the log keeps the order it happened in. */
+let earlyReported: Promise<unknown> = Promise.resolve();
+
+/** Extension panels match the bar: Rust keeps the variables it painted (littleJoan.theme). */
+const reportTheme = (tokens: ThemeTokens): void => {
+  const early = reportEarly;
+  reportEarly = false;
+  const sent = invoke("set_theme_tokens", early ? { tokens, early: true } : { tokens }).catch(() => {
+    // Panels then wait for the next report; the bar itself is unaffected.
+  });
+  if (early) {
+    earlyReported = sent;
+  }
+};
+
+// First, before anything awaits: the theme from Rust's initialization script, if there is one.
+const early = bootTheme(window.__littleJoanTheme, (theme) => {
+  reportEarly = true;
+  applyTheme(theme, reportTheme);
+});
 
 // macOS: the traffic lights sit in the bar's top left corner (style.css leaves room for them).
 document.documentElement.classList.toggle("os-macos", isMac(navigator.userAgent));
@@ -93,13 +119,6 @@ if (field && rowList && toolbarRoot && historyRoot) {
     }
     state = withShown(state, next);
     tools.update(next, canGoBack, extension);
-  };
-
-  /** Extension panels match the bar: Rust keeps the variables it painted (littleJoan.theme). */
-  const reportTheme = (tokens: ThemeTokens): void => {
-    invoke("set_theme_tokens", { tokens }).catch(() => {
-      // Panels then wait for the next report; the bar itself is unaffected.
-    });
   };
 
   const act = (outcome: KeyOutcome, event: KeyboardEvent): void => {
@@ -216,9 +235,14 @@ if (field && rowList && toolbarRoot && historyRoot) {
 
   render();
   tools.update(state.shown, canGoBack, extension);
-  invoke<StartInfo>("start_info")
+  // After the early theme's report (if any), so `theme-early` comes before start_info's `theme`.
+  earlyReported
+    .then(() => invoke<StartInfo>("start_info"))
     .then((info) => {
-      applyTheme(info.theme, reportTheme);
+      // Again only when it differs: a preview may have changed it since the window was built.
+      if (needsTheme(early, info.theme)) {
+        applyTheme(info.theme, reportTheme);
+      }
       fillPanel(info);
     })
     .catch(() => {

@@ -69,6 +69,9 @@ extensions/sdk/v1.js, v1.d.ts      the extension SDK (served to panels at /__lj/
                                    types
 ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above the page, or the
                                    command bar over the whole window; DOM glue only
+ui/bar-boot.ts                     the bar's first paint: the theme of its initialization script,
+                                   applied before anything awaits; start_info's only if it differs
+                                   (pure part unit-tested)
 ui/bar-logic.ts                    the address field: never clobber an edit (unit-tested)
 ui/command/view-state.ts           the bar's two views (toolbar, overlay) and what Enter / Esc do
                                    in each (unit-tested)
@@ -175,6 +178,8 @@ src-tauri/src/bar.rs               its two webviews (bar + page): build, pushing
 src-tauri/src/bar/view.rs          the view state: toolbar / overlay / element fullscreen,
                                    applied to the webviews (layout, show / hide, Linux packing)
 src-tauri/src/bar/watch.rs         the once-a-second check of the page's address
+src-tauri/src/bar/boot.rs          the bar's first paint: its theme script (checked, tested), the
+                                   theme pushed to it, whether its script runs yet (`Ready`)
 src-tauri/src/extensions/          extensions (experimental; below): mod.rs (the model),
                                    manifest.rs (extension.json, strict), paths.rs (plain paths,
                                    no traversal, no symlink out), urls.rs (one origin per
@@ -196,8 +201,12 @@ src-tauri/src/layout.rs            where the bar and the page go per mode (Toolb
                                    Fullscreen), from physical size + scale (pure)
 src-tauri/src/capability_tests.rs  tests: no capability reaches the page webview, its window, or
                                    remote URLs (Ground Rule 18)
-src-tauri/src/phone.rs             phone mode decisions: 600 px threshold, user agents, debounce
-src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user agent, reload
+src-tauri/src/phone.rs             phone mode decisions: 600 px threshold, user agents, debounce,
+                                   a site's mode (siteModes + the WebKit built-in list), the
+                                   desktop address of a known phone host (pure, tested)
+src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user agent for its width
+                                   and site, before the app's navigations and on the page's own,
+                                   reload (or load the desktop address)
 src-tauri/src/placement.rs         where a new window opens (monitor under the cursor)
 src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
                                    with rollback (Registrar trait), suspend while recording
@@ -213,7 +222,8 @@ src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on 
                                    (`SettingsTab`, tested), open on a tab or switch an open one,
                                    links to the default browser
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
-src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen
+src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen;
+                                   WebKitFullscreen (WKWebView's fullscreenState)
 src-tauri/src/keys.rs              page keys per OS (pure), app origin
 src-tauri/src/page_actions.rs      close / open location / reload / back / forward / translate /
                                    open in browser / history; translate_target (skips the start
@@ -223,7 +233,8 @@ src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
 src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → keys.rs;
                                    ContainsFullScreenElementChanged → window fullscreen
-src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode)
+src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode); WebKit's
+                                   fullscreenState (CI's `wk-fullscreen` log)
 src-tauri/src/platform/linux.rs    Linux: GTK window key-press-event → keys.rs; the bar's packing
                                    in the window's GtkBox (toolbar / overlay); enter/leave-
                                    fullscreen → hide the bar
@@ -237,6 +248,8 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/settings/theme.rs    the `theme` field: mode, 1–3 colors, intensity, grain (tolerant
                                    parse, tested; the default matches ui/lib/presets.ts)
+src-tauri/src/settings/site_modes.rs  the `siteModes` field: host → auto | phone | desktop, keys,
+                                   the lookup that walks a name up to its last two labels (tested)
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
                                    --start-at-login on|off / --settings [tab] / --extension <id> /
@@ -256,8 +269,14 @@ scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which pane
                                    the toolbar's label, none of its requests refused); unit-tested
 scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report, the probe),
                                    unit-tested
+scripts/ci/smoke-fullscreen.mts    CI: the fullscreen run (the smoke page's ?fs=both buttons,
+                                   clicked where `page-screen` puts them) and its rules;
+                                   unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
-                                   with ?persist=set|check, the cookie and localStorage check
+                                   with ?persist=set|check, the cookie and localStorage check;
+                                   with ?fs=both, "Element fullscreen" and "Phone player"
+tests/smoke/fullscreen-logic.mjs   ?fs=both's logic: the buttons' places, the player's route by
+                                   user agent, one attempt's report (plain JS, unit-tested)
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
 tests/smoke/ext-probe.mjs          the smoke page's ?ext=probe: a web page trying an extension's
                                    API, files and panel (unit-tested)
@@ -341,13 +360,13 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
-anywhere; the only core permission is the bar's `core:window:allow-start-dragging` (and the
-settings window's `core:window:allow-close`).
+anywhere; the only core permissions are the bar's `core:window:allow-start-dragging` and
+`core:window:allow-internal-toggle-maximize` (and the settings window's `core:window:allow-close`).
 
 | Command | Called by | Does |
 |---|---|---|
@@ -526,7 +545,7 @@ shows the error.
   | Reload | Ctrl+R / F5 (WebView2 built-in) | Ctrl+R / F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right (built-in) | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate page | Ctrl+Shift+T | Ctrl+Shift+T | Cmd+Shift+T |
-  | History view (the command bar's overlay) | Ctrl+Y | Ctrl+Y | Cmd+Y (View menu) |
+  | History view (the command bar's overlay) | Ctrl+H | Ctrl+H | Cmd+Y (View menu) |
   | Open page in default browser (then hibernate) | tray menu | tray menu | Cmd+Shift+O, tray menu |
   | Copy / paste / select all | built-in | built-in | Edit menu (needed by WKWebView) |
 
@@ -548,7 +567,7 @@ page; it is a separate webview with its own capability, and the page webview has
   page fills the window. Fullscreen always wins: starting it closes the overlay, and the overlay
   doesn't open meanwhile.
 - **When the overlay opens:** every summon (a new window is built with it, before it is shown),
-  Ctrl/Cmd+L (page keys and the macOS menu: the address is selected), Ctrl/Cmd+Y (in its history
+  Ctrl/Cmd+L (page keys and the macOS menu: the address is selected), Ctrl+H / Cmd+Y (in its history
   view, below), and a click on the
   toolbar's domain (`set_overlay(true)`, which goes through the same `focus_bar`). **When it
   closes:** whenever the app shows a page (`bar::navigate`: Enter in the command bar, `--show
@@ -580,7 +599,12 @@ page; it is a separate webview with its own capability, and the page webview has
   `open_in_browser` run the page actions Back and OpenInBrowser. The empty parts of the toolbar
   carry `data-tauri-drag-region`, and the bar's capability has
   `core:window:allow-start-dragging`, so they drag the window (Tauri's own drag script, injected
-  in every webview; the page webview's calls are denied).
+  in every webview; the page webview's calls are denied). A double click there zooms the window
+  and back: the drag script calls `internal_toggle_maximize`, which the bar's
+  `core:window:allow-internal-toggle-maximize` allows (LJ37). On Windows and Linux, where the
+  toolbar sits under the native title bar, it maximizes like the title bar does. It always zooms:
+  macOS's "Double-click a window's title bar to: Minimize" isn't followed (the plan's Deferred
+  follow-ups).
 - **macOS title bar:** the page window uses `TitleBarStyle::Overlay` with a hidden title, so the
   content view extends under a transparent title bar and the bar webview starts at y = 0 beneath
   the traffic lights (LJ10.1 had used `Transparent` to keep content *below* the title bar). The
@@ -637,7 +661,7 @@ page; it is a separate webview with its own capability, and the page webview has
   history…") and **Clear history…** at the top, then one row per page at its latest visit,
   grouped by local day — Today, Yesterday, then the date (with the year when it isn't this one) —
   each with the site's icon, "Title — site", the time and a × that removes the page. It opens
-  with Ctrl/Cmd+Y (the page action History: `bar::show_history` opens the overlay, then
+  with Ctrl+H (Cmd+Y on macOS; the page action History: `bar::show_history` opens the overlay, then
   `window.littleJoan.showHistory()`) or from the command bar's built-in **History** row (offered
   when what is typed starts the word, two letters or more, or contains it; built-in commands
   always find room among the 8 rows). It asks `history_list` and filters as you type (every word
@@ -654,8 +678,9 @@ page; it is a separate webview with its own capability, and the page webview has
   which stays when the icon fails. That is why the CSP's `img-src` allows `https:` (and only
   `img-src`); history itself is never sent anywhere.
 - **Element fullscreen:** Windows hides the bar in the `ContainsFullScreenElementChanged`
-  handler; Linux on WebKitGTK's `enter-fullscreen` / `leave-fullscreen` signals; macOS needs
-  nothing (WebKit shows the element in its own fullscreen window).
+  handler; Linux on WebKitGTK's `enter-fullscreen` / `leave-fullscreen` signals; macOS leaves the
+  page alone meanwhile (WebKit shows the element in its own fullscreen window; the guard under
+  "Fullscreen video").
 
 ## Themes
 
@@ -691,7 +716,16 @@ WebKitGTK differ in CSS color-4 support, so no stylesheet uses `oklch()` or `col
 - **Applying it** (`apply-theme.ts`): the variables are set on `<html>` as inline custom
   properties (CSSOM, which the CSP's `style-src 'self'` allows), with `color-scheme` so form
   controls match; a `system` theme re-applies when the system switches between light and dark.
-  The bar gets the theme from `start_info` as it loads; the settings window from
+  **The bar gets its theme before its first paint** (LJ38): its webview — only the bar's, never
+  the page's — is built with an initialization script, `window.__littleJoanTheme = <theme>;`
+  (`bar::theme_script`: the shown theme — the preview while Settings edits one, else the saved
+  one —, checked again, so the script is one assignment of plain JSON). The engine runs it at
+  document start, before the page's own scripts (the bar's CSP doesn't apply to it), and
+  `ui/bar-boot.ts`, called first at `bar.ts`'s top level, applies it before anything awaits —
+  so the first frame isn't `theme-defaults.css`'s Mist. Its first `set_theme_tokens` report says
+  `early: true` (the smoke log's `theme-early`); `start_info` follows that report and its theme is
+  applied again only when it differs (a preview may have changed it). Without the script's value
+  the bar waits for `start_info`, as before. The settings window gets the theme from
   `get_settings`; after Save, Rust pushes it to both. While Settings' Appearance tab edits a
   theme, every change re-themes the settings window itself and goes to the page window through
   `preview_theme` (not saved); Cancel or closing Settings brings the saved theme back. Until then pages show the default theme:
@@ -709,7 +743,11 @@ open as **panels** in the page window. Bundled ones live in the repository's `ex
 and are embedded into the binary at build time (`build.rs` → `$OUT_DIR/bundled_extensions.rs`,
 `include_bytes!`); with **Developer mode** on (`developerMode` in settings.json, off by default)
 unpacked folders in `<config dir>/extensions/<id>/` load too. `little-joan --extension <id>`
-opens one (its first command). Besides hello, twelve are bundled (LJ32–LJ34): Snake, 2048, Notes,
+opens one (its first command); while hibernating, the window is built first and the panel opens
+once the bar's script runs (its first call, `start_info`, logs `bar-ready`) — on a thread of its
+own, at most 5 s, then anyway (`bar-ready timeout`) — so the toolbar is there to name it (LJ38;
+on macOS a panel that committed first left the toolbar an empty field). Openings in a window whose
+bar already runs (the command bar, `--extension` with the window open) don't wait. Besides hello, twelve are bundled (LJ32–LJ34): Snake, 2048, Notes,
 Focus timer, World clock, JSON, Text tools and Color tools (commands), and QR code, Clean link,
 Wayback Machine and Copy as Markdown link (page actions) — none declares a network host or asks to
 open the default browser (a Rust test checks it), and their pure logic is unit-tested in TypeScript. The registry is read when first needed and forgotten when the
@@ -795,8 +833,26 @@ visible in panels as in web pages, and every call is refused.
   - A new window gets the right agent before any web page loads. A resize that crosses the
     threshold switches the agent once the resize has been still for 400 ms (`Debounce`), then
     reloads the current web page (its URL is kept; the bar keeps working). Nothing switches
-    during fullscreen — a fullscreen video makes the window wide, and a reload would end it.
+    during fullscreen — a fullscreen video makes the window wide, and a reload would end it
+    (macOS: also while WebKit's own fullscreen window shows the page).
   - Changing the setting applies at once.
+  - **Per site** (`siteModes` in settings.json, `settings/site_modes.rs`; LJ36): `{ "<host>":
+    "auto" | "phone" | "desktop" }` — lower-case host names without `www.` or a port, IP
+    addresses as they are; an entry covers its subdomains (the lookup walks a name up to its last
+    two labels, never an IP address). `phone` and `desktop` hold at any width and whatever
+    `mobileSites` says; `auto` follows the width. **Built in, on the WebKit engines (macOS,
+    Linux):** `youtube.com` and its subdomains get the desktop agent — its phone site's player
+    waits for iOS's video fullscreen (`webkitbeginfullscreen`, an orientation lock), which a
+    desktop WebKit never gives it, so its fullscreen button dropped out at once on macOS; a user
+    entry (`"auto"` too) wins over it. `phone::site_mode` decides; Windows has no built-ins.
+  - **When the agent follows the site:** the app's own navigations (`bar::navigate`: typed
+    addresses, picked rows, `--show <url>`) set the target's agent first (`phone_mode::prepare`);
+    a navigation the page starts itself gets it on its `Started` event, and when the agent really
+    changes the page loads once more (never twice in a row for the same URL; the visit counts as
+    a reload). Going to the desktop agent on a known phone host loads its desktop address instead
+    — `m.youtube.com` → `www.youtube.com`, `<lang>.m.wikipedia.org` → `<lang>.wikipedia.org`
+    (`phone::desktop_url`) —, and the app's navigation to such an address for a site on `desktop`
+    goes to the desktop one directly. No UI yet (LJ40 adds it).
 
 ## Fullscreen video
 
@@ -805,7 +861,7 @@ HTML5 element fullscreen (a video's fullscreen button) must fill the screen:
 | Engine | What happens | Code |
 |---|---|---|
 | WebView2 (Windows) | The engine only fills the webview's bounds and raises `ContainsFullScreenElementChanged`; the app makes the window fullscreen and back. The change is queued off the callback because resizing re-enters WebView2. | `platform/win.rs` + `fullscreen.rs` |
-| WKWebView (macOS 12.3+) | wry enables `elementFullscreenEnabled`; WebKit moves the element into its own fullscreen window (its own Space). | none |
+| WKWebView (macOS 12.3+) | wry enables `elementFullscreenEnabled`; WebKit moves the element into its own fullscreen window (its own Space). **The guard:** meanwhile nothing touches the page — `bar/view.rs`'s layout sets no bounds on, shows or hides the page (wry's `set_bounds` would set the WKWebView's frame inside WebKit's fullscreen window and shrink the video), phone mode doesn't switch (a reload would end it), and the command bar (Cmd+L, Cmd+Y, a click on the toolbar's site) doesn't open. "Meanwhile" is `fullscreenState` isn't "not in fullscreen" (macOS 13+), or the page's WKWebView isn't in the Little Joan window (macOS 12's only sign) — `fullscreen::page_layout_allowed`, read on the main thread where each decision is made. A skipped layout is applied once, after a 100 ms check finds the fullscreen ended (nothing runs otherwise). | `platform/mac.rs` + `fullscreen.rs` + `bar/view.rs` |
 | WebKitGTK (Linux) | The default `enter-fullscreen` handler fullscreens the toplevel GTK window. | none |
 
 `FullscreenTracker` only undoes a fullscreen it caused, so a window the user made fullscreen
@@ -845,9 +901,12 @@ settings.json at launch), `welcome` (the command
 bar was handed the first run), `quit` (Quit or `--quit` is about to exit),
 `session-cookies-kept <n>` / `session-cookies-restored <n>` (Windows: session cookies kept on
 close, set again in the new window; counts only), `history-visit <kind> <url>` (a visit was
-recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl/Cmd+Y opened
+recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl+H / Cmd+Y opened
 the history view), `history-list <pages>` (the history view asked for the pages; a count only),
-`theme <mode> colors=<n>` (the bar asked for its theme; never the colors), `theme-preview <mode>
+`theme <mode> colors=<n>` (the bar asked for its theme; never the colors), `theme-early <mode>
+colors=<n>` (the bar painted its initialization script's theme first), `bar-ready` (the bar's
+script runs: its first call) and `bar-ready timeout` (a panel opened with a new window stopped
+waiting for it), `theme-preview <mode>
 colors=<n> | ended` (Settings previewed a theme; the preview ended when it closed unsaved),
 `extension-opened <id>`, `extension-missing <id>`, `extension-skipped <folder> <reason>`,
 `ext-api <id> <method> <ok | error code>` (an answered API call), `ljext-refused <reason>
@@ -857,7 +916,14 @@ toolbar was told to name), `new-window-refused <url>` (a popup that isn't a web 
 `ljext-headers <webview> <method> <url without query> status=<n> referer=<own | other | - |
 twice> names=<header names> dest= site= mode= origin= service-worker=` (every `ljext` request:
 its answer and what the engine sent — never the token, nor the Referer's value, which can carry a
-nonce). Without the variable nothing is logged.
+nonce), `page-bounds <x,y,w,h>` and `page-visible <bool>` (every layout of the page webview:
+logical bounds in the window), `page-screen <x>,<y>,<w>,<h> scale=<s>` (where the page is on the
+screen, physical pixels, for CI's clicks), and on macOS `wk-fullscreen <not|entering|in|exiting>`
+(WKWebView's `fullscreenState`, polled every 100 ms while a page window exists — smoke mode only),
+`wk-window <resized|focused|moved> <detail>` (the window's events while that isn't `not`), and
+`layout-deferred` / `layout-resumed` (macOS: a layout waited for WebKit's fullscreen to end),
+`user-agent <phone|desktop>` (phone mode switched the page's agent). Without the variable nothing
+is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -874,8 +940,9 @@ The modules below hold every decision the app makes; the native glue only calls 
   which redirects to `<host>.translate.goog`; skipped for non-web pages and pages that are
   already translated.
 - **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
-  mobileSites, rememberHistory, theme, developerMode, disabledExtensions}` (camelCase JSON;
-  `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once). Each field falls back to its default on its own; sizes are clamped to
+  mobileSites, rememberHistory, theme, developerMode, disabledExtensions, siteModes}` (camelCase
+  JSON; `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once; `siteModes` keeps
+  at most 500 valid `host: auto|phone|desktop` entries). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; `theme` = `{mode, colors, intensity, grain}`, each part on its own too
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
@@ -962,8 +1029,9 @@ and pushes to `main`:
   false` before the smoke page reports ready; the starters first with no history; after the
   smoke page, a new window's empty command bar offers its site first, and typing `127` — xdotool
   on Linux, SendKeys on Windows, key events on macOS, best effort — finds it first; then
-  Ctrl+Y (Cmd+Y on macOS, best effort) must log `history-view` and a `history-list` with at
-  least one page; `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`,
+  Ctrl+H (Cmd+Y on macOS, best effort) must log `history-view` and a `history-list` with at
+  least one page, and on Windows and Linux, with the view closed again (Esc), Ctrl+Y must open
+  nothing within 2 s; `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`,
   `history.png`), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
   with the desktop agent** (it reports `innerWidth`, `innerHeight`, the agent kind and
   `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the
@@ -991,7 +1059,8 @@ and pushes to `main`:
   extensions (this run has Developer mode on, with a copy of hello as `dev-hello` and a broken
   manifest in its extensions folder: `extensions-list 2 skipped=1`, `settings-extensions.png`), and
   the page window must not open. Then the **extension run** (`smoke-extensions.mts`), its own launch: `--extension hello`
-  must load hello's panel and report `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked
+  must log `bar-ready` before hello's panel commits (from hibernation the opening waits for the
+  bar, LJ38), load hello's panel and report `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked
   sw=refused` (or `sw=unsupported`: hello tries to register its `sw.js` as a service worker, and
   the request log must never show that script served) (screenshot `extension-hello.png`), with its storage file counting the visit; a new window's
   command bar, typing `hello`, must offer "Say hello" (`command-hello.png`), and ↓ ↓ Enter — pressed
@@ -1029,7 +1098,23 @@ and pushes to `main`:
   and in dark (`theme/page-dark.png`, `theme/command-bar-dark.png`, `theme/settings-dark.png`),
   and the
   default theme in dark (`theme/command-bar-default-dark.png`); every `theme` event must name the
-  run's mode and number of colors. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  run's mode and number of colors, and come after a `theme-early` of the same theme (the bar
+  painted it before its first frame, LJ38). Then the **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
+  its own launch: the smoke page in `?fs=both` mode at 390×600 (phone agent) and 720×600 (desktop
+  agent); at each size the page's "Element fullscreen" (`requestFullscreen` on a container, as
+  desktop YouTube) and "Phone player" (m.youtube.com's way under an iPhone agent:
+  `video.webkitEnterFullscreen()`, the iOS events, an orientation lock; element fullscreen of its
+  container otherwise) are clicked where the app's `page-screen` line puts them, and each one's
+  Exit (in fullscreen, at the screen's centre) 2 s later — clicks only, never keys. Each attempt
+  reports `LJ-FS <element|phone> width= ua= entered= held_ms= exited_by_page= events=`
+  (screenshots `fs/element-390.png`, `fs/phone-390.png`, `fs/element-720.png`, 1 s after each
+  click; log `smoke-fullscreen.log`; what happened in `summary.json`'s `fullscreenRun`). A second
+  launch whose settings say `"siteModes": { "127.0.0.1": "desktop" }` must report the desktop
+  agent at 390 px, where the player takes element fullscreen (`fs/desktop-site-390.png`, log
+  `smoke-fullscreen-site.log`). The rules: every element-fullscreen path enters, holds until the
+  page's own exit and leaves when asked (required on Windows and Linux; on macOS whenever the
+  click reached the page), the player's iOS route under an iPhone agent is informational, and on
+  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).

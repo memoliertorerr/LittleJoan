@@ -96,7 +96,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 
   They are Little Joan's own code, run on your computer as you type; each can be switched off in
   Settings → Extensions → Built-in.
-- **History:** press **Ctrl+Y** (Windows, Linux) or **Cmd+Y** (macOS) — or pick History in the
+- **History:** press **Ctrl+H** (Windows, Linux) or **Cmd+Y** (macOS) — or pick History in the
   command bar — to see the pages you opened, by day (Today, Yesterday, then dates), each with its
   time. Type to search them; click one (or ↑/↓ and Enter) to open it; × or Shift+Delete removes a
   page; **Clear history…** removes the last hour, the last 24 hours, the last 7 days, or
@@ -106,8 +106,9 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   your default browser** on the right (the page moves there and Little Joan goes back to sleep).
   Click the domain (or press Ctrl/Cmd+L) to go somewhere else: the command bar opens with the
   full address selected; Esc returns to the page. On macOS the window's traffic lights sit in
-  the toolbar, and you can drag the window by its empty parts. The toolbar hides while a video
-  is fullscreen.
+  the toolbar, and you can drag the window by its empty parts; double-click them to zoom the
+  window (and again to bring it back) — on Windows and Linux too, like the title bar. The toolbar
+  hides while a video is fullscreen.
 - **Themes:** the toolbar, the command bar, the history view and Settings wear one theme — one
   to three colors turned into a soft, muted gradient with a little grain, in light, dark, or
   following your system. Whatever colors you pick, Little Joan keeps them pale in light mode and
@@ -122,9 +123,15 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   [Extensions](#extensions-experimental) below.
 - **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
   narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
-  macOS and Linux, Chrome on Android on Windows), so Google, YouTube and others serve their
-  mobile versions; widen it past 600 px and the page reloads in its desktop version once you
-  let go. Switch it off in Settings ("Mobile sites in a narrow window").
+  macOS and Linux, Chrome on Android on Windows), so Google and others serve their mobile
+  versions; widen it past 600 px and the page reloads in its desktop version once you let go.
+  Switch it off in Settings ("Mobile sites in a narrow window"). **YouTube always gets its
+  desktop site on macOS and Linux** — its phone site's player expects an iPhone's video
+  fullscreen, so its fullscreen button didn't work there (`m.youtube.com` addresses open as
+  `www.youtube.com`). To choose per site yourself, add `"siteModes"` to `settings.json` (Settings →
+  Privacy shows its folder; quit Little Joan first), e.g. `"siteModes": { "youtube.com": "auto", "example.com":
+  "desktop" }` — `"phone"`, `"desktop"` or `"auto"` (the window's width decides) for a host and
+  its subdomains; an entry wins over the built-in YouTube one.
 - **Dismiss:** press the shortcut again, press Ctrl/Cmd+W, close the window, or press Esc in the
   empty command bar before opening anything. The page is discarded and Little Joan goes back to sleep. The window remembers its
   size.
@@ -137,7 +144,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | Reload | Ctrl+R, F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
-  | History | Ctrl+Y | Cmd+Y |
+  | History | Ctrl+H | Cmd+Y |
   | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |
 
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On

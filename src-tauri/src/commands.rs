@@ -123,6 +123,8 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
     if first_run {
         smoke::log("welcome", "");
     }
+    // The bar's first call: its script runs, so a panel waiting to open may (bar/boot.rs).
+    bar::mark_ready();
     smoke::log("theme", &theme_summary(&theme));
     // The bar's script is running now: make sure it knows its view (bar::tell_state).
     bar::tell_state(&app);
@@ -315,11 +317,19 @@ pub async fn preview_theme<R: Runtime>(app: AppHandle<R>, theme: Option<Value>) 
 
 /// The bar applied a theme: `{ scheme, vars }`, the `--lj-*` variables it computed
 /// (ui/lib/theme.ts). Kept in memory for extension panels (littleJoan.theme); a report that
-/// fails the checks is dropped (extensions/theme.rs).
+/// fails the checks is dropped (extensions/theme.rs). `early`: the bar painted the theme of its
+/// initialization script, before start_info (LJ38) — the smoke log gets `theme-early`.
 #[tauri::command]
-pub async fn set_theme_tokens(tokens: Value) {
+pub async fn set_theme_tokens(tokens: Value, early: Option<bool>) {
     match crate::extensions::theme::parse(&tokens) {
-        Some(tokens) => crate::extensions::theme::store(tokens),
+        Some(tokens) => {
+            crate::extensions::theme::store(tokens);
+            if early == Some(true)
+                && let Some(theme) = bar::early_theme()
+            {
+                smoke::log("theme-early", &theme_summary(&theme));
+            }
+        }
         None => eprintln!("little-joan: the bar's theme report didn't pass the checks"),
     }
 }

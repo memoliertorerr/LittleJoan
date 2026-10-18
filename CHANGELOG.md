@@ -6,6 +6,27 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **History is Ctrl+H on Windows and Linux** (Chrome's key), so Ctrl+Y is redo again in text
+  fields; macOS keeps Cmd+Y.
+
+### Added
+- **Double-click the toolbar to zoom the window** (and again to bring it back), on its empty
+  parts — on Windows and Linux too, like the title bar.
+
+### Fixed
+- **YouTube's fullscreen button on macOS.** In a narrow window phone mode gave YouTube an iPhone
+  agent, and its phone site's player waits for an iPhone's video fullscreen, which a Mac never
+  gives it: the video dropped out of fullscreen at once, and its exit button did nothing. On
+  macOS and Linux (WebKit) YouTube now always gets its desktop site — `m.youtube.com` addresses
+  open as `www.youtube.com` — and `"siteModes"` in settings.json chooses the phone or desktop
+  site per host (`"auto"` undoes the built-in). On macOS nothing resizes, moves or reloads the
+  page while WebKit shows it fullscreen any more, nor opens the command bar over it.
+- **No flash of the default theme on summon.** The bar gets your theme before its first frame
+  (only the bar: web pages never get a script from Little Joan).
+- **macOS: an extension opened while Little Joan was asleep** (`little-joan --extension snake`)
+  could leave the toolbar empty; the panel now opens once the toolbar is ready.
+
 ## [0.2.0-beta.2] — 2026-10-18
 
 A second pre-release of v0.2: Little Joan now looks and works like Little Arc — a command bar

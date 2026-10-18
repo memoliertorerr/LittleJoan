@@ -35,9 +35,16 @@
 //! best effort, for availability: after `LEAVE_FOR` the panel opens anyway, and another navigation
 //! can supersede the detour. What keeps web pages out of a panel is the nonce and the commit rule
 //! (gate.rs, api.rs), not this.
+//!
+//! **A panel opened from hibernation waits for the bar** (LJ38): `--extension <id>` builds the
+//! window and opens the panel, which could commit before the bar's script ran, and on macOS the
+//! toolbar then stayed an empty field. So that opening waits — on a thread of its own, at most
+//! `BAR_WAIT` — until the bar's first call (`start_info`, bar/boot.rs), then goes on as above.
+//! Openings in a window whose bar already runs (the command bar, `--extension` with the window
+//! open) don't wait.
 
 use std::sync::{Mutex, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
@@ -227,6 +234,45 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<
         }
     });
     Ok(())
+}
+
+/// The longest a panel opened with a new window waits for the bar's script. Normally the bar runs
+/// well within a second; CI's macOS runner, launching WebKit cold, took up to 2.1 s from the
+/// window's creation (LJ38's notes), so the limit only bounds a bar that never runs.
+pub const BAR_WAIT: Duration = Duration::from_secs(5);
+
+/// Waits until `ready` (the bar's script runs) or `limit` passed, then calls `open` with whether
+/// the bar was ready. Blocks the calling thread: never the main thread, never an engine callback.
+pub fn after_bar(ready: &bar::Ready, limit: Duration, open: impl FnOnce(bool)) {
+    open(ready.wait(limit));
+}
+
+/// Opens `target` of the extension `id` in a window just built (`--extension` while
+/// hibernating): from a thread of its own, once the bar's script runs, or after `BAR_WAIT`
+/// anyway (logging `bar-ready timeout`). Errors go to stderr and the smoke log
+/// (`extension-missing`), as the opening's would.
+pub fn open_when_bar_ready<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) {
+    fn open_now<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) {
+        if let Err(err) = open(app, id, target) {
+            eprintln!("little-joan: could not open the extension: {err}");
+            smoke::log("extension-missing", id);
+        }
+    }
+    let (waiting_app, waiting_id, waiting_target) = (app.clone(), id.to_owned(), target.clone());
+    let spawned = std::thread::Builder::new()
+        .name("little-joan-open-extension".into())
+        .spawn(move || {
+            after_bar(&bar::BAR_READY, BAR_WAIT, |ready| {
+                if !ready {
+                    smoke::log("bar-ready", "timeout");
+                }
+                open_now(&waiting_app, &waiting_id, waiting_target);
+            });
+        });
+    if spawned.is_err() {
+        // No thread to wait on: open now, as before LJ38.
+        open_now(app, id, target);
+    }
 }
 
 /// The app's start page, what the page shows when nothing is open.

@@ -7,8 +7,8 @@
 // summon it with `--show` (single-instance forwarding; the command bar covers the window), load
 // the smoke page (the command bar closes: the 40 px bar above the page), click its big
 // fullscreen button, hibernate with `--hide`, summon and hibernate once more, summon again for
-// the command bar (the smoke page's site as a top site, then typing "127", then Ctrl/Cmd+Y for
-// the history view), turn start at login on and off (reading the OS's own login entry each
+// the command bar (the smoke page's site as a top site, then typing "127", then Ctrl+H — Cmd+Y on
+// macOS — for the history view, and Ctrl+Y opening nothing), turn start at login on and off (reading the OS's own login entry each
 // time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
 // then a relaunch on the same data folder), that history.json recorded the smoke page (and that
 // a run with history off records nothing; that run also opens Settings with `--settings` and
@@ -17,9 +17,10 @@
 // run (its own launch: `--extension <id>` for each bundled panel, screenshots), then the theme runs (each its
 // own launch with a theme in settings.json:
 // the page, the command bar, the history view and Settings in a two-color theme, light and dark,
-// and the default theme in dark; screenshots in <out>/theme/), then check the logs
-// (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper
-// processes. The app runs on a fresh
+// and the default theme in dark; screenshots in <out>/theme/), then the fullscreen run (its own
+// launch: the smoke page's ?fs=both buttons clicked at 390 and 720 px, screenshots in <out>/fs/;
+// smoke-fullscreen.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
+// smoke-theme.mts) and the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
 // data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
@@ -68,6 +69,7 @@ import { macKeyToken } from "./smoke-keys.mts";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
+  barReadyFailures,
   commandHelloFailures,
   extensionFailures,
   helloOrigin,
@@ -76,6 +78,7 @@ import {
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
+import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsApp, type FsDriver } from "./smoke-fullscreen.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -221,13 +224,18 @@ $bmp.Save('${file}', [System.Drawing.Imaging.ImageFormat]::Png)`);
   console.log(existsSync(file) ? `screenshot: ${name}` : `screenshot FAILED: ${name}`);
 }
 
-/** Clicks the centre of the primary screen, where the smoke page's big button sits. */
-function clickCentre(): void {
+/**
+ * Clicks a point on the screen — pixels on Windows (SetCursorPos) and Linux (xdotool), points on
+ * macOS (CGEvent) — or the centre of the primary screen ("centre": its work area on Windows).
+ */
+function clickAt(target: { x: number; y: number } | "centre"): void {
+  const point = target === "centre" ? undefined : target;
   if (os === "win32") {
+    const where = point ? `${point.x}, ${point.y}` : "$a.Left + [int]($a.Width / 2), $a.Top + [int]($a.Height / 2)";
     powershell(`Add-Type -AssemblyName System.Windows.Forms
 Add-Type -Namespace LJ -Name Mouse -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, System.UIntPtr e);'
 $a = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-[LJ.Mouse]::SetCursorPos($a.Left + [int]($a.Width / 2), $a.Top + [int]($a.Height / 2)) | Out-Null
+[LJ.Mouse]::SetCursorPos(${where}) | Out-Null
 Start-Sleep -Milliseconds 200
 [LJ.Mouse]::mouse_event(0x0002, 0, 0, 0, [System.UIntPtr]::Zero)
 Start-Sleep -Milliseconds 80
@@ -238,19 +246,27 @@ Start-Sleep -Milliseconds 80
       swift,
       `import AppKit
 let f = NSScreen.main!.frame
-let p = CGPoint(x: f.midX, y: f.midY)
+let args = CommandLine.arguments.dropFirst().compactMap { Double($0) }
+let p = args.count == 2 ? CGPoint(x: args[0], y: args[1]) : CGPoint(x: f.midX, y: f.midY)
 for t in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
   CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
   usleep(80000)
 }
 `,
     );
-    run("swift", [swift]);
+    run("swift", [swift, ...(point ? [String(point.x), String(point.y)] : [])]);
+  } else if (point) {
+    run("xdotool", ["mousemove", String(point.x), String(point.y), "click", "1"]);
   } else {
     const [width, height] = run("xdotool", ["getdisplaygeometry"]).trim().split(/\s+/).map(Number);
     run("xdotool", ["mousemove", String(Math.round((width ?? 1280) / 2)), String(Math.round((height ?? 800) / 2)), "click", "1"]);
   }
-  console.log("clicked the screen centre");
+  console.log(point ? `clicked ${point.x},${point.y}` : "clicked the screen centre");
+}
+
+/** Clicks the centre of the primary screen, where the smoke page's big button sits. */
+function clickCentre(): void {
+  clickAt("centre");
 }
 
 /**
@@ -303,8 +319,8 @@ for token in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes of the keys `pressKeys` sends. */
-const MAC_NAMED_KEYS: Record<string, number> = { Left: 123, Right: 124, Down: 125, Up: 126, Return: 36 };
-const SEND_KEYS: Record<string, string> = { Left: "{LEFT}", Right: "{RIGHT}", Down: "{DOWN}", Up: "{UP}", Return: "{ENTER}" };
+const MAC_NAMED_KEYS: Record<string, number> = { Left: 123, Right: 124, Down: 125, Up: 126, Return: 36, Escape: 53 };
+const SEND_KEYS: Record<string, string> = { Left: "{LEFT}", Right: "{RIGHT}", Down: "{DOWN}", Up: "{UP}", Return: "{ENTER}", Escape: "{ESC}" };
 
 /** Presses named keys (arrows, Return) in the app's window, as typeText does (best effort on macOS). */
 function pressKeys(keys: string[], appPid: number, activate = true): void {
@@ -339,7 +355,9 @@ for code in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16, l: 37 };
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4 };
+/** The history view's key: Ctrl+H on Windows and Linux, Cmd+Y on macOS (LJ37). */
+const HISTORY_KEY = os === "darwin" ? "y" : "h";
 
 /**
  * Presses Ctrl+<letter> (Cmd+<letter> on macOS) in the app's window: xdotool on Linux, SendKeys
@@ -684,13 +702,25 @@ const typingDriven = os !== "darwin";
 await waitFor(`command bar: typing "${TYPED}" finds the smoke page`, (e) => sawTypedMatch(e.slice(commandFrom)), 15_000);
 await sleep(1000);
 screenshot("command-typing.png");
-// The history view (LJ25): Ctrl+Y (Cmd+Y on macOS, best effort) opens it over the command bar,
-// the smoke page under Today.
+// The history view (LJ25): Ctrl+H (Cmd+Y on macOS, best effort; LJ37) opens it over the command
+// bar, the smoke page under Today.
 const historyFrom = events().length;
-pressShortcut("y", pid);
-await waitFor("history view: Ctrl/Cmd+Y lists the history", (e) => sawHistoryView(e.slice(historyFrom)), 15_000);
+pressShortcut(HISTORY_KEY, pid);
+await waitFor("history view: Ctrl+H (Cmd+Y) lists the history", (e) => sawHistoryView(e.slice(historyFrom)), 15_000);
 await sleep(1000);
 screenshot("history.png");
+// Windows and Linux: with the view closed again (Esc: back to the command bar), Ctrl+Y must open
+// nothing within 2 s — it is the page's redo again.
+let afterCtrlY: LogEvent[] | undefined;
+if (typingDriven) {
+  pressKeys(["Escape"], pid, false);
+  await sleep(1000);
+  const ctrlYFrom = events().length;
+  pressShortcut("y", pid);
+  await sleep(2000);
+  afterCtrlY = events().slice(ctrlYFrom);
+  console.log(`after Ctrl+Y: ${afterCtrlY.map((e) => e.event).join(", ") || "nothing"}`);
+}
 await forward(["--hide"]);
 await waitFor("command bar: hibernated", (e) => count(e, "hibernated") > hibernatedBeforeCommand, 20_000);
 
@@ -833,7 +863,7 @@ console.log(`history: main ${historyMain === undefined ? "no file" : `${historyM
 /**
  * A theme run (LJ27): its own launch on a fresh data folder whose settings.json carries the
  * run's theme. The smoke page (the toolbar above it), a new window's command bar with the page's
- * site, the history view (Ctrl/Cmd+Y, best effort as in the main run) and Settings, each
+ * site, the history view (Ctrl+H / Cmd+Y, best effort as in the main run) and Settings, each
  * screenshotted into <out>/theme/ when the run names it.
  */
 async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
@@ -861,7 +891,7 @@ async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
   shot(run.shots.commandBar);
   if (run.shots.history) {
     const historyAt = events(logFile).length;
-    pressShortcut("y", runPid);
+    pressShortcut(HISTORY_KEY, runPid);
     await waitFor(`${run.name}: history view`, (e) => sawHistoryView(e.slice(historyAt)), 10_000, logFile);
     await sleep(1000);
     shot(run.shots.history);
@@ -1027,8 +1057,8 @@ async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, 
   await waitFor("bundled: started", (e) => count(e, "started") > 0, 30_000, logFile);
   await sleep(1500);
   const runPid = appPid(runChild);
-  // The window first (hello's run covers opening from hibernation): on macOS a panel that loads
-  // before the bar's own page can leave the toolbar unpainted (Deferred follow-ups).
+  // The window first (hello's run covers opening from hibernation, where the opening waits for the
+  // bar's script since LJ38).
   await forward(["--show"], runEnv);
   await waitFor("bundled: the window", (e) => count(e, "bar-loaded") > 0 && count(e, "suggestions") > 0, 20_000, logFile);
   await sleep(500);
@@ -1086,6 +1116,33 @@ const themeRuns: { run: ThemeRun; events: LogEvent[] }[] = [];
 for (const run of THEME_RUNS) {
   themeRuns.push({ run, events: await themeRun(run) });
 }
+
+/**
+ * The fullscreen run (LJ36, smoke-fullscreen.mts): its own launches, driven through clicks only.
+ * `name` names the data folder and the log (`smoke-<name>.log`).
+ */
+function fullscreenLaunch(name: string, settings: Record<string, unknown>): Promise<FsApp> {
+  const logFile = join(out, `smoke-${name}.log`);
+  rmSync(logFile, { force: true });
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dataDir(name, true, settings), LITTLEJOAN_SMOKE_LOG: logFile };
+  const runChild = launch(runEnv);
+  return Promise.resolve({
+    forward: (args) => forward(args, runEnv),
+    events: () => events(logFile),
+    waitFor: (what, test, timeoutMs) => waitFor(what, test, timeoutMs, logFile),
+    quit: async () => {
+      const runPid = appPid(runChild);
+      await forward(["--quit"], runEnv);
+      if (!(await exited(runPid, 15_000))) {
+        await quit(runChild, runPid);
+      }
+    },
+  });
+}
+const fullscreenDriver: FsDriver = { os, pageUrl: smokePageUrl, launch: fullscreenLaunch, clickAt, screenshot, sleep: (ms) => sleep(ms).then(() => undefined) };
+mkdirSync(join(out, "fs"), { recursive: true });
+// With the second launch, whose siteModes put the smoke page's host on the desktop agent.
+const fullscreenCheck = await fullscreenRun(fullscreenDriver, true);
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -1170,6 +1227,7 @@ const summary = {
     up: [...BUNDLED_PANELS, ...PAGE_ACTIONS].filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
     keysReached: bundledCheck.keys,
   },
+  fullscreenRun: fullscreenSummary(fullscreenCheck, os),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1201,24 +1259,27 @@ const failures = evaluate(
   },
 )
   .concat(commandBarFailures(log, { typing: typingDriven }))
-  .concat(historyViewFailures(log, { driven: typingDriven }))
+  .concat(historyViewFailures(log, afterCtrlY ? { driven: typingDriven, afterCtrlY } : { driven: typingDriven }))
   .concat(persistFailures(log, persistCheck))
   .concat(historyFailures(historyCheck))
   .concat(settingsFailures(historyOffEvents))
   .concat(extensionFailures(extensionCheck.events, parseStore(extensionCheck.store)))
   .concat(raceFailures(extensionCheck.events))
+  .concat(barReadyFailures(extensionCheck.events))
   .concat(commandHelloFailures(extensionCheck.events, { driven: typingDriven }))
   .concat(settingsExtensionsFailures(historyOffEvents, bundledCount))
   .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
+  .concat(fullscreenFailures(fullscreenCheck, os))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
   const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
-  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, firstLogPath, relaunchLogPath]) {
+  const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log")];
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

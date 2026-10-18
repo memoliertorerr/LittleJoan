@@ -76,7 +76,7 @@ export const SETTINGS_ROW: Row = {
   action: { kind: "settings", tab: "extensions" },
 };
 
-/** The built-in "History" command: it opens the history view (also Ctrl/Cmd+Y). */
+/** The built-in "History" command: it opens the history view (also Ctrl+H, Cmd+Y on macOS). */
 export const HISTORY_ROW: Row = {
   kind: "command",
   title: "History",

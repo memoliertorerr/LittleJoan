@@ -7,7 +7,7 @@ mod mac;
 #[cfg(windows)]
 mod win;
 
-use tauri::{Runtime, Webview, Window};
+use tauri::{AppHandle, Runtime, Webview, Window};
 
 /// Windows: page keys on the bar's WebView2 controller.
 #[cfg(windows)]
@@ -84,6 +84,46 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
 #[cfg(target_os = "macos")]
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     mac::set_mobile(page, mobile);
+}
+
+/// macOS, smoke mode only (CI): logs WebKit's element-fullscreen state (`wk-fullscreen …`) while
+/// the page window exists. Nothing elsewhere: Windows and Linux report fullscreen through their
+/// hooks.
+#[cfg(target_os = "macos")]
+pub fn watch_webkit_fullscreen<R: Runtime>(app: &AppHandle<R>) {
+    mac::watch_webkit_fullscreen(app);
+}
+
+/// Windows and Linux: nothing to watch (their hooks report element fullscreen).
+#[cfg(not(target_os = "macos"))]
+pub fn watch_webkit_fullscreen<R: Runtime>(_app: &AppHandle<R>) {}
+
+/// macOS: whether the page must be left alone because WebKit shows it in its own fullscreen
+/// window — `fullscreenState` isn't "not in fullscreen" (macOS 13+), or the page's WKWebView no
+/// longer sits in the Little Joan window (macOS 12's only sign) (fullscreen::page_layout_allowed).
+/// Asks the main thread; an unanswered question counts as no.
+#[cfg(target_os = "macos")]
+pub fn page_in_webkit_fullscreen<R: Runtime>(page: &Webview<R>) -> bool {
+    mac::webkit_fullscreen(page)
+        .is_some_and(|(state, ours)| !crate::fullscreen::page_layout_allowed(state, ours))
+}
+
+/// Windows and Linux: element fullscreen goes through their hooks (`bar::element_fullscreen`).
+#[cfg(not(target_os = "macos"))]
+pub fn page_in_webkit_fullscreen<R: Runtime>(_page: &Webview<R>) -> bool {
+    false
+}
+
+/// macOS, smoke mode only: whether the last `wk-fullscreen` line logged wasn't `not`.
+#[cfg(target_os = "macos")]
+pub fn webkit_fullscreen_logged() -> bool {
+    mac::webkit_fullscreen_logged()
+}
+
+/// Windows and Linux: WebKit's fullscreen window doesn't exist there.
+#[cfg(not(target_os = "macos"))]
+pub fn webkit_fullscreen_logged() -> bool {
+    false
 }
 
 /// Puts `text` on the system clipboard (littleJoan.clipboard.writeText). Main thread only.
