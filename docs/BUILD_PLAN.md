@@ -112,8 +112,9 @@ it; it opened with `lj-step-20-fix2` for the macOS abort `main`'s CI had shown) 
 merged. Phase 14 (LJ25 → LJ26: the history view with Ctrl/Cmd+Y, removing and clearing history
 on disk at once, the tabbed Settings window with `--settings [tab]`) is PR #15 on
 `lj/p14-history-settings`, merged. Phase 15 (LJ27 → LJ28: the theme engine — muted gradients from
-1–3 colors on every surface we draw — and the Appearance editor) is in progress on
-`lj/p15-themes`.**
+1–3 colors on every surface we draw — and the Appearance editor; it also fixed the bar missing a
+view change while its page loaded) is PR #16 on `lj/p15-themes`, merged once verify, package and
+smoke are green. Next: phase 16 (LJ29 → LJ31).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -3400,6 +3401,14 @@ attempts, then stop). Look at the screenshots in light and dark.
   (`lj-step-27-fix2`):** `start_info` — which the bar's script calls once it runs — also tells
   the bar its view and back state (`bar::tell_state`, through the same ordered eval channel, so a
   later change still wins).
+- **CI after fix 2 (run 39083883621):** the fix worked — macOS `theme/page.png` now shows back,
+  the site and open-in-browser on the lavender → peach strip beside the traffic lights, and Linux
+  scale-2 `theme/page-dark.png` the near-white domain on the plum strip — but `smoke (macos)` was
+  red on one check: 2 WebContent helpers still alive 10 s after the third quick summon / hide
+  cycle (`afterEachCycle [0, 0, 2]`; the 60 s samples after the page were 0). The runner was slow
+  in that cycle (the bar's first `suggest` came 1.3 s after it loaded) and nothing in fix 2
+  touches releasing webviews; the next full run (LJ28's) had `[0, 0, 0]` on every OS. Recorded as
+  a one-off; it was the first time this check failed in any run.
 
 ### LJ28 — Appearance editor · standard · auto
 
@@ -3487,6 +3496,18 @@ phase 15: fill the PR description, merge into main once green, then stop and rep
   and `smoke-theme.mts` (+ tests), docs/architecture.md.
 - `npm run verify`: 220 TS tests, 169 Rust tests, clippy clean. Disk: 13 GiB free at the start
   and after verify; `.cache/target` 1.3 GB.
+- **CI (run 39084768446): every job green** — verify ×3, package ×3, smoke on Windows, macOS,
+  Linux and Linux at scale 2; Settings opened on General, Privacy, Appearance in every job, every
+  theme run logged its own theme, no webview helpers left after any cycle. `settings-appearance.png`
+  (default theme, all OSes alike): "Appearance" with System pressed beside it, the preview (a pale
+  slate toolbar strip with "example.com" over a card with the selected slate row), the 11 swatches
+  with Mist ringed, one pad with its dot in the blue-grey area and the dashed +, Intensity and
+  Grain; no scrollbar, the footer clear. `theme/settings.png` (two colors, light): the same on the
+  lavender/peach gradient, Light pressed, two pads (× on the selected one, dots at violet and
+  peach), the selected tab and row a muted violet. `theme/settings-dark.png`: plum, Dark pressed;
+  on Linux the sliders and lists draw dark. On Windows the preview card's second row is cut at the
+  preview's bottom edge mid-line (its larger font pushes it down); intended to read as "the list
+  goes on", left as is.
 
 ### LJ29 — Extension runtime · strong · auto
 
