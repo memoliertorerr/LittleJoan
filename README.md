@@ -22,12 +22,12 @@ affiliated with or endorsed by The Browser Company.
 
 > **Status:** [v0.1.0](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0) is the
 > latest release; the
-> [v0.2.0-beta.1 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.1)
-> adds start at login and a first-launch welcome. The `main` branch goes further — the Little
-> Arc-style command bar and toolbar, logins that survive closing, local history, themes, and
-> extensions (experimental) with twelve bundled ones — for the next pre-release. Every build is
-> smoke-tested in CI on all three systems (Linux on Ubuntu 24.04); none is code-signed yet. See the
-> known issue under Fullscreen video. The build plan and progress tracker live in
+> [v0.2.0-beta.2 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.2)
+> has everything v0.2 adds so far — start at login, a first-launch welcome, the Little Arc-style
+> command bar and toolbar, logins that survive closing, local history, themes, and extensions
+> (experimental) with twelve bundled ones. Every build is smoke-tested in CI on all three systems
+> (Linux on Ubuntu 24.04); none is code-signed yet. See the known issue under Fullscreen video.
+> The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## Install
@@ -38,12 +38,12 @@ aren't code-signed yet, so the first launch shows a warning; the steps below get
 (Development builds of every change are also kept as artifacts of the
 [CI workflow](https://github.com/memoliertorerr/LittleJoan/actions/workflows/ci.yml).)
 
-- **Windows 10/11 (x64):** `LittleJoan-<version>-windows-x64-setup.exe` (about 1.3 MB). It
+- **Windows 10/11 (x64):** `LittleJoan-<version>-windows-x64-setup.exe` (about 2 MB). It
   installs for your user only, no admin needed. Windows SmartScreen may warn about an unknown
   publisher: choose **More info → Run anyway**. Windows 10 without the WebView2 runtime gets it
   during setup.
 - **macOS 12.3 or later (Intel or Apple silicon):** `LittleJoan-<version>-macos-universal.dmg`
-  (about 3.4 MB). Open it and drag Little Joan to Applications. It isn't notarized, so macOS
+  (about 5 MB). Open it and drag Little Joan to Applications. It isn't notarized, so macOS
   blocks the first launch. Either run this once:
 
   ```bash
@@ -54,10 +54,10 @@ aren't code-signed yet, so the first launch shows a warning; the steps below get
   Security**. (Right-click → Open no longer gets past this on macOS 15 and later.) Little Joan
   lives in the menu bar, with no Dock icon.
 - **Linux (x86_64):**
-  - Debian/Ubuntu: `sudo apt install ./LittleJoan-<version>-linux-amd64.deb` (about 2 MB; it
+  - Debian/Ubuntu: `sudo apt install ./LittleJoan-<version>-linux-amd64.deb` (about 3 MB; it
     pulls in WebKitGTK and the GStreamer plugins that video needs). Ubuntu 24.04 or later is
     recommended: on 22.04 the system WebKitGTK crashes when a page goes fullscreen.
-  - Elsewhere: `chmod +x LittleJoan-<version>-linux-x86_64.AppImage` and run it (about 140 MB;
+  - Elsewhere: `chmod +x LittleJoan-<version>-linux-x86_64.AppImage` and run it (about 150 MB;
     it carries its own WebKitGTK and media framework). It currently bundles the WebKitGTK version
     with the fullscreen crash, so prefer the `.deb` where you can.
   - The tray icon needs an AppIndicator host (on GNOME, the "AppIndicator and

@@ -6,6 +6,11 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0-beta.2] — 2026-10-18
+
+A second pre-release of v0.2: Little Joan now looks and works like Little Arc — a command bar
+with your most visited sites, a slim toolbar, history, themes, and extensions (experimental).
+
 ### Changed
 - **The window opens with a command bar.** Every summon shows the command bar over the whole
   window — the field at the top, and on the first launch the welcome under it; Enter opens the
@@ -123,6 +128,12 @@ All notable changes to Little Joan are recorded here. The format follows
   normal way first (at most 1.5 s), and the page's address is no longer read before the page has
   started loading.
 
+### Known issues
+- On macOS, YouTube's own fullscreen button drops back to the normal size at once; its F key
+  works (Esc leaves fullscreen).
+- On Ubuntu 22.04, and in the AppImage, a video's fullscreen button can crash WebKitGTK 2.50
+  (unchanged since v0.1.0).
+
 ## [0.2.0-beta.1] — 2026-10-17
 
 A pre-release of v0.2: the first two v0.2 features, for trying out before v0.2.0.
@@ -183,6 +194,7 @@ global shortcut calls it.
   a Gatekeeper or SmartScreen warning.
 - Linux global shortcuts work on X11 only; on Wayland, bind `little-joan --toggle` instead.
 
-[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.0-beta.1...HEAD
+[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.0-beta.2...HEAD
+[0.2.0-beta.2]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.2
 [0.2.0-beta.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.1
 [0.1.0]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0
