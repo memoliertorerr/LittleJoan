@@ -51,7 +51,9 @@ function titles(events: LogEvent[], prefix: string): string[] {
 
 /**
  * The extension run's rules: every bundled extension loaded; hello opened (its panel's URL loaded
- * in the page), called storage and theme with success, and reported HELLO_TITLE; then, from the
+ * in the page), called storage and theme with success, and reported HELLO_TITLE — the first open
+ * (`--extension hello`, from hibernation) on its own, before anything else opened it again, with
+ * none of hello's own requests refused meanwhile; then, from the
  * probe page on, no API call succeeded, no extension URL loaded, the guard refused the navigation
  * to the panel, and the probe reported PROBE_TITLE. hello's store holds its count and nothing the
  * probe tried to write.
@@ -70,6 +72,19 @@ export function extensionFailures(events: LogEvent[], store: HelloStore | undefi
   const reported = titles(events, "LJ-EXT hello");
   if (!reported.includes(HELLO_TITLE)) {
     failures.push(`extensions: hello reported ${JSON.stringify(reported.at(-1) ?? "nothing")}, not "${HELLO_TITLE}"`);
+  }
+  const firstOpen = events.findIndex((e) => e.event === "extension-opened" && e.detail === "hello");
+  if (firstOpen >= 0) {
+    const next = events.findIndex(
+      (e, i) => i > firstOpen && ((e.event === "extension-opened") || (e.event === "page-loaded" && e.detail.includes("ext=probe"))),
+    );
+    const firstPanel = events.slice(firstOpen, next < 0 ? undefined : next);
+    if (!firstPanel.some((e) => e.event === "title" && e.detail === HELLO_TITLE)) {
+      failures.push("extensions: --extension hello's own panel never reported its checks (before anything opened it again)");
+    }
+    for (const refused of firstPanel.filter((e) => e.event === "ljext-refused" && /\/\/hello\.localhost\//.test(e.detail) && !e.detail.includes("favicon.ico"))) {
+      failures.push(`extensions: a request of hello's own panel was refused: ${refused.detail}`);
+    }
   }
   for (const method of ["storage.set", "storage.get", "theme"]) {
     if (!events.some((e) => e.event === "ext-api" && e.detail === `hello ${method} ok`)) {

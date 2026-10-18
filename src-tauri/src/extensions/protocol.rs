@@ -55,11 +55,11 @@ fn respond<R: Runtime>(
     body: &[u8],
 ) -> Response<Cow<'static, [u8]>> {
     let registry = registry::current(app);
-    let page = bar::page_url(app);
+    let showing = session::showing();
     let opened = session::opened();
     let ctx = Context {
         platform: Platform::current(),
-        page: page.as_ref(),
+        showing: showing.as_deref(),
         registry: &registry,
         opened: opened.as_deref(),
     };

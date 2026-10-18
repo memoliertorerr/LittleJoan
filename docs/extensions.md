@@ -162,8 +162,9 @@ extension's name and icon instead of a domain. Each extension has an **origin of
 So `localStorage`, IndexedDB and cookies are per extension too — but use `littleJoan.storage`,
 which is the documented, size-limited store. Only Little Joan opens a panel: a page (or a panel)
 can't navigate the window to an extension's URL. A panel is one page: links to other pages of the
-same extension don't open (build your UI in the page), and a panel can't become a `blob:` or
-`data:` document. Following a link to the web leaves the panel, like `openUrl`. Popups
+same extension don't open (build your UI in the page; that includes `#anchor` links and
+`location.reload()` — scroll with `scrollIntoView()`, re-render instead of reloading), and a panel
+can't become a `blob:` or `data:` document. Following a link to the web leaves the panel, like `openUrl`. Popups
 (`target=_blank`, `window.open`) open web addresses in the default browser.
 
 **Files** are served by plain paths only: names of letters, digits, `.`, `_` and `-` (no spaces,

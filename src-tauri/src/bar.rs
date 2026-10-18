@@ -226,12 +226,6 @@ pub fn current_text<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
     bar_text(&page_url(app)?, &keys::app_origin())
 }
 
-/// The page's address as its events left it, whether or not a window exists (the page's
-/// navigation guard runs inside the window, where it does).
-pub fn address_now() -> Option<Url> {
-    address().current().cloned()
-}
-
 /// Tells the bar the page's address if it changed since the last time (and the extension the
 /// toolbar shows).
 pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {

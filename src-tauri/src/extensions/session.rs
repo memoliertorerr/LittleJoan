@@ -9,6 +9,13 @@
 //! it can't turn into a `blob:` or `data:` document either (one would keep its origin outside
 //! the files the policy allows). The bar's toolbar shows the extension's name and icon instead of
 //! a domain. All of it is per window: a new window starts with nothing opened.
+//!
+//! **Which extension the page shows** is decided here too, by the guard (`NavGate::showing`): an
+//! admitted extension URL makes it that extension, any other navigation the guard lets through
+//! makes it none. Every navigation of the page webview passes the guard first, in order — the
+//! app's own, links, reloads, back / forward — while load events can arrive late: on Windows CI
+//! saw the start page's `Finished` land after the app had started opening a panel, and a page
+//! check based on the page's address refused the panel's own document. api.rs checks this.
 
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -27,15 +34,26 @@ use crate::smoke;
 /// How long an expected extension URL stays expected.
 pub const EXPECT_FOR: Duration = Duration::from_secs(5);
 
-/// The app's "this extension URL is mine" flag (pure, tested).
+/// The app's "this extension URL is mine" flag, and which extension the page shows (pure,
+/// tested).
 #[derive(Debug, Default)]
 pub struct NavGate {
     expected: Option<(String, Instant)>,
+    showing: Option<String>,
 }
 
 impl NavGate {
     pub const fn new() -> Self {
-        NavGate { expected: None }
+        NavGate {
+            expected: None,
+            showing: None,
+        }
+    }
+
+    /// The extension whose panel the guard last let the page navigate to, until it let the page
+    /// go anywhere else.
+    pub fn showing(&self) -> Option<&str> {
+        self.showing.as_deref()
     }
 
     /// The app is about to navigate the page to `url`.
@@ -61,21 +79,25 @@ impl NavGate {
 }
 
 /// Whether the page webview may navigate (top level or frame) to `url`: an extension URL only
-/// when the gate admits it; while a panel is shown (`showing_extension`), never `blob:` or
-/// `data:`; everything else as for web pages (navigation.rs).
-pub fn page_may_navigate(
-    url: &Url,
-    gate: &mut NavGate,
-    now: Instant,
-    showing_extension: bool,
-) -> bool {
+/// when the gate admits it (the page then shows that extension); while a panel is shown, never
+/// `blob:` or `data:`; everything else as for web pages (navigation.rs), and the page then shows
+/// no extension.
+pub fn page_may_navigate(url: &Url, gate: &mut NavGate, now: Instant, platform: Platform) -> bool {
     if urls::is_ext_like(url) {
-        return gate.admit(url, now);
+        let admitted = gate.admit(url, now);
+        if admitted {
+            gate.showing = urls::parse(url, platform).map(|ext| ext.id);
+        }
+        return admitted;
     }
-    if showing_extension && matches!(url.scheme(), "blob" | "data") {
+    if gate.showing.is_some() && matches!(url.scheme(), "blob" | "data") {
         return false;
     }
-    navigation::is_allowed_navigation(url)
+    let allowed = navigation::is_allowed_navigation(url);
+    if allowed {
+        gate.showing = None;
+    }
+    allowed
 }
 
 /// The page a page action was opened for (`pageInfo`).
@@ -111,18 +133,24 @@ pub fn reset() {
 
 /// The page webview's navigation guard (bar.rs). Refusals go to the smoke log.
 pub fn allow_page_navigation(url: &Url) -> bool {
-    let showing =
-        bar::address_now().is_some_and(|page| urls::parse(&page, Platform::current()).is_some());
     let allowed = page_may_navigate(
         url,
         &mut GATE.lock().unwrap_or_else(PoisonError::into_inner),
         Instant::now(),
-        showing,
+        Platform::current(),
     );
     if !allowed {
         smoke::log("navigation-refused", url.as_str());
     }
     allowed
+}
+
+/// The extension whose panel the page shows, as the guard saw it (`NavGate::showing`).
+pub fn showing() -> Option<String> {
+    GATE.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .showing()
+        .map(str::to_owned)
 }
 
 /// The extension the app opened last in this window.
@@ -289,7 +317,10 @@ mod tests {
             "http://ljext.localhost/hello/index.html",
             "http://ljext.evil.example.com/",
         ] {
-            assert!(!page_may_navigate(&url(s), &mut gate, now, false), "{s}");
+            assert!(
+                !page_may_navigate(&url(s), &mut gate, now, Platform::Windows),
+                "{s}"
+            );
         }
         // The expected URL in one form doesn't admit another form.
         gate.expect(&url("http://ljext.hello.localhost/index.html"), now);
@@ -297,20 +328,70 @@ mod tests {
             &url("https://ljext.hello.localhost/index.html"),
             &mut gate,
             now,
-            false
+            Platform::Windows
         ));
         assert!(page_may_navigate(
             &url("http://ljext.hello.localhost/index.html"),
             &mut gate,
             now,
-            false
+            Platform::Windows
         ));
+    }
+
+    #[test]
+    fn the_guard_decides_which_extension_the_page_shows() {
+        let now = Instant::now();
+        let mut gate = NavGate::new();
+        let panel = url("ljext://hello.localhost/index.html");
+        gate.expect(&panel, now);
+        assert!(page_may_navigate(&panel, &mut gate, now, Platform::MacOs));
+        assert_eq!(gate.showing(), Some("hello"));
+        // Refused navigations change nothing.
+        for refused in [
+            "file:///etc/passwd",
+            "ljext://other.localhost/index.html",
+            "blob:ljext://hello.localhost/1",
+            "data:text/html,hi",
+        ] {
+            assert!(
+                !page_may_navigate(&url(refused), &mut gate, now, Platform::MacOs),
+                "{refused}"
+            );
+        }
+        assert_eq!(gate.showing(), Some("hello"));
+        // Leaving for anything else the guard allows: no extension any more.
+        assert!(page_may_navigate(
+            &url("https://example.com/"),
+            &mut gate,
+            now,
+            Platform::MacOs
+        ));
+        assert_eq!(gate.showing(), None);
+        // The start page (the command bar, `close`) is not a panel either.
+        gate.expect(&panel, now);
+        assert!(page_may_navigate(&panel, &mut gate, now, Platform::MacOs));
+        assert!(page_may_navigate(
+            &url("tauri://localhost/index.html"),
+            &mut gate,
+            now,
+            Platform::MacOs
+        ));
+        assert_eq!(gate.showing(), None);
+        // Another platform's form, even if expected, shows no extension on this one.
+        let windows_form = url("http://ljext.hello.localhost/index.html");
+        gate.expect(&windows_form, now);
+        assert!(page_may_navigate(
+            &windows_form,
+            &mut gate,
+            now,
+            Platform::MacOs
+        ));
+        assert_eq!(gate.showing(), None);
     }
 
     #[test]
     fn web_rules_still_apply_and_panels_get_no_blob_or_data_documents() {
         let now = Instant::now();
-        let mut gate = NavGate::new();
         for (s, on_web, on_panel) in [
             ("https://example.com/", true, true),
             ("about:blank", true, true),
@@ -320,13 +401,18 @@ mod tests {
             ("javascript:alert(1)", false, false),
             ("tauri://localhost/index.html", true, true),
         ] {
+            let mut web = NavGate::new();
             assert_eq!(
-                page_may_navigate(&url(s), &mut gate, now, false),
+                page_may_navigate(&url(s), &mut web, now, Platform::Linux),
                 on_web,
                 "{s} on the web"
             );
+            let mut shown = NavGate::new();
+            let opened = url("ljext://hello.localhost/index.html");
+            shown.expect(&opened, now);
+            assert!(page_may_navigate(&opened, &mut shown, now, Platform::Linux));
             assert_eq!(
-                page_may_navigate(&url(s), &mut gate, now, true),
+                page_may_navigate(&url(s), &mut shown, now, Platform::Linux),
                 on_panel,
                 "{s} on a panel"
             );

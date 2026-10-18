@@ -53,6 +53,20 @@ describe("the extension run", () => {
     expect(extensionFailures(parseLog(skipped), STORE).join()).toMatch(/was skipped/);
   });
 
+  it("fails when --extension hello's own panel was refused (the Windows race CI saw)", () => {
+    const raced = GOOD.replace(
+      "4 page-loaded ljext://hello.localhost/index.html",
+      "4 ljext-refused page joan-page ljext://hello.localhost/index.html\n4 page-loaded ljext://hello.localhost/index.html",
+    );
+    expect(extensionFailures(parseLog(raced), STORE).join()).toMatch(/was refused/);
+    // Its title only after a second open (from the command bar) doesn't count for the first.
+    const late = GOOD.replace(`8 title ${HELLO_TITLE}`, `8 extension-opened hello\n8 title ${HELLO_TITLE}`);
+    expect(extensionFailures(parseLog(late), STORE).join()).toMatch(/own panel never reported/);
+    // WebView2's own favicon request isn't hello's.
+    const favicon = GOOD.replace("4 page-loaded", "4 ljext-refused not-found joan-page ljext://hello.localhost/favicon.ico\n4 page-loaded");
+    expect(extensionFailures(parseLog(favicon), STORE)).toEqual([]);
+  });
+
   it("fails when the probe reached hello in any way", () => {
     const called = GOOD.replace("10 ljext-refused", "10 ext-api hello storage.set ok\n10 ljext-refused");
     expect(extensionFailures(parseLog(called), STORE).join()).toMatch(/succeeded after the probe/);

@@ -6,7 +6,9 @@
 //! - **the webview** that asked is `joan-page` (never the bar or Settings);
 //! - **the extension** in the URL exists;
 //! - **the page** that webview shows now is a page of that very extension, which the app opened
-//!   (so a web page — or its frames — can't load an extension's files or call its API);
+//!   (so a web page — or its frames — can't load an extension's files or call its API). "Shows"
+//!   is what the navigation guard last let through (session.rs `NavGate::showing`), not the
+//!   page's address from load events, which can arrive late;
 //! - files and the SDK: a `GET`, not for a frame (`Sec-Fetch-Dest`), a plain path (paths.rs) of a
 //!   type we serve;
 //! - the API: a `POST` with `X-LJ-Api: 1` (on Chromium this also forces a CORS preflight, which
@@ -131,11 +133,12 @@ impl Incoming {
     }
 }
 
-/// What else a decision needs: the platform, the page webview's current address, the registry,
-/// and the extension the app opened last (session.rs).
+/// What else a decision needs: the platform, the extension whose panel the page webview shows
+/// (as the navigation guard saw it), the registry, and the extension the app opened last
+/// (session.rs).
 pub struct Context<'a> {
     pub platform: Platform,
-    pub page: Option<&'a Url>,
+    pub showing: Option<&'a str>,
     pub registry: &'a Registry,
     pub opened: Option<&'a str>,
 }
@@ -232,11 +235,7 @@ pub fn route(incoming: &Incoming, ctx: &Context<'_>) -> Result<Route, Refusal> {
     }
     let target = urls::parse_request(&incoming.uri).ok_or(Refusal::Unknown)?;
     let extension = ctx.registry.get(&target.id).ok_or(Refusal::Unknown)?;
-    let showing = ctx
-        .page
-        .and_then(|page| urls::parse(page, ctx.platform))
-        .is_some_and(|page| page.id == target.id)
-        && ctx.opened == Some(target.id.as_str());
+    let showing = ctx.showing == Some(target.id.as_str()) && ctx.opened == Some(target.id.as_str());
 
     if let Some(name) = target.path.strip_prefix(API_PREFIX) {
         if incoming.method != "POST" {

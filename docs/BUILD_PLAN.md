@@ -3716,6 +3716,26 @@ honest attempts, then stop).
   `webkit_sends_no_origin_from_the_extension_itself` (accepted on macOS / Linux, refused on
   Windows, foreign Referer refused, empty Origin refused, other checks still apply); the refusal
   log now carries the Referer too.
+- **CI after fix 2 (run 39091695597, with LJ30): LJ29's checks green on all four smoke jobs** —
+  hello `storage=ok theme=ok ipc=denied net=blocked`, the probe refused (WebKit: the web page's POST
+  by its `Origin: http://127.0.0.1:…`, its simple POST by the header, its `<img>` by the page check;
+  Windows: the preflight by `http-method`, then the same), the guard's `navigation-refused` — but
+  **the Windows log showed a race the rules didn't catch:** `--extension hello` while hibernating
+  logged `extension-opened`, then the start page's late `page-loaded http://tauri.localhost/`, then
+  `ljext-refused page … hello.localhost/index.html` — the panel's own document refused, its title
+  the refusal's (`extension-hello.png` showed the JSON). The start page's `Finished` (WebView2's
+  NavigationCompleted, delivered after the app had begun opening the panel) overwrote the page's
+  address, which the page check read; on WebView2 `Started` comes only at ContentLoading, after the
+  handler answered. The title the rule wanted came later from the command bar's second open.
+  **Fix 3 (`lj-step-29-fix3`):** which extension the page shows is now decided by the navigation
+  guard itself (`NavGate::showing`: an admitted panel URL sets it, any other navigation the guard
+  allows clears it, refused ones change nothing) — every navigation passes the guard first and in
+  order, while load events can come late. `api::Context` takes `showing` instead of the address
+  (tests unchanged in substance: the helper derives what the guard would show from the page URL),
+  `session::tests::the_guard_decides_which_extension_the_page_shows` is new, and the smoke rule now
+  wants `--extension hello`'s own panel to report before anything opens it again, with none of
+  hello's requests refused meanwhile (2 more test cases, one replaying CI's log). The blob / data
+  rule uses the same state.
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
@@ -4307,6 +4327,11 @@ Populated from real friction, not speculation:
   And **WebKit sends cross-origin requests to a custom scheme without a CORS preflight**, custom
   header and all: a web page's POST to `ljext:` reaches the handler, and only the handler's checks
   (Origin, page) refuse it.
+- *(LJ29, Windows)* **Load events can arrive after the app started the next navigation**:
+  WebView2's `Finished` (NavigationCompleted) of the start page landed after `--extension hello`
+  had begun navigating to the panel, and `Started` only comes at ContentLoading, after the request
+  was answered. Anything that must know "what document is this request for" can't read the page's
+  address from load events; the extension page check follows the navigation guard instead.
 - *(LJ29, Windows)* **A navigation cancelled in `NavigationStarting` may still request its URL**:
   CI's probe saw the guard refuse `http://ljext.hello.localhost/index.html` and then that very GET
   reach the `ljext` handler (refused there by the page check). The cancelled navigation also raised

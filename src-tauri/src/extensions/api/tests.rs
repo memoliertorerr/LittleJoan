@@ -65,7 +65,9 @@ fn without_header(mut incoming: Incoming, name: &str) -> Incoming {
     incoming
 }
 
-/// Decides `incoming` with hello's panel open in the page (opened by the app) on `platform`.
+/// Decides `incoming` on `platform` with the page webview at `page` — the extension the guard
+/// would say it shows after admitting that URL (none for anything else) — and `opened` the
+/// extension the app opened last.
 fn decide_on(
     incoming: &Incoming,
     platform: Platform,
@@ -73,12 +75,15 @@ fn decide_on(
     opened: Option<&str>,
 ) -> Result<Route, Refusal> {
     let registry = registry::build(FIXTURE, None, &[]);
-    let page = page.map(url);
+    let showing = page
+        .map(url)
+        .and_then(|page| crate::extensions::urls::parse(&page, platform))
+        .map(|ext| ext.id);
     route(
         incoming,
         &Context {
             platform,
-            page: page.as_ref(),
+            showing: showing.as_deref(),
             registry: &registry,
             opened,
         },
@@ -520,13 +525,12 @@ fn extensions_open_web_addresses_only() {
 #[test]
 fn switched_off_extensions_are_unknown() {
     let registry = registry::build(FIXTURE, None, &["hello".to_owned()]);
-    let page = url("ljext://hello.localhost/index.html");
     for incoming in [api("storage.get"), file("/index.html"), file(SDK_PATH)] {
         let decided = route(
             &incoming,
             &Context {
                 platform: Platform::MacOs,
-                page: Some(&page),
+                showing: Some("hello"),
                 registry: &registry,
                 opened: Some("hello"),
             },
