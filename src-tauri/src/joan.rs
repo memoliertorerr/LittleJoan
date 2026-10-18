@@ -50,7 +50,14 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
         Action::FocusAndNavigate(url) => focus(app).and_then(|()| bar::navigate(app, url)),
         Action::CreateExtension(id) => {
             if extensions::registry::current(app).get(&id).is_some() {
-                create(app, None).and_then(|()| open_extension(app, &id))
+                // A new window: the panel opens once the bar's script runs (LJ38).
+                create(app, None).map(|()| {
+                    extensions::session::open_when_bar_ready(
+                        app,
+                        &id,
+                        extensions::session::Target::First,
+                    );
+                })
             } else {
                 // An unknown extension opens nothing (and nothing is kept while hibernating).
                 extensions::registry::forget();

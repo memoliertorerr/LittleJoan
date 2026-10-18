@@ -69,6 +69,9 @@ extensions/sdk/v1.js, v1.d.ts      the extension SDK (served to panels at /__lj/
                                    types
 ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above the page, or the
                                    command bar over the whole window; DOM glue only
+ui/bar-boot.ts                     the bar's first paint: the theme of its initialization script,
+                                   applied before anything awaits; start_info's only if it differs
+                                   (pure part unit-tested)
 ui/bar-logic.ts                    the address field: never clobber an edit (unit-tested)
 ui/command/view-state.ts           the bar's two views (toolbar, overlay) and what Enter / Esc do
                                    in each (unit-tested)
@@ -175,6 +178,8 @@ src-tauri/src/bar.rs               its two webviews (bar + page): build, pushing
 src-tauri/src/bar/view.rs          the view state: toolbar / overlay / element fullscreen,
                                    applied to the webviews (layout, show / hide, Linux packing)
 src-tauri/src/bar/watch.rs         the once-a-second check of the page's address
+src-tauri/src/bar/boot.rs          the bar's first paint: its theme script (checked, tested), the
+                                   theme pushed to it, whether its script runs yet (`Ready`)
 src-tauri/src/extensions/          extensions (experimental; below): mod.rs (the model),
                                    manifest.rs (extension.json, strict), paths.rs (plain paths,
                                    no traversal, no symlink out), urls.rs (one origin per
@@ -711,7 +716,16 @@ WebKitGTK differ in CSS color-4 support, so no stylesheet uses `oklch()` or `col
 - **Applying it** (`apply-theme.ts`): the variables are set on `<html>` as inline custom
   properties (CSSOM, which the CSP's `style-src 'self'` allows), with `color-scheme` so form
   controls match; a `system` theme re-applies when the system switches between light and dark.
-  The bar gets the theme from `start_info` as it loads; the settings window from
+  **The bar gets its theme before its first paint** (LJ38): its webview — only the bar's, never
+  the page's — is built with an initialization script, `window.__littleJoanTheme = <theme>;`
+  (`bar::theme_script`: the shown theme — the preview while Settings edits one, else the saved
+  one —, checked again, so the script is one assignment of plain JSON). The engine runs it at
+  document start, before the page's own scripts (the bar's CSP doesn't apply to it), and
+  `ui/bar-boot.ts`, called first at `bar.ts`'s top level, applies it before anything awaits —
+  so the first frame isn't `theme-defaults.css`'s Mist. Its first `set_theme_tokens` report says
+  `early: true` (the smoke log's `theme-early`); `start_info` follows that report and its theme is
+  applied again only when it differs (a preview may have changed it). Without the script's value
+  the bar waits for `start_info`, as before. The settings window gets the theme from
   `get_settings`; after Save, Rust pushes it to both. While Settings' Appearance tab edits a
   theme, every change re-themes the settings window itself and goes to the page window through
   `preview_theme` (not saved); Cancel or closing Settings brings the saved theme back. Until then pages show the default theme:
@@ -729,7 +743,11 @@ open as **panels** in the page window. Bundled ones live in the repository's `ex
 and are embedded into the binary at build time (`build.rs` → `$OUT_DIR/bundled_extensions.rs`,
 `include_bytes!`); with **Developer mode** on (`developerMode` in settings.json, off by default)
 unpacked folders in `<config dir>/extensions/<id>/` load too. `little-joan --extension <id>`
-opens one (its first command). Besides hello, twelve are bundled (LJ32–LJ34): Snake, 2048, Notes,
+opens one (its first command); while hibernating, the window is built first and the panel opens
+once the bar's script runs (its first call, `start_info`, logs `bar-ready`) — on a thread of its
+own, at most 2 s, then anyway (`bar-ready timeout`) — so the toolbar is there to name it (LJ38;
+on macOS a panel that committed first left the toolbar an empty field). Openings in a window whose
+bar already runs (the command bar, `--extension` with the window open) don't wait. Besides hello, twelve are bundled (LJ32–LJ34): Snake, 2048, Notes,
 Focus timer, World clock, JSON, Text tools and Color tools (commands), and QR code, Clean link,
 Wayback Machine and Copy as Markdown link (page actions) — none declares a network host or asks to
 open the default browser (a Rust test checks it), and their pure logic is unit-tested in TypeScript. The registry is read when first needed and forgotten when the
@@ -885,7 +903,10 @@ bar was handed the first run), `quit` (Quit or `--quit` is about to exit),
 close, set again in the new window; counts only), `history-visit <kind> <url>` (a visit was
 recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl+H / Cmd+Y opened
 the history view), `history-list <pages>` (the history view asked for the pages; a count only),
-`theme <mode> colors=<n>` (the bar asked for its theme; never the colors), `theme-preview <mode>
+`theme <mode> colors=<n>` (the bar asked for its theme; never the colors), `theme-early <mode>
+colors=<n>` (the bar painted its initialization script's theme first), `bar-ready` (the bar's
+script runs: its first call) and `bar-ready timeout` (a panel opened with a new window stopped
+waiting for it), `theme-preview <mode>
 colors=<n> | ended` (Settings previewed a theme; the preview ended when it closed unsaved),
 `extension-opened <id>`, `extension-missing <id>`, `extension-skipped <folder> <reason>`,
 `ext-api <id> <method> <ok | error code>` (an answered API call), `ljext-refused <reason>
@@ -1038,7 +1059,8 @@ and pushes to `main`:
   extensions (this run has Developer mode on, with a copy of hello as `dev-hello` and a broken
   manifest in its extensions folder: `extensions-list 2 skipped=1`, `settings-extensions.png`), and
   the page window must not open. Then the **extension run** (`smoke-extensions.mts`), its own launch: `--extension hello`
-  must load hello's panel and report `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked
+  must log `bar-ready` before hello's panel commits (from hibernation the opening waits for the
+  bar, LJ38), load hello's panel and report `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked
   sw=refused` (or `sw=unsupported`: hello tries to register its `sw.js` as a service worker, and
   the request log must never show that script served) (screenshot `extension-hello.png`), with its storage file counting the visit; a new window's
   command bar, typing `hello`, must offer "Say hello" (`command-hello.png`), and ↓ ↓ Enter — pressed
@@ -1076,7 +1098,8 @@ and pushes to `main`:
   and in dark (`theme/page-dark.png`, `theme/command-bar-dark.png`, `theme/settings-dark.png`),
   and the
   default theme in dark (`theme/command-bar-default-dark.png`); every `theme` event must name the
-  run's mode and number of colors. Then the **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
+  run's mode and number of colors, and come after a `theme-early` of the same theme (the bar
+  painted it before its first frame, LJ38). Then the **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
   its own launch: the smoke page in `?fs=both` mode at 390×600 (phone agent) and 720×600 (desktop
   agent); at each size the page's "Element fullscreen" (`requestFullscreen` on a container, as
   desktop YouTube) and "Phone player" (m.youtube.com's way under an iPhone agent:

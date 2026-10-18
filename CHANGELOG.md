@@ -22,6 +22,10 @@ All notable changes to Little Joan are recorded here. The format follows
   open as `www.youtube.com` — and `"siteModes"` in settings.json chooses the phone or desktop
   site per host (`"auto"` undoes the built-in). On macOS nothing resizes, moves or reloads the
   page while WebKit shows it fullscreen any more, nor opens the command bar over it.
+- **No flash of the default theme on summon.** The bar gets your theme before its first frame
+  (only the bar: web pages never get a script from Little Joan).
+- **macOS: an extension opened while Little Joan was asleep** (`little-joan --extension snake`)
+  could leave the toolbar empty; the panel now opens once the toolbar is ready.
 
 ## [0.2.0-beta.2] — 2026-10-18
 

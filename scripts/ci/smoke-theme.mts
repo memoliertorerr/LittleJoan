@@ -1,7 +1,9 @@
 // The smoke test's theme runs and their rules (pure, unit-tested; scripts/ci/smoke.mts drives
 // them). Each run is its own launch on a fresh data folder whose settings.json carries a theme,
 // so the main run's memory numbers don't move. The bar logs `theme <mode> colors=<n>` each time
-// it loads (start_info, src-tauri/src/commands.rs) — the mode and a count, never the colors.
+// it loads (start_info, src-tauri/src/commands.rs) — the mode and a count, never the colors —, and
+// before that `theme-early <mode> colors=<n>` when it painted its initialization script's theme
+// before its first frame (LJ38).
 import type { LogEvent } from "./smoke-log.mts";
 import { sawSettings, sawSmokeTopSite } from "./smoke-command.mts";
 
@@ -12,10 +14,16 @@ export interface ThemeEvent {
 
 /** Reads a `theme` event's detail; anything else is undefined. */
 export function parseTheme(event: LogEvent): ThemeEvent | undefined {
-  if (event.event !== "theme") {
-    return undefined;
-  }
-  const match = /^(system|light|dark) colors=(\d+)$/.exec(event.detail);
+  return event.event === "theme" ? themeDetail(event.detail) : undefined;
+}
+
+/** Reads a `theme-early` event's detail (the bar painted its first theme, LJ38). */
+export function parseEarlyTheme(event: LogEvent): ThemeEvent | undefined {
+  return event.event === "theme-early" ? themeDetail(event.detail) : undefined;
+}
+
+function themeDetail(detail: string): ThemeEvent | undefined {
+  const match = /^(system|light|dark) colors=(\d+)$/.exec(detail);
   return match?.[1] && match[2] ? { mode: match[1], colors: Number(match[2]) } : undefined;
 }
 
@@ -82,6 +90,7 @@ export function themeFailures(run: ThemeRun, events: LogEvent[]): string[] {
       failures.push(`${run.name}: the bar got a ${theme.mode} theme with ${theme.colors} colors, not ${wanted.mode} with ${wanted.colors}`);
     }
   }
+  failures.push(...earlyThemeFailures(run, events));
   if (run.shots.page && !events.some((e) => e.event === "title" && e.detail.startsWith("LJ-SMOKE ready"))) {
     failures.push(`${run.name}: the smoke page never loaded`);
   }
@@ -90,6 +99,33 @@ export function themeFailures(run: ThemeRun, events: LogEvent[]): string[] {
   }
   if (run.shots.settings && !sawSettings(events, "appearance")) {
     failures.push(`${run.name}: Settings never opened on Appearance (or its page never loaded)`);
+  }
+  return failures;
+}
+
+/**
+ * The bar painted its theme before its first frame (LJ38): every `theme` from start_info comes
+ * after a `theme-early` of the run's theme, logged since the previous `theme`.
+ */
+export function earlyThemeFailures(run: ThemeRun, events: LogEvent[]): string[] {
+  const failures: string[] = [];
+  const wanted = { mode: run.theme.mode, colors: run.theme.colors?.length ?? 1 };
+  let early: ThemeEvent | undefined;
+  let window = 0;
+  for (const event of events) {
+    const painted = parseEarlyTheme(event);
+    if (painted) {
+      early = painted;
+    }
+    if (parseTheme(event)) {
+      window += 1;
+      if (!early) {
+        failures.push(`${run.name}: window #${window}'s bar got its theme from start_info with no theme-early before it`);
+      } else if (early.mode !== wanted.mode || early.colors !== wanted.colors) {
+        failures.push(`${run.name}: window #${window}'s bar painted a ${early.mode} theme with ${early.colors} colors first, not ${wanted.mode} with ${wanted.colors}`);
+      }
+      early = undefined;
+    }
   }
   return failures;
 }

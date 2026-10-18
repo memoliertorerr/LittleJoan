@@ -21,9 +21,11 @@ use tauri::{
 };
 use url::Url;
 
+mod boot;
 mod view;
 mod watch;
 
+pub use boot::{BAR_READY, Ready, early_theme, mark_ready, set_theme, theme_script};
 pub use view::{
     after_webkit_fullscreen, apply_layout, element_fullscreen, log_overlay, mode, overlay,
     page_in_webkit_fullscreen, set_element_fullscreen, set_overlay,
@@ -79,6 +81,12 @@ pub fn add_webviews<R: Runtime>(
     *back() = BackStack::new();
     // Every summon opens the command bar: the window is built in Overlay mode.
     view::new_window();
+    // The bar's script hasn't run yet in this window (panels opened now wait for it: boot.rs).
+    BAR_READY.reset();
+    // The theme it paints first: the preview while Settings edits one, else the saved one (what
+    // start_info hands out too).
+    let theme = crate::state::with(window.app_handle(), |s| s.shown_theme());
+    boot::set_early_theme(theme.clone());
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
     let whole = Rect {
         x: 0.0,
@@ -91,6 +99,8 @@ pub fn add_webviews<R: Runtime>(
     let page_rect = layout(width, height, Mode::Toolbar).page.unwrap_or(whole);
 
     let mut bar = WebviewBuilder::new(BAR, WebviewUrl::App("bar.html".into()))
+        // Its theme before its first paint (the bar only: the page webview never gets a script).
+        .initialization_script(theme_script(&theme))
         // The bar is ours and never leaves the app's origin (about:blank only to unload it when
         // the window closes on macOS, see joan::release_page).
         .on_navigation(|url| navigation::is_allowed_bar_navigation(url, &keys::app_origin()))
@@ -284,22 +294,6 @@ pub fn show_history<R: Runtime>(app: &AppHandle<R>) {
         let _ = bar.eval("window.littleJoan && window.littleJoan.showHistory()");
     }
     smoke::log("history-view", "");
-}
-
-/// Shows `theme` in the open window's bar at once (after Settings saves one).
-pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme) {
-    let Some(bar) = app.get_webview(BAR) else {
-        return;
-    };
-    // Checked hex colors, a mode name and two numbers: the JSON is a safe script literal.
-    match serde_json::to_string(theme) {
-        Ok(json) => {
-            let _ = bar.eval(format!(
-                "window.littleJoan && window.littleJoan.setTheme({json})"
-            ));
-        }
-        Err(err) => eprintln!("little-joan: could not send the theme to the bar: {err}"),
-    }
 }
 
 /// Gives the keyboard back to the page.

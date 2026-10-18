@@ -69,6 +69,7 @@ import { macKeyToken } from "./smoke-keys.mts";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
+  barReadyFailures,
   commandHelloFailures,
   extensionFailures,
   helloOrigin,
@@ -1056,8 +1057,8 @@ async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, 
   await waitFor("bundled: started", (e) => count(e, "started") > 0, 30_000, logFile);
   await sleep(1500);
   const runPid = appPid(runChild);
-  // The window first (hello's run covers opening from hibernation): on macOS a panel that loads
-  // before the bar's own page can leave the toolbar unpainted (Deferred follow-ups).
+  // The window first (hello's run covers opening from hibernation, where the opening waits for the
+  // bar's script since LJ38).
   await forward(["--show"], runEnv);
   await waitFor("bundled: the window", (e) => count(e, "bar-loaded") > 0 && count(e, "suggestions") > 0, 20_000, logFile);
   await sleep(500);
@@ -1264,6 +1265,7 @@ const failures = evaluate(
   .concat(settingsFailures(historyOffEvents))
   .concat(extensionFailures(extensionCheck.events, parseStore(extensionCheck.store)))
   .concat(raceFailures(extensionCheck.events))
+  .concat(barReadyFailures(extensionCheck.events))
   .concat(commandHelloFailures(extensionCheck.events, { driven: typingDriven }))
   .concat(settingsExtensionsFailures(historyOffEvents, bundledCount))
   .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))

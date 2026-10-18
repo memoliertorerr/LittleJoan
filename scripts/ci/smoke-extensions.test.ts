@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
 import {
   HELLO_TITLE,
+  barReadyFailures,
   isHelloReport,
   serviceWorkerFailures,
   PROBE_TITLE,
@@ -217,5 +218,25 @@ describe("the race and the toolbar", () => {
     expect(labelFailures(parseLog("1 toolbar-label none\n")).join()).toMatch(/never named hello/);
     const windows = `1 page-started http://ljext.hello.localhost/index.html?lj-open=${N}\n2 toolbar-label hello\n`;
     expect(labelFailures(parseLog(windows))).toEqual([]);
+  });
+});
+
+describe("a panel opened from hibernation (LJ38)", () => {
+  const panel = "page-started ljext://hello.localhost/index.html?lj-open=00";
+  it("waits for the bar's script", () => {
+    const good = parseLog(`1 started\n2 window-created\n3 bar-loaded\n4 bar-ready\n5 extension-opened hello\n6 ${panel}\n`);
+    expect(barReadyFailures(good)).toEqual([]);
+    // Windows names the panel in WebView2's http form.
+    expect(barReadyFailures(parseLog("1 bar-ready\n2 page-started http://ljext.hello.localhost/index.html?lj-open=00\n"))).toEqual([]);
+  });
+
+  it("fails when the panel committed first, or the wait timed out", () => {
+    expect(barReadyFailures(parseLog(`1 window-created\n2 extension-opened hello\n3 ${panel}\n4 bar-ready\n`))).toEqual([
+      "extensions: hello's panel committed before the bar's script ran (no bar-ready before its page-started)",
+    ]);
+    expect(barReadyFailures(parseLog(`1 window-created\n2 bar-ready timeout\n3 ${panel}\n4 bar-ready\n`))).toEqual([
+      "extensions: the bar didn't run within 2 s of --extension hello (bar-ready timeout); the panel opened without it",
+    ]);
+    expect(barReadyFailures(parseLog("1 window-created\n2 bar-ready\n"))).toEqual(["extensions: hello's panel never committed (no page-started)"]);
   });
 });

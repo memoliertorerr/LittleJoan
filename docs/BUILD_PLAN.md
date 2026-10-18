@@ -103,7 +103,7 @@
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — the owner's checklist passed 2026-10-18 (one YouTube fullscreen bug, see notes); v0.2.0-beta.2 released |
 | LJ36 | *(round 3)* YouTube's fullscreen on macOS (the phone site, confirmed by the owner): reproduce in CI; guard WebKit's fullscreen; youtube.com on the desktop agent on WebKit (a minimal per-site table) | strong | auto | ✅ done (reproduced, then lj-step-36-fix — see notes) |
 | LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ✅ done |
-| LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ⬜ todo |
+| LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ✅ done |
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ⬜ todo |
 | LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ⬜ todo |
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
@@ -5382,6 +5382,40 @@ commit (`gh pr merge <n> --merge --repo memoliertorerr/LittleJoan`; never squash
 --delete-branch), then stop and report.
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **The theme before the first paint:** `bar/boot.rs` (new; `bar.rs` was at its ~400-line limit,
+  so `set_theme` moved there too): `theme_script(&Theme)` checks the theme again
+  (`settings::theme::parse`) and returns `window.__littleJoanTheme = <json>;` — tests: a two-color
+  theme's exact script; hostile colors (`</script>…`, a newline and a second statement), an
+  infinite intensity, a negative grain, the extremes: no `<`, no line break, one `;`, bad colors
+  dropped and numbers clamped. `add_webviews` adds it to the bar's `WebviewBuilder` only, with
+  `AppState::shown_theme()` (the preview while Settings edits one, else the saved theme), and
+  remembers it for the log. A test reads `bar.rs` and finds exactly one `initialization_script`,
+  between the bar's builder and the page's, and no other source file but `settings_window.rs`
+  (its tab) has one — the page webview never gets a script. `ui/bar-boot.ts` (+ test):
+  `earlyTheme` (an object with a mode string and a colors list, then `themeFrom`'s checks; else
+  null — today's path), `bootTheme` (applies it before it returns — the test sees the call
+  synchronously), `needsTheme` (start_info's theme only when it differs). `bar.ts` calls it first
+  at top level; its first `set_theme_tokens` report carries `early: true`, and `start_info` is
+  asked only after that report settled, so the log's order is the bar's (`set_theme_tokens` is an
+  async command and could otherwise land after `start_info`). Rust logs `theme-early <mode>
+  colors=<n>` for a report that passed the checks (the checks unchanged).
+- **Panels from hibernation wait for the bar:** `bar::Ready` (a flag and a condition variable,
+  per window: reset in `add_webviews`), set by `start_info` through `bar::mark_ready`, which logs
+  `bar-ready` once per window. `joan`'s `CreateExtension` builds the window, then
+  `session::open_when_bar_ready` opens the panel from a thread of its own after `after_bar`
+  (waits at most `BAR_WAIT` = 2 s, then opens anyway and logs `bar-ready timeout`); a failed
+  thread spawn opens at once, as before. `FocusAndExtension` and the command bar's rows open at
+  once. The nonce, the commit rule and the detour are untouched: the wait comes before `open`.
+  Tests: an opening waits until the bar is ready (set 60 ms later), goes on after the limit
+  without it, and goes at once when it is ready.
+- **Smoke:** `themeFailures` gains `earlyThemeFailures` (every `theme` after a `theme-early` of the
+  run's theme since the previous one; tests for both); the extension run's `barReadyFailures`
+  (`bar-ready` before hello's panel's `page-started`, no `bar-ready timeout`; tests).
+- `npm run verify`: 493 TS tests, 280 Rust tests, clippy clean. Disk: 12 GiB free at the start and
+  after verify; `.cache/target` 1.4 GB.
+
 ### LJ39 — Live resize like Little Arc · strong · auto
 
 > Phase 19. Branch `lj/p19-resizing` from the latest `main`; the PR goes into `main`. Designed
@@ -6825,7 +6859,11 @@ and where, then stop.
   the theme when `start_info` answers, a moment after its page (with `theme-defaults.css`) first
   paints, so a summon can flash the default Mist colors before the user's. Not visible in CI's
   screenshots. Option: also hand the bar the theme in an initialization script (as the settings
-  window gets its tab), applied before the first paint. → *Planned as LJ38 (round 3).*
+  window gets its tab), applied before the first paint. → *Planned as LJ38 (round 3). LJ38 gives the bar its theme in an initialization script, applied
+  before its first frame; CI's theme runs log `theme-early` before every `theme`. Whether a flash
+  is gone on a real Mac is the owner's check (phase 18's PR) — if one remains, the next move is
+  handing the bar the painted `--lj-*` variables themselves (its last report, kept in `AppState`
+  across windows).*
 - **A panel can leave for any web address** (surfaced by LJ29). `network:` limits what a panel
   can fetch (CSP `connect-src`), not where it can go: `location.href`, a link, `openUrl` or
   `window.open` (→ the default browser) can carry data in a URL to any site — visible to the
@@ -6899,7 +6937,7 @@ and where, then stop.
   runner), possibly real; the owner's checklist asks whether the games take the keys without a
   click. Option, if real: make the page webview first responder when a panel commits
   (`focus_page`).
-- **macOS: a panel opened from hibernation can leave the toolbar unpainted** (surfaced by LJ32's
+- ~~**macOS: a panel opened from hibernation can leave the toolbar unpainted**~~ (surfaced by LJ32's
   CI). With `--extension <id>` while hibernating, the window is built with the command bar and the
   panel's commit can arrive before the bar's own page has loaded; on macOS the toolbar then showed
   an empty field instead of the extension's name (hello in run 39118669089; the label was sent
@@ -6907,7 +6945,9 @@ and where, then stop.
   from the command bar (the window already open) isn't affected. Options: have the bar ask for its
   label and overlay state in one call when it loads (`start_info` already forces the label); or
   open the panel only after the bar reported `bar-loaded`. → *Planned as LJ38 (round 3): the
-  second option, keyed on the bar's `start_info`.*
+  second option, keyed on the bar's `start_info`. Handled by LJ38: from hibernation the opening
+  waits for the bar's `start_info` (CI: `bar-ready` before hello's panel commits on every OS, and
+  macOS's `extension-hello.png` shows the toolbar naming hello).*
 - ~~**YouTube's fullscreen button on macOS**~~ (the owner's checklist, 2026-10-18). The player's own
   fullscreen button enters fullscreen and drops back to the normal size at once; YouTube's F key
   fullscreens fine, and then the player's exit button does nothing (Esc exits). CI's smoke page

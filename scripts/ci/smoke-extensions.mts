@@ -277,3 +277,24 @@ export function commandHelloFailures(events: LogEvent[], options: { driven: bool
   }
   return failures;
 }
+
+/**
+ * `--extension hello` from hibernation (the run's first opening): the bar's script ran (`bar-ready`,
+ * its first call) before hello's panel committed (`page-started` of hello's URL) — the opening
+ * waited for it (LJ38), so the toolbar is there to name hello. A `bar-ready timeout` means it
+ * didn't within 2 s and the panel opened anyway.
+ */
+export function barReadyFailures(events: LogEvent[]): string[] {
+  const panel = events.findIndex((e) => e.event === "page-started" && isExtUrl(e.detail) && e.detail.includes("hello"));
+  if (panel < 0) {
+    return ["extensions: hello's panel never committed (no page-started)"];
+  }
+  const before = events.slice(0, panel);
+  if (before.some((e) => e.event === "bar-ready" && e.detail === "timeout")) {
+    return ["extensions: the bar didn't run within 2 s of --extension hello (bar-ready timeout); the panel opened without it"];
+  }
+  if (!before.some((e) => e.event === "bar-ready" && e.detail === "")) {
+    return ["extensions: hello's panel committed before the bar's script ran (no bar-ready before its page-started)"];
+  }
+  return [];
+}
