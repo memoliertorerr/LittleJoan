@@ -193,6 +193,14 @@ recorded as skipped. CLAUDE.md's standing exception covers the approved plan's v
 phases (confirmed 2026-10-18 for round 3), so v0.3's `auto` phases (23, 25) merge when green like
 v0.2's (Ground Rule 24).
 
+**Phase 18 (LJ36 → LJ38, 2026-10-18)** is PR #21 on `lj/p18-fixes`, merged by the agent once
+verify, package and smoke were green on every OS job (the standing exception). CI reproduced
+YouTube's macOS fullscreen bug — our layout and phone mode acting inside WebKit's fullscreen window —
+and the guard fixed it on every element path; YouTube gets the desktop agent on WebKit; Ctrl+H
+opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
+first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
+(LJ39 → LJ40)**, which ends in a checkpoint.
+
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
 Windows or Linux (CI is the only compiler for those paths), and phase 4 is CI packaging, where
@@ -5288,6 +5296,10 @@ fix attempts, stop and report. Never commit red; never weaken a check.
   follow-ups). CI can't usefully double-click on its fixed screens: a human check.
 - `npm run verify`: 483 TS tests, 273 Rust tests, clippy clean. Disk: 13 GiB free at the start and
   after verify.
+- **CI (run 39151866041):** all ten jobs green. Windows and both Linux jobs: `pressed Ctrl+H` →
+  `history-view` and the list; Esc, then `pressed Ctrl+Y` → nothing at all in the next 2 s. macOS:
+  Cmd+Y opened the view as before (the theme run's too). The screenshots look as before
+  (`history.png` on every OS: the history view over the command bar, the smoke page under Today).
 
 ### LJ38 — The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar · strong · auto
 
@@ -5415,6 +5427,15 @@ commit (`gh pr merge <n> --merge --repo memoliertorerr/LittleJoan`; never squash
   (`bar-ready` before hello's panel's `page-started`, no `bar-ready timeout`; tests).
 - `npm run verify`: 493 TS tests, 280 Rust tests, clippy clean. Disk: 12 GiB free at the start and
   after verify; `.cache/target` 1.4 GB.
+- **CI (run 39153143119):** all ten jobs green. Every theme run, on every OS, logged `theme-early`
+  with the run's theme before each window's `theme` (two windows per run). The extension run's
+  `--extension hello` from hibernation logged `bar-ready` before hello's panel committed on every
+  OS (macOS: `theme-early` → `bar-ready` + `theme` → `extension-opened hello` → `page-started
+  ljext://hello…` 100 ms later; no `bar-ready timeout` anywhere). **`extension-hello.png`:** the
+  toolbar shows hello's icon, "Hello" and the Extension badge on macOS (the traffic lights beside
+  it — before LJ38 it was an empty field there), Windows, Linux and Linux at scale 2. The theme
+  runs' screenshots look as before (macOS's dark command bar, Windows' light two-color toolbar
+  above the smoke page).
 
 ### LJ39 — Live resize like Little Arc · strong · auto
 
