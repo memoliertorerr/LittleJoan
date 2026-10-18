@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_DOMAIN, displayDomain, extensionLabel, isMac, middleEllipsis, siteFor, toolbarView } from "./logic.ts";
+import { MAX_DOMAIN, displayDomain, extensionLabel, isMac, middleEllipsis, pillFor, siteFor, siteModeInfo, toolbarView, type SiteModeInfo } from "./logic.ts";
 
 describe("the domain shown", () => {
   it("strips www.", () => {
@@ -41,18 +41,18 @@ describe("the toolbar", () => {
   const page = "http://127.0.0.1:5000/smoke.html";
 
   it("has no domain and no working buttons without a page", () => {
-    expect(toolbarView("", true)).toEqual({ domain: "", site: "", icon: null, badge: "", back: false, openInBrowser: false });
+    expect(toolbarView("", true)).toEqual({ domain: "", site: "", icon: null, badge: "", back: false, openInBrowser: false, pill: null });
   });
 
   it("enables back only once the page navigated within this window", () => {
     // A new window: Rust's counter says there is nowhere to go back to yet.
-    expect(toolbarView(page, false)).toEqual({ domain: "127.0.0.1", site: "127.0.0.1:5000", icon: null, badge: "", back: false, openInBrowser: true });
+    expect(toolbarView(page, false)).toEqual({ domain: "127.0.0.1", site: "127.0.0.1:5000", icon: null, badge: "", back: false, openInBrowser: true, pill: null });
     // After a second page in the same window.
     expect(toolbarView("https://example.com/next", true).back).toBe(true);
   });
 
   it("never offers web actions for the app's own pages", () => {
-    expect(toolbarView("tauri://localhost/index.html", true)).toEqual({ domain: "", site: "", icon: null, badge: "", back: false, openInBrowser: false });
+    expect(toolbarView("tauri://localhost/index.html", true)).toEqual({ domain: "", site: "", icon: null, badge: "", back: false, openInBrowser: false, pill: null });
   });
 });
 
@@ -61,7 +61,7 @@ describe("an extension's panel", () => {
 
   it("shows the extension's name and icon, and never the default browser", () => {
     const label = extensionLabel({ name: "Hello", icon });
-    expect(toolbarView("", false, label)).toEqual({ domain: "Hello", site: "", icon, badge: "Extension", back: false, openInBrowser: false });
+    expect(toolbarView("", false, label)).toEqual({ domain: "Hello", site: "", icon, badge: "Extension", back: false, openInBrowser: false, pill: null });
     // A web page never carries the badge, so a name next to it reads as an extension's.
     expect(toolbarView("https://paypal.com/", false).badge).toBe("");
     expect(toolbarView("", true, label).back).toBe(true);
@@ -93,5 +93,59 @@ describe("the platform", () => {
     expect(isMac("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)")).toBe(true);
     expect(isMac("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/141.0")).toBe(false);
     expect(isMac("Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15")).toBe(false);
+  });
+});
+
+describe("the phone / desktop pill (LJ40)", () => {
+  const page = "https://www.youtube.com/watch?v=x";
+  const info = (mode: SiteModeInfo["mode"], agent: SiteModeInfo["agent"], builtIn = false): SiteModeInfo => ({
+    host: "youtube.com",
+    mode,
+    builtIn,
+    agent,
+  });
+
+  it("shows while the page has the phone version, and a click asks for desktop", () => {
+    expect(pillFor(info("auto", "phone"), page, null)).toMatchObject({ label: "Phone", next: "desktop" });
+    expect(pillFor(info("phone", "phone"), page, null)).toMatchObject({ label: "Phone", next: "desktop" });
+  });
+
+  it("shows for a site with a mode of its own (a built-in one too), and a click asks for phone", () => {
+    expect(pillFor(info("desktop", "desktop"), page, null)).toMatchObject({ label: "Desktop", next: "phone" });
+    expect(pillFor(info("desktop", "desktop", true), page, null)).toMatchObject({ label: "Desktop", next: "phone" });
+  });
+
+  it("is gone for a desktop page that follows the width — most of the time", () => {
+    expect(pillFor(info("auto", "desktop"), page, null)).toBeNull();
+  });
+
+  it("is never on the start page, a panel, or without Rust's info", () => {
+    expect(pillFor(info("auto", "phone"), "", null)).toBeNull();
+    expect(pillFor(info("auto", "phone"), "tauri://localhost/index.html", null)).toBeNull();
+    expect(pillFor(info("auto", "phone"), page, { name: "Snake", icon: null })).toBeNull();
+    expect(pillFor(null, page, null)).toBeNull();
+    expect(toolbarView(page, false, { name: "Snake", icon: null }, info("auto", "phone")).pill).toBeNull();
+    expect(toolbarView(page, false, null, info("auto", "phone")).pill?.label).toBe("Phone");
+  });
+
+  it("names the site in its tooltip, shortened", () => {
+    expect(pillFor(info("auto", "phone"), page, null)?.title).toContain("youtube.com");
+    const long = { ...info("auto", "phone"), host: `${"a".repeat(60)}.example.com` };
+    expect(pillFor(long, page, null)?.title).toContain("…");
+  });
+
+  it("takes only a well-formed info from Rust", () => {
+    expect(siteModeInfo({ host: "youtube.com", mode: "desktop", builtIn: true, agent: "desktop" })).toEqual(info("desktop", "desktop", true));
+    for (const bad of [
+      null,
+      "youtube.com",
+      { host: "", mode: "auto", builtIn: false, agent: "phone" },
+      { host: "a.b", mode: "tablet", builtIn: false, agent: "phone" },
+      { host: "a.b", mode: "auto", builtIn: "no", agent: "phone" },
+      { host: "a.b", mode: "auto", builtIn: false, agent: "watch" },
+      { host: "x".repeat(254), mode: "auto", builtIn: false, agent: "phone" },
+    ]) {
+      expect(siteModeInfo(bad), JSON.stringify(bad)).toBeNull();
+    }
   });
 });

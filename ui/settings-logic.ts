@@ -3,6 +3,7 @@
 import { CLEAR_CHOICES, clearChoice, clearedText, type ClearRange } from "./history/logic.ts";
 import type { Theme } from "./lib/theme.ts";
 import { sameTheme } from "./settings/appearance-logic.ts";
+import { sameSites, type BuiltInSite, type SiteMode } from "./settings/sites-logic.ts";
 
 export interface Choice {
   id: string;
@@ -24,6 +25,8 @@ export interface Settings {
   developerMode: boolean;
   /** Switched-off extensions (`hello`) and built-ins (`builtin:calc`). */
   disabledExtensions: string[];
+  /** Phone or desktop per site (General; settings/site_modes.rs checks every entry). */
+  siteModes: Record<string, SiteMode>;
 }
 
 /** Where Little Joan keeps things (Rust's get_settings), for the Privacy tab. */
@@ -43,6 +46,8 @@ export interface SettingsView {
   platform: string;
   storage: Storage;
   version: string;
+  /** The sites built in on this OS (YouTube on the desktop site on macOS and Linux). */
+  builtInSiteModes: BuiltInSite[];
 }
 
 export interface SettingsInput {
@@ -56,6 +61,8 @@ export interface SettingsInput {
   /** The Extensions tab's switches; left out, Rust keeps the saved ones. */
   disabledExtensions?: string[];
   developerMode?: boolean;
+  /** General's per-site list; left out (not edited), Rust keeps the saved one. */
+  siteModes?: Record<string, SiteMode>;
 }
 
 /** The Extensions tab's part of Save (settings/extensions-logic.ts's draft). */
@@ -107,8 +114,18 @@ export function toInput(
   rememberHistory: boolean,
   theme?: Theme,
   extensions?: ExtensionsInput,
+  siteModes?: Record<string, SiteMode>,
 ): SettingsInput {
-  return { shortcut, searchEngine, translateTo, mobileSites, rememberHistory, ...(theme ? { theme } : {}), ...(extensions ?? {}) };
+  return {
+    shortcut,
+    searchEngine,
+    translateTo,
+    mobileSites,
+    rememberHistory,
+    ...(theme ? { theme } : {}),
+    ...(extensions ?? {}),
+    ...(siteModes ? { siteModes } : {}),
+  };
 }
 
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
@@ -127,7 +144,8 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     saved.rememberHistory !== input.rememberHistory ||
     (input.theme !== undefined && !sameTheme(saved.theme, input.theme)) ||
     (input.developerMode !== undefined && input.developerMode !== saved.developerMode) ||
-    (input.disabledExtensions !== undefined && !sameIds(saved.disabledExtensions, input.disabledExtensions))
+    (input.disabledExtensions !== undefined && !sameIds(saved.disabledExtensions, input.disabledExtensions)) ||
+    (input.siteModes !== undefined && !sameSites(saved.siteModes, input.siteModes))
   );
 }
 

@@ -105,7 +105,7 @@
 | LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ✅ done |
 | LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ✅ done |
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ✅ done (the bar's background only — see notes) |
-| LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ⬜ todo |
+| LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ✅ done — waiting for the owner's check |
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ⬜ todo |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ⬜ todo |
@@ -5596,6 +5596,19 @@ honest fix attempts, then stop). Look at both screenshots on every OS.
 - **`lj-step-39-fix`:** Windows' verify (run 39160049052) failed one new test only — the check that
   the fallback colors are the start page's read `ui/style.css` with `\n` line ends, and Windows
   checks the file out with CRLF; the test now folds whitespace first.
+- **CI for the fix (run 39160486225): all ten jobs green.** The resize run, every OS: `narrow`
+  (820 → 380) one switch to phone and one reload; each 12-step burst one switch and one reload
+  (380 → 820 desktop, 820 → 380 phone), 11 layouts per burst (the first width was the window's
+  already), every `bounds-set` 2 on Windows and both Linux jobs, on macOS 9 × 2 and 2 × 0 going up
+  (two `Resized` read a size the last layout had already applied) and 11 × 2 going down; no
+  `page-visible` in any step; 620 coming from phone stayed phone, 660 switched to desktop with one
+  reload, 620 coming from desktop stayed desktop; every final viewport W×560 with the right agent.
+  macOS logged `autoresizing joan-bar 18 / joan-page 18` (Overlay) then `joan-bar 10 / joan-page 18`
+  (Toolbar), `flipped=false follows=true`, and `bar-background dark`. The fullscreen run's rules
+  still pass everywhere. **Screenshots:** `resize-820.png` / `resize-380.png` — Windows: the dark
+  toolbar and the navy smoke page reach the window's right and bottom edges, no white strip;
+  macOS: the same, the traffic lights inside the dark toolbar; Linux (scale 1 and 2): the same
+  (the thin light line under the window is openbox's frame handle, not ours).
 
 ### LJ40 — Phone mode per site: a command, a toolbar pill, Windows' agent with client hints; the owner's check · strong · checkpoint
 
@@ -5704,6 +5717,64 @@ attempts, then stop). Look at the screenshots on every OS. This ends phase 19 an
 human check", merge the PR into main with a merge commit once every CI job is green, tell the owner
 exactly what to check and where, then STOP — don't start phase 20 until the owner says go.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **Commands** (`src-tauri/src/commands/site.rs`; build.rs's manifest; `capabilities/bar.json`
+  gains exactly `allow-site-mode-info` and `allow-set-site-mode`, and
+  `capability_tests.rs`' `only_the_bar_may_read_and_set_site_modes` fails if any other capability
+  grants them): `site_mode_info()` → `{ host, mode, builtIn, agent }`, `set_site_mode(mode)`. The
+  site is always the open web page's (`bar::page_url`, web pages only — the start page and panels
+  have none); the bar sends only the mode. The runtime is `phone_mode::{info, publish,
+  set_site_mode}`; the decisions are pure in `phone/sites.rs` (moved out of `phone.rs`, which
+  passed 400 lines): `with_site_mode` (phone / desktop kept; auto removes the entry, or keeps
+  `"auto"` when a built-in or a parent's entry would still decide; refused with 500 sites, or
+  without a site), `site_info`, `reaction` (stay, reload, or load the desktop address going to
+  desktop on a known phone host). Rust pushes the info to the bar (`setSiteMode`) on every address
+  change (`bar::publish_url`) and agent switch, and again when the bar's script runs.
+- **A deviation, decided while building it: a site's phone address is the site.** The prompt
+  says `set_site_mode` writes the entry "for that host". Kept literally, "Request desktop site" on
+  `m.facebook.com` would hold for `m.facebook.com` alone: the site then sends the desktop agent to
+  `www.`, where the width gives the phone agent again, and the page bounces between the two for
+  ever (`RELOADED` stops only a reload of the same URL twice in a row). So `phone::mode_site` keys
+  a mode under the desktop name (`desktop_url`'s known hosts; an `m.` / `mobile.` label in front of
+  a name of two labels or more dropped), and a lookup asks the page's own host first, then that
+  site — LJ36's entries and tests behave as before.
+- **The pill** (`ui/toolbar/`: `siteModeInfo`, `pillFor` + tests): "Phone" while the phone agent
+  is in use, "Desktop" while the site has its own mode (a built-in one counts — YouTube on macOS
+  shows "Desktop", and the click is how to try its phone site); nothing for a desktop page that
+  follows the width, the start page or a panel. Between the site and "open in default browser";
+  the site's `max-width` and ellipsis let the domain shorten first at 320 px.
+- **The command bar** (`ui/command/rows.ts` `siteModeRows`, part of `builtInCommands` so they
+  always find room, like History): every typed word (two letters or more) must start one of a
+  row's words — "Request desktop site" (request, desktop, site), "Request phone site" (… phone,
+  mobile …), "Automatic for this site" (automatic, auto, site, desktop, phone, mobile) —, the
+  site's mode now marked "current"; picking one calls `set_site_mode`, then closes the command bar.
+- **Settings → General** (`ui/settings/sites-logic.ts` + test, `sites.ts`): the user's entries and
+  this OS's built-ins (`get_settings`' `builtInSiteModes`: YouTube on macOS and Linux), "youtube.com
+  — Desktop, built in on macOS and Linux" with Remove (which keeps `"auto"` for it), an overridden
+  built-in with Reset, the user's entries with Remove. Save sends `siteModes` only when the list was
+  edited (so a pill click while Settings is open survives its Save); `save_settings` checks it
+  entry by entry.
+- **Windows' agent** (`platform/win.rs`, `phone/agent.rs` — built on Windows and in tests): the
+  phone agent through `ICoreWebView2::CallDevToolsProtocolMethod("Emulation.setUserAgentOverride")`
+  with `userAgentMetadata` (Android, mobile, brands "Chromium" / "Google Chrome" — the agent string
+  says Chrome — and a GREASE brand, full versions from `ICoreWebView2Environment::BrowserVersionString`)
+  and `platform: "Linux armv8l"` for `navigator.platform`; desktop clears the override
+  (`{ "userAgent": "" }`, as Playwright does — WebView2's own agent and metadata exactly, which
+  reconstructing them couldn't promise). The settings' agent is never touched while the protocol
+  works; a refusal falls back to `SetUserAgent` for good (`ua-override fallback <reason>`). The
+  call waits off the main thread (≤ 2 s; the main thread is noted in setup and never waits) so the
+  reload that follows goes out with the new agent. Before a resize's reload for the phone agent,
+  `Page.getLayoutMetrics`: a page whose content fits the viewport is not reloaded (`ua-reload
+  skipped fits`) — only going narrow; going wide always reloads, or a phone page would stay in a
+  wide window. The smoke page therefore has a 600 px minimum width under a desktop agent (like most
+  desktop pages; `?fits=1` drops it), or Windows would rightly skip its reloads and LJ39's
+  one-reload-per-crossing rule would not see them.
+- **Smoke** (`scripts/ci/smoke-sitemode.mts` + test; the smoke server's `agent-headers.jsonl`; the
+  smoke page's `uamobile=`): as the architecture's CI section says.
+- `npm run verify`: 535 TS tests, 311 Rust tests, clippy clean. Disk: 11 GiB free at the start of
+  the step and after verify; `.cache/target` 1.4 GB.
 
 ### LJ41 — Hide the tray / menu-bar icon (safely); Settings and Quit in the command bar · standard · auto
 
@@ -7069,6 +7140,17 @@ and where, then stop.
   first web page's `Started`) — which buys almost nothing, since the page webview is hidden behind
   the command bar until a page loads; or the page's own background color, which only Windows could
   read without a script (CDP `CSS`/`DOM`), not planned.
+- **An agent switch on a page's own redirect could still bounce between two hosts** (surfaced by
+  LJ40). `phone_mode::page_started` reloads when a navigation the page made lands on a host with
+  another mode, and `RELOADED` stops only the same URL twice in a row. LJ40 keys a mode under the
+  site (`m.` / `mobile.` and known phone hosts count as the site), which covers the `m.` ↔ `www.`
+  case; two unrelated hosts that redirect to each other by agent, with different modes, would
+  still alternate. Option: a reload budget (at most two agent reloads within a few seconds).
+- **Windows' phone metadata is partly fixed** (surfaced by LJ40): `platformVersion` "10.0.0" (the
+  reduced agent's "Android 10"), an empty `model`, the brands "Chromium" and "Google Chrome" (the
+  agent string says Chrome) with WebView2's version, and a fixed GREASE brand. Sites that read
+  high-entropy hints see a generic Android phone. Option: follow Chrome's own GREASE algorithm per
+  version, if a site ever cares.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

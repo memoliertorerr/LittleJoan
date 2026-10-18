@@ -31,6 +31,8 @@ fn main() {
             "reload_extensions",
             "open_extensions_folder",
             "open_extension",
+            "site_mode_info",
+            "set_site_mode",
         ]),
     ))
     .expect("failed to run tauri-build");

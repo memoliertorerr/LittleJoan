@@ -88,7 +88,9 @@ pub fn run() {
             commands::extensions_list,
             commands::reload_extensions,
             commands::open_extensions_folder,
-            commands::open_extension
+            commands::open_extension,
+            commands::site::site_mode_info,
+            commands::site::set_site_mode
         ])
         // Extension panels and their API (extensions/protocol.rs). Registered for every
         // webview; each request is checked (extensions/api.rs), and only the page webview's
@@ -103,6 +105,8 @@ pub fn run() {
         })
         .setup(|app| {
             smoke::log("started", "");
+            // Setup runs on the main thread (Windows: nothing may wait there for WebView2).
+            platform::note_main_thread();
 
             // A menu-bar utility: no Dock icon on macOS.
             #[cfg(target_os = "macos")]

@@ -17,6 +17,7 @@ import {
 import { renderRows } from "./view.ts";
 import { commandRows, isWebPage, type ExtensionInfo, type ExtensionsView } from "./extensions.ts";
 import { quickAnswer } from "../answers/index.ts";
+import type { SiteModeInfo } from "../toolbar/logic.ts";
 import { copyText } from "./copy.ts";
 
 /** How long typing must pause before Rust is asked. */
@@ -33,12 +34,16 @@ export interface CommandBar {
   onKey(event: KeyboardEvent): boolean;
 }
 
-/** `shown` gives the open page's address ("" = none); `showHistory` switches to the history view. */
+/**
+ * `shown` gives the open page's address ("" = none); `showHistory` switches to the history view;
+ * `site` gives what the open web page's site is on (Rust's info, for "Request desktop site" & co).
+ */
 export function commandBar(
   field: HTMLInputElement,
   list: HTMLElement,
   shown: () => string,
   showHistory: () => void,
+  site: () => SiteModeInfo | null = () => null,
 ): CommandBar {
   let rows: RowList = EMPTY;
   let selected: number | null = null;
@@ -105,6 +110,7 @@ export function commandBar(
     rows = buildRows(query, suggestions, {
       quickAnswer: (typedText) => quickAnswer(typedText, { now: Date.now(), disabled: disabledBuiltIns }),
       commands: (typedText) => commandRows(typedText, extensions, isWebPage(shown())),
+      site: isWebPage(shown()) ? site() : null,
     });
     if (!applyAutofill()) {
       rows = { ...rows, autofill: null };
@@ -180,6 +186,11 @@ export function commandBar(
         break;
       case "copy":
         void copyText(action.text, field).then((copied) => flash(copied ? "Copied" : "Couldn't copy"));
+        break;
+      case "siteMode":
+        // Rust applies it to the open page's site (and reloads it if its agent changed); the
+        // command bar closes so the page shows.
+        void invoke("set_site_mode", { mode: action.mode }).then(() => invoke("set_overlay", { on: false }));
         break;
     }
   };

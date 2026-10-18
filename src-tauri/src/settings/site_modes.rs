@@ -28,6 +28,15 @@ pub enum SiteMode {
 }
 
 impl SiteMode {
+    /// The name settings.json uses.
+    pub fn name(self) -> &'static str {
+        match self {
+            SiteMode::Auto => "auto",
+            SiteMode::Phone => "phone",
+            SiteMode::Desktop => "desktop",
+        }
+    }
+
     fn from_name(name: &str) -> Option<SiteMode> {
         match name {
             "auto" => Some(SiteMode::Auto),

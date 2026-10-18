@@ -206,6 +206,32 @@ fn only_the_bar_may_toggle_maximize() {
 }
 
 #[test]
+fn only_the_bar_may_read_and_set_site_modes() {
+    // Phone or desktop per site (LJ40): the toolbar's pill and the command bar's rows, in the
+    // trusted bar only — never the page, never Settings (which saves siteModes with the rest).
+    let mut bar_has = Vec::new();
+    for (place, capability) in all_capabilities() {
+        let granted: Vec<&str> = permissions(&capability)
+            .into_iter()
+            .filter(|p| matches!(*p, "allow-set-site-mode" | "allow-site-mode-info"))
+            .collect();
+        if granted.is_empty() {
+            continue;
+        }
+        let only_the_bar = capability.get("identifier").and_then(Value::as_str) == Some("bar")
+            && scopes(&capability, "webviews") == [bar::BAR]
+            && scopes(&capability, "windows").is_empty();
+        assert!(
+            only_the_bar,
+            "{place}: only the bar's capability may read or set site modes"
+        );
+        bar_has.extend(granted.into_iter().map(str::to_owned));
+    }
+    bar_has.sort();
+    assert_eq!(bar_has, ["allow-set-site-mode", "allow-site-mode-info"]);
+}
+
+#[test]
 fn no_capability_is_added_at_runtime() {
     // A capability added in code (Manager::add_capability) would escape the checks above.
     for path in files(&manifest_dir().join("src")) {

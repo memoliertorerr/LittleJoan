@@ -226,6 +226,7 @@ pub fn tell_state<R: Runtime>(app: &AppHandle<R>) {
         tell_back(&bar, can_go_back());
     }
     extensions::session::publish_label(app, true);
+    phone_mode::republish(app);
 }
 
 fn tell_back<R: Runtime>(bar: &Webview<R>, on: bool) {
@@ -269,6 +270,8 @@ pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
         ));
     }
     smoke::log("bar-url", text.as_deref().unwrap_or("start"));
+    // The toolbar's pill follows the page's site (LJ40).
+    phone_mode::publish(app);
 }
 
 /// Opens the command bar and puts the keyboard in its field with the text selected

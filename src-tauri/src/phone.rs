@@ -17,16 +17,22 @@
 //!   phone or the desktop agent. On the WebKit engines (macOS, Linux) a short built-in list gives
 //!   some sites the desktop agent unless the user says otherwise: YouTube's phone site expects
 //!   iOS's video fullscreen, which a desktop WebKit never gives it, so its fullscreen button
-//!   failed on macOS (LJ36). `desktop_url` takes a known phone address to its desktop one.
+//!   failed on macOS (LJ36). `desktop_url` takes a known phone address to its desktop one. The
+//!   per-site rules live in `sites` (pure), Windows' agent with client hints in `agent`.
 
-use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use url::Url;
+#[cfg(any(windows, test))]
+pub mod agent;
+mod sites;
+
+pub use sites::{
+    Reaction, Refusal, SiteInfo, WEBKIT_DESKTOP_SITES, built_in, desktop_url, mode_site, reaction,
+    site_info, site_mode, with_site_mode,
+};
 
 use crate::keys::Platform;
 use crate::settings::SiteMode;
-use crate::settings::site_modes;
 
 /// Pages narrower than this many logical pixels get the phone user agent.
 pub const PHONE_BELOW: f64 = 600.0;
@@ -44,33 +50,6 @@ AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1
 /// Chrome major version used when WebView2's own version can't be read.
 pub const FALLBACK_CHROME_MAJOR: u32 = 141;
 
-/// Sites that get the desktop agent on the WebKit engines (macOS, Linux) unless `siteModes` says
-/// otherwise; their subdomains too.
-pub const WEBKIT_DESKTOP_SITES: &[&str] = &["youtube.com"];
-
-/// The mode for a page on `host` (a URL's host, lower case): the user's entry for the host or its
-/// nearest parent (`"auto"` included, so a user can undo a built-in), else the built-in list on
-/// WebKit, else auto.
-pub fn site_mode(
-    host: &str,
-    platform: Platform,
-    overrides: &BTreeMap<String, SiteMode>,
-) -> SiteMode {
-    if let Some(mode) = site_modes::lookup(overrides, host) {
-        return mode;
-    }
-    let webkit = matches!(platform, Platform::MacOs | Platform::Linux);
-    let built_in = webkit
-        && site_modes::candidates(host)
-            .iter()
-            .any(|name| WEBKIT_DESKTOP_SITES.contains(name));
-    if built_in {
-        SiteMode::Desktop
-    } else {
-        SiteMode::Auto
-    }
-}
-
 /// Whether a page `width` logical pixels wide should look like a phone to websites: always for a
 /// site on `phone`, never for one on `desktop`; otherwise, when phone mode (`enabled`, the
 /// setting `mobileSites`) is on, below `PHONE_BELOW`, not from `DESKTOP_FROM`, and in between
@@ -85,27 +64,6 @@ pub fn wants_mobile(enabled: bool, width: f64, mode: SiteMode, current: Option<b
         SiteMode::Auto if width >= DESKTOP_FROM => false,
         SiteMode::Auto => current == Some(true),
     }
-}
-
-/// The desktop address of a page on a known phone host — `m.youtube.com` → `www.youtube.com`,
-/// `<lang>.m.wikipedia.org` → `<lang>.wikipedia.org` — with everything else kept; `None` for
-/// every other URL.
-pub fn desktop_url(url: &Url) -> Option<Url> {
-    if !matches!(url.scheme(), "http" | "https") {
-        return None;
-    }
-    let host = url.host_str()?;
-    let desktop = if host == "m.youtube.com" {
-        "www.youtube.com".to_owned()
-    } else {
-        let lang = host
-            .strip_suffix(".m.wikipedia.org")
-            .filter(|lang| !lang.is_empty() && !lang.contains('.'))?;
-        format!("{lang}.wikipedia.org")
-    };
-    let mut rewritten = url.clone();
-    rewritten.set_host(Some(&desktop)).ok()?;
-    Some(rewritten)
 }
 
 /// The phone user agent for `platform`. `engine_ua` is the engine's own (desktop) user agent;
@@ -279,104 +237,6 @@ mod tests {
                     assert!(wants_mobile(enabled, width, SiteMode::Phone, current));
                 }
             }
-        }
-    }
-
-    fn table(entries: &[(&str, SiteMode)]) -> BTreeMap<String, SiteMode> {
-        entries
-            .iter()
-            .map(|(host, mode)| ((*host).to_owned(), *mode))
-            .collect()
-    }
-
-    #[test]
-    fn youtube_gets_the_desktop_agent_on_webkit_only() {
-        let none = BTreeMap::new();
-        for host in [
-            "youtube.com",
-            "www.youtube.com",
-            "m.youtube.com",
-            "music.youtube.com",
-        ] {
-            assert_eq!(
-                site_mode(host, Platform::MacOs, &none),
-                SiteMode::Desktop,
-                "{host}"
-            );
-            assert_eq!(
-                site_mode(host, Platform::Linux, &none),
-                SiteMode::Desktop,
-                "{host}"
-            );
-            assert_eq!(site_mode(host, Platform::Windows, &none), AUTO, "{host}");
-        }
-        for host in [
-            "notyoutube.com",
-            "youtube.com.example",
-            "example.com",
-            "127.0.0.1",
-        ] {
-            assert_eq!(site_mode(host, Platform::MacOs, &none), AUTO, "{host}");
-        }
-    }
-
-    #[test]
-    fn a_user_entry_wins_for_the_host_or_a_parent() {
-        let phone = table(&[("youtube.com", SiteMode::Phone)]);
-        assert_eq!(
-            site_mode("m.youtube.com", Platform::MacOs, &phone),
-            SiteMode::Phone
-        );
-        assert_eq!(
-            site_mode("youtube.com", Platform::Linux, &phone),
-            SiteMode::Phone
-        );
-        let desktop = table(&[("wikipedia.org", SiteMode::Desktop)]);
-        assert_eq!(
-            site_mode("en.m.wikipedia.org", Platform::Windows, &desktop),
-            SiteMode::Desktop
-        );
-        let ip = table(&[("127.0.0.1", SiteMode::Desktop)]);
-        assert_eq!(
-            site_mode("127.0.0.1", Platform::Windows, &ip),
-            SiteMode::Desktop
-        );
-    }
-
-    #[test]
-    fn auto_undoes_a_built_in() {
-        let auto = table(&[("youtube.com", AUTO)]);
-        assert_eq!(site_mode("www.youtube.com", Platform::MacOs, &auto), AUTO);
-        let one = table(&[("m.youtube.com", AUTO)]);
-        assert_eq!(site_mode("m.youtube.com", Platform::MacOs, &one), AUTO);
-        assert_eq!(
-            site_mode("www.youtube.com", Platform::MacOs, &one),
-            SiteMode::Desktop,
-            "only that host"
-        );
-    }
-
-    #[test]
-    fn known_phone_addresses_go_to_their_desktop_ones() {
-        let url = |s: &str| Url::parse(s).expect("valid");
-        assert_eq!(
-            desktop_url(&url("https://m.youtube.com/watch?v=x")).map(String::from),
-            Some("https://www.youtube.com/watch?v=x".to_owned())
-        );
-        assert_eq!(
-            desktop_url(&url("https://en.m.wikipedia.org/wiki/X#History")).map(String::from),
-            Some("https://en.wikipedia.org/wiki/X#History".to_owned())
-        );
-        for other in [
-            "https://www.youtube.com/watch?v=x",
-            "https://m.example.com/",
-            "https://mobile.twitter.com/",
-            "https://m.wikipedia.org/",
-            "https://a.b.m.wikipedia.org/",
-            "https://en.wikipedia.org/wiki/X",
-            "ljext://m.youtube.com/",
-        ] {
-            assert_eq!(desktop_url(&url(other)), None, "{other}");
         }
     }
 

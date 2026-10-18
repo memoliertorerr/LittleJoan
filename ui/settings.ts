@@ -11,6 +11,8 @@ import { themeFrom } from "./lib/theme.ts";
 import { acceleratorFromEvent, displayShortcut } from "./lib/shortcut.ts";
 import { appearance } from "./settings/appearance.ts";
 import { extensionsTab } from "./settings/extensions.ts";
+import { sitesList } from "./settings/sites.ts";
+import { builtInsFrom, siteModesFrom } from "./settings/sites-logic.ts";
 import { BUILT_INS } from "./answers/index.ts";
 import {
   CLEAR_CHOICES,
@@ -73,6 +75,7 @@ const NOTE = "Click, then press the keys you want to use.";
 
 const look = appearance(element<HTMLElement>("#panel-appearance"), refresh);
 const extensionsPanel = extensionsTab(element<HTMLElement>("#panel-extensions"), refresh, BUILT_INS);
+const sites = sitesList(element<HTMLElement>("#site-modes"), element<HTMLElement>("#site-modes-empty"), refresh);
 
 let saved: Settings | null = null;
 let savedLogin: boolean | null = null;
@@ -124,7 +127,16 @@ function refresh(): void {
 }
 
 function input(): SettingsInput {
-  return toInput(shortcut, engine.value, language.value, mobile.checked, remember.checked, look.draft(), extensionsPanel.draft());
+  return toInput(
+    shortcut,
+    engine.value,
+    language.value,
+    mobile.checked,
+    remember.checked,
+    look.draft(),
+    extensionsPanel.draft(),
+    sites.draft(),
+  );
 }
 
 function pending(from: Settings): Changes {
@@ -288,6 +300,7 @@ invoke<SettingsView>("get_settings")
     mobile.checked = view.settings.mobileSites;
     remember.checked = view.settings.rememberHistory;
     extensionsPanel.load({ disabledExtensions: view.settings.disabledExtensions, developerMode: view.settings.developerMode });
+    sites.load(siteModesFrom(view.settings.siteModes), builtInsFrom(view.builtInSiteModes));
     savedLogin = view.startAtLogin;
     login.checked = view.startAtLogin ?? false;
     login.disabled = view.startAtLogin === null;

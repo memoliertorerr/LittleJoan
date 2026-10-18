@@ -30,6 +30,9 @@ use crate::toggle::Command;
 use crate::translate::{LANGUAGES, is_valid_lang};
 use crate::welcome;
 
+/// Phone or desktop per site (LJ40): `site_mode_info`, `set_site_mode`.
+pub mod site;
+
 /// Opens what the user typed in the URL bar in the page: a web address, or a search with the
 /// configured engine. The keyboard then moves to the page.
 #[tauri::command]
@@ -175,6 +178,9 @@ pub struct SettingsView {
     storage: Storage,
     /// Little Joan's version (About).
     version: String,
+    /// The sites built in on this OS (General's "Phone or desktop per site"): `[{ host, mode }]`
+    /// — YouTube on the desktop agent on macOS and Linux, nothing on Windows.
+    built_in_site_modes: Vec<site::BuiltInSite>,
 }
 
 /// Where the web engine keeps cookies and site data (docs/architecture.md, "Where data lives"):
@@ -229,6 +235,7 @@ pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
             site_data: site_data(&app, webview_dir.as_deref()),
         },
         version: app.package_info().version.to_string(),
+        built_in_site_modes: site::built_in_sites(),
     }
 }
 
@@ -250,6 +257,11 @@ pub struct SettingsInput {
     disabled_extensions: Option<Value>,
     #[serde(default)]
     developer_mode: Option<bool>,
+    /// Settings → General's "Phone or desktop per site": the whole table, checked entry by entry
+    /// (settings/site_modes.rs). Left out, the saved one stays (the toolbar's pill may have
+    /// changed it while Settings was open).
+    #[serde(default)]
+    site_modes: Option<Value>,
 }
 
 /// Validates and applies new settings: the shortcut is swapped live (the old one comes back if
@@ -289,6 +301,10 @@ pub async fn save_settings<R: Runtime>(
                 |v| settings::disabled_extensions(Some(v)),
             ),
             developer_mode: settings.developer_mode.unwrap_or(s.settings.developer_mode),
+            site_modes: settings.site_modes.as_ref().map_or_else(
+                || s.settings.site_modes.clone(),
+                |v| settings::site_modes::parse(Some(v)),
+            ),
             ..s.settings.clone()
         };
         (

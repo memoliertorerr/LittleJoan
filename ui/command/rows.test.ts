@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { SiteModeInfo } from "../toolbar/logic.ts";
 import {
+  CURRENT_MODE,
   HISTORY_ROW,
   MAX_SUGGESTIONS,
   SETTINGS_ROW,
@@ -13,6 +15,7 @@ import {
   listKey,
   queryFor,
   showsTyped,
+  siteModeRows,
   typedForm,
   type Row,
   type Suggestion,
@@ -150,6 +153,51 @@ describe("rows while typing", () => {
     const title = '<img src=x onerror="alert(1)">';
     const { rows } = buildRows("x", [{ ...EXAMPLE, title }, GOOGLE]);
     expect(rows[0]?.title).toBe(title);
+  });
+});
+
+describe("phone or desktop for this site (LJ40)", () => {
+  const site = (mode: SiteModeInfo["mode"]): SiteModeInfo => ({ host: "127.0.0.1", mode, builtIn: false, agent: "phone" });
+  const titles = (rows: { title: string }[]) => rows.map((row) => row.title);
+
+  it("offers the rows for desktop, phone, mobile and site while a web page is open", () => {
+    expect(titles(siteModeRows("desktop", site("auto")))).toEqual(["Request desktop site", "Automatic for this site"]);
+    expect(titles(siteModeRows("mobile", site("auto")))).toEqual(["Request phone site", "Automatic for this site"]);
+    expect(titles(siteModeRows("phone", site("auto")))).toEqual(["Request phone site", "Automatic for this site"]);
+    expect(titles(siteModeRows("site", site("auto")))).toEqual(["Request desktop site", "Request phone site", "Automatic for this site"]);
+    expect(titles(siteModeRows("request desk", site("auto")))).toEqual(["Request desktop site"]);
+    expect(titles(siteModeRows("automatic", site("auto")))).toEqual(["Automatic for this site"]);
+  });
+
+  it("offers nothing without a web page, for one letter, or for other words", () => {
+    expect(siteModeRows("desktop", null)).toEqual([]);
+    expect(siteModeRows("d", site("auto"))).toEqual([]);
+    expect(siteModeRows("request d", site("auto"))).toEqual([]);
+    expect(siteModeRows("weather", site("auto"))).toEqual([]);
+    expect(siteModeRows("", site("auto"))).toEqual([]);
+  });
+
+  it("marks the site's mode now and asks Rust for the row's", () => {
+    const rows = siteModeRows("site", site("desktop"));
+    expect(rows.map((row) => row.domain)).toEqual([CURRENT_MODE, "", ""]);
+    expect(rows.map((row) => row.action)).toEqual([
+      { kind: "siteMode", mode: "desktop" },
+      { kind: "siteMode", mode: "phone" },
+      { kind: "siteMode", mode: "auto" },
+    ]);
+    expect(siteModeRows("site", site("auto")).at(-1)?.domain).toBe(CURRENT_MODE);
+    expect(rows.map((row) => row.icon)).toEqual(["desktop", "phone", "auto"]);
+  });
+
+  it("finds room among the rows, after the search row, like History", () => {
+    const { rows } = buildRows("request desktop", [GOOGLE], { site: site("auto") });
+    expect(rows.map((row) => row.kind)).toEqual(["search", "command", "settings"]);
+    expect(rows[1]?.title).toBe("Request desktop site");
+    const many = Array.from({ length: 12 }, (_, i): Suggestion => ({ ...EXAMPLE, kind: "history", url: `https://site${i}.test/`, host: `site${i}.test` }));
+    const crowded = buildRows("site", [...many, GOOGLE], { site: site("auto") }).rows;
+    expect(crowded).toHaveLength(MAX_SUGGESTIONS + 1);
+    expect(titles(crowded.slice(-4, -1))).toEqual(["Request desktop site", "Request phone site", "Automatic for this site"]);
+    expect(buildRows("desktop", [GOOGLE]).rows.some((row) => row.action.kind === "siteMode")).toBe(false);
   });
 });
 
