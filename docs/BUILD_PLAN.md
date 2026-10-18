@@ -3860,7 +3860,30 @@ honest attempts, then stop).
     subresources (unstyled, no script, broken icon; no refusal logged — fix4 logged refusals
     only, so whether they reached the handler is unknown) while a racer's `window.open` landed in
     the same moment; fix5's run was green.
-    Not reproduced since; noted in Landmines.
+  - **Fix 7 (`lj-step-29-fix7`) — opening from a web page leaves it first.** Fix 6's CI run
+    (39098950325) failed the Windows race again, with the full request log this time: the app's
+    document request was answered 200, the racers were refused (`referer`), yet the page committed
+    **WebView2's own "HTTP ERROR 404" page** for the panel's nonce URL — a response the handler
+    never sent — and no subresource request followed. In both failing runs (fix4, fix6) the race
+    page's `window.open` landed between `extension-opened` and the panel's commit (16 and 91 ms
+    after); in the passing run (fix5) none did. So a web page's popup request while the panel
+    loads breaks that load in WebView2 (the engine's own behaviour; the mechanism isn't visible
+    from here — wry answers `NewWindowRequested` through a deferral). **Fix:** when the page
+    shows a web page, `session::open` navigates it to the app's start page first (what it shows
+    when nothing is open, whose load events CI has seen on every engine — not so for
+    `about:blank` on WebView2) and opens the panel (expect + navigate) only when that page committed (`session::page_committed`, from a
+    thread of its own, not inside the engine's event) or after `LEAVE_FOR` = 1 s — so no web page,
+    nor its frames, subresources or popups, is alive while a panel loads. That also closes fix 6's
+    window at the root; fix 6's checks stay as the second line. `gate::Leaving` numbers each wait
+    so a stale timer can't open a later opening early; `close` and a new window drop a wait.
+    Reload on a panel keeps the web page Close returns to (it lost it since fix 4). Opening from
+    the start page, hibernation or another panel goes straight to the panel, as before. The start
+    page is no web page anywhere (the bar shows the start state, history and back skip it). To
+    keep files near 400 lines, the pure gate moved to `extensions/gate.rs` (`NavGate`,
+    `page_may_navigate`, `Leaving`; re-exported by session.rs) with session's tests in
+    `session/tests.rs`, and `openable` / `is_private_host` to `extensions/web_address.rs`
+    (re-exported by api.rs). Test: `an_opening_waits_for_the_page_to_leave_its_web_page`; smoke:
+    the race (now the app's opening must pass through the start page there, `raceFailures`).
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
@@ -4498,10 +4521,13 @@ Populated from real friction, not speculation:
   commit**, and its frames' requests reach the `ljext` handler in that moment (~60 ms in CI). The
   guard's "showing" is therefore not enough to serve files: only the nonce document is served
   before the commit (fix 6).
-- *(LJ29, Windows, seen once)* **A panel opened while the old page fires `window.open` at it
-  loaded without its subresources** in fix4's CI run (document and title arrived, `Finished`
-  came 41 ms later, nothing refused — that run didn't log served requests yet); green in every
-  run since; the request log (`ljext-headers … status=`) would now show where they went. If the race step flakes on Windows, look here first.
+- *(LJ29, Windows)* **A web page's `window.open` while the page webview loads another document
+  can break that load**: twice in CI a racing page's popup request landed between the app's
+  navigation to a panel and its commit, and the panel came up once without any subresource
+  (unstyled, no script, broken icon) and once as WebView2's own "HTTP ERROR 404" page for the
+  panel's URL — though the handler had answered the document 200. Don't load something important
+  while a hostile page is still alive: the app leaves the web page for its start page first
+  (fix 7). If the race step flakes on Windows, look here first.
 - *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
   `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
   that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.

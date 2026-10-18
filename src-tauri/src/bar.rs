@@ -130,7 +130,7 @@ pub fn add_webviews<R: Runtime>(
                     smoke::log("page-started", payload.url().as_str());
                     // What the toolbar shows, and what the extension handler serves beyond a
                     // panel's document: an extension only once its panel committed here.
-                    extensions::session::page_committed(payload.url());
+                    extensions::session::page_committed(webview.app_handle(), payload.url());
                 }
                 PageLoadEvent::Finished => {
                     address().finished(payload.url().clone());

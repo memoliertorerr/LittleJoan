@@ -268,7 +268,9 @@ other attempt (a link, `location.href`, on macOS and Linux also an iframe) is re
 Windows, whose engine doesn't let the app see frame navigations, an iframe's request is refused by
 the handler itself: the page doesn't show that extension — and in the moment while Little Joan's
 own navigation to the panel is under way, only the request carrying the nonce is answered, and
-the old page's requests are refused by their Referer or held until that page is gone. Windows'
+the old page's requests are refused by their Referer or held until that page is gone. Opening
+an extension while a web page is shown first takes the window to Little Joan's start page, so that
+web page is gone before the panel starts loading. Windows'
 `http://ljext.…` form is never treated as a web address. The toolbar names an extension only after
 that extension's panel loaded, so a refused or cancelled attempt can't put an extension's name
 over a web page. Paths can't leave the

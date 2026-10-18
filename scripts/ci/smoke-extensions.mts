@@ -125,6 +125,11 @@ export function extensionFailures(events: LogEvent[], store: HelloStore | undefi
   return failures;
 }
 
+/** Whether `url` is the app's own start page (`tauri://localhost/…`, `http://tauri.localhost/…`). */
+function isStartPage(url: string): boolean {
+  return /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)\//.test(url);
+}
+
 /** Whether `url` is hello's panel as the app opens it: with its single-use nonce. */
 function isOpenedPanel(url: string): boolean {
   return isExtUrl(url) && url.includes("hello") && /[?&]lj-open=[0-9a-f]{32}(?:$|&)/.test(url);
@@ -135,7 +140,8 @@ function isOpenedPanel(url: string): boolean {
  * without the app's nonce — into iframes and window.open, `--extension hello` must still open the
  * panel (it reports again), every extension URL that loads in the page must carry the nonce, at
  * least one of the page's attempts must have been refused (the guard on macOS / Linux, the
- * handler on Windows, where the guard doesn't see frames), nothing may be served to a request
+ * handler on Windows, where the guard doesn't see frames), the app must leave the web page for
+ * its start page before the panel loads (so the page can't race it), nothing may be served to a request
  * whose Referer is another page (`servedToOthers` — CI saw the racers' frames served on Windows
  * in the moment before the panel committed), and the toolbar may name hello only right after
  * hello's own panel loaded — never while a web page is shown.
@@ -154,6 +160,11 @@ export function raceFailures(events: LogEvent[]): string[] {
     if (!isOpenedPanel(load.detail)) {
       failures.push(`race: an extension URL without the app's nonce loaded in the page: ${load.detail}`);
     }
+  }
+  const openedAt = after.findIndex((e) => e.event === "extension-opened");
+  const nextPages = after.slice(openedAt + 1).filter((e) => e.event === "page-started").map((e) => e.detail);
+  if (openedAt >= 0 && (!isStartPage(nextPages[0] ?? "") || !isOpenedPanel(nextPages[1] ?? ""))) {
+    failures.push(`race: the app didn't leave the web page for its start page before the panel (then: ${nextPages.slice(0, 2).join(", ") || "nothing"})`);
   }
   const refusedRacer = after.some(
     (e) =>

@@ -153,6 +153,7 @@ describe("the race and the toolbar", () => {
 9 extension-opened hello
 10 navigation-refused ljext://hello.localhost/index.html
 10 ljext-headers joan-page GET ljext://hello.localhost/index.html status=403 referer=other names=accept,referer dest=- site=- mode=- origin=- service-worker=-
+10 page-started tauri://localhost/index.html
 10 ljext-headers joan-page GET ljext://hello.localhost/index.html status=200 referer=- names=accept dest=- site=- mode=- origin=- service-worker=-
 11 page-started ljext://hello.localhost/index.html?lj-open=${N.replace("0", "f")}
 12 toolbar-label hello
@@ -168,6 +169,10 @@ describe("the race and the toolbar", () => {
     expect(raceFailures(parseLog(loaded)).join()).toMatch(/without the app's nonce loaded/);
     const quiet = GOOD_RACE.replaceAll(/\d+ navigation-refused .*\n/g, "");
     expect(raceFailures(parseLog(quiet)).join()).toMatch(/none of the page's iframe attempts/);
+    const direct = GOOD_RACE.replace("10 page-started tauri://localhost/index.html\n", "");
+    expect(raceFailures(parseLog(direct)).join()).toMatch(/didn't leave the web page for its start page/);
+    const windows = GOOD_RACE.replace("10 page-started tauri://localhost/index.html", "10 page-started http://tauri.localhost/");
+    expect(raceFailures(parseLog(windows))).toEqual([]);
     const lost = GOOD_RACE.replace(`13 title ${HELLO_TITLE}`, "13 title LJ-EXTRACE done opened=0");
     expect(raceFailures(parseLog(lost)).join()).toMatch(/didn't open the panel/);
     expect(raceFailures(parseLog("1 started\n"))).toEqual(["race: the smoke page's race never loaded"]);
