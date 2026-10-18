@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_THEME } from "./lib/theme.ts";
 import {
   CLEAR_START,
   TABS,
@@ -22,6 +23,7 @@ const saved: Settings = {
   windowHeight: 640,
   mobileSites: true,
   rememberHistory: true,
+  theme: DEFAULT_THEME,
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);

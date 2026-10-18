@@ -1,6 +1,7 @@
 /* The settings window (settings.html): a sidebar of tabs on the left, the chosen tab on the
-   right, Save / Cancel along the bottom for every tab. The colors are style.css's tokens, so it
-   matches the command bar in light and dark. */
+   right, Save / Cancel along the bottom for every tab. Like the command bar: the theme's gradient
+   (the body is `.themed`) shows in the sidebar, and the tab and the buttons sit on the frosted
+   panel over it. */
 
 .settings-body {
   overflow: hidden;
@@ -19,8 +20,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 14px 8px;
-  background: var(--toolbar-bg);
-  border-right: 1px solid var(--hairline);
+  border-right: 1px solid var(--lj-hairline);
 }
 
 .tab {
@@ -31,7 +31,7 @@
   padding: 0 10px;
   font: inherit;
   font-size: 13px;
-  color: var(--fg);
+  color: var(--lj-fg);
   text-align: left;
   background: transparent;
   border: 0;
@@ -40,17 +40,17 @@
 }
 
 .tab:hover {
-  background: var(--field-bg);
+  background: var(--lj-field);
 }
 
 .tab:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--lj-accent);
   outline-offset: -2px;
 }
 
 .tab.selected {
-  color: #ffffff;
-  background: var(--select-bg);
+  color: var(--lj-on-selected);
+  background: var(--lj-row-selected);
 }
 
 .tab svg {
@@ -72,6 +72,7 @@
 .tab-panels {
   overflow-y: auto;
   padding: 16px 24px 10px;
+  background: var(--lj-panel);
 }
 
 .tab-panel h1 {
@@ -101,7 +102,7 @@
 }
 
 .setting-label {
-  color: var(--fg);
+  color: var(--lj-fg);
 }
 
 .setting-controls {
@@ -115,7 +116,7 @@
   margin: 0 0 10px;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
 }
 
 .settings-body select,
@@ -123,8 +124,8 @@
   padding: 5px 10px;
   font: inherit;
   font-size: 13px;
-  color: var(--fg);
-  background: var(--field-bg);
+  color: var(--lj-fg);
+  background: var(--lj-field);
   border: 1px solid transparent;
   border-radius: 6px;
 }
@@ -133,7 +134,7 @@
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: var(--accent);
+  accent-color: var(--lj-row-selected);
 }
 
 .recorder {
@@ -143,12 +144,12 @@
 }
 
 .settings-body .recorder.recording {
-  border-color: var(--accent);
+  border-color: var(--lj-accent);
 }
 
 .settings-body button.primary {
-  color: #ffffff;
-  background: var(--accent);
+  color: var(--lj-on-selected);
+  background: var(--lj-row-selected);
 }
 
 .settings-body button.danger {
@@ -171,7 +172,7 @@
   margin: 4px 0 8px;
   padding: 8px 10px;
   font-size: 13px;
-  background: var(--field-bg);
+  background: var(--lj-field);
   border-radius: 8px;
 }
 
@@ -180,7 +181,7 @@
 }
 
 .settings-body .confirm button:not(.danger) {
-  background: var(--bg);
+  background: var(--lj-surface);
 }
 
 .storage {
@@ -192,7 +193,7 @@
 }
 
 .storage dt {
-  color: var(--muted);
+  color: var(--lj-fg-muted);
 }
 
 .storage dd {
@@ -202,7 +203,7 @@
 
 .placeholder {
   max-width: 380px;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
 }
 
 .about-name {
@@ -215,7 +216,7 @@
 }
 
 .settings-body a {
-  color: var(--accent);
+  color: var(--lj-accent);
 }
 
 .settings-actions {
@@ -225,8 +226,8 @@
   align-items: center;
   justify-content: flex-end;
   padding: 10px 16px;
-  background: var(--bg);
-  border-top: 1px solid var(--hairline);
+  background: var(--lj-panel);
+  border-top: 1px solid var(--lj-hairline);
 }
 
 .settings-actions .error {

@@ -2,8 +2,10 @@
 // shortcut recorder, lists and switches, and Save / Cancel for every tab. All validation happens
 // in Rust; this page shows what it says. Rust picks the first tab (window.__littleJoanSettingsTab,
 // set before this script runs) and switches an open window with window.littleJoanSettings.showTab.
+// The window wears the saved theme, and window.littleJoanSettings.setTheme changes it.
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { applyTheme } from "./lib/apply-theme.ts";
 import { acceleratorFromEvent, displayShortcut } from "./lib/shortcut.ts";
 import {
   CLEAR_CHOICES,
@@ -28,7 +30,7 @@ import {
 declare global {
   interface Window {
     __littleJoanSettingsTab?: string;
-    littleJoanSettings?: { showTab(name: string): void };
+    littleJoanSettings?: { showTab(name: string): void; setTheme(theme: unknown): void };
   }
 }
 
@@ -259,6 +261,9 @@ window.littleJoanSettings = {
   showTab(name: string) {
     showTab(tabFrom(name));
   },
+  setTheme(theme: unknown) {
+    applyTheme(theme);
+  },
 };
 
 showTab(tab);
@@ -267,6 +272,7 @@ drawClearing();
 invoke<SettingsView>("get_settings")
   .then((view) => {
     saved = view.settings;
+    applyTheme(view.settings.theme);
     isMac = view.platform === "macos";
     shortcut = view.settings.shortcut;
     fill(engine, view.engines, view.settings.searchEngine);

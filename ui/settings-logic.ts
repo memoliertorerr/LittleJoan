@@ -1,6 +1,7 @@
 // Types and small pure helpers for the settings window: its tabs, change detection across them
 // (Save and Cancel cover every tab), and the Privacy tab's "Clear history" action.
 import { CLEAR_CHOICES, clearChoice, clearedText, type ClearRange } from "./history/logic.ts";
+import type { Theme } from "./lib/theme.ts";
 
 export interface Choice {
   id: string;
@@ -16,6 +17,8 @@ export interface Settings {
   windowHeight: number;
   mobileSites: boolean;
   rememberHistory: boolean;
+  /** The look (ui/lib/theme.ts); settings.rs checks every field. */
+  theme: Theme;
 }
 
 /** Where Little Joan keeps things (Rust's get_settings), for the Privacy tab. */

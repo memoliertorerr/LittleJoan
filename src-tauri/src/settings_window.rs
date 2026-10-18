@@ -109,6 +109,19 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
     });
 }
 
+/// Shows `theme` in the open settings window at once (after a save).
+pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme) {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    // Checked hex colors, a mode name and two numbers: the JSON is a safe script literal.
+    if let Ok(json) = serde_json::to_string(theme) {
+        let _ = window.eval(format!(
+            "window.littleJoanSettings && window.littleJoanSettings.setTheme({json})"
+        ));
+    }
+}
+
 /// If the window closes while it was recording a shortcut, the paused shortcut comes back.
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if window.label() == LABEL && matches!(event, WindowEvent::Destroyed) {

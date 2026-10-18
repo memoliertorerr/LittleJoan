@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_THEME } from "../lib/theme.ts";
 import { lineText, welcome, type StartInfo } from "./welcome.ts";
 
 const mac: StartInfo = {
@@ -8,6 +9,7 @@ const mac: StartInfo = {
   trayHint: "Little Joan's icon is in the menu bar at the top of the screen.",
   startAtLogin: false,
   waylandNoShortcut: false,
+  theme: DEFAULT_THEME,
 };
 
 describe("the welcome", () => {

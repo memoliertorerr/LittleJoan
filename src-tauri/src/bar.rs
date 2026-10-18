@@ -296,6 +296,22 @@ pub fn show_history<R: Runtime>(app: &AppHandle<R>) {
     smoke::log("history-view", "");
 }
 
+/// Shows `theme` in the open window's bar at once (after Settings saves one).
+pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme) {
+    let Some(bar) = app.get_webview(BAR) else {
+        return;
+    };
+    // Checked hex colors, a mode name and two numbers: the JSON is a safe script literal.
+    match serde_json::to_string(theme) {
+        Ok(json) => {
+            let _ = bar.eval(format!(
+                "window.littleJoan && window.littleJoan.setTheme({json})"
+            ));
+        }
+        Err(err) => eprintln!("little-joan: could not send the theme to the bar: {err}"),
+    }
+}
+
 /// Gives the keyboard back to the page.
 pub fn focus_page<R: Runtime>(app: &AppHandle<R>) {
     if let Some(page) = app.get_webview(PAGE) {

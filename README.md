@@ -89,6 +89,12 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   full address selected; Esc returns to the page. On macOS the window's traffic lights sit in
   the toolbar, and you can drag the window by its empty parts. The toolbar hides while a video
   is fullscreen.
+- **Themes:** the toolbar, the command bar, the history view and Settings wear one theme — one
+  to three colors turned into a soft, muted gradient with a little grain, in light, dark, or
+  following your system. Whatever colors you pick, Little Joan keeps them pale in light mode and
+  deep in dark mode, and picks the text color so it stays readable. The default is a quiet
+  blue-grey. (The theme lives in `settings.json` as `"theme": { "mode": "system" | "light" |
+  "dark", "colors": ["#rrggbb", …], "intensity": 0–1, "grain": 0–1 }`.)
 - **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
   narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
   macOS and Linux, Chrome on Android on Windows), so Google, YouTube and others serve their
@@ -148,7 +154,7 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
     Windows (the registry's Run key), `~/.config/autostart/Little Joan.desktop` on Linux. Little
     Joan keeps no copy of this setting, so if you remove it in your system's settings, it shows
     as off here too.
-- **Appearance** and **Extensions** — coming next (themes; extensions).
+- **Appearance** and **Extensions** — coming next (the theme editor; extensions).
 - **Privacy** — **Remember history** (on by default; off, nothing new is recorded), **Clear
   history** (the last hour, 24 hours, 7 days, or everything — at once, after a question; it isn't
   undone by Cancel), and what Little Joan keeps where on your computer.

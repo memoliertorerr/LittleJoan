@@ -8,10 +8,11 @@
     <link rel="stylesheet" href="./history/history.css" />
     <script type="module" src="./bar.ts"></script>
   </head>
-  <!-- "overlay": the command bar covers the window; "toolbar": the 40 px strip above the page;
+  <!-- "themed": the theme's gradient and grain (style.css).
+       "overlay": the command bar covers the window; "toolbar": the 40 px strip above the page;
        "history" (with "overlay"): the history view instead of the command bar's field and rows.
        data-tauri-drag-region: empty parts drag the window (on macOS there is no title bar). -->
-  <body class="bar-body overlay" data-tauri-drag-region>
+  <body class="bar-body themed overlay" data-tauri-drag-region>
     <div class="command">
       <nav class="toolstrip" aria-label="Page" data-tauri-drag-region>
         <button id="back" class="tool" type="button" aria-label="Back" title="Back" disabled>

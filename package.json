@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit -p .",
     "lint": "eslint .",
     "test": "vitest run",
+    "theme:css": "node scripts/theme-css.mts",
     "icons": "node scripts/make-icons.mts && tauri icon .cache/icons/app-icon.png -o .cache/icons/generated && node scripts/copy-icons.mts",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",

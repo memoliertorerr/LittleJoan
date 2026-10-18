@@ -74,7 +74,7 @@
 | LJ24 | *(v0.2, round 2)* The Little Arc-style toolbar: favicon + domain, back, open in browser; macOS traffic lights inside it | strong | auto | ✅ done |
 | LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ✅ done |
 | LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ✅ done |
-| LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ⬜ todo |
+| LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ✅ done |
 | LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ⬜ todo |
 | LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ⬜ todo |
 | LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ⬜ todo |
@@ -111,8 +111,9 @@ command bar with suggestions, the Little Arc-style toolbar with the macOS traffi
 it; it opened with `lj-step-20-fix2` for the macOS abort `main`'s CI had shown) was PR #14,
 merged. Phase 14 (LJ25 → LJ26: the history view with Ctrl/Cmd+Y, removing and clearing history
 on disk at once, the tabbed Settings window with `--settings [tab]`) is PR #15 on
-`lj/p14-history-settings`, merged once verify, package and smoke are green. Next: phase 15
-(LJ27 → LJ28).**
+`lj/p14-history-settings`, merged. Phase 15 (LJ27 → LJ28: the theme engine — muted gradients from
+1–3 colors on every surface we draw — and the Appearance editor) is in progress on
+`lj/p15-themes`.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -3303,6 +3304,72 @@ open the phase-15 PR into main as a draft, and watch CI until every job is green
 attempts, then stop). Look at the screenshots in light and dark.
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **Files:** the color math is its own module, `ui/lib/color.ts` (hex ↔ sRGB ↔ OKLab ↔ OKLCH with
+  Ottosson's matrices, fitting into sRGB by lowering chroma at the same lightness and hue,
+  mixing in OKLab, WCAG contrast; 9 tests), so `ui/lib/theme.ts` (mute, backgrounds, palette,
+  `gradientCss`, `grainUri`, `tokens`, `themeFrom`) stays under 400 lines; the conversion tests
+  the Verify lists for theme.ts are in `color.test.ts`. Presets are `ui/lib/presets.ts` (11, the
+  first, **Mist** `#8c9bb5` at intensity 0.45 and grain 0.15, is the default). Rust:
+  `settings/theme.rs` (a child module of settings.rs; 5 tests), `Settings` lost `Eq` (the theme
+  has floats).
+- **Interpretations, stated:** a pick's lightness is **mapped** into the band (light 0.86–0.93,
+  dark 0.22–0.32: L′ = low + (high − low) · L) rather than clamped, so it always holds the clamps
+  and lighter picks stay lighter — clamping would have pushed nearly every pick onto the band's
+  edge. Chroma is min(C, 0.12) · intensity (≤ 0.12 × intensity, and the slider scales every pick).
+  One pick gets two neighbours (lighter/24° warmer, darker/30° cooler); two picks get their
+  OKLab midpoint as the third background.
+- **Tokens beyond the prompt's list** (the surfaces needed them): `--lj-on-selected` (white on
+  the selected row), `--lj-panel` (the frosted card: light 66 % / dark 52 % opaque, so the
+  gradient shows through), `--lj-surface` (that card over `--lj-bg-0`, opaque), `--lj-tile`
+  (favicons sit on a light tile in both modes: the preview showed GitHub's black icon vanishing on
+  a dark one), `--lj-hairline`, `--lj-shadow`, `--lj-gradient`, `--lj-grain`. The old `--bg`,
+  `--fg`, `--muted`, … are gone; every color in style.css, history.css and settings.css is an
+  `--lj-*` variable. The built-in rows' symbols (gear, search, clock) became CSS masks in the
+  muted text color (they were grey SVGs that disappeared on dark panels).
+- **Contrast:** text, muted text and the accent are stepped (OKLCH L in 0.01 steps from
+  near-black / near-white) until they reach 4.5:1 against every gradient stop, the grain's
+  darkest and lightest speck over each, and the panel over all of those; the selected row is dark
+  enough for white text. Tested for every preset in light, dark and system-dark, and 150 random
+  themes (seeded).
+- **Grain:** the first version (grey noise with its own alpha) was invisible; measured on a canvas
+  in Chromium it moved pixels by a standard deviation of under 1 level. The tile now takes the
+  red channel stretched to full contrast with full alpha (`feColorMatrix`), at 0.14 × grain:
+  grain 0.4 → about 4 levels of noise, the default 0.15 → 1.6.
+- **Applying:** `apply-theme.ts` sets the variables on `<html>` with `style.setProperty` (CSSOM is
+  allowed by `style-src 'self'`; an injected `<style>` would not be) plus `color-scheme`; system
+  mode re-applies on the media query's change. The bar applies `start_info`'s new `theme` as it
+  loads (`panel.ts` no longer asks start_info itself; `bar.ts` does and hands it the answer),
+  the settings window `get_settings`' `settings.theme`. Until then `ui/lib/theme-defaults.css`
+  (written by `npm run theme:css`, `@import`ed by style.css, checked by a test, as is the Rust
+  default against presets.ts) shows the default theme for the system's scheme.
+- **Deviation:** after a save Rust pushes the theme to the settings window with `eval`
+  (`window.littleJoanSettings.setTheme`), like `showTab`, not with an app event: listening to
+  events would have given the settings window `core:event:allow-listen` / `allow-unlisten`, its
+  first core permissions beyond `allow-close`, for no gain.
+- **`save_settings`** takes an optional `theme` (left out, the saved one stays; given, it goes
+  through the same tolerant parse); LJ27's settings window doesn't send one yet.
+- **Looks, tuned locally before CI:** the real `bar.html` / `settings.html` in iframes with a
+  mocked `__TAURI_INTERNALS__`, served by Vite and viewed in Chromium (a throwaway harness in the
+  gitignored `test-results/`, never committed). Changes from it: overlay padding 10 → 12 px, the
+  panel's opacity, the favicon tile, the grain.
+- **Smoke:** `smoke-theme.mts` (new, 4 tests) holds the three theme runs and `themeFailures`; each
+  run is its own launch with the theme in settings.json (the main run is untouched): two colors
+  `#9d8fd0` + `#e0a2a0`, intensity 0.6, grain 0.4 in light (`theme/page.png`,
+  `theme/command-bar.png`, `theme/history.png`, `theme/settings.png`) and dark
+  (`theme/page-dark.png`, `theme/command-bar-dark.png`, `theme/settings-dark.png`), and the
+  default theme in dark (`theme/command-bar-default-dark.png`). The screenshots live in
+  `<out>/theme/` so the main run's `command-bar.png` / `page.png` (default theme, light) keep
+  their names. Rust logs `theme <mode> colors=<n>` from `start_info`.
+- Files beyond the prompt: `ui/lib/{color,presets,theme-css,apply-theme}.ts`,
+  `ui/lib/theme-defaults.css`, `scripts/theme-css.mts` (+ `npm run theme:css`), the
+  `ui/command/{panel,welcome}.ts` and `ui/settings{.ts,-logic.ts}` glue, `ui/{bar,settings}.html`
+  (the `themed` body class), `history.css`, `settings.css`, `bar.rs` / `settings_window.rs`
+  (`set_theme`), `scripts/ci/smoke-theme.mts` (+ test).
+- `npm run verify`: 207 TS tests, 168 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.3 GB.
+
 ### LJ28 — Appearance editor · standard · auto
 
 **Verify:** `npm run verify` green, including vitest tests for `ui/settings/appearance-logic.ts`:
@@ -3693,6 +3760,11 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   Chromium) Ctrl+Y was also "redo" in text fields, so pages lose it there (Ctrl+Shift+Z still
   redoes). WebKitGTK has no Ctrl+Y binding. Option: Ctrl+H (Chrome's history key) on Windows and
   Linux instead — the owner's call.
+- **A custom theme may show the default theme for a frame** (surfaced by LJ27). The bar applies
+  the theme when `start_info` answers, a moment after its page (with `theme-defaults.css`) first
+  paints, so a summon can flash the default Mist colors before the user's. Not visible in CI's
+  screenshots. Option: also hand the bar the theme in an initialization script (as the settings
+  window gets its tab), applied before the first paint.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

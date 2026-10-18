@@ -33,7 +33,7 @@
   padding: 0 10px;
   font: inherit;
   font-size: 13px;
-  color: var(--fg);
+  color: var(--lj-fg);
   background: transparent;
   border: 0;
   border-radius: 7px;
@@ -43,7 +43,7 @@
 .text-button:hover,
 .text-button:focus-visible,
 .text-button[aria-expanded="true"] {
-  background: var(--field-bg);
+  background: var(--lj-field);
   outline: none;
 }
 
@@ -70,7 +70,7 @@
   align-items: center;
   padding: 10px 12px 10px 16px;
   font-size: 13px;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--lj-hairline);
 }
 
 .history-clearing[hidden] {
@@ -88,16 +88,16 @@
   padding: 0 10px;
   font: inherit;
   font-size: 12px;
-  color: var(--fg);
-  background: var(--field-bg);
+  color: var(--lj-fg);
+  background: var(--lj-field);
   border: 0;
   border-radius: 13px;
   cursor: pointer;
 }
 
 .choice[aria-pressed="true"] {
-  color: #ffffff;
-  background: var(--select-bg);
+  color: var(--lj-on-selected);
+  background: var(--lj-row-selected);
 }
 
 .history-clearing-actions {
@@ -110,7 +110,7 @@
   flex: none;
   margin: 8px 16px 0;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
 }
 
 .history-status[hidden] {
@@ -128,7 +128,7 @@
   padding: 12px 10px 4px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -137,7 +137,7 @@
   flex: none;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
 }
 
 .history-remove {
@@ -150,7 +150,7 @@
   font: inherit;
   font-size: 16px;
   line-height: 1;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
   background: transparent;
   border: 0;
   border-radius: 6px;
@@ -164,13 +164,13 @@
 }
 
 .history-remove:hover {
-  color: var(--fg);
-  background: var(--field-bg);
+  color: var(--lj-fg);
+  background: var(--lj-field);
 }
 
 .row.selected .history-time,
 .row.selected .history-remove {
-  color: #ffffff;
+  color: var(--lj-on-selected);
 }
 
 .row.selected .history-remove:hover {
@@ -180,7 +180,7 @@
 .history-empty {
   margin: 28px 16px;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
   text-align: center;
 }
 
@@ -188,14 +188,9 @@
   display: none;
 }
 
-/* The command bar's built-in "History" row: a clock. */
+/* The command bar's built-in "History" row: a clock (painted as a mask, style.css). */
 .row-icon-clock {
-  background: center / 16px no-repeat
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='8' r='5.8'/%3E%3Cpath d='M8 4.6V8l2.3 1.5'/%3E%3C/svg%3E");
-}
-
-.row.selected .row-icon-clock {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='8' r='5.8'/%3E%3Cpath d='M8 4.6V8l2.3 1.5'/%3E%3C/svg%3E");
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='8' r='5.8'/%3E%3Cpath d='M8 4.6V8l2.3 1.5'/%3E%3C/svg%3E");
 }
 
 /* A history list is denser than the command bar's suggestions. */

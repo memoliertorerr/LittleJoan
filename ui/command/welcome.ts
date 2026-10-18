@@ -1,6 +1,7 @@
 // The one-time welcome the command bar shows on the first launch (pure, unit-tested). The bar
 // shows it above the suggestions; start_info hands over the facts.
 import { displayShortcut } from "../lib/shortcut.ts";
+import type { Theme } from "../lib/theme.ts";
 
 export interface StartInfo {
   /** The registered global shortcut (accelerator syntax), if any. */
@@ -14,6 +15,8 @@ export interface StartInfo {
   startAtLogin: boolean | null;
   /** A Linux Wayland session, where the global shortcut can't fire. */
   waylandNoShortcut: boolean;
+  /** The theme (settings.json's `theme`), applied as the bar loads. */
+  theme: Theme;
 }
 
 /** A sentence with one part in monospace: a key combination or a command. */
