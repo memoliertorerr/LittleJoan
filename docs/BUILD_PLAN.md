@@ -1,4 +1,4 @@
-# Little Joan — Build Plan (v0.1, v0.2)
+# Little Joan — Build Plan (v0.1, v0.2, v0.3)
 
 > **Little Joan** is a tiny pop-up browser for Windows, Linux, and macOS, inspired by Little Arc.
 > It **hibernates by default**: after launch it shows no window and loads no page, and sits in
@@ -28,12 +28,28 @@
 > phone mode, fullscreen video on Windows / macOS / Ubuntu 24.04, single-instance CLI flags, and
 > the page size at scale 1, 1.5 and 2 — every phase PR re-checks them.
 >
+> **Round 3 (planned 2026-10-18, steps LJ36–LJ57, phases 18–26):** v0.2.0 is finished by fixes
+> (YouTube's fullscreen on macOS, Ctrl+H for history, the bar's first paint, double-click to zoom),
+> responsive resizing (live resize like Little Arc, phone mode per site), control (hide the icon,
+> quick commands with their state, every key configurable in a Keyboard tab), then round 1's phases
+> 7–11 (Linux fullscreen, downloads + zoom, the Wayland shortcut, macOS signing if the owner's
+> secrets exist, the v0.2.0 release). **v0.3:** Little Joan as the system's browser for links,
+> sign-in popups inside the app, find in page and pinned sites, saved logins on Windows, nine more
+> bundled extensions. **Not in round 3:** macOS saved passwords and passkeys (deferred by the
+> owner; Later has the research), Linux saved logins, Windows code signing (waiting on SignPath),
+> auto-update, tabs, keeping the page after close. **Round 3 must not disturb** the list above, nor
+> the command bar, toolbar, history, themes, logins surviving close and quit, or the extension
+> runtime's security checks. Checkpoints stop for the owner's own testing; security-sensitive
+> phases end ready and green, not merged (Ground Rule 24).
+>
 > **Never use Arc's name, logo, or artwork as branding.** "Inspired by Little Arc" in the README
 > is the only mention. The icon is original.
 >
 > **Autopilot:** one step = one commit, made by the agent only when verify is green. One
-> phase = one pull request, reviewed and merged by a human. The agent stops at checkpoints, at
-> the end of each phase, and at any stop condition.
+> phase = one pull request. Since round 2 the agent merges a phase PR once its CI is green (the
+> owner's standing exception) — never a security-sensitive phase's, never a tag or a release
+> (Ground Rule 24). The agent stops at checkpoints, at the end of each phase it was asked to run,
+> and at any stop condition.
 
 ---
 
@@ -41,7 +57,9 @@
 
 > Each session flips its own row to ✅ in the same commit as the step's change. Read this table
 > at the start of a session to know where to resume. `auto` steps run back to back;
-> `checkpoint` steps end with a stop for a human check.
+> `checkpoint` steps end with a stop for a human check. *(Round 3)* A `review` step ends a
+> security-sensitive phase: the PR is marked ready and green, and the agent stops without merging
+> (Ground Rule 24). `⏭ skipped` marks a step whose precondition didn't hold, with the reason.
 
 | Step | Scope | Model | Gate | Status |
 |------|-------|-------|------|--------|
@@ -65,8 +83,8 @@
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ⬜ todo |
 | LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ⬜ todo |
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
-| LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (starts once the user's secrets exist) | strong | auto | ⬜ todo |
-| LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the user's checklist | standard | checkpoint | ⬜ todo |
+| LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⬜ todo |
+| LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -83,6 +101,28 @@
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — the owner's checklist passed 2026-10-18 (one YouTube fullscreen bug, see notes); v0.2.0-beta.2 released |
+| LJ36 | *(round 3)* YouTube's fullscreen on macOS: reproduce in CI (element and video fullscreen, narrow and wide), then fix | strong | auto | ⬜ todo |
+| LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ⬜ todo |
+| LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ⬜ todo |
+| LJ39 | *(round 3)* Resizing, part 1 — DESIGN PENDING RESEARCH | strong | auto | ⬜ todo |
+| LJ40 | *(round 3)* Resizing, part 2; the owner's check — DESIGN PENDING RESEARCH | strong | checkpoint | ⬜ todo |
+| LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
+| LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ⬜ todo |
+| LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ⬜ todo |
+| LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ⬜ todo |
+| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ⬜ todo |
+| LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ⬜ todo |
+| LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ⬜ todo |
+| LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ⬜ todo |
+| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ⬜ todo |
+| LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
+| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
+| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ⬜ todo |
+| LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⬜ todo |
+| LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⬜ todo |
+| LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⬜ todo |
+| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action | standard | auto | ⬜ todo |
+| LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ⬜ todo |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
@@ -130,13 +170,37 @@ fullscreen bug, see LJ35's notes), and on their word `v0.2.0-beta.2` was release
 Next: the owner's new requests ("Requested for the next version" under LJ35) and phases 7–10 —
 nothing starts until the owner says yes.**
 
+**Round 3 (planned 2026-10-18; decisions under "Design Decisions Already Made → round 3"): the
+owner said yes to the next version.** It finishes **v0.2.0** — phase 18 (LJ36–LJ38: YouTube's
+fullscreen on macOS reproduced in CI and fixed, Ctrl+H, the bar's first paint, double-click to
+zoom), phase 19 (LJ39–LJ40: responsive resizing), phase 20 (LJ41–LJ44: hide the icon safely, quick
+commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ19, their prompts
+adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
+phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
+and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26.**
+**The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
+end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
+are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
+green PR, and then STOPS; the next phase starts only when the owner says go. **The agent's merge
+permission is no wider than before:** it merges a phase PR once verify, package and smoke are green
+on every OS job; the security-sensitive phases 21, 22 and 24 end in a `review` step — ready, green,
+NOT merged — for an independent review and the owner's decision; tags and releases happen only on
+the owner's word. LJ18 runs only if the owner's Apple signing secrets exist, and is otherwise
+recorded as skipped. CLAUDE.md's standing exception names "the v0.2 plan", so v0.3's `auto` phases
+(23, 25) stop before merging until the owner extends it (Ground Rule 24).
+
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
 Windows or Linux (CI is the only compiler for those paths), and phase 4 is CI packaging, where
 mistakes only show up after a 15-minute round trip. Phase 3 is ordinary UI + glue on top of
 settled contracts and can run on a standard model. In v0.2 the strong steps are the ones that
 touch three OSes' native APIs or CI packaging (LJ11, LJ13–LJ15, LJ17, LJ18); LJ12, LJ16 and
-LJ19 are UI, key tables and release chores on settled code.
+LJ19 are UI, key tables and release chores on settled code. *(Round 3)* Phases 18–22 and 24 run
+on the strong model: macOS fullscreen and first-paint timing (18), per-OS resize and agent code
+(19), the keymap across three native key paths (20), and the security-sensitive phases (21, 22,
+24); phase 23's find glue is native too, so it runs strong as well. Phases 25 and 26 (bundled
+extensions in an established layout, docs) can run on a standard model.
 
 **Phases** — one pull request each, stacked (each phase branches from the previous one):
 1. **LJ1 → LJ2** · strong — `lj/p1-foundation` → PR into `main`. Review: the toolchain/caching
@@ -188,6 +252,39 @@ phases after 17 then branch from `main` too; LJ15 and LJ16 use the toolbar that 
 17. **LJ32 → LJ35** · standard — `lj/p17-bundled-extensions`. Ends in a checkpoint: the user's
     checklist, then `v0.2.0-beta.2` only on their word.
 
+**Round 3 phases** — **execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24
+→ 25 → 26.** Every phase branches from the latest `main` and its PR goes into `main`. Round 1's
+phases 7–11 keep their numbers and steps (LJ13–LJ19), adjusted where round 2 changed the ground.
+
+18. **LJ36 → LJ38** · strong — `lj/p18-fixes`. Review: the fullscreen reproduction's log per OS and
+    what fixed it; the history key; the bar's initialization script (bar only). Merged by the agent
+    when green.
+19. **LJ39 → LJ40** · strong — `lj/p19-resizing`. Review: layout and agent changes per OS, the
+    resize smoke numbers. **Ends in a checkpoint** (the owner's eyes on the resizing feel).
+20. **LJ41 → LJ44** · strong — `lj/p20-control`. Review: the icon's safety rule, the quick
+    commands' fixed command set, the keymap replacing every hard-coded key. Merged when green.
+7. **LJ13 → LJ14** · strong — `lj/p7-linux-fullscreen`. As planned; merged when green.
+8. **LJ15 → LJ16** · strong — `lj/p8-downloads-zoom`. Downloads' status in the toolbar; zoom keys in
+   the keymap. Merged when green.
+9. **LJ17** · strong — `lj/p9-wayland-shortcut`. The portal's trigger in the Keyboard tab; a portal
+   shortcut counts as working for the icon rule. Merged when green.
+10. **LJ18** · strong — `lj/p10-macos-signing`, only if the owner's Apple secrets exist (`gh secret
+    list` names only); otherwise ⏭ skipped and recorded in LJ19's PR. Merged when green.
+11. **LJ19** · standard — `lj/release-0.2.0`. **Checkpoint:** the owner's checklist; the
+    version-bump PR may be merged when green; tag and release only on the owner's word.
+21. **LJ45 → LJ46** · strong — `lj/p21-links`. **Security-sensitive (`review`):** ready and green,
+    not merged. Review: argument injection, the OS registrations and their removal, no defaults
+    changed, the handoff loop guard.
+22. **LJ47 → LJ48** · strong — `lj/p22-popups`, after phase 21 is merged. **Security-sensitive
+    (`review`).** Review: popups have no IPC, what decides a popup, its lifecycle.
+23. **LJ49 → LJ50** · strong — `lj/p23-find-pins`. Review: the per-engine find glue.
+24. **LJ51 → LJ52** · strong — `lj/p24-saved-logins`. **Security-sensitive (`review`).** Review:
+    password saving off by default, removal clears the right profile, no credential handling.
+25. **LJ53 → LJ56** · standard — `lj/p25-more-extensions`. Review: the bundled extensions' rules
+    (no network, text as text), the two platform touch-ups.
+26. **LJ57** · standard — `lj/p26-v0.3-docs`. **Checkpoint:** the owner's v0.3 checklist; a
+    pre-release only on their word.
+
 Never start a phase with uncommitted changes in the tree.
 
 ---
@@ -215,6 +312,11 @@ several back to back. LJ18 needs the user's signing secrets before it starts (se
 `CLAUDE.md` lets the agent commit and push on branches; merging, tagging and releasing still need
 the user's word for each one.
 
+Round 3 uses the same prompts. The owner says per run how far to go. Within that range a phase
+whose last step is `auto` is merged by the agent once CI is green, and the next phase starts from
+the latest `main`; a `checkpoint` (LJ40, LJ19, LJ57) or a `review` step (LJ46, LJ48, LJ52) ends
+the run whatever the range says (Ground Rule 24).
+
 ### Opening prompt — every session
 
 ```text
@@ -231,9 +333,11 @@ Before any work:
    `df -h .`. Free disk must be above 3 GB.
 4. Restate, in one line each, the rules you will not break this session:
    (a) you commit only when `npm run verify` is green, one commit per step, never on main;
-   (b) you never force-push, rewrite pushed history, merge a PR, or delete a branch;
-   (c) you stop at checkpoints, at the end of the phase, and at every stop condition in
-       Ground Rules — list them;
+   (b) you never force-push, rewrite pushed history, or delete a branch, and you merge only
+       what Ground Rule 24 allows (a phase PR whose CI is green under CLAUDE.md's standing
+       exception — never a `review` phase's PR; tags and releases only on the owner's word);
+   (c) you stop at checkpoints and `review` steps, at the end of the range you were given, and
+       at every stop condition in Ground Rules — list them;
    (d) you write only inside LittleJoan/, source scripts/env.sh before every npm/node/cargo
        command, and never launch the GUI app on this machine;
    (e) remote web pages never get IPC, and at rest no webview exists.
@@ -258,12 +362,16 @@ For each step:
    `gh run watch <id> --repo memoliertorerr/LittleJoan`. If CI is red on code the Mac cannot
    compile, fix it in a follow-up commit "lj-step-N-fix: ..." (Ground Rule 3).
 4. Paste a short report: the verify output, `git log -1 --stat`, and the CI result per OS.
-5. If the step's gate is `checkpoint`, update the PR, tell me exactly what to check, and stop.
-   If it is `auto`, continue to the next step.
+5. If the step's gate is `checkpoint`: fill the PR with the step's checklist, merge it once CI
+   is green if the step says so, tell me exactly what to check, and stop. If it is `review`:
+   fill the PR (the review focus first), mark it ready once CI is green, and stop — never merge
+   it. If it is `auto`, continue to the next step.
 
 Stop immediately at any stop condition in Ground Rules and tell me which one.
-After the last step of the range: push the branch, fill the PR description from the template,
-mark it ready for review once CI is green, then stop.
+At the end of each phase in the range: push the branch, fill the PR description from the
+template, and once CI is green either merge it (Ground Rule 24's `auto` case) and go on with the
+next phase from the latest `main`, or — after the range's last phase — mark it ready / merge it as
+its last step says, then stop.
 ```
 
 ### PR description template
@@ -312,6 +420,16 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 | *(round 2)* No IPC for the page webview, ever | `cargo test` (LJ22) + smoke (LJ29) | A Rust test reads every capability file and finds no `joan-page`; the test extension reports `ipc=denied` |
 | *(round 2)* How the command bar, toolbar, history view, themes and extensions look | the agent from CI screenshots on all three OSes (each step names its screenshots), then **you** — LJ35 | Screenshots match the step's description in light and dark; at LJ35 it feels like Little Arc on your Mac |
 | *(round 2)* Suggestions feel right with real history | **you** — LJ35 | After a few days of use, the empty command bar shows the sites you actually open most, and typing finds them fast |
+| *(round 3)* Element and video fullscreen at narrow and wide widths, entered and left by clicks | CI `smoke` (LJ36's fullscreen run; macOS where the click reaches the page) | Every path that entered holds until the page's own exit, and leaves when asked |
+| *(round 3)* YouTube's own player: button, F, exit button | **you** — phase 18 PR, LJ19 | Fullscreen stays; the exit button works; at a narrow and a wide window |
+| *(round 3)* The resizing feel | **you** — LJ40 checkpoint | Defined in LJ40 (from the research) |
+| *(round 3)* The icon hidden, and back by itself when the shortcut can't work | CI `smoke` (LJ41's tray run logs) + **you** (seeing the menu bar / tray) | `tray-visible false` with the setting off; `true` on a Wayland session; on your Mac the icon is gone and Little Joan still opens |
+| *(round 3)* Custom keys on real keyboards and layouts; the reserved-shortcut warnings | CI `smoke` (one rebinding, LJ43) + **you** — phase 20 PR | A rebound key works and the old one doesn't; the warnings name what the OS uses |
+| *(v0.3)* Little Joan as the OS's browser for links | CI `smoke` (LJ45/46: the registration read back, a link launched as the OS would, the defaults untouched, the Linux loop check) + **you** — phase 21 PR | It appears in the OS's default-apps list; once chosen, links from other apps open in it, and "Open in browser" goes to your main browser |
+| *(v0.3)* Sign-in popups with real providers | CI `smoke` (a cross-origin fake sign-in, LJ47) + **you** — phase 22 PR | Google / Apple / GitHub sign-ins finish in the popup, which shows the provider's host and closes |
+| *(v0.3)* Find in page | CI `smoke` (counts on Windows / Linux, found on macOS) + **you** | Real pages: Enter, Shift+Enter, Esc behave |
+| *(v0.3)* Saved passwords and passkeys on Windows | CI `smoke` (the settings read back, removal) + **you** — phase 24 PR | WebView2 offers to save, fills in, forgets after removal; a passkey with Windows Hello |
+| *(v0.3)* Security-sensitive phases (21, 22, 24) | an independent read-only review, then the owner | No unaddressed Critical / High findings; the owner merges |
 
 The agent self-verifies everything a compiler, a test suite, and CI (including headless
 screenshots of the installed app) can show. Everything that needs a real desktop, real input
@@ -323,7 +441,8 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
 
 1. **Branches:** one per phase, `lj/p<n>-<name>`, each cut from the previous phase's branch
    (phase 1 from `main`). PRs are stacked: phase 1 → `main`, phase n → phase n-1's branch.
-   After the bootstrap commit, **nothing is ever committed to `main`** by the agent.
+   After the bootstrap commit, **nothing is ever committed to `main`** by the agent. *(Since
+   round 2: every phase branches from the latest `main` and its PR goes into `main`.)*
 2. **One step = one commit**, message `lj-step-N: <message>`, made **only when
    `npm run verify` is green**. Never commit red.
 3. **CI-only failures:** the Mac cannot compile the Windows/Linux code paths, so CI is part of
@@ -333,6 +452,8 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
 4. **Push and PR:** the agent pushes after every step commit and opens the phase PR as a draft
    after the first one. It never force-pushes, never rewrites pushed history, never merges any
    PR, and never deletes a branch. `gh` commands always pass `--repo memoliertorerr/LittleJoan`.
+   *(Since round 2 the owner's standing exception lets the agent merge green phase PRs; Ground
+   Rule 24 says exactly what it may merge.)*
 5. **Never weaken verification** to get green — no skipped or deleted tests, loosened
    assertions, `#[allow(...)]` / `eslint-disable` added to silence a failure, or swallowed
    errors.
@@ -387,6 +508,38 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
 20. *(round 2)* **History never leaves the machine.** It lives in the app's config folder, is
     loaded only while the window is open (nothing extra at rest), and is never sent anywhere;
     favicons are loaded by the bar straight from the sites the user visited.
+21. *(round 3)* **Little Joan never changes OS defaults or system settings silently.** It may
+    register itself as a candidate (a browser for http / https links, LJ45), read whether it is
+    the default, and open the OS's own settings when the user clicks a button. It never writes
+    the default-browser choice (Windows `UserChoice`, macOS Launch Services' default handlers,
+    `xdg-settings` / `xdg-mime default`), never writes a system shortcut or any other system
+    setting, and reads system settings only where a step names the read. Uninstalling removes
+    what installing registered.
+22. *(round 3)* **Links from other apps are untrusted input.** They arrive only as `--link <url>`
+    (exactly one argument after it, never read as a flag) or as macOS's `RunEvent::Opened`; only
+    absolute `http` / `https` URLs open — never `file:`, `javascript:`, `data:`, extension or app
+    URLs — through the same rules as typed addresses, and nothing in a link can trigger another
+    flag, a setting or a command.
+23. *(round 3)* **In-app popups are page trust.** A popup window (`joan-popup-<n>`, LJ47) is an
+    IPC-free web page like `joan-page`: no capability names it (`capability_tests.rs` enforces
+    it), it never loads extension or app URLs, it opens no further popups, and hibernating closes
+    it — nothing survives at rest.
+24. *(round 3, the owner's update 2026-10-18)* **Merging, checkpoints and reviews.** The agent
+    merges a phase PR into `main` — a merge commit, never squash, never `--delete-branch` — once
+    verify, package and smoke are green on every OS job (CLAUDE.md's standing exception). That
+    permission is no wider than before: a `review` step (a security-sensitive phase's end) marks
+    the PR ready and STOPS for an independent review and the owner's decision; a `checkpoint`
+    step fills the PR with a precise checklist, may merge its green PR, and STOPS — the next phase
+    starts only when the owner says go; tags and releases happen only on the owner's word, one at
+    a time. The standing exception names "the v0.2 plan": until the owner extends it to v0.3, a
+    v0.3 phase PR is marked ready and the agent stops before merging.
+25. *(round 3)* **One keymap.** From LJ43 on, every key of Little Joan's own (page keys, the macOS
+    menu's key equivalents, keys shown in the bar or Settings) comes from `keymap.rs` and the
+    user's overrides in settings; no other file hard-codes such a key. Typing keys (a letter or
+    digit without a modifier, or with Shift alone) can never be bound.
+26. *(round 3)* **Saved credentials stay in the engine.** Passwords, passkeys and autofill data
+    live only in the web engine's own store. Little Joan never reads, exports, logs or syncs them;
+    it only switches the engine's features on or off and asks the engine to remove them.
 
 ### Stop conditions
 
@@ -405,6 +558,14 @@ The agent stops, reports which condition fired, and waits:
   `memoliertorerr/LittleJoan`.
 - Free disk would drop below 3 GB.
 - A checkpoint step, or the end of the phase.
+- *(round 3)* A `review` step: the PR is marked ready and never merged by the agent.
+- *(round 3)* Anything that would change an OS default (the default browser, URL or file
+  associations beyond what LJ45 registers, login items beyond LJ11's) or write a system setting
+  (Ground Rule 21).
+- *(round 3)* A change that would give `joan-page` or a `joan-popup-*` webview a capability, or
+  add an initialization script to either.
+- *(round 3)* Starting the next phase after a checkpoint, or while the previous security-sensitive
+  phase's PR that touches the same files is still open, without the owner's go.
 
 ### Rollback
 
@@ -433,10 +594,18 @@ git tag lj-pre-build && git push origin lj-pre-build
 git switch -c lj/p1-foundation
 ```
 
-Each later phase:
+Each later phase (v0.1, v0.2 round 1 — stacked):
 
 ```bash
 git switch lj/p<n-1>-<name> && git pull --ff-only
+git switch -c lj/p<n>-<name>
+```
+
+Since round 2 (rounds 2 and 3, v0.3) every phase starts from the latest `main`:
+
+```bash
+git status                       # must be clean
+git switch main && git pull --ff-only
 git switch -c lj/p<n>-<name>
 ```
 
@@ -613,6 +782,79 @@ extension models) and a read of the vendored Tauri/wry sources:
   Clean link (page action), Wayback Machine (page action), Copy as Markdown link (page action),
   JSON formatter, Text tools, Color tools. All local; Wayback only opens web.archive.org in the
   page.
+
+### Round 3 (decided with the owner, 2026-10-18)
+
+The owner's decisions for the rest of v0.2.0 and for v0.3, after the beta.2 checklist. Do not
+relitigate them mid-plan; a step that seems to need a change is a stop condition.
+
+- **Order:** phase 18 (fixes) → 19 (responsive resizing) → 20 (control) → round 1's phases 7–11
+  (LJ13–LJ19; LJ19 is the v0.2.0 release) → v0.3's phases 21–26. Steps are numbered on from LJ36,
+  phases from 18; LJ13–LJ19 keep their numbers.
+- **Fixes (phase 18):** (a) YouTube's own fullscreen button on macOS — reproduce in CI first (a
+  smoke page calling both `requestFullscreen()` and `video.webkitEnterFullscreen()` from a click,
+  at narrow and wide sizes), then fix; (b) the history key is **Ctrl+H** on Windows and Linux,
+  Cmd+Y stays on macOS; (c) macOS: the toolbar left blank when an extension opens from
+  hibernation — the panel opens once the bar's script runs; (d) double-clicking the toolbar zooms
+  the window (`core:window:allow-internal-toggle-maximize`, the bar only); (e) no default-theme
+  flash on summon — the bar gets its theme before its first paint (the trusted bar only, never
+  the page webview).
+- **Responsive resizing (phase 19):** the owner: "Little Arc has no mobile toggle; I like a mobile
+  version on narrow sizes, but outside of that websites should be more responsive; optimize or
+  better the resizing." The design follows a research pass (LJ39–LJ40). Phase 19 ends in a
+  checkpoint: the feel is the owner's to judge.
+- **Control (phase 20):** (a) an option to hide the tray / menu-bar icon (Settings → General); it
+  comes back by itself whenever the global shortcut can't work; a second launch still opens the
+  window; the command bar gets "Settings" and "Quit Little Joan". (b) Quick commands in the
+  command bar for actions and settings, each showing its current state (LJ42 lists them). (c) A
+  Keyboard tab: every Little Joan key configurable (focus address, history, translate, close,
+  reload, back / forward, and later zoom and find), warnings for clashes with Little Joan's own
+  keys and the global shortcut, a curated table of the OSes' reserved shortcuts, and "another app
+  holds it" when the global shortcut can't be registered. Reading macOS's own enabled shortcuts
+  (`com.apple.symbolichotkeys`, read-only) is decided in LJ44 by whether it is reliable; system
+  settings are never written.
+- **Round 1's phases after that:** zoom keys join the keymap (LJ16); LJ15's download status lives
+  in the toolbar; LJ17's portal trigger shows in the Keyboard tab; LJ18 runs only if the owner's
+  Apple secrets exist (`gh secret list`, names only) and is otherwise skipped and recorded; LJ19's
+  version-bump PR may be merged by the agent, tagging and publishing wait for the owner's word, and
+  it is a checkpoint with the owner's checklist.
+- **v0.3 — links from other apps (phase 21, security-sensitive):** Little Joan can be the
+  system's browser for http / https links: macOS `CFBundleURLTypes` (Tauri merges
+  `src-tauri/Info.plist`) and `RunEvent::Opened`; Windows the registry's `Capabilities` /
+  `URLAssociations` and `RegisteredApplications`, written per user by the NSIS installer's hooks,
+  so it appears in Default apps; Linux the desktop file's `MimeType=x-scheme-handler/http;…`. A
+  link opens in the Little Joan window. Settings gets a "Main browser" for handing pages on —
+  Little Joan may itself be the default, so it never hands a link to itself — and a button that
+  opens the OS's default-apps settings. Little Joan never changes defaults silently (Ground Rule
+  21).
+- **v0.3 — sign-in popups (phase 22, security-sensitive):** `window.open` / OAuth popups (sized
+  ones, or known sign-in flows) open in a small child window with its own IPC-free page webview
+  that shares the data store and the opener relationship, so the popup can post back and close;
+  they close on hibernate; everything else still goes to the browser.
+- **v0.3 — find in page (phase 23):** Ctrl/Cmd+F → a find field in the toolbar (the trusted bar)
+  driving each engine's own find — WKWebView's find, WebView2's Find API (webview2-com 0.39.1 has
+  it: checked while planning), WebKitGTK's FindController; next / previous, the match count where
+  the engine reports it; the key lives in the keymap.
+- **v0.3 — saved logins on Windows (phase 24, security-sensitive):** a Privacy setting for
+  WebView2's own password saving (`IsPasswordAutosaveEnabled`, default off) and general autofill,
+  plus removing saved passwords; macOS and Linux say it isn't available yet. **macOS passwords and
+  passkeys are deferred by the owner** (Later, with the research). Windows passkeys through
+  Windows Hello are a human check.
+- **v0.3 — more bundled extensions (phase 25):** Reading list (a page action saves the page; a
+  panel lists, opens, removes), Stopwatch & countdown, To-do, Minesweeper, Password generator,
+  Regex tester, Hash & Base64 (SubtleCrypto), Emoji picker, Breathing timer — the conventions of
+  LJ32–LJ34 (plain JS, pure logic tested, themed, no network).
+- **Additions the owner allowed, chosen while planning:** **pinned sites** (LJ50 — pin the current
+  site to the top of the command bar's empty state; small, and it rounds off the command bar the
+  quick commands extend); **panels follow theme changes** and **`--extension` opens a page action**
+  (LJ56 — two Deferred follow-ups that make the new extensions better at little cost); **downloads
+  refused while the page shows an extension panel or in a popup** (LJ15 / LJ47 — extensions have
+  no downloads permission, so they must not drop files). Bigger ideas went to Later.
+- **v0.3 ends with a checkpoint** (LJ57): docs, screenshots, the owner's checklist; a v0.3
+  pre-release only on the owner's word.
+- **Checkpoints and merging (the owner's update):** checkpoints stop for the owner's own testing
+  and review — the end of phase 19, LJ19 and LJ57. The agent's merge permission is no wider than
+  before (Ground Rule 24).
 
 ---
 
@@ -1994,8 +2236,13 @@ Then mark the PR ready for review and stop.
 
 ### LJ13 — Build the AppImage on Ubuntu 24.04 · strong · auto
 
-> Phase 7. Branch `lj/p7-linux-fullscreen` from `lj/p6-first-run` (or from `main` if phase 6 is
-> merged).
+> Phase 7 (runs after round 3's phase 20). Branch `lj/p7-linux-fullscreen` from the latest
+> `main`; the PR goes into `main`, and the agent merges it once every job is green (Ground Rule
+> 24).
+>
+> *Round 3 adjustments (2026-10-18):* by now `smoke.mts` runs much more than in v0.1 — round 2's
+> command bar, history, settings, extension, bundled and theme runs, and round 3's fullscreen,
+> tray, quick-command and keymap runs. The `linux-appimage` entry runs all of it, like `linux`.
 
 **Verify:** `npm run verify` green. CI: `package (linux)` on ubuntu-22.04 builds only the
 `.deb`, so its glibc floor is unchanged; a new `package (linux-appimage)` on ubuntu-24.04 builds
@@ -2038,10 +2285,9 @@ Do NOT add the 22.04 stopgap (LJ14) or change app code.
 
 Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ13 to ✅, add notes, and
 commit: "lj-step-13: build the AppImage on ubuntu-24.04 (WebKitGTK 2.52) and smoke-test it
-fully". Push, open the phase-7 PR as a draft (base: lj/p6-first-run, or main if phase 6 is
-merged), and watch CI until every job is green. Download linux-appimage's fullscreen.png into
-test-results/ci/, look at it, then delete it. If a job is still red after two honest fix
-attempts, stop and report.
+fully". Push, open the phase-7 PR into main as a draft, and watch CI until every job is green.
+Download linux-appimage's fullscreen.png into test-results/ci/, look at it, then delete it. If a
+job is still red after two honest fix attempts, stop and report.
 ```
 
 ### LJ14 — WebKitGTK older than 2.52: fullscreen the window instead of aborting · strong · auto
@@ -2079,14 +2325,21 @@ stays its in-page size, but nothing crashes.
    tests. When it applies, the enter-fullscreen handler returns TRUE, logs
    `fullscreen-fallback`, fullscreens the window and hides the bar, through the same path as
    bar::set_element_fullscreen. Esc, a new page load (Started), or the window leaving
-   fullscreen by other means ends it and brings the bar back. Esc goes through keys.rs and the
-   GTK key hook, and only while the fallback is active. FullscreenTracker's rule holds: undo
+   fullscreen by other means ends it and brings the bar back. Esc is handled in
+   platform/linux.rs's GTK key hook before the keymap (Esc is never a keymap key, Ground Rule
+   25), and only while the fallback is active. FullscreenTracker's rule holds: undo
    only a fullscreen we caused. WebKitGTK 2.52+ keeps today's behavior untouched.
 3. CI smoke: add a permanent matrix entry `linux-22.04` (ubuntu-22.04, artifact
    little-joan-linux, the .deb). Its smoke-log rules, unit-tested: `fullscreen-fallback`, then
    `fullscreen true`, then `fullscreen false` after the page loads again, and no abort.
-   Everything else matches the `linux` entry. The 24.04 entries must NOT log
-   fullscreen-fallback.
+   Everything else matches the `linux` entry — the whole smoke, round 2's and round 3's runs
+   included (the extension runtime's security checks must hold on the oldest engine the .deb
+   reaches). LJ36's fullscreen run expects the fallback there: each path logs
+   `fullscreen-fallback` and window fullscreen, the page reports `entered=0` (its request was
+   declined), and the fallback ends when the page loads again. If any other check fails only on
+   22.04 for an engine reason, stop and report — don't exempt the entry from it. The 24.04
+   entries must NOT log fullscreen-fallback. If the run's annotations announce the ubuntu-22.04
+   image's retirement, record it under Landmines.
 4. Write docs/upstream/webkitgtk-2.50-fullscreen-abort.md: a bug report for Ubuntu's
    webkit2gtk package on Launchpad. Jammy has stayed at 2.50.4-0ubuntu0.22.04.1 since
    2026-01-13, while noble and resolute got 2.52.6 on 2026-08-31. Include the bare PyGObject
@@ -2107,21 +2360,28 @@ linux-22.04's fullscreen.png. This ends phase 7. Fill the PR description. Needs 
   fullscreen button. Nothing crashes, the window fills the screen, and Esc brings it back.
 - On 24.04: the AppImage's fullscreen fills the screen with the video.
 - The must-not-disturb list.
-Then mark the PR ready and stop.
+These checks also go into LJ19's checklist. Once every job is green, merge the PR into main with a
+merge commit (Ground Rule 24), then stop and report.
 ```
 
 ### LJ15 — Downloads · strong · auto
 
-> Phase 8. Branch `lj/p8-downloads-zoom` from `lj/p7-linux-fullscreen` (or from `main`).
+> Phase 8. Branch `lj/p8-downloads-zoom` from the latest `main`; the PR goes into `main`.
+>
+> *Round 3 adjustments (2026-10-18):* the bar is LJ24's toolbar by now, so the status area lives
+> in `ui/toolbar/`; downloads are refused while the page shows an extension panel (extensions have
+> no downloads permission); the new command goes into a child module; the smoke rules into their
+> own file.
 
 **Verify:** `npm run verify` green, including Rust tests for a pure `downloads.rs`. The file
 name comes from the engine's suggested name, else the URL's last path segment, else
 `download`. It is cleaned: no path separators, no `..`, no control characters, no Windows
 reserved names (`CON`, `NUL`, `COM1`…) or trailing dots and spaces, capped at 200 bytes. It is
 made unique in the folder: `report.pdf` → `report (1).pdf`, `archive.tar.gz` →
-`archive (1).tar.gz`. Only `http`, `https`, `blob` and `data` downloads are accepted. Vitest
-tests for the bar's status logic in `ui/bar-logic.ts`: downloading → saved → cleared after 8 s;
-failed; an address edit in progress is never disturbed. Capabilities: the bar gains only
+`archive (1).tar.gz`. Only `http`, `https`, `blob` and `data` downloads are accepted, and none
+while the page shows an extension panel (`download-refused panel`). Vitest tests for the
+toolbar's status logic in `ui/toolbar/logic.ts`: downloading → saved → cleared after 8 s;
+failed; the command bar opening never loses a status. Capabilities: the bar gains only
 `allow-reveal-download`. CI green on all three, with a new smoke check: `--show` a smoke-server
 URL that answers `application/octet-stream` with `Content-Disposition: attachment;
 filename="lj-smoke.bin"`. The log then shows `download-started lj-smoke.bin` and
@@ -2141,17 +2401,19 @@ Design (decided with the user; do not relitigate):
   engine's suggested destination, else the URL. Log `download-started <name>`, remember the
   destination keyed by URL (DownloadEvent::Finished carries no path on macOS; see Landmines),
   and tell the bar. On Finished: log `download-finished <name> ok|failed` and tell the bar.
-- The URL bar (ui/bar.html, ui/bar.ts, ui/bar-logic.ts) gets a small status area at its right
-  edge, pushed from Rust like the address: bar.eval("window.littleJoan.setStatus(<json>)").
-  *(Round 2 runs first: by then the bar is LJ24's Little Arc-style toolbar. Put the status
-  area there, left of the open-in-browser button, and keep LJ22's rule that only the bar holds
-  trusted UI.)*
+- While the page shows an extension panel (extensions::session's committed panel), refuse every
+  download and log `download-refused panel`: no extension has a downloads permission, so a panel
+  must not drop files in Downloads. (LJ47's popups refuse downloads too.)
+- The toolbar (LJ24: ui/toolbar/logic.ts + toolbar.ts, ui/bar.html, ui/style.css) gets a small
+  status area left of the open-in-browser button, pushed from Rust like the address:
+  bar.eval("window.littleJoan.setStatus(<json>)"). Only the bar holds trusted UI (LJ22).
   It shows "Downloading lj-smoke.bin…", then "lj-smoke.bin saved" with a "Show in folder"
-  button, or "Download failed". It clears after 8 s, or at once when the user starts editing
-  the address. The button calls a new command `reveal_download()`, which reveals the last
-  saved file with tauri_plugin_opener's reveal_item_in_dir. It is granted to the bar only and
-  added to build.rs's app manifest. LJ16 reuses this status area for the zoom level, so keep it
-  generic (text + optional action).
+  button, or "Download failed". It clears after 8 s; while the command bar is open it waits and
+  shows when the toolbar comes back. The button calls a new command `reveal_download()` (in a
+  child module, src-tauri/src/commands/downloads.rs), which reveals the last saved file with
+  tauri_plugin_opener's reveal_item_in_dir. It is granted to the bar only and added to build.rs's
+  app manifest. LJ16 reuses this status area for the zoom level, and LJ46 for "No other browser",
+  so keep it generic (text + optional action).
 - Closing the window during a download cancels it. Nothing keeps a webview alive for it
   (Ground Rule 9). No notification plugin.
 - Windows: WebView2's own download flyout must not appear on top. Check it in the smoke
@@ -2159,16 +2421,17 @@ Design (decided with the user; do not relitigate):
   arguments (ICoreWebView2DownloadStartingEventArgs) in platform/win.rs, keeping wry's
   destination.
 
-Smoke (scripts/ci/smoke.mts + smoke-log.mts and its test; the smoke server in smoke.mts): add a
-route that answers with a fixed 1 KB body, Content-Type application/octet-stream and
+Smoke (a new scripts/ci/smoke-downloads.mts + test for the run and its rules, wired into
+smoke.mts; the smoke server lives in smoke.mts): add a route that answers with a fixed 1 KB body, Content-Type application/octet-stream and
 Content-Disposition attachment; filename="lj-smoke.bin". Use `--show` on that URL twice. Check
 the log events, the bytes of Downloads/lj-smoke.bin and of Downloads/lj-smoke (1).bin, and take
 a screenshot of the bar (download.png). Delete both files afterwards (the runner is
 disposable, but stay tidy).
 
-Files: src-tauri/src/{downloads.rs (new, pure), bar.rs, commands.rs, lib.rs, smoke.rs,
-platform/win.rs if needed}, src-tauri/build.rs, src-tauri/capabilities/bar.json, ui/{bar.html,
-bar.ts, bar-logic.ts (+ test), style.css}, scripts/ci/{smoke.mts, smoke-log.mts (+ test)},
+Files: src-tauri/src/{downloads.rs (new, pure), bar.rs, commands/downloads.rs (new), lib.rs,
+smoke.rs, platform/win.rs if needed}, src-tauri/build.rs, src-tauri/capabilities/bar.json,
+ui/{bar.html, bar.ts, toolbar/logic.ts, toolbar/toolbar.ts (+ tests), style.css},
+scripts/ci/{smoke.mts, smoke-downloads.mts (+ test)},
 README, CHANGELOG ([Unreleased] → Added), docs/architecture.md (the page, the URL bar,
 commands, smoke log), this plan (Deferred follow-ups: "Downloads" handled by LJ15).
 
@@ -2176,19 +2439,24 @@ Do NOT add a downloads list, a progress bar, pause/resume, or a "where to save" 
 
 Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ15 to ✅, add notes, and
 commit: "lj-step-15: downloads go to the Downloads folder, with status in the URL bar". Push,
-open the phase-8 PR as a draft (base: lj/p7-linux-fullscreen, or main), and watch CI until
+open the phase-8 PR into main as a draft, and watch CI until
 every job is green (Ground Rule 3; two honest attempts, then stop). Look at each OS's
 download.png.
 ```
 
 ### LJ16 — Page zoom · standard · auto
 
+> *Round 3 adjustments (2026-10-18):* the zoom keys join LJ43's keymap — so they appear in the
+> Keyboard tab and can be changed — instead of new hard-coded arms in `keys.rs`.
+
 **Verify:** `npm run verify` green, including Rust tests for a pure `zoom.rs`: levels 50, 67,
 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300 %; zooming in or out steps to the next level
-from any value, stops at the ends, and reset goes to 100 %. `keys.rs` tests: Ctrl+= / Ctrl+Shift+=
-/ Ctrl++ (keypad) zoom in, Ctrl+- (and keypad -) zoom out, Ctrl+0 resets (Windows and Linux).
-The exact-match rules still hold (Ctrl+Alt never matches). macOS: View menu items Zoom In ⌘+,
-Zoom Out ⌘−, Actual Size ⌘0 in `menu.rs`. `zoom_hotkeys_enabled` appears nowhere in
+from any value, stops at the ends, and reset goes to 100 %. `keymap.rs` tests: the actions
+`zoom-in`, `zoom-out`, `zoom-reset` with defaults — Windows / Linux Ctrl+= (aliases Ctrl+Shift+=
+and Ctrl+numpad +), Ctrl+- (alias Ctrl+numpad −), Ctrl+0 (alias Ctrl+numpad 0); macOS Cmd+=,
+Cmd+-, Cmd+0 as the View menu's Zoom In, Zoom Out, Actual Size (built from the keymap); an
+override replaces the first binding and drops the aliases; the exact-match rules still hold
+(Ctrl+Alt never matches). `keymap_info` lists them, so the Keyboard tab shows them. `zoom_hotkeys_enabled` appears nowhere in
 `src-tauri/src`. CI green; the Linux smoke sends ctrl+equal with xdotool, and the Windows smoke
 sends it with SendKeys `^=`. The page then reports a smaller `innerWidth` (about 655 instead of
 720 at 110 %), and after Ctrl+0 it reports 720 again. On macOS the check is required only if the
@@ -2199,10 +2467,15 @@ synthetic key reached the page (the same rule as the fullscreen click).
 Add page zoom. Keys only, plus a short status in the URL bar.
 
 Design (decided with the user; do not relitigate):
-- The keys are caught natively like the other page keys (keys.rs → page_actions.rs:
-  PageAction::ZoomIn / ZoomOut / ZoomReset): WebView2 AcceleratorKeyPressed (platform/win.rs),
-  the GTK key hook (platform/linux.rs), and a View menu in menu.rs on macOS. They call
-  Webview::set_zoom on the PAGE webview with the level from zoom.rs.
+- The keys are keymap actions (keymap.rs, LJ43: zoom-in, zoom-out, zoom-reset with the
+  Verify's defaults and aliases) performed as PageAction::ZoomIn / ZoomOut / ZoomReset
+  (page_actions.rs), so they go through the same native paths as every other page key —
+  WebView2's AcceleratorKeyPressed (platform/win.rs), the GTK key hook (platform/linux.rs), the
+  View menu built from the keymap (menu.rs) — and the Keyboard tab lists them with no extra
+  work. They call Webview::set_zoom on the PAGE webview with the level from zoom.rs.
+- Read LJ39's and LJ40's implementation notes first: if phase 19 changed anything about page
+  zoom or the page's bounds, the user's zoom must compose with it — stop and report if it
+  can't.
 - NEVER enable Tauri's zoom_hotkeys_enabled on joan-page. On macOS and Linux it injects a
   script into the page that needs core:webview:allow-set-webview-zoom, which is IPC for remote
   pages (Ground Rule 10; Landmines). On Windows it is WebView2's IsZoomControlEnabled, which
@@ -2220,9 +2493,10 @@ Windows: SendKeys "^="; macOS: a CGEvent key press, best-effort), and require th
 report to be narrower than 720. Then send Ctrl+0 and require 720 again. Add the rules to
 smoke-log.mts with tests.
 
-Files: src-tauri/src/{zoom.rs (new, pure), keys.rs, page_actions.rs, menu.rs, platform/win.rs,
-platform/linux.rs, bar.rs}, ui/bar-logic.ts (+ test) if the status needs it,
-scripts/ci/{smoke.mts, smoke-log.mts (+ test)}, README (page keys table), CHANGELOG
+Files: src-tauri/src/{zoom.rs (new, pure), keymap.rs (+ keymap/tests.rs), keys.rs (the numpad
+and punctuation keys, if LJ43 didn't add them), page_actions.rs, menu.rs, bar.rs},
+ui/toolbar/logic.ts (+ test) if the status needs it, scripts/ci/{smoke.mts, smoke-downloads.mts or
+a smoke-zoom.mts (+ test)}, README (page keys table), CHANGELOG
 ([Unreleased] → Added), docs/architecture.md (the page keys table), this plan (Later: zoom
 moved here; find in page stays Later).
 
@@ -2235,14 +2509,19 @@ check:
 - On your Mac: download a PDF from a real site. It appears in ~/Downloads under its own name,
   and "Show in folder" opens Finder with it selected.
 - Download it again: you get "name (1).pdf".
-- ⌘+ / ⌘− / ⌘0 zoom and reset, with the level shown briefly in the bar.
+- ⌘+ / ⌘− / ⌘0 zoom and reset, with the level shown briefly in the bar; Settings → Keyboard
+  lists the three, and a changed zoom key works.
 - The must-not-disturb list.
-Then mark the PR ready and stop.
+These checks also go into LJ19's checklist. Once every job is green, merge the PR into main with a
+merge commit (Ground Rule 24), then stop and report.
 ```
 
 ### LJ17 — Wayland-native global shortcut · strong · auto
 
-> Phase 9. Branch `lj/p9-wayland-shortcut` from `lj/p8-downloads-zoom` (or from `main`).
+> Phase 9. Branch `lj/p9-wayland-shortcut` from the latest `main`; the PR goes into `main`.
+>
+> *Round 3 adjustments (2026-10-18):* the global shortcut's recorder lives in Settings →
+> Keyboard (LJ44) now, and LJ41's icon rule asks whether the shortcut can work.
 
 **Verify:** `npm run verify` green, including Rust tests for the pure parts:
 - accelerator → XDG shortcut trigger (`CommandOrControl+Shift+Space` → `CTRL+SHIFT+space`; Alt →
@@ -2281,13 +2560,20 @@ Design (decided with the user; do not relitigate):
   (with a space), the portal may not match it. Then use ashpd's host-app registration with
   io.github.memoliertorerr.littlejoan, and install the desktop file under that id if that's
   needed. Record what you find in Landmines.
-- Settings window: on the portal path, replace the recorder with the trigger the portal reports,
-  plus "Change it in your desktop's keyboard settings". On other paths nothing changes.
-- StartInfo.waylandNoShortcut (LJ12) becomes false once the portal registers the shortcut.
+- Settings → Keyboard (LJ44's "Summon Little Joan" row, ui/settings/keyboard.ts and
+  keyboard-logic.ts) and General's shortcut line: on the portal path, show the trigger the portal
+  reports instead of the recorder, plus "Change it in your desktop's keyboard settings". On other
+  paths nothing changes.
+- StartInfo.waylandNoShortcut (LJ12) becomes false once the portal registers the shortcut, and
+  LJ41's shortcut_works counts a portal-registered shortcut as working: call
+  tray::apply_visibility after the portal answers, so a user who hid the icon keeps it hidden on
+  GNOME 48+ / KDE, and sees it come back where the portal is missing.
 
 Files: src-tauri/Cargo.toml (+ Cargo.lock), src-tauri/src/{shortcut.rs and/or
-platform/portal.rs, lib.rs, commands.rs, smoke.rs}, ui/settings.{html,ts}, ui/settings-logic.ts
-(+ test), possibly src-tauri/tauri.conf.json (desktop file), README (Wayland), CHANGELOG
+platform/portal.rs, lib.rs, commands.rs or its child modules, tray.rs, welcome.rs, smoke.rs},
+ui/settings/{keyboard.ts, keyboard-logic.ts (+ test)}, ui/settings.ts, possibly
+src-tauri/tauri.conf.json and a desktop file template (LJ45 later adds the link handler to the
+same template), README (Wayland), CHANGELOG
 ([Unreleased] → Added), docs/architecture.md (global shortcut), this plan (Later: the Wayland
 row moved here).
 
@@ -2295,23 +2581,29 @@ Do NOT remove the `--toggle` fallback or the X11 path.
 
 Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ17 to ✅, add notes, and
 commit: "lj-step-17: Wayland-native global shortcut through the XDG GlobalShortcuts portal".
-Push, open the phase-9 PR as a draft (base: lj/p8-downloads-zoom, or main), and watch CI until
-every job is green (two honest attempts, then stop). This ends phase 9. Needs human check:
+Push, open the phase-9 PR into main as a draft, and watch CI until every job is green (two honest
+attempts, then stop). This ends phase 9. Needs human check (they also go into LJ19's checklist):
 - On a Wayland session with GNOME 48+ or KDE Plasma: install the .deb and launch. The desktop
   asks once to allow the shortcut (or shows it in its shortcut settings). The shortcut then
   summons and dismisses the window, with no XWayland window focused.
 - On Ubuntu 24.04 Wayland: the welcome shows the `--toggle` hint, as before.
 - On X11, nothing changed.
+- With the icon hidden (LJ41) on GNOME 48+: it stays hidden; on 24.04 Wayland it comes back.
 - The must-not-disturb list.
-Mark the PR ready and stop.
+Once every job is green, merge the PR into main with a merge commit (Ground Rule 24), then stop and
+report.
 ```
 
 ### LJ18 — macOS Developer ID signing and notarization · strong · auto
 
-> Phase 10. Branch `lj/p10-macos-signing` from `lj/p9-wayland-shortcut` (or from `main`).
-> **Starts only after the user has done the human pre-step below.** Check with
-> `gh secret list --repo memoliertorerr/LittleJoan` (it lists names only, never values). If any
-> name is missing, stop and ask.
+> Phase 10. Branch `lj/p10-macos-signing` from the latest `main`; the PR goes into `main`.
+> **Runs only if the owner has done the human pre-step below.** Check with
+> `gh secret list --repo memoliertorerr/LittleJoan` (it lists names only, never values; never ask
+> for, read or print a value). *Round 3 (the owner's decision, 2026-10-18):* if any of the six
+> names is missing, **skip this phase** — don't create the branch; flip LJ18's row to
+> `⏭ skipped — no Apple signing secrets on <date>` and say so in the overall status, both in LJ19's
+> release PR (nothing is ever committed to `main` directly); LJ19's checklist then keeps the
+> documented Gatekeeper step for the ad-hoc-signed DMG. Then go on with LJ19.
 
 **Human pre-step (the user, once, about 20 minutes; the agent never sees these values):**
 1. developer.apple.com → Certificates, IDs & Profiles → Certificates → + → **Developer ID
@@ -2389,51 +2681,76 @@ commit: "lj-step-18: sign the macOS app with Developer ID and notarize the DMG i
 the phase-10 PR as a draft (base: lj/p9-wayland-shortcut, or main), let CI run, then run
 `gh workflow run ci.yml --repo memoliertorerr/LittleJoan --ref lj/p10-macos-signing -f notarize=true`
 and watch both runs until green (two honest attempts, then stop). This ends phase 10. Needs
-human check: download the DMG artifact of the notarized run with a browser (so it gets
-quarantined), open it, drag Little Joan to Applications and launch it. There should be no
-Gatekeeper warning. Mark the PR ready and stop.
+human check (it also goes into LJ19's checklist): download the DMG artifact of the notarized run
+with a browser (so it gets quarantined), open it, drag Little Joan to Applications and launch it.
+There should be no Gatekeeper warning. The hardened runtime must not break round 3's features
+either: the smoke's fullscreen, tray, quick-command and keymap runs stay green. Once every job is green,
+merge the PR into main with a merge commit (Ground Rule 24), then stop and report.
 ```
 
 ### LJ19 — Release v0.2.0 · standard · checkpoint
 
-> Phase 11. Branch `lj/release-0.2.0` from `lj/p10-macos-signing` (or from `main` once the
-> phases are merged).
+> Phase 11. Branch `lj/release-0.2.0` from the latest `main`, once phases 18, 19, 20 and 7–10 are
+> merged (or LJ18 recorded as skipped). *Round 3 adjustments (2026-10-18):* the phases are no
+> longer stacked, so this is the only open PR; the agent may merge it once it is green (the owner's
+> decision); tagging and publishing still wait for the owner's word. It is a **checkpoint**
+> (Ground Rule 24).
 
-**Verify:** `npm run verify` green. Version `0.2.0` in `package.json` (+ lock), `tauri.conf.json`
-and `Cargo.toml` (+ `Cargo.lock`). `CHANGELOG.md` has `[0.2.0] — <date>` built from
-`[Unreleased]`, with a fresh empty `[Unreleased]` above it and the link references at the
-bottom. The README points at the v0.2.0 assets. CI green on the release PR. **Checkpoint:** the
-user ticks the checklist. Only after the user says to merge and release: merges in order (merge
-commits), `main`'s CI green, the assets renamed (`LittleJoan-0.2.0-windows-x64-setup.exe`,
+**Verify:** `npm run verify` green. Version `0.2.0` (from `0.2.0-beta.2`) in `package.json` (+
+lock), `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` (+ `Cargo.lock`). `CHANGELOG.md` has
+`[0.2.0] — <date>` built from `[Unreleased]`, with a fresh empty `[Unreleased]` above it and the
+link references at the bottom. The README points at the v0.2.0 assets. CI green on the release
+PR. **Checkpoint:** the owner ticks the checklist. Only after the owner says to release: `main`'s
+CI green for the merge commit, the assets renamed (`LittleJoan-0.2.0-windows-x64-setup.exe`,
 `-macos-universal.dmg`, `-linux-amd64.deb`, `-linux-x86_64.AppImage`), `SHA256SUMS.txt`,
 `gh release create v0.2.0 --target <that main commit> --latest`, and then the release, its tag
 and one downloaded asset's checksum checked.
+**Human check:** the checklist below, copied into the PR.
 **Commit:** `lj-release-0.2.0: version 0.2.0, changelog and readme`
 
 ```text
-Prepare v0.2.0 exactly as CLAUDE.md's "Release process" says (it was done that way for v0.1.0):
-bump the three versions, turn [Unreleased] into [0.2.0] with today's date, and point the README
-at the release. Do it all through this PR.
+Prepare v0.2.0 exactly as CLAUDE.md's "Release process" says (it was done that way for v0.1.0
+and the betas): bump the three versions, turn [Unreleased] into [0.2.0] with today's date, and
+point the README at the release. Do it all through this PR. If LJ18 was skipped, this PR also
+flips its row to ⏭ skipped and records it in the overall status (LJ18's header).
 
-Fill the PR description from the template. Needs human check (the user's checklist):
-- [ ] Mac (your Retina machine): install from the notarized DMG with no warning; the welcome on
-      a fresh profile; start at login across a logout; a real download and "Show in folder";
-      zoom keys; YouTube fullscreen; phone mode at a narrow width; memory at rest in Activity
-      Monitor (no WebContent processes for Little Joan).
-- [ ] Windows, if you have one: the installer (SmartScreen still warns, since it's unsigned),
-      the welcome, start at login across a reboot, a download, zoom, YouTube fullscreen.
-- [ ] Linux, if you have one: the .deb on 22.04 (fullscreen fallback), the AppImage on 24.04
-      (real fullscreen), and the Wayland shortcut on GNOME 48+ or KDE.
+Fill the PR description from the template. Needs human check (the owner's checklist):
+- [ ] Mac (your Retina machine): install the DMG — notarized: no warning; ad-hoc (LJ18 skipped):
+      the README's Gatekeeper step; the welcome on a fresh profile; start at login across a
+      logout; memory at rest in Activity Monitor (no WebContent processes for Little Joan).
+- [ ] YouTube (phase 18): its fullscreen button, F and the player's exit button, in a narrow and
+      a wide window.
+- [ ] Resizing (phase 19): LJ40's checklist items still hold on this build.
+- [ ] Control (phase 20): hide the icon, quit, launch again → the window opens; Settings →
+      Keyboard: a rebound key works, a Spotlight clash warns; quick commands (theme, mobile sites,
+      copy link, clear history asks twice).
+- [ ] Downloads and zoom (phase 8): a real PDF lands in ~/Downloads under its own name, "Show in
+      folder" selects it, again → "name (1).pdf"; ⌘+ / ⌘− / ⌘0 with the level in the toolbar.
+- [ ] Round 2's features: the command bar, the toolbar (drag; double-click zooms), logins across
+      close / quit / reboot, history ⌘Y, themes (no flash), extensions (also from hibernation).
+- [ ] Windows, if you have one: the installer (SmartScreen still warns, since it's unsigned), the
+      welcome, start at login across a reboot, Ctrl+H, a download, zoom, YouTube fullscreen,
+      resizing without white strips, hiding the icon.
+- [ ] Linux, if you have one: the .deb on 22.04 (the fullscreen fallback), the AppImage on 24.04
+      (real fullscreen), the Wayland shortcut on GNOME 48+ or KDE (or the `--toggle` hint on
+      24.04), hiding the icon with the AppIndicator extension.
 - [ ] The must-not-disturb list.
 
-Then STOP and wait. Merging, tagging and releasing need the user's word for each one. When they
-give it: merge the open phase PRs in order with merge commits, let main's CI build the
-installers, download them (`gh run download <run> --repo memoliertorerr/LittleJoan`; the AppImage
-is in little-joan-linux-appimage), rename them, write SHA256SUMS.txt, and run `gh release create
-v0.2.0 --repo memoliertorerr/LittleJoan --target <that main commit> --latest` with notes taken
-from the CHANGELOG. Then check the release, its tag, and one downloaded asset's checksum. Flip
-LJ19 to ✅ and record the release in the plan's overall status in a follow-up PR (main is never
-committed to directly).
+Once every CI job is green, merge the PR into main with a merge commit (the owner allowed it for
+this PR), then STOP and wait (Ground Rule 24). Tagging and releasing need the owner's word. When
+they give it: let main's CI build the installers for the merge commit, download them
+(`gh run download <run> --repo memoliertorerr/LittleJoan`; the AppImage is in
+little-joan-linux-appimage), rename them, write SHA256SUMS.txt, and run `gh release create v0.2.0
+--repo memoliertorerr/LittleJoan --target <that main commit> --latest` with notes taken from the
+CHANGELOG. Then check the release, its tag, and one downloaded asset's checksum. Flip LJ19 to ✅
+and record the release in the plan's overall status in the next PR (the first v0.3 phase's first
+commit — main is never committed to directly).
+
+Run `source scripts/env.sh && npm run verify` before the commit; commit everything as one commit:
+"lj-release-0.2.0: version 0.2.0, changelog and readme". Push, open the PR into main, and watch CI
+until every job is green (two honest fix attempts, then stop). This is a checkpoint: fill the PR
+with the checklist above, merge it when green, tell the owner exactly what to check and where,
+then stop. Don't start phase 21 until the owner says go.
 ```
 
 ---
@@ -4561,6 +4878,1482 @@ then.
 - Still planned from round 1: phases 7–10 (Linux fullscreen, downloads + zoom, the Wayland
   shortcut, macOS signing), then LJ19 (v0.2.0).
 
+→ *2026-10-18: the owner said yes, with decisions ("Design Decisions Already Made → round 3"):
+planned as round 3 — LJ36–LJ44 and round 1's LJ13–LJ19 finish v0.2.0, LJ45–LJ57 are v0.3.*
+
+---
+
+## v0.2 round 3 steps — finishing v0.2.0
+
+> Planned 2026-10-18 with the owner (decisions: "Design Decisions Already Made → round 3"; Ground
+> Rules 21–26). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 (v0.2.0) → 21 → 22 → 23 →
+> 24 → 25 → 26 (v0.3).** Every phase branches from the latest `main`, and its PR goes into
+> `main` (no stacking). Gates (Ground Rule 24): at the end of an `auto` phase the agent merges the
+> green PR (a merge commit, never squash, never `--delete-branch`); a `checkpoint` step fills the
+> PR with the owner's checklist, may merge its green PR, and STOPS — the next phase waits for the
+> owner's go; a `review` step ends a security-sensitive phase — the PR is marked ready and the
+> agent stops without merging. Steps whose look matters name CI screenshots: download them into
+> `test-results/ci/`, look at them on every OS, describe them in the notes, then delete them.
+> Each step updates CHANGELOG `[Unreleased]` (Ground Rule 17), the README and
+> `docs/architecture.md` (Ground Rule 15). `src-tauri/src/commands.rs` (481 lines),
+> `scripts/ci/smoke-log.mts` (468) and `scripts/ci/smoke.mts` (1,227) are already past the
+> ~400-line guide: new commands go into child modules (`src-tauri/src/commands/<topic>.rs`), new
+> smoke runs and their rules into their own `scripts/ci/smoke-<topic>.mts` (+ test), wired into
+> `smoke.mts`'s sequence the way `smoke-theme.mts` is.
+
+### LJ36 — YouTube's fullscreen button on macOS: reproduce in CI, then fix · strong · auto
+
+> Phase 18. Branch `lj/p18-fixes` from the latest `main`; the PR goes into `main`.
+
+**Verify:** `npm run verify` green, including vitest tests for the smoke page's new logic
+(`tests/smoke/fullscreen-logic.mjs`, + test: the button positions, the report title for each path
+and outcome) and for the new rules (`scripts/ci/smoke-fullscreen.mts`, + test: a log where
+fullscreen ends within 1 s of entering fails; one where it holds until the page's own exit button
+ends it passes). CI green on all three OSes with a **fullscreen run** (its own launch): the smoke
+page in `?fs=both` mode at 390×600 (phone agent) and at 720×600 (desktop agent), each time
+(a) a click on "Element fullscreen" (`requestFullscreen()` on a container, as YouTube's desktop
+player does), (b) 2 s later a click on the page's "Exit" button (`document.exitFullscreen()`, as
+the player's exit button does), (c) a click on "Video fullscreen" (`video.webkitEnterFullscreen()`
+on a playing `<video>`, as YouTube's mobile player does), (d) the page's own exit for (c) — and
+the page reports `LJ-FS <element|video> width=<w> entered=<0|1> held_ms=<n> exited_by_page=<0|1>`
+for each. **The first commit makes the run informational** (results in `summary.json` and the
+notes, no failure), so CI shows the bug before anything changes; **the fix commit
+(`lj-step-36-fix`) turns the rule on:** every path that entered stays fullscreen at least 1.5 s
+until the page exits it, and leaves when the page asks — required on Windows and Linux, and on
+macOS whenever the click reached the page (the existing macOS click rule). Screenshots
+`fs/element-390.png`, `fs/element-720.png`, `fs/video-390.png`, `fs/video-720.png` (1 s after each
+entry).
+**Commit:** `lj-step-36: reproduce the macOS fullscreen bug in CI (element and video fullscreen, narrow and wide)`, then `lj-step-36-fix: <what fixed it>`
+
+```text
+The owner's checklist (LJ35's notes): on macOS, YouTube's own fullscreen button enters
+fullscreen and drops back to the normal size at once; YouTube's F key fullscreens fine, and then
+the player's exit button does nothing (Esc exits). CI's smoke page passes on macOS, so something
+YouTube does differs. Reproduce it in CI first, then fix it. Change no fullscreen code before the
+reproduction has run in CI and you have read its log.
+
+What the code does today (read it first): macOS has no element-fullscreen hook — fullscreen.rs
+and platform/mod.rs leave it to WebKit, which moves the page's WKWebView into its own fullscreen
+window. So bar::element_fullscreen() (bar/view.rs) is never true on macOS: joan::on_window_event's
+Resized → bar::apply_layout → set_bounds() + show() on the page webview, bar::focus_bar /
+set_overlay, and phone_mode::apply (which checks only window.is_fullscreen(), false for WebKit's
+separate window) all run as if nothing were fullscreen. Windows (platform/win.rs,
+ContainsFullScreenElementChanged) and Linux (platform/linux.rs, enter-/leave-fullscreen) call
+bar::set_element_fullscreen.
+
+Leads, in this order (Deferred follow-ups):
+1. Phone mode: below 600 px the page gets an iPhone agent (phone.rs), and YouTube's mobile site
+   then uses the iOS path, video.webkitEnterFullscreen(), which WKWebView on macOS handles
+   differently from element fullscreen.
+2. Something reaches the page webview during WebKit's fullscreen transition: set_bounds / show /
+   hide from apply_layout, a focus change, the window title set in on_document_title_changed,
+   the bar's eval calls, the once-a-second address check (bar/watch.rs).
+3. Click versus key: a click starts the transition with the mouse down in our window; the app is
+   ActivationPolicy::Accessory, so WebKit's fullscreen window may not become key — which would
+   also explain the exit button's click doing nothing (it only activates the window) while Esc
+   works.
+
+1. Reproduction (the first commit):
+   - tests/smoke/smoke.html gains `?fs=both`: four large buttons at known positions
+     (tests/smoke/fullscreen-logic.mjs exports them as fractions of the viewport, so smoke.mts
+     can click each) — "Element fullscreen" (requestFullscreen on a container div, with the
+     webkit-prefixed fallback), "Exit" (shown in fullscreen; document.exitFullscreen, prefixed
+     fallback), "Video fullscreen" (video.webkitEnterFullscreen() on a <video> playing a
+     canvas.captureStream() — no media file in the repository; if the engine has no
+     captureStream or the video never reaches HAVE_METADATA, that path reports `unavailable`),
+     and the video's own exit (webkitExitFullscreen). It listens to fullscreenchange,
+     webkitfullscreenchange, webkitbeginfullscreen and webkitendfullscreen and reports in its
+     title as the Verify says. Pure logic in fullscreen-logic.mjs (JSDoc-typed, tested, like
+     smoke-logic.mjs).
+   - scripts/ci/smoke-fullscreen.mts (new, + test): the run and fullscreenFailures(events). Its
+     own launch, so the main run's memory numbers don't move: --show the page, --size 390x600,
+     click each button in turn with a variant of smoke.mts's clickCentre that takes a point
+     (factor it out; clickCentre keeps its behaviour), screenshot, then --size 720x600 and again.
+     Exits only through the page's buttons, never a key: the bug is about clicks.
+   - macOS instrumentation (smoke mode only, smoke::enabled()): platform/mac.rs reads WKWebView's
+     fullscreenState (macOS 13+, through objc2 msg_send after respondsToSelector:) every 100 ms
+     while a page window exists and logs `wk-fullscreen <not|entering|in|exiting>` on each
+     change; bar/view.rs's place() logs `page-bounds <x,y,w,h>` and `page-visible <bool>` for the
+     page webview; joan::on_window_event logs Resized / Focused / Moved while wk-fullscreen isn't
+     `not`. They stay after the fix — they are how CI proves it.
+   - summary.json gets `fullscreen` per path and width; the run doesn't fail the job yet.
+   Commit, push, open the phase-18 PR into main as a draft, let CI run, download the macOS logs
+   and the screenshots, and write into the notes exactly what happened per path and width on
+   every OS.
+
+2. If CI did NOT reproduce it on macOS (every path held and the page's exits worked): stop and
+   report. Keep the run and the instrumentation; say what the log rules out, and propose the next
+   experiment (for example a CI run against YouTube's own mobile page — it needs the network and
+   YouTube's consent page on the runner, so it is the owner's call).
+
+3. The fix (`lj-step-36-fix`), decided by what the log shows:
+   - Anything touching the page webview during the transition (page-bounds, page-visible, focus
+     or eval while wk-fullscreen isn't `not`): treat WebKit's fullscreen as element fullscreen on
+     macOS. platform/mac.rs follows fullscreenState (the 100 ms check runs only while a page
+     window exists and ends with it — nothing at rest) and calls bar::set_element_fullscreen(app,
+     state != not) on changes, so the overlay can't open and phone mode doesn't switch; on macOS
+     place() must not set bounds on, show or hide the page while it is in WebKit's fullscreen
+     window (WebKit owns it then).
+   - The click path failing because WebKit's fullscreen window isn't key: make it key once
+     wk-fullscreen reaches `in` ([webview window] makeKeyAndOrderFront:, platform/mac.rs).
+   - Only the narrow width failing, caused by the iPhone agent's webkitEnterFullscreen path, with
+     nothing above helping: STOP and report the options with what CI showed — changing macOS's
+     phone agent (LJ10.3's "built for the same engine") or the activation policy (Accessory, a
+     v0.1 decision) is the owner's call.
+   - Leave Windows' and Linux's fullscreen code alone; if the run fails there, fix it only if it
+     is a bug in our code, otherwise record it and stop.
+
+4. Docs: docs/architecture.md (the Fullscreen video table's macOS row, the smoke-log events),
+   CHANGELOG ([Unreleased] → Fixed), this plan (Deferred follow-ups: annotate the YouTube line
+   with what CI found; Landmines: what WebKit does).
+
+Do NOT add a fullscreen setting, switch macOS to window fullscreen, or add YouTube-specific code.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, add implementation notes (with the
+df -h numbers) and commit everything as one commit: "lj-step-36: reproduce the macOS fullscreen bug
+in CI (element and video fullscreen, narrow and wide)". Push, open the phase-18 PR into main as a
+draft, and watch CI (`gh run watch <id> --repo memoliertorerr/LittleJoan`). Then the fix as above:
+local verify green, flip LJ36 to ✅ with notes, commit "lj-step-36-fix: <what fixed it>", push, and
+watch CI until verify, package and smoke are green on all three OSes; fix Windows/Linux-only
+failures per Ground Rule 3. If it is still red after two honest fix attempts, stop and report.
+Never commit red; never weaken a check.
+```
+
+### LJ37 — Ctrl+H opens history on Windows and Linux; double-clicking the toolbar zooms the window · standard · auto
+
+**Verify:** `npm run verify` green, including `keys.rs` tests: Ctrl+H → `PageAction::History` on
+Windows and Linux; Ctrl+Y → nothing (the page gets it back: redo in WebView2's text fields);
+Ctrl+Shift+H, Ctrl+Alt+H (AltGr) and a plain H → nothing; `Key::from_windows_vk(0x48)` and
+`Key::from_gdk_name("h")` → `Key::Letter('h')`; macOS still gets nothing from `keys.rs` (Cmd+Y
+stays the View menu's item in `menu.rs`). `capabilities/bar.json` gains exactly
+`core:window:allow-internal-toggle-maximize`, and a new `capability_tests.rs` test fails if any
+other capability grants it. CI green on all three: the smoke's history key becomes Ctrl+H on
+Windows (SendKeys `^h`) and Linux (xdotool `ctrl+h`), Cmd+Y on macOS as before, with
+`history-view` and `history-list` following; then, with the view closed again, Ctrl+Y on Windows
+and Linux must open nothing within 2 s (`historyViewFailures` gains the case, with a test).
+**Commit:** `lj-step-37: Ctrl+H opens history on Windows and Linux; double-clicking the toolbar zooms the window`
+
+```text
+Two small decided changes (LJ35's "Requested for the next version"; Deferred follow-ups).
+
+1. The history key. The owner decided: Ctrl+H on Windows and Linux (Chrome's history key), so
+   Ctrl+Y is redo again in WebView2's text fields; Cmd+Y stays on macOS.
+   - src-tauri/src/keys.rs: the 'y' arm of action_for becomes 'h'; the module table and the tests
+     follow (the Verify's cases).
+   - menu.rs (Cmd+Y) and bar.rs (show_history) don't change.
+   - Every place that says Ctrl+Y: ui/bar.ts, ui/command/rows.ts (HISTORY_ROW's comment),
+     src-tauri/src/bar.rs, README (Using it; the page keys table), docs/architecture.md (the page
+     keys table), scripts/ci/smoke.mts and scripts/ci/smoke-command.mts (+ test): "Ctrl+H (Cmd+Y
+     on macOS)".
+   - Smoke (scripts/ci/smoke.mts, where Ctrl+Y opens the history view today): Ctrl+H on Windows
+     and Linux; then the Ctrl+Y check from Verify.
+   LJ43 later moves every key into one keymap with Ctrl+H as the default; don't build that here.
+
+2. Double-click the toolbar. Tauri's drag script turns a double click on a drag region into
+   internal_toggle_maximize (tauri 2.12.4 window/scripts/drag.js; the command maximizes or
+   restores a resizable window, window/plugin.rs), which needs
+   core:window:allow-internal-toggle-maximize. Grant it in src-tauri/capabilities/bar.json only
+   (update that capability's description and docs/architecture.md's capabilities table), and add
+   the capability test from Verify. It applies on Windows and Linux too, where the toolbar's
+   empty parts are drag regions under the native title bar: a double click there maximizes like
+   the title bar does — keep it, and say so in the notes. It doesn't follow macOS's "Double-click
+   a window's title bar to: Minimize" preference (Tauri's command always zooms); record that under
+   Deferred follow-ups instead of reading the system preference. CI can't usefully double-click
+   on the runners' fixed screens: this is a human check.
+
+Do NOT change any other key, the toolbar's markup or Tauri's drag script.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ37 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-37: Ctrl+H opens history on
+Windows and Linux; double-clicking the toolbar zooms the window". Push and watch CI until verify,
+package and smoke are green on all three OSes (Ground Rule 3). If it is still red after two honest
+fix attempts, stop and report. Never commit red; never weaken a check.
+```
+
+### LJ38 — The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar · strong · auto
+
+**Verify:** `npm run verify` green, including:
+- Rust tests: `bar::theme_script(&Theme)` (pure) returns `window.__littleJoanTheme = <json>;` with
+  the serde JSON of a checked theme (only `#rrggbb` colors, a mode name and two numbers; a test
+  feeds the extremes and asserts no `<`, newline or second statement); only the bar's builder adds
+  an initialization script (a test reads `bar.rs` and finds exactly one `initialization_script(`
+  call, in the bar's builder — the page webview never gets one; cookies.rs has a source test of
+  the same kind);
+- `extensions/session` tests: an opening while the bar hasn't called `start_info` in this window
+  waits for it (at most 2 s, then opens anyway and logs `bar-ready timeout`); with the bar ready it
+  opens at once;
+- vitest tests for `ui/bar-boot.ts` (pure part): the theme from `window.__littleJoanTheme` is
+  applied before the first `await`; `start_info`'s theme is applied again only if it differs (a
+  preview may have changed it); a missing or malformed value falls back to today's path.
+
+CI green on all three: every theme run logs `theme-early <mode> colors=<n>` before that window's
+`theme <mode> colors=<n>` from `start_info` (`themeFailures` gains the rule, 2 test cases); the
+extension run's `--extension hello` from hibernation logs `bar-ready` before hello's
+`page-started`, and macOS's `extension-hello.png` shows the toolbar with hello's icon, name and the
+Extension badge, not an empty field — look at it.
+**Commit:** `lj-step-38: the bar gets its theme before it paints; panels opened from hibernation wait for the bar`
+
+```text
+Two first-paint problems of the trusted bar (Deferred follow-ups), fixed in the bar only: the
+page webview never gets an initialization script (Ground Rules 10 and 18), and the settings
+window stays as it is.
+
+1. The default-theme flash. The bar applies the theme when start_info answers (ui/bar.ts →
+   applyTheme, ui/lib/apply-theme.ts), a moment after its page first painted with
+   ui/lib/theme-defaults.css (Mist), so a summon with another theme can flash Mist.
+   - bar.rs, add_webviews, the bar's WebviewBuilder only: .initialization_script(theme_script(
+     &theme)) with AppState::shown_theme() (the preview while Settings edits one, else the saved
+     theme — what start_info hands out). theme_script is pure and tested (Verify).
+     Initialization scripts run at document start, before the page's own scripts; the engine
+     injects them, so the bar's CSP doesn't block them.
+   - ui/bar-boot.ts (new; its pure part tested; bar.ts calls it first, at module top level):
+     read window.__littleJoanTheme, check it the way apply-theme.ts checks a theme, and call
+     applyTheme synchronously — before any await, so it lands before the first frame of a page as
+     small as bar.html. The bar can't write the smoke log, so its first set_theme_tokens report
+     carries a new optional `early: true`, and Rust logs `theme-early <mode> colors=<n>` for it
+     (commands.rs set_theme_tokens; the report's checks stay as strict). start_info's theme is
+     applied only when it differs.
+   - All color math stays TypeScript (v0.2 round 2 decisions); Rust only hands over the settings.
+   If the owner still sees a flash on their Mac (the human check), the next move is handing the
+   bar the painted --lj-* variables themselves (its last report, kept in AppState across
+   windows): record that as a Deferred follow-up; don't build it now.
+
+2. macOS: a panel opened from hibernation can leave the toolbar unpainted. With --extension <id>
+   while hibernating, the window is built with the command bar, and the panel can commit before
+   the bar's script has run; the toolbar then stayed an empty field (LJ32's CI) although
+   toolbar-label was sent twice. Decided (the second option in Deferred follow-ups): open the
+   panel only once the bar's script runs.
+   - Per-window state `bar_ready` (bar.rs, next to the other per-window state; reset in
+     add_webviews), set by start_info — the bar's first call — which logs `bar-ready`.
+   - extensions/session.rs's opening path for a new window (joan::open_extension, CreateExtension)
+     waits for it on its own thread — never on the main thread, never inside an engine callback —
+     at most 2 s, then opens anyway and logs `bar-ready timeout`. Openings in a window whose bar
+     already runs (the command bar's rows, FocusAndExtension) don't wait.
+   - The nonce, the commit rule and the detour through the start page (LJ29's fixes 4–10) are
+     unchanged: the wait comes before `expect`.
+   - Smoke (scripts/ci/smoke-extensions.mts + test): the rule from Verify.
+
+Files: src-tauri/src/{bar.rs, commands.rs (start_info, set_theme_tokens), extensions/session.rs
+(+ session/tests.rs), joan.rs if the opening path needs it}, ui/{bar.ts, bar-boot.ts (new, +
+test)}, ui/lib/apply-theme.ts only if its check must be exported, scripts/ci/{smoke-theme.mts,
+smoke-extensions.mts} (+ tests), docs/architecture.md (Themes → "Applying it"; how a panel opens),
+CHANGELOG ([Unreleased] → Fixed), this plan (Deferred follow-ups: strike the macOS
+unpainted-toolbar line once CI's screenshot shows the toolbar, naming LJ38; annotate the
+theme-flash line — the owner's eyes close it).
+
+Do NOT add an initialization script to the page webview or to Settings, hide the bar's body until
+the theme arrives (LJ32's landmine: WebKit may then never paint it), or delay opening a panel in a
+window whose bar already runs.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ38 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-38: the bar gets its theme
+before it paints; panels opened from hibernation wait for the bar". Push and watch CI until every
+job is green (Ground Rule 3; two honest fix attempts, then stop). Look at extension-hello.png and
+the theme runs' screenshots on every OS. This ends phase 18. Fill the PR description from the
+template. Needs human check, on your Mac (Windows / Linux where you have them):
+- YouTube: its fullscreen button, F, and the player's exit button, in a narrow (< 600 px) and a
+  wide window.
+- Windows / Linux: Ctrl+H opens history; Ctrl+Y redoes in a text field.
+- Double-click the toolbar's empty part: the window zooms; again: it comes back.
+- With a non-default theme, summon ten times: no Mist flash.
+- Quit, then `little-joan --extension snake`: the toolbar shows Snake.
+- The must-not-disturb list.
+Once verify, package and smoke are green on every OS job, merge the PR into main with a merge
+commit (`gh pr merge <n> --merge --repo memoliertorerr/LittleJoan`; never squash, never
+--delete-branch), then stop and report.
+```
+
+### LJ39 — Resizing, part 1 · strong · auto — DESIGN PENDING RESEARCH
+
+> Phase 19. Branch `lj/p19-resizing` from the latest `main`. **Provisional — do not execute.** A
+> research pass (Little Arc's resize behaviour; the engines' zoom, viewport and client-hint APIs;
+> resize smoothness per OS) is under way, and a planning session replaces this outline with the
+> final steps before phase 19 starts.
+
+**Verify:** to be written from the research. It will at least keep `layout.rs`'s tests at scale 1,
+1.5 and 2, the CI viewport checks (390 / 720 px with the right agent), and add a smoke check that
+measures what the research says matters (for example how often the page is laid out or reloaded
+during a burst of `--size` steps).
+**Commit:** `lj-step-39: <from the research>`
+
+```text
+Provisional, do not execute. The owner: "Little Arc has no mobile toggle; I like a mobile version
+on narrow sizes, but outside of that websites should be more responsive; optimize or better the
+resizing." Known today: phone mode (phone.rs, phone_mode.rs) switches the page's user agent below
+600 logical px after a 400 ms still period and reloads the page; layout (layout.rs, bar/view.rs)
+re-applies the bar's and the page's bounds on every Resized; Linux packs the views in a GtkBox.
+Candidate directions for the research to settle: how Little Arc behaves while resizing; whether
+page zoom, viewport emulation or client hints can make sites fit narrow windows without a mobile
+agent; what makes resizing feel slow or flicker per OS; a per-site phone / desktop choice.
+```
+
+### LJ40 — Resizing, part 2; the owner's check · strong · checkpoint — DESIGN PENDING RESEARCH
+
+> Phase 19, last step. **Provisional — do not execute** (see LJ39). It ends in a **checkpoint**:
+> the resizing feel needs the owner's eyes (Ground Rule 24).
+
+**Verify:** to be written from the research.
+**Human check:** to be written from the research (at least: dragging the window's edge on a Retina
+Mac and on Windows, sites across the phone threshold both ways, staying signed in).
+**Commit:** `lj-step-40: <from the research>`
+
+```text
+Provisional, do not execute. Whatever the research puts here, this step ends phase 19 as a
+checkpoint: fill the PR with the owner's checklist, merge it once every CI job is green, then STOP
+until the owner says go.
+```
+
+### LJ41 — Hide the tray / menu-bar icon (safely); Settings and Quit in the command bar · standard · auto
+
+> Phase 20. Branch `lj/p20-control` from the latest `main`; the PR goes into `main`.
+
+**Verify:** `npm run verify` green, including:
+- Rust tests for a pure `tray::icon_visible(show_icon, shortcut_works) -> bool` (shown unless the
+  setting is off **and** the shortcut works) and `shortcut_works(active_shortcut,
+  wayland_no_shortcut)` (no registered shortcut → false; a Wayland session, where the X11 grab
+  can't fire → false; suspended while Settings records one → still working);
+- `settings.rs`: `showTrayIcon` (default true; a wrong type falls back);
+- `cli.rs`: a second launch without flags still shows the window (`forwarded_command()` →
+  `Show(None)`; add the test if none pins it);
+- vitest: `rows.ts` `builtInCommands` offers **Settings** for "settings" / "preferences" /
+  "options" and **Quit Little Joan** for "quit" / "exit" (two letters or more, like History), both
+  always finding room among the 8 rows; `settings-logic.ts` change detection includes the switch.
+
+Capabilities: the bar gains only `allow-quit-app`. CI green on all three with a **tray run**
+(`scripts/ci/smoke-tray.mts`, + test, its own launch): with `"showTrayIcon": false` the log has
+`tray-visible false` after `shortcut-registered`; a second launch without flags logs
+`window-created`; typing "quit" in the command bar and Enter logs `quit` and the process ends by
+itself (Windows, Linux; best effort on macOS); on Linux a launch with `XDG_SESSION_TYPE=wayland`
+in its environment (it still runs on Xvfb's X11 but counts as a Wayland session, where the X11
+shortcut can't fire) logs `tray-visible true` despite the setting. Screenshot
+`settings-general-tray.png`.
+**Commit:** `lj-step-41: hide the tray / menu-bar icon (it comes back when the shortcut can't work); Settings and Quit in the command bar`
+
+```text
+Some people prefer no icon (the owner's request). Hiding it must never strand anyone: with no
+icon and no working shortcut, Little Joan would be unreachable.
+
+Design (decided; do not relitigate):
+- settings.rs: `showTrayIcon` (default true). Settings → General: "Show the icon in the menu bar"
+  (macOS) / "Show the icon in the system tray" (Windows, Linux), with the note: "Without it, press
+  <shortcut> or open Little Joan again from your apps. The icon comes back by itself whenever the
+  shortcut can't work." (ui/settings.html, ui/settings.ts, ui/settings-logic.ts; Save covers it;
+  save_settings takes it.)
+- The rule (pure, in tray.rs or a small child module): visible = showTrayIcon ||
+  !shortcut_works. shortcut_works is false when no shortcut is registered (AppState's
+  active_shortcut is None: the saved one and the default both failed) and on a Linux Wayland
+  session (welcome::wayland_no_shortcut_here(); LJ17 makes a portal-registered shortcut count as
+  working). Suspension while Settings records a shortcut counts as working, so the icon doesn't
+  blink.
+- tray::apply_visibility(app), logging `tray-visible <bool>` once at startup and on each change:
+  after shortcut::register_from_settings in lib.rs's setup, and after every save_settings (a
+  swap that failed and restored the old shortcut still works; one that left no shortcut brings
+  the icon back). Use the tray's own API (app.tray_by_id("main") → set_visible); on Linux that is
+  the AppIndicator's status — read tray-icon 0.25's Linux set_visible in the cargo registry and
+  note what it does.
+- A second launch without flags already shows the window (single-instance → forwarded_command →
+  Show(None)): keep it, and keep a test on it.
+- Everything stays reachable without the icon: the command bar's built-in rows
+  (ui/command/rows.ts builtInCommands, like HISTORY_ROW) gain **Settings** (Settings on General,
+  through the existing open_settings) and **Quit Little Joan** (a new bar command `quit_app` →
+  joan::quit; build.rs's app manifest, capabilities/bar.json `allow-quit-app`; in a new
+  src-tauri/src/commands/app.rs child module). Symbols as CSS masks like the others: the gear,
+  and a power glyph for Quit. "Settings & extensions" stays the last row.
+- Hiding the icon creates nothing; hibernation is unchanged.
+
+Smoke: the tray run from Verify (scripts/ci/smoke-tray.mts + test, its own LITTLEJOAN_DATA_DIR so
+the main run's memory numbers stay put) and the General tab's screenshot with the switch off.
+
+Docs: README (Using it: hiding the icon, and how to reach Little Joan without it),
+docs/architecture.md (the tray, settings fields, the bar's commands and capability table),
+CHANGELOG ([Unreleased] → Added).
+
+Do NOT remove the tray menu's items, hide the icon by default, or add a Dock icon on macOS.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ41 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-41: hide the tray / menu-bar icon
+(it comes back when the shortcut can't work); Settings and Quit in the command bar". Push, open the
+phase-20 PR into main as a draft, and watch CI until every job is green (Ground Rule 3; two honest
+fix attempts, then stop). Look at the screenshot on every OS.
+```
+
+### LJ42 — Quick commands in the command bar, each showing its state · standard · auto
+
+**Verify:** `npm run verify` green, including:
+- vitest tests for a pure `ui/command/quick.ts`: matching (every typed word starts a word of the
+  title or a keyword; two letters or more); the page commands (Translate page, Open in browser,
+  Copy link, Copy as Markdown link, Reload) only while a web page is open; each row's state as text
+  ("Mobile sites — on", "Theme: Dark ✓", "Search with DuckDuckGo ✓", "Start at login — off",
+  "Icon — shown (the shortcut can't work)"); "Clear history" offers its four ranges and needs a
+  second Enter on the same row (Esc or moving away cancels); quick commands share the 8 rows like
+  the built-ins (up to 3 always find room; history matches make way);
+- vitest for `settings-logic.ts` `rebase(draft, oldSaved, newSaved)`: a field the open Settings
+  window didn't edit follows a change made from the command bar; an edited one keeps the edit;
+- Rust tests for `quick_command`'s input (a serde enum, `deny_unknown_fields`, fixed kinds — anything
+  else is refused) and for `settings::apply_change` (shared with `save_settings`: a bad engine id,
+  an unknown theme mode or a bad color changes nothing);
+- the Markdown text comes from `extensions/markdown-link/logic.js`'s `link("markdown", …)`, imported
+  by the bar (one implementation).
+
+Capabilities: the bar gains only `allow-quick-state` and `allow-quick-command`. CI green on all
+three with a **quick-commands run** (`scripts/ci/smoke-quick.mts`, + test): type `mobile` →
+Enter → `quick-command setMobileSites false` and settings.json `"mobileSites": false`; type `dark`
+→ Enter → `theme dark colors=<n>` and the saved theme's mode `dark`; over the smoke page, type
+`copy link` → Enter → the clipboard holds its URL where the runner can read it (informational, as
+for quick answers). Windows and Linux required, macOS best effort. Screenshots `quick-theme.png`
+(typing "theme") and `quick-page.png` (typing "copy" over the smoke page).
+**Commit:** `lj-step-42: quick commands in the command bar, each showing its current state`
+
+```text
+The owner: more command-bar commands for actions and settings, each showing its current state.
+The list (decided): Translate page, Open in browser, Copy link, Copy as Markdown link, Reload;
+the theme presets and Theme: System / Light / Dark; Search engine (one row per engine); Mobile
+sites on / off; Remember history on / off; Clear history (last hour, 24 hours, 7 days,
+everything); Start at login on / off; Settings → <each tab>; Reload extensions; Show / hide the
+icon (LJ41); Quit (LJ41's row).
+
+Design (decided; do not relitigate):
+- Rust, a new child module src-tauri/src/commands/quick.rs:
+  - quick_state() → { page: { url, title } | null (a web page only; title = the window's title),
+    theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool
+    | null, showTrayIcon, iconForced (shown although the setting is off, LJ41) }.
+  - quick_command(command): a serde enum, #[serde(tag = "kind", deny_unknown_fields)]:
+    translate, openInBrowser, reload (the existing page actions); setThemeMode { mode }; setTheme
+    { theme } (a preset's whole theme, built by the bar from ui/lib/presets.ts and checked exactly
+    like save_settings' theme); setSearchEngine { id }; setMobileSites { on };
+    setRememberHistory { on }; clearHistory { range } (history_store's clear, as history_clear);
+    setStartAtLogin { on } (autostart::set); openSettings { tab } (settings_window::open);
+    reloadExtensions; setTrayIcon { on }. It logs `quick-command <kind> [<value>]`, never a URL
+    or a title.
+  - Settings changes share one path with save_settings: factor settings::apply_change(app,
+    change) out of commands.rs's save_settings (validate, update AppState, atomic save, push a new
+    theme to the bar and the settings window, re-run LJ41's tray rule, phone_mode::apply when
+    mobileSites changed); save_settings calls it too, so the two can't drift.
+  - Settings only, never from the command bar: the global shortcut and keys, developer mode,
+    switching extensions, custom theme colors. The bar is trusted (Ground Rule 18), but these
+    change what code runs or what keys do, and keep the Settings window's Save.
+- If the settings window is open when a quick command changes a setting, Rust tells it
+  (window.littleJoanSettings.savedChanged(<settings json>), by eval like showTab), and
+  settings.ts rebases its draft (rebase, Verify), so a later Save doesn't undo the change.
+- The bar (ui/command/quick.ts pure + tests; the glue in ui/command/command.ts): quick_state when
+  the command bar opens (alongside extensions_list); rows show their state as text after the
+  title; Enter runs the command, and the rows refresh from a new quick_state (settings keep the
+  command bar open; page commands close it as they do today). Copy link and Copy as Markdown link
+  copy in the bar with ui/command/copy.ts on the Enter keypress; the Markdown text is
+  link("markdown", title, url) imported from extensions/markdown-link/logic.js (plain ES, already
+  type-checked through tsconfig's checkJs) — if Vite or tsc can't take the import, stop and
+  report; don't copy the escaping. Rows draw with textContent only (view.ts).
+- Clearing history asks a second Enter on the same row (its subtitle says what will go); nothing
+  else asks twice.
+
+Smoke: scripts/ci/smoke-quick.mts + test, its own launch on a fresh data folder, with the smoke
+page for the page commands; type with the existing helpers (typeText, pressKeys) and read
+settings.json after each settings command.
+
+Docs: README (the command bar: quick commands), docs/architecture.md (commands table,
+capabilities), CHANGELOG ([Unreleased] → Added).
+
+Do NOT add commands that change keys, the shortcut or extensions, or let a page's title or URL
+choose a command.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ42 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-42: quick commands in the command
+bar, each showing its current state". Push and watch CI until every job is green (Ground Rule 3;
+two honest fix attempts, then stop). Look at both screenshots on every OS.
+```
+
+### LJ43 — One keymap: every key of Little Joan's own, configurable (engine side) · strong · auto
+
+**Verify:** `npm run verify` green, including Rust tests for a pure `src-tauri/src/keymap.rs` (tests
+in `keymap/tests.rs`):
+- the actions' default bindings per OS reproduce today's keys exactly (a table test — Windows /
+  Linux: Ctrl+W, Ctrl+L, Ctrl+Shift+T, Ctrl+H, and on Linux also Ctrl+R, F5, Alt+← / Alt+→;
+  macOS: Cmd+W, Cmd+L, Cmd+Shift+T, Cmd+Shift+O, Cmd+R, Cmd+[, Cmd+], Cmd+Y);
+- a binding is an accelerator string with a `KeyboardEvent.code` key (`CommandOrControl+KeyL`,
+  `Alt+ArrowLeft`, `F5`), `CommandOrControl` resolved per OS; matching stays exact (Ctrl+Shift+L is
+  not Ctrl+L; Ctrl+Alt never matches on Windows and Linux);
+- settings' `keys` overrides (`{ "<action-id>": "<accelerator>" | "" }`): unknown ids and
+  unparsable accelerators are dropped, `""` means no key, and an override replaces the action's
+  first binding and drops its fixed aliases (Linux reload's F5 stays only while reload has its
+  default);
+- validation: two actions on one binding → refused; an action on the global shortcut → refused; a
+  typing key (no modifier and not an F-key, or Shift alone with a letter or digit) → refused; on
+  macOS a binding needs Cmd or Ctrl;
+- every default, and every binding the recorder can produce, parses as a menu accelerator (the
+  parser menu.rs's items use);
+- `Key` covers what the recorder records — letters, digits, `Equal`, `Minus`, `BracketLeft` /
+  `BracketRight`, `Comma`, `Period`, `Slash`, `Semicolon`, `Quote`, `Backquote`, `Backslash`,
+  F1–F12, arrows, Home / End / PageUp / PageDown, numpad keys — from Windows virtual keys and GDK
+  key names.
+
+The settings round trip keeps `keys`. CI green on all three with a **keymap run**
+(`scripts/ci/smoke-keymap.mts`, + test): settings.json `"keys": { "history":
+"CommandOrControl+Shift+KeyK" }` → Ctrl+Shift+K (SendKeys `^+k`, xdotool `ctrl+shift+k`) opens the
+history view and Ctrl+H doesn't; on macOS `menu-keys history=⌘⇧K` in the log shows the menu was
+built from the keymap (the key press itself best effort).
+**Commit:** `lj-step-43: one keymap for every Little Joan key, configurable in settings (engine side)`
+
+```text
+The owner: change Little Joan's own keys too, not just the global shortcut. This step builds the
+engine side — one keymap every native key path reads; LJ44 builds the Settings tab. Ground Rule 25
+applies from here on.
+
+Today (read it): keys.rs's action_for hard-codes the Windows / Linux keys; platform/win.rs
+(AcceleratorKeyPressed on both webviews) and platform/linux.rs (the GTK window's
+key-press-event) call it; menu.rs hard-codes macOS's key equivalents in the hidden menu bar.
+
+Design (decided; do not relitigate):
+- src-tauri/src/keymap.rs (pure, no Tauri types; tests in keymap/tests.rs): KeyAction — close,
+  open-location, reload, back, forward, translate, history, open-in-browser (ids are these
+  strings; LJ16 adds zoom-in / zoom-out / zoom-reset, LJ49 find). Per OS an ordered list of
+  default bindings: the first is what Settings shows and lets you change, the rest are fixed
+  aliases; an action may have none (open-in-browser on Windows and Linux).
+  Keymap::new(platform, overrides); action_for(press) -> Option<KeyAction>; binding(action) for
+  the menu and for display; validate(overrides, global_shortcut) -> Result<(), Vec<Problem>>.
+- Bindings use the accelerator syntax the global shortcut already uses (shortcut.rs,
+  ui/lib/shortcut.ts: "CommandOrControl+Shift+Space"), keys named by KeyboardEvent.code, so the
+  recorder and the display text are shared. Store CommandOrControl, never the resolved modifier
+  (Landmines).
+- Not in the keymap (fixed): Esc / Enter / arrows / Tab in the bar, the Edit menu, Cmd+Q and
+  Cmd+, on macOS. On Windows, WebView2's own browser keys (Ctrl+R, F5, Alt+← / Alt+→) keep working
+  beside a custom binding — WebView2 handles them itself, and turning them all off
+  (AreBrowserAcceleratorKeysEnabled) would take other keys too, so don't; the docs say so.
+- settings.rs: `keys` (a map of overrides, tolerant per entry). save_settings takes it (optional,
+  like disabledExtensions) and refuses a set that fails validate, with the first problem's
+  message. AppState holds the built Keymap; a save rebuilds it.
+- keys.rs keeps Key, Mods, Platform and the conversions from Windows virtual keys and GDK key
+  names (extended as Verify lists); action_for moves into keymap.rs (keys.rs re-exports what
+  callers need, or the callers change — keep the diff readable). PageAction stays what
+  page_actions.rs performs; KeyAction → PageAction is mapped in one place.
+- macOS: menu.rs takes the page items' accelerators from the keymap (an action without a key gets
+  none), and a save sets the menu again (app.set_menu(menu::create(..)), on the main thread). In
+  smoke mode it logs `menu-keys <action>=<display>` for each item once the menu is built.
+- keymap_info() (bar and settings capabilities; a child module commands/keys.rs): { platform,
+  actions: [{ id, title, binding, defaults }], globalShortcut } — titles as the menu has them.
+  LJ44 uses it.
+
+Smoke: scripts/ci/smoke-keymap.mts + test, its own launch: the Verify's sequence.
+
+Docs: docs/architecture.md (the page keys table becomes the default keys, plus the keymap),
+CHANGELOG ([Unreleased] → Added: the keys can be changed in settings.json; LJ44 adds the tab).
+
+Do NOT build the Keyboard tab (LJ44), change any default key, or make the bar's own keys
+configurable.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ43 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-43: one keymap for every Little
+Joan key, configurable in settings (engine side)". Push and watch CI until every job is green
+(Ground Rule 3; two honest fix attempts, then stop).
+```
+
+### LJ44 — Settings → Keyboard: record every key; clashes and the system's reserved shortcuts · standard · auto
+
+**Verify:** `npm run verify` green, including vitest tests for:
+- `ui/settings/keyboard-logic.ts`: recording (the next key press with a modifier, or an F-key; Esc
+  cancels; Backspace means no key); the same rules as Rust's validation (duplicate → error, the
+  global shortcut → error, typing key → refused, macOS without Cmd / Ctrl → refused, Ctrl+Alt on
+  Windows / Linux → warning); reserved-shortcut warnings; Reset per row and Reset all; change
+  detection with the other tabs;
+- `ui/settings/reserved-shortcuts.ts` (data): every entry parses, has a name and an OS, no
+  duplicates per OS; it includes at least macOS ⌘Space (Spotlight), ⌃Space and ⌃⌥Space (input
+  sources), ⌘⇧3 / ⌘⇧4 / ⌘⇧5 (screenshots), ⌘Tab, ⌘\`, ⌃⌘Q, ⌃⌘Space (emoji), ⌘⌥Esc, ⌘H, ⌘M; Windows
+  Alt+Tab, Alt+F4, Alt+Space, Ctrl+Esc, Ctrl+Shift+Esc, Win+<any key> (one wildcard entry),
+  Ctrl+Win+← / →, PrintScreen; Linux (GNOME, KDE, Ubuntu) Super and Super+<any key>, Alt+Tab,
+  Alt+F2, Alt+F4, Alt+Space (KDE's KRunner), Ctrl+Alt+T, Ctrl+Alt+arrows, Super+Space; and on every
+  OS the editing keys (Ctrl / Cmd + C, V, X, A, Z, Shift+Z) as errors ("used for editing in
+  pages");
+- Rust: `SettingsTab::Keyboard` (by name, any case), `--settings keyboard`; get_settings /
+  keymap_info report `shortcutProblem` (`{ wanted, active, reason: taken | invalid }`) when the
+  saved global shortcut couldn't be registered at launch; `shortcut::TAKEN` reads "Another app or
+  the system already uses that shortcut. Try another one."
+
+CI green on all three: `--settings keyboard` opens the tab (`settings-window keyboard`), screenshot
+`settings-keyboard.png`; a short launch whose settings.json holds an unparsable shortcut shows the
+problem line (`settings-keyboard-problem.png`; Little Joan fell back to the default).
+**Commit:** `lj-step-44: Settings → Keyboard: every key recordable, clashes and the system's reserved shortcuts`
+
+```text
+The Settings side of LJ43's keymap, plus what the owner asked for the global shortcut: warn about
+clashes with Little Joan's own keys and with the system's, and say plainly when another app holds
+the shortcut.
+
+Design (decided; do not relitigate):
+- A Keyboard tab (settings_window.rs SettingsTab::Keyboard, between General and Appearance;
+  ui/settings.html, ui/settings.ts, new ui/settings/keyboard.ts glue + keyboard-logic.ts pure +
+  keyboard.css; `--settings keyboard` in cli.rs). Rows: "Summon Little Joan" — the global
+  shortcut; its recorder moves here from General, with its suspend / resume behaviour unchanged,
+  and General keeps a line with the current shortcut and a "Change…" button that switches to this
+  tab — then every keymap action (keymap_info) with its key as a recorder button, "Reset" when it
+  isn't the default, and "No key"; "Reset all" at the bottom. Save covers the tab (keys to
+  save_settings, which validates again).
+- Problems: errors block Save and say why ("⌘L is already Open Location", "That's the shortcut
+  that summons Little Joan", "Plain keys type text — add ⌘ or ⌃"); warnings don't ("macOS uses
+  ⌘Space for Spotlight", "Ctrl+Alt is AltGr on many keyboards"). The global shortcut's recorder
+  gets the same rules (an app key equal to it → error, a reserved one → warning).
+- The reserved table is curated data (ui/settings/reserved-shortcuts.ts: { os, accelerator or a
+  modifier wildcard, name }): the entries in Verify plus what you can confirm in the OSes' own
+  documentation. No network at runtime.
+- macOS system shortcuts, read-only — decide here, by evidence: macOS keeps the user's system
+  shortcuts in the com.apple.symbolichotkeys preferences domain (AppleSymbolicHotKeys: id → {
+  enabled, value: { parameters: [character, virtual key code, modifier flags] } }). Read it with
+  NSUserDefaults persistentDomainForName: through objc2 msg_send in platform/mac.rs (no new
+  crate), map virtual key codes (US layout) and modifier flags to accelerators, and test the
+  parser on a CI runner's export (a one-off step of a workflow_dispatch run: `defaults export
+  com.apple.symbolichotkeys -`, saved as test data — a runner holds nothing personal). Ship it only
+  if it is reliable: the domain lists only entries that were written, so defaults such as
+  Spotlight's may be absent — the curated table stays the base, a read entry marked disabled drops
+  that curated warning, and an enabled one adds a warning. If the export is empty or the mapping
+  isn't trustworthy, don't ship the read, and record why under Later. Never write a system setting
+  (Ground Rule 21).
+- The global shortcut's failure: shortcut::register_from_settings keeps what failed
+  (AppState::shortcut_problem: the wanted accelerator, the active one or none, taken | invalid);
+  get_settings and keymap_info report it; Keyboard and General show "⌘⇧K couldn't be registered:
+  another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little
+  Joan has no shortcut now."). shortcut::TAKEN changes as Verify says.
+- On a Linux Wayland session the Summon row explains `little-joan --toggle` as the welcome does
+  (LJ17 later shows the portal's trigger there instead).
+
+Smoke: the Verify's two screenshots (the history-off run's Settings sequence opens Keyboard after
+Appearance; a short launch of its own for the problem line).
+
+Docs: README (Settings → Keyboard; the page keys table says the keys can be changed),
+docs/architecture.md (the settings tabs table, the CLI), CHANGELOG ([Unreleased] → Added).
+
+Do NOT change a default key, write any OS setting, or block Save on a warning.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ44 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-44: Settings → Keyboard: every
+key recordable, clashes and the system's reserved shortcuts". Push and watch CI until every job is
+green (Ground Rule 3; two honest fix attempts, then stop). Look at both screenshots on every OS.
+This ends phase 20. Fill the PR description from the template. Needs human check:
+- Turn the icon off, quit, launch Little Joan again: the window opens; the shortcut works.
+- Settings → Keyboard: set the global shortcut to ⌘Space — the Spotlight warning shows; set History
+  to ⌘⇧K, Save: ⌘⇧K opens history and ⌘Y doesn't; Reset all.
+- Quick commands: Theme: Dark / Light, Mobile sites, Copy link, Copy as Markdown link, Clear
+  history (asks twice), Quit.
+- The must-not-disturb list.
+Once verify, package and smoke are green on every OS job, merge the PR into main with a merge
+commit, then stop and report.
+```
+
+---
+
+## v0.3 steps
+
+> Planned 2026-10-18 with the owner (decisions: "Design Decisions Already Made → round 3"). They
+> run after LJ19 (v0.2.0), in the order 21 → 22 → 23 → 24 → 25 → 26. Phases 21, 22 and 24 are
+> **security-sensitive**: each ends in a `review` step — the PR is marked ready, green, and NOT
+> merged; an independent read-only review follows (as for phase 16), its findings are fixed in
+> `lj-step-N-fix<k>` commits, and the owner decides the merge. The next phase starts from `main`
+> only when the owner says go; phase 22 changes the same new-window code as phase 21, so it waits
+> until phase 21 is merged. CLAUDE.md's standing exception names "the v0.2 plan": until the owner
+> extends it to v0.3, the `auto` phases 23 and 25 are marked ready and stop before merging too
+> (Ground Rule 24).
+
+### LJ45 — Links from other apps: register as a browser and receive links · strong · auto
+
+> Phase 21 (v0.3, security-sensitive). Branch `lj/p21-links` from the latest `main`; the PR goes
+> into `main` and is not merged by the agent.
+
+**Verify:** `npm run verify` green, including Rust tests:
+- `cli.rs`: `--link <url>` takes exactly the next argument as data, even when it starts with `--`
+  (`--link --quit` opens nothing and doesn't quit); only absolute `http`/`https` URLs open —
+  `file:`, `javascript:`, `data:`, `about:`, `ljext:`, `http://ljext.<id>.localhost`, the app's own
+  origin and a URL over 4,096 bytes are refused (`link-refused <scheme>`, never the URL); a launch
+  with `--link` never toggles, hides, quits, or opens Settings or an extension, whatever else is on
+  its command line; `--link` with nothing after it is a plain launch;
+- a pure `links::accept(&Url) -> Option<Url>` that both `--link` and macOS's `RunEvent::Opened` go
+  through; from a batch of opened URLs only the first acceptable one opens (`link-ignored <n>` for
+  the rest);
+- the toggle table: a link while hibernating → `Create(url)`; with the window open →
+  `FocusAndNavigate(url)` (the command bar closes; the page before stays in the back trail).
+
+Packaging: macOS `src-tauri/Info.plist` (merged by Tauri) declares `CFBundleURLTypes` for `http` and
+`https` (role Viewer) and no document types; Windows `src-tauri/windows/hooks.nsh`
+(`bundle.windows.nsis.installerHooks`) writes the per-user registration below and removes it on
+uninstall; Linux `src-tauri/linux/little-joan.desktop.hbs` (the deb's and the AppImage's
+`desktopTemplate`) adds `MimeType=x-scheme-handler/http;x-scheme-handler/https;`,
+`Categories=Network;WebBrowser;` and `--link %u` to `Exec`. CI green on all three with a **links
+run** (`scripts/ci/smoke-links.mts`, + test): the registration is read back (Windows `reg query`;
+macOS `plutil` on the installed app's Info.plist and Launch Services' handler list for `https`
+including `io.github.memoliertorerr.littlejoan`; Linux the installed `.desktop` file, which
+`desktop-file-validate` accepts); the OS's default is untouched (Windows: no `UserChoice` names
+`LittleJoanURL`; macOS: Launch Services' default `https` handler isn't Little Joan; Linux: `xdg-mime
+query default x-scheme-handler/https` isn't ours); a link launched the way the OS would — Windows:
+the ProgId's registered command with `%1` = the smoke page's URL; macOS: `open -a <installed app>
+<url>`; Linux: the desktop file's `Exec` with `%u` — logs `link-opened` and the page reports
+`LJ-SMOKE ready`; `--link "--quit"`, `--link "file:///etc/passwd"` and `--link "javascript:alert(1)"`
+leave the app running with `link-refused`; at the end the Windows uninstaller (`/S`) leaves none of
+the keys behind.
+**Commit:** `lj-step-45: links from other apps — Little Joan registers as a browser candidate and opens links`
+
+```text
+v0.3's first feature (the owner's decision): Little Joan can be the system's browser for http and
+https links, and a link from another app opens in the Little Joan window. It is security-sensitive:
+a link is untrusted input arriving from outside (Ground Rule 22), and registering touches the OS's
+app registry (Ground Rule 21). This step registers and receives; LJ46 adds the main browser, the
+loop guard and the default-apps button.
+
+Design (decided; do not relitigate):
+- Little Joan only becomes a candidate. It never makes itself the default: no Windows UserChoice
+  write (the OS protects it anyway), no LSSetDefaultHandlerForURLScheme, no `xdg-settings set` or
+  `xdg-mime default` — not from the app, not from an installer, not from a package script. The
+  user picks it in the OS's own settings (LJ46's button opens them).
+- Receiving:
+  - Windows and Linux: the OS starts `little-joan --link <url>`; single-instance forwards it to
+    the running app as for every flag. cli.rs: `--link` takes exactly the next argument, whatever
+    it looks like (Chrome's --single-argument idea): that is what keeps a crafted link from
+    becoming a flag. cli.rs is at 392 lines: move its tests into cli/tests.rs first (a separate
+    commit isn't needed; say so in the notes).
+  - macOS: links arrive as Apple Events → tauri's RunEvent::Opened { urls } in lib.rs's app.run
+    closure (the run loop already handles ExitRequested there). It exists only on macOS in tauri
+    2.12.4 (app.rs, cfg(target_os = "macos")).
+  - Both go through a pure links::accept (new src-tauri/src/links.rs): input::normalize is NOT
+    used (a link is never a search); Url::parse, then the navigation rules for typed addresses
+    (navigation::is_allowed_navigation and is_external_openable: web only, never extension-like,
+    never the app origin), at most 4,096 bytes. Then joan::dispatch(Command::Show(Some(url))) —
+    the toggle table already turns that into Create(url) or FocusAndNavigate(url). The visit
+    records as `link` (history.rs). Log `link-opened` (no URL), `link-refused <scheme>`,
+    `link-ignored <count>`.
+- Registration (all per-user, matching the NSIS currentUser install):
+  - macOS: src-tauri/Info.plist with CFBundleURLTypes = [{ CFBundleURLName "Web site URL",
+    CFBundleURLSchemes [http, https], CFBundleTypeRole Viewer }]. No CFBundleDocumentTypes:
+    Little Joan never opens files (Ground Rule 11). If the smoke shows Launch Services doesn't
+    list Little Joan for https with URL types alone, STOP and report — claiming HTML documents
+    would be a design change.
+  - Windows: src-tauri/windows/hooks.nsh, referenced from tauri.conf.json bundle.windows.nsis.
+    installerHooks (tauri-utils 2.10.2 config.rs documents the NSIS_HOOK_POSTINSTALL /
+    PREUNINSTALL / POSTUNINSTALL macros). POSTINSTALL writes, under HKCU:
+    Software\Clients\StartMenuInternet\LittleJoan (default "Little Joan"; Capabilities with
+    ApplicationName, ApplicationDescription, ApplicationIcon "<exe>,0"; Capabilities\URLAssociations
+    http = https = "LittleJoanURL"; DefaultIcon; shell\open\command = "\"<exe>\""),
+    Software\RegisteredApplications "Little Joan" = "Software\Clients\StartMenuInternet\
+    LittleJoan\Capabilities", and Software\Classes\LittleJoanURL (default "Little Joan URL";
+    DefaultIcon; shell\open\command = "\"<exe>\" --link \"%1\""), then
+    SHChangeNotify(SHCNE_ASSOCCHANGED). Never Software\Classes\http or \https themselves, never
+    UserChoice. The uninstall hooks delete exactly these keys and values, then notify again.
+  - Linux: a desktop file template (tauri-utils' deb and appimage desktop_template; its variables
+    are categories, comment, exec, icon and name — extend the one LJ17 added, if it did) with Exec={{exec}} --link %u,
+    MimeType=x-scheme-handler/http;x-scheme-handler/https; and Categories=Network;WebBrowser;
+    (GNOME's Default Apps lists web browsers by that category). Launched from the app menu
+    without a URL, `--link` gets nothing and it is a plain launch, as today.
+- Focus: a link while Little Joan is open brings its window to the front (it was asked for).
+  Local programs could already do that with --show <url>; links don't widen that.
+
+Threat model for the PR's review focus (each item with the test or smoke rule that covers it):
+argument injection through the link (single-argument --link; the registry's and desktop file's
+quoting), what schemes and hosts may open (links::accept), no new IPC (no command added; no
+capability changes — capability_tests.rs unchanged and green), the OS's defaults untouched (the
+smoke's read-backs), uninstall leaving nothing behind (Windows), and a link flood (each link is one
+navigation of the one window, as --show already is).
+
+Smoke: scripts/ci/smoke-links.mts + test, its own launch, the sequence from Verify. On Windows read
+the registered command from HKCU\Software\Classes\LittleJoanURL\shell\open\command and run it with
+%1 replaced, as Explorer would; on macOS use a short Swift snippet for Launch Services'
+LSCopyAllHandlersForURLScheme / LSCopyDefaultHandlerForURLScheme (read-only).
+
+Files: src-tauri/src/{links.rs (new, + tests), cli.rs (+ cli/tests.rs), lib.rs (RunEvent::Opened,
+single-instance), toggle.rs only if a test is missing}, src-tauri/Info.plist (new),
+src-tauri/windows/hooks.nsh (new), src-tauri/linux/little-joan.desktop.hbs (new, or LJ17's),
+src-tauri/tauri.conf.json, scripts/ci/smoke-links.mts (+ test), scripts/ci/smoke.mts (wiring),
+.github/workflows/ci.yml only for the uninstall check at the end of the Windows smoke job,
+README (Little Joan as your browser for links — written in LJ46 once the button exists; here only
+the CLI flag), docs/architecture.md (CLI, packaging, a "Links from other apps" section), CHANGELOG
+([Unreleased] → Added), SECURITY.md (links are untrusted input).
+
+Do NOT make Little Joan the default anywhere, claim file types, or open anything but http(s) from
+a link.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ45 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-45: links from other apps —
+Little Joan registers as a browser candidate and opens links". Push, open the phase-21 PR into
+main as a draft, and watch CI until every job is green (Ground Rule 3; two honest fix attempts,
+then stop).
+```
+
+### LJ46 — The main browser: handing pages on without loops; the default-apps button · strong · review
+
+**Verify:** `npm run verify` green, including Rust tests for a pure `browsers.rs`:
+- `handoff_target(main_browser, os_default, installed, self_id)`: a chosen main browser that is
+  installed wins; else the OS default unless it is Little Joan; else (Little Joan is the default,
+  no main browser) the first other installed browser in the OS's own order; none → no target
+  (`handoff-none`, and the toolbar's status says "No other browser to open this in"); a target that
+  is Little Joan itself is always refused (`handoff-self-refused`);
+- the per-OS readers' pure parts: Windows `StartMenuInternet` entries and the `UserChoice` ProgId,
+  Linux `.desktop` files' `MimeType` / `Exec` / `NoDisplay` and `xdg-mime`'s answer, macOS bundle
+  ids;
+- a source test: `tauri_plugin_opener::open_url` appears only in `browsers.rs`'s glue (every
+  handoff goes through one place).
+
+Settings gain `mainBrowser` (an id from the OS's list, or null = "System default"; tolerant). CI
+green on all three; the links run adds: `browsers-listed <n> default=<self|other|none>`; on Linux
+and Windows a fake browser installed by the smoke (a `.desktop` file / a `StartMenuInternet` entry
+whose command writes its URL to a file) chosen as `mainBrowser` receives the smoke page's
+`target=_blank` link (clicked at a known point) and the app logs `handoff browser=<id>`; on Linux,
+with the smoke making Little Joan the runner's default (`xdg-mime default` run by the smoke on the
+disposable runner, never by the app) and no main browser chosen, the same click goes to the fake
+browser (the first other one) and no `link-opened` follows (no loop). Screenshot
+`settings-general-browser.png`.
+**Commit:** `lj-step-46: the main browser for "Open in browser" — no loops when Little Joan is the default; the default-apps button`
+
+```text
+Once Little Joan can be the default browser (LJ45), "Open in browser", target=_blank links,
+Settings' links and extensions' openUrl(where: "browser") would hand pages to the OS default —
+possibly Little Joan itself, which would bring them straight back. This step routes every handoff
+through one place that knows the user's main browser.
+
+Design (decided; do not relitigate):
+- browsers.rs (pure decisions + a thin per-OS reader in platform/{win,mac,linux}.rs, read-only):
+  - installed browsers: macOS NSWorkspace URLsForApplicationsToOpenURL: for
+    https://example.com (macOS 12+; our minimum is 12.3) → bundle ids and names; Windows HKCU and
+    HKLM Software\Clients\StartMenuInternet\* (name, shell\open\command); Linux the .desktop files
+    in the XDG data dirs whose MimeType has x-scheme-handler/https (not NoDisplay).
+  - the OS default: macOS URLForApplicationToOpenURL:; Windows HKCU\Software\Microsoft\Windows\
+    Shell\Associations\UrlAssociations\https\UserChoice ProgId ("LittleJoanURL" = Little Joan);
+    Linux `xdg-mime query default x-scheme-handler/https`.
+  - opening with one browser: macOS `open -b <bundle id> <url>`; Windows the browser's registered
+    command with the URL as one argument (never through a shell); Linux `gio launch <desktop file>
+    <url>` (GLib ≥ 2.68; Ubuntu 22.04 has 2.72). The OS default (when it isn't Little Joan): the
+    opener as today.
+  - hand_off(app, url): handoff_target (Verify), then open; logs `handoff <os-default |
+    browser=<id> | none>`.
+- Every handoff calls hand_off: page_actions::open_in_browser, bar.rs's page on_new_window,
+  settings_window.rs's links, extensions/protocol.rs's openUrl to the browser. Nothing else calls
+  tauri_plugin_opener::open_url (the source test).
+- Settings → General gains a "Browser" section: "Little Joan is your default browser" / "isn't";
+  "Open default apps settings" — macOS x-apple.systempreferences:com.apple.Desktop-Settings.extension
+  (Desktop & Dock holds "Default web browser" on macOS 13+; macOS 12:
+  x-apple.systempreferences:com.apple.preference.general), Windows
+  ms-settings:defaultapps?registeredAppUser=Little%20Joan (Windows 11 opens Little Joan's page;
+  Windows 10 opens Default apps), Linux `gnome-control-center default-apps`, then `systemsettings
+  kcm_componentchooser`, else a note telling the user where to set it (with the xdg-settings
+  command for them to run themselves); and "Main browser": System default + the installed browsers
+  (never Little Joan). When Little Joan is the default and no main browser is chosen, the section
+  says which browser pages go to ("Opening pages in Safari, because Little Joan is your default
+  browser"). Commands (settings capability; a child module commands/browsers.rs):
+  browsers_info(), open_default_apps_settings().
+- Opening the OS's settings is the only thing the button does (Ground Rule 21).
+
+Threat model additions for the review: no loop can form (handoff_target's self refusal, tested;
+the Linux smoke), the browser command lines are built without a shell, the browser list comes
+from the OS (never from a page), and Settings' strings are drawn as text.
+
+Smoke: the links run's additions from Verify (scripts/ci/smoke-links.mts + test). The fake
+browsers are created by the smoke on the disposable runners and removed afterwards; on macOS the
+handoff is covered by unit tests and the human check.
+
+Docs: README ("Little Joan as your browser for links": how to choose it per OS, what the main
+browser does), docs/architecture.md (handoff), CHANGELOG ([Unreleased] → Added), SECURITY.md.
+
+Do NOT change the OS default from the app or from the smoke on macOS / Windows, or open a page in
+Little Joan when a handoff finds no target.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ46 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-46: the main browser for \"Open
+in browser\" — no loops when Little Joan is the default; the default-apps button". Push and watch
+CI until every job is green (Ground Rule 3; two honest fix attempts, then stop). Look at the
+screenshot on every OS. This ends phase 21, which is security-sensitive (gate `review`, Ground Rule
+24): fill the PR description from the template — the review focus is LJ45's and LJ46's threat
+models, each item with its test or smoke rule. Needs human check: on your Mac pick Little Joan in
+System Settings → Desktop & Dock → Default web browser, click a link in Mail or Notes: it opens in
+Little Joan; "Open in browser" goes to your main browser and nothing bounces back; set Safari back.
+On Windows (if you have one): Little Joan appears in Settings → Default apps, and the same checks.
+On Linux: GNOME Settings → Default Apps lists it. Mark the PR ready once every job is green and
+STOP. Never merge it: an independent security review comes next, and the owner decides.
+```
+
+### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
+
+> Phase 22 (v0.3, security-sensitive). Branch `lj/p22-popups` from the latest `main`, after phase
+> 21's PR is merged (both change the page's new-window handler); if it is still open, stop and ask.
+
+**Verify:** `npm run verify` green, including Rust tests for a pure `popups.rs`:
+- `decide(opener, target, features, open_popups) -> InApp | Browser | Refuse`: the opener must be
+  an http(s) web page in `joan-page` (an extension panel or an app page → today's behaviour);
+  InApp when the request asks for a size (`window.open(url, name, "width=…,height=…")`, as sign-in
+  libraries do) or the target is a known sign-in flow (accounts.google.com, appleid.apple.com,
+  login.microsoftonline.com, login.live.com, github.com/login/oauth/…, www.facebook.com/…/dialog/
+  oauth, discord.com/oauth2/…, x.com / twitter.com /i/oauth2/…, slack.com/oauth/…); `about:blank`
+  with a size → InApp (libraries open a blank popup, then set its location), without one → Refuse;
+  at most 2 popups at once (more → Browser); everything else → Browser (through LJ46's handoff),
+  as today;
+- the popup's navigation rules: http(s) and `about:blank` only — never extension-like URLs, never
+  the app origin;
+- capability_tests.rs: no capability's `webviews` or `windows` pattern matches `joan-popup-1` (or
+  any popup label).
+
+CI green on all three with a **popups run** (`scripts/ci/smoke-popups.mts`, + test; the smoke
+server serves `tests/smoke/signin.html` on a second port, a different origin, like a real
+provider): a click on the smoke page's "Sign in" (`?popup=oauth`) opens it with
+`window.open(url, "lj-signin", "width=480,height=600")`; the popup posts
+`window.opener.postMessage("lj-signed-in", "*")` and calls `window.close()`; the opener reports
+`LJ-POPUP received=1 closed=1`; `?popup=blank` (a sized popup to `about:blank`, then
+`popup.location = <signin url>`) reports the same; a plain `target=_blank` link logs `handoff …` and
+opens no popup; with a popup open, `--hide` logs `popup-closed hibernate`, and no webview helpers
+outlive the window (the existing helper rule, counting the popup's). Screenshot `popup.png` (the
+popup over the window).
+**Commit:** `lj-step-47: sign-in popups open in a small window of their own, with no IPC`
+
+```text
+"Sign in with Google / Apple / Microsoft / GitHub" often opens a popup and waits for it to post
+back. Today every popup goes to the default browser, so those flows break (Later's "Popups inside
+the app"). Decided with the owner: sign-in popups open in a small child window of Little Joan's
+own, with an IPC-free page webview that shares the data store and the opener relationship (so
+the popup can post back and close); they close on hibernate; everything else keeps going to the
+browser. Security-sensitive: a popup is a web page and gets exactly what joan-page gets — nothing
+(Ground Rule 23).
+
+Design (decided; do not relitigate):
+- popups.rs (pure, tests): decide (Verify) and the popup navigation rule.
+- bar.rs's page on_new_window: InApp → build the popup and return
+  NewWindowResponse::Create { window } (tauri 2.12.4 webview/mod.rs); Browser → LJ46's hand_off;
+  Refuse → today's `new-window-refused`. Building: WebviewWindowBuilder::new(app,
+  "joan-popup-<n>", WebviewUrl::External(<target>)) with .window_features(features) — it gives the
+  popup the opener's webview configuration (macOS), environment (Windows) and related view (Linux),
+  which is what makes window.opener and the shared cookie store work (webview_window.rs
+  window_features). Follow tauri's own docs / example for building inside on_new_window (the
+  handler must return the window); if that deadlocks on Windows (joan::dispatch exists because
+  building windows from the main thread can), stop and report what the engine did.
+- The window: inner size from the features, clamped to 320–1200 × 300–900; centred over the
+  Little Joan window on its monitor; owned by it (.parent(&joan window)) so it stays above it;
+  resizable; not always-on-top. Its title is the popup's current host (set by Rust on each
+  navigation, never the page's own title), so you always see where you are signing in.
+  on_navigation: popups::may_navigate. on_new_window inside a popup → hand_off (no nested
+  popups). on_download: refused (`download-refused popup`). Permission requests: denied.
+- Lifecycle: joan::destroy closes every popup first, before the page is released; a page that
+  calls window.close() closes its popup — check per engine in CI (WebView2 WindowCloseRequested,
+  WKWebView's webViewDidClose:, WebKitGTK's close signal) and wire whichever wry doesn't already;
+  a popup closing hands the keyboard back to the page. Logs: `popup-opened <host>`,
+  `popup-closed <by-page | hibernate | user>`.
+- The data store: popups share the page's (the opener's environment / configuration), so a login
+  made in the popup is the page's login. No separate profile.
+
+Smoke: scripts/ci/smoke-popups.mts + test, tests/smoke/signin.html (new), `?popup=oauth|blank`
+in smoke.html with logic in tests/smoke/popup-logic.mjs (+ test); the smoke server listens on a
+second port for the sign-in origin.
+
+Files: src-tauri/src/{popups.rs (new, + tests), bar.rs, joan.rs, capability_tests.rs, smoke.rs if
+a helper is needed}, tests/smoke/{smoke.html, signin.html, popup-logic.mjs (+ test)},
+scripts/ci/smoke-popups.mts (+ test), scripts/ci/smoke.mts (wiring), docs/architecture.md (a
+Popups section; the trust table gains joan-popup-*), CHANGELOG ([Unreleased] → Added).
+
+Do NOT give popups the bar webview, a toolbar, IPC, extensions or downloads, and don't keep them
+across hibernation.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ47 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-47: sign-in popups open in a
+small window of their own, with no IPC". Push, open the phase-22 PR into main as a draft, and watch
+CI until every job is green (Ground Rule 3; two honest fix attempts, then stop). Look at popup.png
+on every OS.
+```
+
+### LJ48 — Popups: closing with their page, keys, docs and the review · strong · review
+
+**Verify:** `npm run verify` green, including Rust tests: popups close when the page webview
+commits a page of another origin than their opener's (a reload or a same-origin navigation keeps
+them); Ctrl/Cmd+W in a popup closes the popup only (the page keys' Close, routed by the focused
+window); no other page key acts in a popup. CI green on all three; the popups run adds: the
+opener navigates to another origin with a popup open → `popup-closed opener-left`; Ctrl+W in the
+popup (Windows, Linux; best effort on macOS) → `popup-closed user` and the page window stays.
+`docs/architecture.md`, `SECURITY.md` and the README describe popups.
+**Commit:** `lj-step-48: popups close with their page; Ctrl/Cmd+W closes a popup; popup docs`
+
+```text
+The rest of the popup lifecycle, then the security review.
+
+1. A popup belongs to the page that opened it: when the page webview commits a page of another
+   origin than the popup's opener (bar.rs's page load Started), close its popups
+   (`popup-closed opener-left`); reloads and same-origin navigations keep them (sign-in flows
+   reload the opener).
+2. Keys: Ctrl+W (Windows: AcceleratorKeyPressed on the popup's controller — platform/win.rs's
+   install for a third kind of webview, keys only; Linux: the popup's GTK window key hook) and
+   Cmd+W (macOS: the menu's Close Window closes the key window) close the popup. No other page key
+   acts in a popup (no bar to focus, no history to show). Through the keymap (LJ43): only the
+   close action applies to popups.
+3. Docs: docs/architecture.md (Popups: which requests become popups, the window, its lifecycle,
+   the trust table), README (Sign-in popups), SECURITY.md (popups are page trust; their title is
+   the host), CHANGELOG.
+
+Threat model for the review (each item with its test or smoke rule): popups have no IPC
+(capability_tests.rs), can't load extension or app URLs (popups::may_navigate), can't open further
+popups (hand_off), can't download, get no permissions, show their real host, share only the page's
+own store, and never outlive the window (hibernate, opener-left). Also review what decide() lets
+in: a page can always ask for a size, so any web page can open one in-app popup at a time (two at
+most) — the same reach as a page's own window.open in any browser.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ48 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-48: popups close with their
+page; Ctrl/Cmd+W closes a popup; popup docs". Push and watch CI until every job is green (Ground
+Rule 3; two honest fix attempts, then stop). This ends phase 22, which is security-sensitive (gate
+`review`): fill the PR description from the template — the review focus is the threat model above.
+Needs human check: sign in with Google on a site that offers it (e.g. a "Sign in with Google"
+button), with Apple and with GitHub where you have accounts: the popup shows the provider's host,
+you sign in, it closes, and the site is signed in; close and summon — still signed in; a popup
+left open goes away when you dismiss Little Joan. Mark the PR ready once every job is green and
+STOP. Never merge it: an independent security review comes next, and the owner decides.
+```
+
+### LJ49 — Find in page · strong · auto
+
+> Phase 23 (v0.3). Branch `lj/p23-find-pins` from the latest `main`.
+
+**Verify:** `npm run verify` green, including:
+- Rust tests for a pure `find.rs`: the find state per window (a query of at most 1,000
+  characters, case-insensitive, next / previous wrap, a new query restarts, Stop clears, a new
+  page ends the find); results `{ matches?, active?, found }` merged per engine (Windows and Linux
+  count; macOS knows only found / not found); the smoke-log line;
+- keymap: a `find` action, default Ctrl+F / Cmd+F (Windows: caught in AcceleratorKeyPressed so
+  WebView2's own find bar never opens);
+- vitest for `ui/toolbar/find-logic.ts`: the strip's state — open, typing debounced 120 ms →
+  `find_start`, Enter next, Shift+Enter previous, Esc closes and gives the page the keyboard; the
+  label "3 of 12" / "No matches" / "Found" (macOS) / "Find isn't available in this version of
+  Windows' web engine".
+
+Capabilities: the bar gains only `allow-find`. CI green on all three with a **find run**
+(`scripts/ci/smoke-find.mts`, + test): the smoke page `?find=1` shows `lj-needle` three times;
+Ctrl/Cmd+F opens the strip (`find-open`), typing `lj-needle` logs `find-result matches=3 active=1`
+(Windows, Linux) or `find-result found=true` (macOS, best effort for typing), Enter → `active=2`,
+Esc → `find-closed`. Screenshot `find.png`.
+**Commit:** `lj-step-49: find in page — Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar`
+
+```text
+Find in page (Later → v0.3, the owner's decision): Ctrl/Cmd+F opens a find field in the toolbar
+(the trusted bar), driving each engine's native find. The page itself gets no script and no IPC
+(Ground Rules 10 and 18).
+
+Design (decided; do not relitigate):
+- Native find, in platform/{win,mac,linux}.rs behind one find module (find.rs pure +
+  thin glue):
+  - Windows: webview2-com 0.39.1 has it (checked while planning: webview2-com-sys bindings.rs —
+    ICoreWebView2_28::Find → ICoreWebView2Find with Start(options, handler), FindNext,
+    FindPrevious, Stop, MatchCount, ActiveMatchIndex, add_MatchCountChanged,
+    add_ActiveMatchIndexChanged; options from ICoreWebView2Environment15::CreateFindOptions with
+    SetFindTerm, SetIsCaseSensitive(false), SetShouldHighlightAllMatches(true),
+    SetSuppressDefaultFindDialog(true)). Cast the core webview to ICoreWebView2_28; if the
+    installed runtime lacks it, report unavailable. Record CI's WebView2 runtime version.
+  - macOS: WKWebView findString:withConfiguration:completionHandler: (macOS 11+) with a
+    WKFindConfiguration (caseSensitive NO, wraps YES, backwards for previous); its WKFindResult
+    says only matchFound — no count. The completion handler is a block: add block2 = "0.6" (0.6.2
+    is already in Cargo.lock through wry — nothing new to fetch) as a macOS dependency and call it
+    with objc2 msg_send as platform/mac.rs does; use objc2-web-kit 0.3 (also in the lock) only if
+    msg_send gets unwieldy, and say which in the notes. Stop has nothing to undo but the selection
+    the find left; leave it.
+  - Linux: webkit2gtk's FindController (find_controller(); search(text, CASE_INSENSITIVE |
+    WRAP_AROUND, max), search_next, search_previous, search_finish, count_matches; signals
+    found-text, failed-to-find-text, counted-matches). WebKitGTK doesn't report the active match:
+    track it in find.rs (1 after a search, ± with next / previous, wrapping) and say so.
+- Rust ↔ bar: one bar command `find(action)` (`{ kind: start, query } | next | previous | stop`,
+  a serde enum; commands/find.rs; allow-find) and results pushed with
+  bar.eval("window.littleJoan.setFindResult(<json>)"). A page load (Started) ends the find and
+  closes the strip.
+- The keymap (LJ43) gains `find` (Ctrl+F / Cmd+F; macOS a View menu item "Find…" built from the
+  keymap). Ctrl/Cmd+F with a web page or a panel opens the strip; on the start page it does
+  nothing; it closes the command bar first if it is open.
+- The strip (ui/toolbar/find-logic.ts pure + tests, ui/toolbar/find.ts glue, toolbar markup and
+  styles): in the toolbar's middle, in place of the site while open — the field, the count, ↑ ↓
+  buttons and ×; back and open-in-browser stay. Text drawn as text.
+
+Smoke: scripts/ci/smoke-find.mts + test, `?find=1` in smoke.html (three visible `lj-needle`s),
+keys with the existing helpers.
+
+Docs: README (Find in page; the page keys table), docs/architecture.md (find per engine, commands,
+keymap), CHANGELOG ([Unreleased] → Added); this plan's Later row "Find in page" → LJ49.
+
+Do NOT inject a find script into the page, add regex or whole-word options, or find in the bar's
+own screens.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ49 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-49: find in page — Ctrl/Cmd+F,
+the engines' own find, a find strip in the toolbar". Push, open the phase-23 PR into main as a
+draft, and watch CI until every job is green (Ground Rule 3; two honest fix attempts, then stop).
+Look at find.png on every OS.
+```
+
+### LJ50 — Pinned sites at the top of the command bar · standard · auto
+
+**Verify:** `npm run verify` green, including Rust tests: settings `pinnedSites` (at most 8 `{ url,
+title }`, http(s) only, one per URL, tolerant parse); `suggest.rs` puts pinned sites first in the
+empty state (kind `pinned`), then top sites without the pinned hosts, still at most 8 rows plus
+Settings; and vitest tests: `rows.ts` draws pinned rows with a pin glyph; Shift+Delete on a pinned
+row unpins it (instead of removing history); the quick commands (LJ42) offer "Pin this site" /
+"Unpin this site" with the page open, showing its state. CI green on all three: a launch with the
+smoke page pinned in settings.json shows `suggestions … first=127.0.0.1…` in its very first window
+(no history yet); typing `pin` over another page and Enter adds it (settings.json). Screenshot
+`pinned.png`.
+**Commit:** `lj-step-50: pinned sites at the top of the command bar`
+
+```text
+An owner-approved addition: pin the current site so it always leads the command bar's empty state
+(Little Arc keeps favourites at hand; frecency alone moves sites around).
+
+Design (decided):
+- settings.rs: `pinnedSites` (Verify's rules). The quick command setPinned { url, title, on }
+  (LJ42's enum; the bar sends the page from quick_state, Rust checks it is the open web page).
+- suggest.rs: pinned first (kind `pinned`, in the order pinned), then top sites minus pinned hosts;
+  the starters only when there are neither. history.rs is unchanged.
+- The bar: rows.ts / view.ts draw a pin glyph (a CSS mask); Shift+Delete on a pinned row unpins
+  (setPinned … on: false). No reordering (Later).
+
+Smoke: in the quick run (scripts/ci/smoke-quick.mts + test) or a short launch of its own.
+
+Docs: README (pinning), docs/architecture.md (suggest, settings), CHANGELOG ([Unreleased] → Added).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ50 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-50: pinned sites at the top of
+the command bar". Push and watch CI until every job is green (Ground Rule 3; two honest fix
+attempts, then stop). Look at pinned.png. This ends phase 23. Fill the PR description from the
+template. Needs human check: Ctrl/Cmd+F on a long article and on a page in another language;
+Enter / Shift+Enter; Esc; pin two sites and summon: they lead the list; unpin one with
+Shift+Delete; the must-not-disturb list. Once every job is green: merge the PR into main with a
+merge commit if CLAUDE.md's standing exception covers v0.3 phases by then; otherwise mark it
+ready and stop (Ground Rule 24).
+```
+
+### LJ51 — Saved logins on Windows: the engine's password saving and autofill as Privacy settings · strong · auto
+
+> Phase 24 (v0.3, security-sensitive). Branch `lj/p24-saved-logins` from the latest `main`.
+
+**Verify:** `npm run verify` green, including Rust tests: settings `savePasswords` (default false)
+and `autofillForms` (default true — WebView2's own default, what Windows users have had since
+v0.1), tolerant; the settings window uses the page window's webview data folder (`AppState::
+webview_data_dir`; a test on the builder's input). Capabilities: the settings window gains only
+`allow-clear-saved-logins`. CI green on all three with a **logins run** (`scripts/ci/
+smoke-logins.mts`, + test; Windows rules): a default launch logs `logins password-autosave=false
+autofill=true` (read back from the page webview's settings with the getters); with
+`"savePasswords": true` → `password-autosave=true`; the settings window's profile path equals the
+page's (`webview-profile page=<p> settings=<p>`, the same folder); Settings → Privacy → Remove saved
+passwords and form data, while hibernating, logs `saved-logins-cleared ok`. macOS and Linux:
+`settings-privacy-logins.png` shows the "isn't available" note. Screenshots
+`settings-privacy-logins.png` on every OS.
+**Commit:** `lj-step-51: Windows — the web engine's password saving and autofill as Privacy settings, and removing them`
+
+```text
+The owner's request "saved logins", per engine, as far as each allows. Windows' WebView2 has its
+own password saving and autofill; Little Joan has never set them (WebView2's defaults: password
+saving off, general autofill on). macOS passwords and passkeys are DEFERRED by the owner (Later);
+Linux's WebKitGTK has no password manager. Security-sensitive: credentials (Ground Rule 26).
+
+Design (decided; do not relitigate):
+- settings.rs: savePasswords (default false) and autofillForms (default true, the engine's own
+  default, so nothing changes for anyone until they choose; the owner may flip that default).
+- platform/win.rs: on each page webview (and each popup, LJ47) right after it is built and after
+  a Save: ICoreWebView2Settings4 SetIsPasswordAutosaveEnabled / SetIsGeneralAutofillEnabled
+  (webview2-com 0.39.1 has both; checked while planning). Log the values read back.
+- Removing: Settings → Privacy (Windows) gets "Offer to save passwords (kept by Windows' web
+  engine, on this computer)", "Fill in forms (addresses and the like)", and "Remove saved
+  passwords and form data…" — a question, then clear_saved_logins (settings capability;
+  commands/logins.rs): ICoreWebView2Profile2::ClearBrowsingData(PASSWORD_AUTOSAVE |
+  GENERAL_AUTOFILL) on the settings window's own WebView2 profile, so it works while
+  hibernating (no page window, no extra webview — Ground Rule 9). That needs the settings window
+  to share the page's user data folder: settings_window.rs sets no data_directory today; in
+  installed builds both already end up in app_local_data_dir (Tauri forces it), but with
+  LITTLEJOAN_DATA_DIR (dev, CI) the page uses <dir>/webview and Settings didn't (Landmines). Give
+  Settings AppState::webview_data_dir too. CI checks both profiles' paths are the same
+  (ICoreWebView2_13 Profile → ProfilePath); if they aren't, stop.
+- macOS and Linux Privacy: "Saving passwords isn't available in Little Joan on this system yet."
+  plus one line why (macOS: "Apple lets only browsers with a special entitlement use Passwords
+  and passkeys"; Linux: "WebKitGTK has no password manager"). No switch.
+- Ground Rule 26: Little Joan never reads, exports, logs or syncs a credential; the smoke never
+  types a password.
+
+Smoke: scripts/ci/smoke-logins.mts + test (Windows rules; the screenshots everywhere).
+
+Docs: README (Privacy: saved passwords on Windows), docs/architecture.md (Where data lives: saved
+passwords and form data; the settings window's data folder), CHANGELOG ([Unreleased] → Added),
+SECURITY.md (credentials stay in the engine).
+
+Do NOT build a password manager, read the engine's stores, or turn password saving on by default.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ51 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-51: Windows — the web engine's
+password saving and autofill as Privacy settings, and removing them". Push, open the phase-24 PR
+into main as a draft, and watch CI until every job is green (Ground Rule 3; two honest fix
+attempts, then stop). Look at the screenshots on every OS.
+```
+
+### LJ52 — Passkeys and saved logins: what each engine offers; docs; the review · standard · review
+
+**Verify:** `npm run verify` green, including vitest tests for `tests/smoke/webauthn-logic.mjs`
+(the report). CI green on all three: the smoke page `?webauthn=1` reports `LJ-WEBAUTHN api=<0|1>
+platform=<true|false|error> conditional=<true|false|error>` (`PublicKeyCredential`,
+`isUserVerifyingPlatformAuthenticatorAvailable()`, `isConditionalMediationAvailable()`) on every
+OS into `summary.json` (informational: it is evidence, not a rule). README, SECURITY.md and
+docs/architecture.md describe what is saved where and what isn't available; Later holds the macOS
+research.
+**Commit:** `lj-step-52: what each engine offers for passkeys and saved logins; docs and the macOS research`
+
+```text
+Close the saved-logins phase with evidence and docs, then the security review.
+
+1. tests/smoke/smoke.html `?webauthn=1` + tests/smoke/webauthn-logic.mjs (+ test): the report in
+   Verify; scripts/ci/smoke-logins.mts adds it to summary.json for every OS. Write what each engine
+   reported into the notes.
+2. Docs: README (Privacy: saved passwords on Windows, passkeys where the engine offers them —
+   Windows Hello in WebView2 is the owner's check; not available on macOS and Linux yet, and why),
+   SECURITY.md, docs/architecture.md (Where data lives).
+3. This plan's Later: the macOS row (the owner deferred it) with the research — WKWebView passkeys
+   for an app that isn't Safari need Apple's restricted browser entitlement
+   (com.apple.developer.web-browser.public-key-credential, granted by Apple on request to apps
+   that are web browsers), which in turn needs Developer ID signing with a provisioning profile
+   (LJ18's signing is a precondition); WKWebView's password AutoFill isn't dependable for embedding
+   apps. Record what CI's `?webauthn=1` showed on macOS next to it. Linux: no engine support;
+   would need libsecret and our own UI.
+
+Threat model for the review (each with its test): password saving off by default; the setting
+reaches every page webview and popup (the read-back log); removal really clears the page's profile
+(same profile path, tested in CI); Little Joan never touches credential data (no code reads the
+engine's stores — say how you checked); the Privacy texts are honest about where data lives.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ52 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-52: what each engine offers for
+passkeys and saved logins; docs and the macOS research". Push and watch CI until every job is green
+(Ground Rule 3; two honest fix attempts, then stop). This ends phase 24, which is security-sensitive
+(gate `review`): fill the PR description from the template — the review focus is LJ51's design and
+the threat model above. Needs human check (Windows): turn on "Offer to save passwords", sign in to
+a site and accept WebView2's offer; close, summon: the login form fills in; remove saved passwords:
+it no longer does; on a site with passkeys (e.g. github.com) sign in with Windows Hello. On macOS:
+Privacy says it isn't available. Mark the PR ready once every job is green and STOP. Never merge it:
+an independent security review comes next, and the owner decides.
+```
+
+### LJ53 — More bundled extensions: Reading list and To-do · standard · auto
+
+> Phase 25 (v0.3). Branch `lj/p25-more-extensions` from the latest `main`.
+
+**Verify:** `npm run verify` green, including vitest tests for each `logic.js`:
+- **Reading list** (`extensions/reading-list/`, permissions `storage`, `pageInfo`): saving (URL
+  without its fragment; the same page again moves to the top instead of doubling; at most 1,000),
+  read / unread, remove with Undo, search (every word, any case and accent), the order (newest
+  first, read ones folded under "Read");
+- **To-do** (`extensions/todo/`, permission `storage`): add, edit, toggle, delete with Undo,
+  reorder (Alt+↑ / ↓), "Clear done", at most 1,000 items of 500 characters, what storage holds is
+  checked from scratch on read.
+
+`extensions/bundled.test.ts` and the Rust test `the_shipped_extensions_are_all_valid` cover both
+(no network, the SDK first, text drawn as text). CI green on all three: the bundled run opens both
+(`reading-list.png` with seeded items, `todo.png`); from the smoke page, the command bar's "Save to
+reading list" (Ctrl/Cmd+L, typing `reading`, the page action's row, Enter) saves it — the panel's
+own storage call `ok` and the item in `extension-data/reading-list.json` (Windows, Linux; best
+effort on macOS).
+**Commit:** `lj-step-53: bundled extensions — Reading list and To-do`
+
+```text
+v0.3's bundled extensions (the owner's list), in LJ32's layout: extension.json, index.html (the
+SDK, then <script type="module" src="ui.js">), ui.js (DOM glue), logic.js (pure ES module,
+JSDoc-typed, // @ts-check) + logic.test.ts, style.css (the theme's --lj-* variables with fallbacks
+from the first frame — LJ32's landmine), an original icon.svg. Keyboard first, fits phone width,
+themed, no network (no network: host, no fetch), text drawn as text.
+
+- Reading list: a page action "Save to reading list" (pageInfo) whose panel saves the page at once
+  and shows the list with "Saved"; a command "Reading list" shows the list. Enter opens an item in
+  the page (littleJoan.openUrl(url, { where: "page" })) and marks it read; R toggles read; Delete
+  removes (Undo for 6 s, also Ctrl/Cmd+Z); / searches. Site icons are the command bar's lettered
+  stand-ins (a panel can't load https images: its CSP allows 'self' data: blob: only).
+- To-do: one list; N or the field adds, Enter edits, Space toggles, Delete removes (Undo), Alt+↑ /
+  ↓ moves, "Clear done". Autosave like Notes (a debounce, a flush on leaving).
+
+Smoke: scripts/ci/smoke-bundled.mts (+ test): seed both (Little Joan's own storage format,
+seedFile), open both, and the page action from the smoke page as for QR code (pageActionFailures).
+
+Docs: README (the bundled extensions table), docs/architecture.md (file map), CHANGELOG
+([Unreleased] → Added).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ53 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-53: bundled extensions — Reading
+list and To-do". Push, open the phase-25 PR into main as a draft, and watch CI until every job is
+green (Ground Rule 3; two honest fix attempts, then stop). Look at the screenshots.
+```
+
+### LJ54 — More bundled extensions: Stopwatch & countdown, Breathing timer, Minesweeper · standard · auto
+
+**Verify:** `npm run verify` green, including vitest tests for each `logic.js`:
+- **Stopwatch & countdown** (`extensions/timer/`, `storage`): the stopwatch (start / stop / laps /
+  reset with an injected clock), the countdown from a stored end time (reopening shows the time
+  left; one that ended while closed is reported, nothing runs in the background — the panel says
+  so, as Focus timer does), presets 1 / 5 / 10 / 25 min and a custom time;
+- **Breathing timer** (`extensions/breathe/`, `storage`): the patterns box 4-4-4-4, 4-7-8 and
+  5.5-5.5, the phase sequence and timing with a fake clock, sessions of 1 / 3 / 5 minutes;
+- **Minesweeper** (`extensions/minesweeper/`, `storage`): beginner 9×9 / 10, intermediate 16×16 /
+  40, expert 30×16 / 99; the first reveal never hits a mine (nor its neighbours); flood fill;
+  chording; flags; win / lose; best times; a seeded generator in tests.
+
+CI green on all three: the bundled run opens all three (`timer.png` with a countdown running from
+seeded storage — its title counts down, `breathe.png`, `minesweeper.png`).
+**Commit:** `lj-step-54: bundled extensions — Stopwatch & countdown, Breathing timer, Minesweeper`
+
+```text
+Three more in LJ32's layout (see LJ53's prompt for the shared rules).
+
+- Stopwatch & countdown: Space starts / stops, L adds a lap, R resets; the countdown keeps its end
+  time in storage like Focus timer (extensions/focus/ is the model) and chimes with Web Audio only
+  while open; the window title shows the time while running.
+- Breathing timer: an expanding / contracting circle (CSS transforms; with reduced motion, a text
+  count instead), the phase name ("Breathe in", "Hold", "Breathe out"), the chosen pattern
+  remembered.
+- Minesweeper: keyboard first (arrows move, Space or Enter reveals, F flags, D chords), the mouse
+  too (right click flags); cells sized to fit the panel — expert is offered only when 30 columns
+  fit at a usable size; best times per level.
+
+Smoke: scripts/ci/smoke-bundled.mts (+ test): the three panels, with the countdown seeded.
+
+Docs: README (the table), docs/architecture.md (file map), CHANGELOG.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ54 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-54: bundled extensions —
+Stopwatch & countdown, Breathing timer, Minesweeper". Push and watch CI until every job is green
+(Ground Rule 3; two honest fix attempts, then stop). Look at the screenshots.
+```
+
+### LJ55 — More bundled extensions: Password generator, Regex tester, Hash & Base64, Emoji picker · standard · auto
+
+**Verify:** `npm run verify` green, including vitest tests for each `logic.js`:
+- **Password generator** (`extensions/password/`, `clipboard`, `storage` for the options): length
+  8–128, the chosen sets each at least once, look-alikes left out on request, rejection sampling
+  over `crypto.getRandomValues` (no modulo bias; the randomness passed in for tests), the strength
+  shown as bits (log2(set size) × length); no word lists;
+- **Regex tester** (`extensions/regex/`, `storage`): flags g i m s u v y d, matches and groups
+  (named too), the replace preview with `$1` / `$<name>`; matching runs in a dedicated worker
+  (`worker.js`, same origin) that is terminated after 500 ms, so a catastrophic pattern says
+  "Took too long" instead of freezing the panel;
+- **Hash & Base64** (`extensions/hash/`, `clipboard`): SHA-1 / 256 / 384 / 512 with
+  `crypto.subtle.digest` over UTF-8 text or a dropped file (read locally, at most 64 MB), hex and
+  Base64 output; Base64 / Base64url both ways (invalid input refused); MD5 isn't in SubtleCrypto
+  and isn't offered;
+- **Emoji picker** (`extensions/emoji/`, `clipboard`, `storage` for recents): about 400 emoji in 8
+  categories with English names and keywords written for Little Joan (no external data file); every
+  entry is one RGI emoji (`/^\p{RGI_Emoji}$/v`), names are unique; search; grid keys; recents (24).
+
+CI green on all three: the bundled run opens all four (`password.png`, `regex.png`, `hash.png`,
+`emoji.png`); the hash panel's own self-test reports `subtle=ok` in its title on every OS (SubtleCrypto
+needs a secure context: `ljext:` on macOS / Linux, `http://ljext.<id>.localhost` on Windows) — if
+it isn't available on an engine, stop and report.
+**Commit:** `lj-step-55: bundled extensions — Password generator, Regex tester, Hash & Base64, Emoji picker`
+
+```text
+Four tools in LJ32's layout (see LJ53's prompt for the shared rules).
+
+- Password generator: like the quick answer `password 20` (ui/answers/random.ts), but with
+  options; the panel can't import ui/, so logic.js has its own cryptoInt with tests. Enter copies.
+- Regex tester: the pattern and flags at the top, the test text below with the matches marked
+  (text nodes only, never innerHTML), a groups table, a replace field with its preview. The worker
+  is a dedicated Worker from the extension's own origin — the runtime refuses service and shared
+  workers (LJ29, L4) but not dedicated ones; check that it starts under the extension CSP on every
+  engine.
+- Hash & Base64: a text field or a dropped file; the four SHA digests; Base64 both ways. Text tools
+  already has Base64 for text; this one adds files and digests.
+- Emoji picker: categories as tabs, a search field, a grid (arrows, Enter copies and says
+  "Copied"), recents first. No skin tones (Later).
+
+Smoke: scripts/ci/smoke-bundled.mts (+ test): the four panels; the hash panel's subtle report.
+
+Docs: README (the table), docs/architecture.md (file map), CHANGELOG.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ55 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-55: bundled extensions — Password
+generator, Regex tester, Hash & Base64, Emoji picker". Push and watch CI until every job is green
+(Ground Rule 3; two honest fix attempts, then stop). Look at the screenshots.
+```
+
+### LJ56 — Panels follow theme changes; `--extension` opens a page action · standard · auto
+
+**Verify:** `npm run verify` green, including:
+- Rust tests: after the bar reports new theme tokens while the page shows a **committed** panel
+  (`NavGate::committed`), Rust tells that panel (`page.eval` of a dispatch of the
+  `littlejoan:themechange` event, which carries no data), and never a web page or an uncommitted
+  panel; `--extension <id>` for an extension without commands opens its first page action for the
+  open web page (with `pageInfo` as the command bar builds it), and with no web page open logs
+  `extension-missing <id> no-page`;
+- vitest: the SDK's `littleJoan.theme.onChange(callback)` (extensions/sdk/v1.js + v1.d.ts) calls
+  back with a fresh `theme` on the event; every bundled extension re-applies its colors on change.
+
+CI green on all three: in the bundled run, with Snake open, Ctrl/Cmd+L, typing `dark` and Enter
+(LJ42's quick command) logs `panel-theme-changed snake` and then Snake's own `ext-api snake theme
+ok` (Windows, Linux; best effort on macOS); `--extension qr` over the smoke page opens QR code for
+it, with `pageInfo` answered.
+**Commit:** `lj-step-56: panels follow theme changes; --extension opens a page action`
+
+```text
+Two small platform touch-ups from Deferred follow-ups that make the bundled extensions better.
+docs/extensions.md stays apiVersion 1: both are additions.
+
+1. A theme change reaches an open panel. Today littleJoan.theme.get() is a snapshot (LJ29). When
+   the bar reports new tokens (commands.rs set_theme_tokens) and the page shows a committed panel,
+   Rust evals `window.dispatchEvent(new Event("littlejoan:themechange"))` into the page webview —
+   checked against NavGate::committed right before the eval, and only then (a web page that
+   dispatches the event on itself gains nothing: it carries no data). The SDK adds
+   theme.onChange(callback), which asks `theme` again and calls back; bundled extensions use it.
+   Log `panel-theme-changed <id>`.
+2. `--extension <id>` and page actions (Deferred follow-ups): with no command, open the first page
+   action for the open web page — the same path as the command bar's open_extension (session::open
+   with Target page action and its page); no web page → `extension-missing <id> no-page`.
+
+Smoke: the bundled run gets the two checks from Verify (scripts/ci/smoke-bundled.mts + test),
+after the panels' screenshots so they keep the default theme.
+
+Docs: docs/extensions.md (theme.onChange; --extension with page actions), README (the CLI),
+docs/architecture.md, CHANGELOG; this plan (Deferred follow-ups: strike both lines, naming LJ56).
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ56 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-56: panels follow theme changes;
+--extension opens a page action". Push and watch CI until every job is green (Ground Rule 3; two
+honest fix attempts, then stop). This ends phase 25. Fill the PR description from the template.
+Needs human check: each of the nine new extensions with the keyboard only, in light and dark;
+change the theme with Snake open — Snake recolors; bind `little-joan --extension reading-list` to a
+key in your OS and save a page with it. Once every job is green: merge the PR into main with a
+merge commit if CLAUDE.md's standing exception covers v0.3 phases by then; otherwise mark it ready
+and stop (Ground Rule 24).
+```
+
+### LJ57 — v0.3: docs, screenshots, the owner's checklist · standard · checkpoint
+
+> Phase 26 (v0.3). Branch `lj/p26-v0.3-docs` from the latest `main`. Phases 21, 22 and 24 are in
+> only if the owner merged them after their reviews; anything not merged is listed in the
+> checklist as not included.
+
+**Verify:** `npm run verify` green. README's "Using it" covers Little Joan as the browser for
+links, the main browser, sign-in popups, find in page, pinned sites, saved logins on Windows and
+the new extensions, with screenshots in `docs/images/` from CI's macOS run (the smoke page and
+sample data only). CHANGELOG `[Unreleased]` lists everything since v0.2.0. `docs/architecture.md`,
+`docs/extensions.md`, `SECURITY.md` and `CONTRIBUTING.md` are current. CI green. **Checkpoint:** the
+owner ticks the checklist.
+**Human check:** the checklist below, copied into the PR.
+**Commit:** `lj-step-57: docs and screenshots for v0.3`
+
+```text
+Bring the docs up to date with v0.3, then hand the owner a checklist.
+
+Fill the PR description from the template. Needs human check, on your Mac with the CI build of
+this PR (and Windows / Linux where you have them):
+- [ ] Links: choose Little Joan as the default browser; a link from Mail / Notes opens in it; "Open
+      in browser" goes to your main browser; nothing bounces back; switch back.
+- [ ] Sign-in popups: Google, Apple, GitHub sign-ins complete in the popup, which shows the
+      provider's host and closes; dismissing Little Joan closes an open popup.
+- [ ] Find: Ctrl/Cmd+F, Enter, Shift+Enter, Esc on a long page.
+- [ ] Pinned sites lead the command bar; Shift+Delete unpins.
+- [ ] Windows: saving a password and filling it in; removing saved passwords; a passkey with
+      Windows Hello. macOS: Privacy says it isn't available.
+- [ ] The nine new extensions, keyboard only, light and dark; Reading list from a page.
+- [ ] Everything from v0.2.0's checklist still holds: summon / hibernate, the command bar,
+      history, themes, logins surviving close and quit, phone mode and resizing, the Keyboard tab,
+      quick commands, downloads, zoom, fullscreen.
+- [ ] Memory at rest: no webview helpers while hibernating, also after a popup was open.
+
+Merge the PR once every CI job is green (docs only), then STOP for the checklist (Ground Rule 24).
+Do not start any further work until the owner says go. A `v0.3.0-beta.1` pre-release happens only
+on the owner's word, the way beta.2 was made: bump the three versions through a PR, merge it, let
+main's CI build the installers, rename them (LittleJoan-0.3.0-beta.1-windows-x64-setup.exe,
+-macos-universal.dmg, -linux-amd64.deb, -linux-x86_64.AppImage), write SHA256SUMS.txt, then
+`gh release create v0.3.0-beta.1 --repo memoliertorerr/LittleJoan --prerelease --latest=false
+--target <that main commit>` with notes from the CHANGELOG, and check the release, its tag and one
+asset's checksum.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ57 to ✅ with the note
+"waiting for the owner's checklist", add implementation notes (with df -h), and commit everything
+as one commit: "lj-step-57: docs and screenshots for v0.3". Push and watch CI until every job is
+green (two honest fix attempts, then stop). This is a checkpoint: fill the PR with the checklist
+above, merge it when green, tell the owner exactly what to check and where, then stop.
+```
+
 ---
 
 ## Deferred follow-ups (cross-step, live tracker)
@@ -4631,7 +6424,7 @@ then.
 - **Double-click the toolbar to zoom the window on macOS** (surfaced by LJ24). Tauri's drag
   script turns a double click on a drag region into `internal_toggle_maximize`, which needs
   `core:window:allow-internal-toggle-maximize`; the bar has only `allow-start-dragging` (what
-  LJ24 named), so a double click does nothing.
+  LJ24 named), so a double click does nothing. → *Planned as LJ37 (round 3).*
 - ~~**`history_top` / `history_search` have no caller**~~ since LJ23 (the command bar uses
   `suggest`). They stay in the bar's capability for the history view (LJ25) to use or remove. →
   *Removed by LJ25: the history view uses `history_list` and filters in TypeScript.*
@@ -4640,12 +6433,12 @@ then.
   Chromium) Ctrl+Y was also "redo" in text fields, so pages lose it there (Ctrl+Shift+Z still
   redoes). WebKitGTK has no Ctrl+Y binding. Option: Ctrl+H (Chrome's history key) on Windows and
   Linux instead — the owner's call. → *Decided 2026-10-18: Ctrl+H on Windows and Linux, in the
-  next version (see "Requested for the next version" under LJ35).*
+  next version (see "Requested for the next version" under LJ35). Planned as LJ37.*
 - **A custom theme may show the default theme for a frame** (surfaced by LJ27). The bar applies
   the theme when `start_info` answers, a moment after its page (with `theme-defaults.css`) first
   paints, so a summon can flash the default Mist colors before the user's. Not visible in CI's
   screenshots. Option: also hand the bar the theme in an initialization script (as the settings
-  window gets its tab), applied before the first paint.
+  window gets its tab), applied before the first paint. → *Planned as LJ38 (round 3).*
 - **A panel can leave for any web address** (surfaced by LJ29). `network:` limits what a panel
   can fetch (CSP `connect-src`), not where it can go: `location.href`, a link, `openUrl` or
   `window.open` (→ the default browser) can carry data in a URL to any site — visible to the
@@ -4659,7 +6452,7 @@ then.
 - **A theme change doesn't reach an open panel** (surfaced by LJ29): `littleJoan.theme.get()` is
   a snapshot; a panel learns of a new theme (Save, a preview, the system switching) only when it
   asks again. Option: the bar's report also evals a `littleJoan` event into the open panel (Rust,
-  not the panel, decides when).
+  not the panel, decides when). → *Planned as LJ56 (v0.3).*
 - **A cancelled navigation counts as a second visit on Windows** (surfaced by LJ29's probe):
   WebView2 raises one more `Finished` load event for the page that stays when `NavigationStarting`
   cancels a navigation, so history records that page twice. Option: ignore a `Finished` whose URL
@@ -4702,7 +6495,8 @@ then.
   first *command*, and the four bundled page actions have none, so `little-joan --extension qr`
   only logs `extension-missing` (a key binding for "QR code of this page" isn't possible yet).
   Options: fall back to the first page action for the open web page (as the command bar's
-  `open_extension` builds its `pageInfo`), or a `--page-action <id>` flag.
+  `open_extension` builds its `pageInfo`), or a `--page-action <id>` flag. → *Planned as LJ56
+  (v0.3): the first option.*
 - **Back after a panel opens a page meets the panel's own history entry** (surfaced by LJ34, from
   reading the code — not seen in CI). A panel's `openUrl(…, { where: "page" })` (Wayback Machine,
   Clean link's "Open it here") and a link followed from a panel navigate the page webview from
@@ -4725,7 +6519,8 @@ then.
   twice, once with `start_info`), while the same flow on `main` (bar loaded first) drew it. Opening
   from the command bar (the window already open) isn't affected. Options: have the bar ask for its
   label and overlay state in one call when it loads (`start_info` already forces the label); or
-  open the panel only after the bar reported `bar-loaded`.
+  open the panel only after the bar reported `bar-loaded`. → *Planned as LJ38 (round 3): the
+  second option, keyed on the bar's `start_info`.*
 - **YouTube's fullscreen button on macOS** (the owner's checklist, 2026-10-18). The player's own
   fullscreen button enters fullscreen and drops back to the normal size at once; YouTube's F key
   fullscreens fine, and then the player's exit button does nothing (Esc exits). CI's smoke page
@@ -4734,7 +6529,7 @@ then.
   agent, and YouTube then uses the iOS-style `video.webkitEnterFullscreen()` path, which WKWebView
   on macOS handles differently), and whether a bounds or layout update reaches the page webview
   during WebKit's fullscreen transition. Reproduce with a smoke page that calls both APIs from a
-  click before changing anything.
+  click before changing anything. → *Planned as LJ36 (round 3).*
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -4940,21 +6735,41 @@ Populated from real friction, not speculation:
 - *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
   `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
   that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.
+- *(round 3 planning, read in the code)* **macOS has no element-fullscreen hook.** Only
+  `platform/win.rs` and `platform/linux.rs` call `bar::set_element_fullscreen`, so on macOS
+  `bar::element_fullscreen()` is never true: `apply_layout` (on every `Resized`) still sets the
+  page webview's bounds and shows it, and `phone_mode::apply` checks only `window.is_fullscreen()`,
+  which is false for WebKit's separate fullscreen window. LJ36 starts there.
+- *(round 3 planning, vendored tauri 2.12.4)* **`NewWindowResponse::Create` takes a whole
+  `WebviewWindow`,** and what makes `window.opener` and the shared cookie store work is
+  `WebviewWindowBuilder::window_features(features)` — it copies the opener's webview configuration
+  (macOS), environment (Windows) or related view (Linux) (`webview_window.rs`). LJ47 relies on it.
+- *(round 3 planning, vendored tauri 2.12.4)* **`RunEvent::Opened` exists only on macOS** (and
+  iOS / Android): on Windows and Linux a link from another app arrives as a command-line argument,
+  through single-instance. LJ45.
+- *(round 3 planning, read in the code)* **The settings window doesn't use the page's webview data
+  folder.** `settings_window.rs` sets no `data_directory`, so Tauri forces `app_local_data_dir`;
+  the page uses `AppState::webview_data_dir` — the same folder in installed builds, but
+  `<LITTLEJOAN_DATA_DIR>/webview` in dev builds and CI. Anything that acts on the page's profile
+  through the settings window (LJ51) must give it the same folder first.
+- *(round 3 planning, vendored tauri-utils 2.10.2)* **Tauri's desktop-file template offers only
+  `categories`, `comment`, `exec`, `icon` and `name`;** `MimeType=` and `%u` go into the template's
+  text (LJ45).
 
 ---
 
-## Later — designed, NOT built in v0.1
+## Later — designed, NOT built (v0.1 → v0.3)
 
 Everything below is intentionally out of scope, recorded so nobody half-builds it. Rows that v0.2
-picked up point at their step and stay here for the record.
+or round 3 picked up point at their step and stay here for the record.
 
 | Item | Design | What it needs |
 |---|---|---|
 | **Start at login** → *v0.2, LJ11* | Settings checkbox → tauri-plugin-autostart (LaunchAgent / registry Run key / XDG autostart) | New dependency, settings field, per-OS human check |
 | **Keep the page after close** | Settings "Keep page for N minutes": hide instead of destroy, destroy on a timer | Breaks the "no webview at rest" invariant for N minutes — needs a measured memory budget |
 | **Downloads** → *v0.2, LJ15 (status in the URL bar, no notifications)* | `on_download` → save to the OS Downloads folder, tray notification | Handler + notification permission per OS |
-| **Find in page** (zoom → *v0.2, LJ16*) | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
-| **Popups inside the app (OAuth)** | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too. Some "Sign in with …" flows break today because the popup opens in the default browser |
+| **Find in page** (zoom → *v0.2, LJ16*) → *v0.3, LJ49* | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
+| **Popups inside the app (OAuth)** → *v0.3, LJ47–LJ48* | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too. Some "Sign in with …" flows break today because the popup opens in the default browser |
 | **Code signing / notarization / SmartScreen reputation** → *macOS: v0.2, LJ18* | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Windows: SignPath Foundation if the user's application is approved (Deferred follow-ups) |
 | **Auto-update and GitHub Releases** | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys, release workflow |
 | **Wayland-native global shortcut** → *v0.2, LJ17* | XDG GlobalShortcuts portal (via ashpd) when `WAYLAND_DISPLAY` is set | New dependency, portal support varies by desktop |
@@ -4969,7 +6784,15 @@ picked up point at their step and stay here for the record.
 | *(round 2)* **Extension gallery / signing** | A list of reviewed community extensions in the repository; signed bundles | Review process, a trust model |
 | *(round 2)* **Custom window chrome on Windows and Linux** | Frameless window with our own close / minimize, resize borders | Per-OS hit-testing; accessibility |
 | *(round 2)* **One user agent per signed-in site** | Remember the agent a site was signed in with and keep it across phone-mode switches | Per-host user agent at navigation time |
+| *(round 3, deferred by the owner)* **macOS saved passwords and passkeys** | Passkeys (WebAuthn) in an app's WKWebView that isn't Safari need Apple's restricted web-browser entitlement (`com.apple.developer.web-browser.public-key-credential`), which Apple grants on request to apps that are web browsers, and which needs Developer ID signing with a provisioning profile (LJ18 first); WKWebView's password AutoFill for embedding apps isn't dependable. LJ52 records what CI's `?webauthn=1` page showed | Apple's entitlement (a request to Apple), signing with a profile, then the engine's own UI — never a password store of Little Joan's own (Ground Rule 26) |
+| *(round 3)* **Saved logins on Linux** | WebKitGTK has no password manager; one would be Little Joan's own (libsecret + UI) | A new dependency and a credential store to secure — big; against Ground Rule 26's spirit |
+| *(round 3)* **Routing links by site** | Rules that send some sites from Little Joan straight to the main browser (or the reverse) | A rules editor; LJ46's handoff is the hook |
+| *(round 3)* **Keyboard extras** | Chorded keys, keys for extension commands, per-site keys | The keymap (LJ43) is the base |
+| *(round 3)* **Pinned sites extras** | Reorder by drag, folders, pinned extension commands | UI in the command bar's empty state |
+| *(round 3)* **Find extras** | Whole word, regex, find in the bar's own screens | Engine support differs (macOS has no count) |
+| *(round 3)* **Emoji skin tones and a full emoji set** | The full Unicode set with CLDR names | A data file and its licence notice (Unicode License v3); the bundled picker ships a curated set written for Little Joan |
 
 **When Later work starts:** v0.1's order (start at login, then downloads, then signing) became
-v0.2. What's left, roughly by value: popups inside the app (OAuth), find in page, auto-update
-(best after Windows signing), then the rest.
+v0.2; popups inside the app and find in page became v0.3. What's left, roughly by value:
+auto-update (best after Windows signing), macOS passwords and passkeys (after the signing and
+Apple's entitlement), then the rest.
