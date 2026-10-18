@@ -2,11 +2,13 @@
 // shortcut recorder, lists and switches, and Save / Cancel for every tab. All validation happens
 // in Rust; this page shows what it says. Rust picks the first tab (window.__littleJoanSettingsTab,
 // set before this script runs) and switches an open window with window.littleJoanSettings.showTab.
-// The window wears the saved theme, and window.littleJoanSettings.setTheme changes it.
+// The window wears the saved theme; the Appearance tab (settings/appearance.ts) edits it, the
+// window and the open page window previewing every change, and Save keeps it.
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { applyTheme } from "./lib/apply-theme.ts";
+import { themeFrom } from "./lib/theme.ts";
 import { acceleratorFromEvent, displayShortcut } from "./lib/shortcut.ts";
+import { appearance } from "./settings/appearance.ts";
 import {
   CLEAR_CHOICES,
   CLEAR_START,
@@ -66,6 +68,8 @@ const cancel = element<HTMLButtonElement>("#cancel");
 
 const NOTE = "Click, then press the keys you want to use.";
 
+const look = appearance(element<HTMLElement>("#panel-appearance"), refresh);
+
 let saved: Settings | null = null;
 let savedLogin: boolean | null = null;
 let isMac = false;
@@ -116,7 +120,7 @@ function refresh(): void {
 }
 
 function input(): SettingsInput {
-  return toInput(shortcut, engine.value, language.value, mobile.checked, remember.checked);
+  return toInput(shortcut, engine.value, language.value, mobile.checked, remember.checked, look.draft());
 }
 
 function pending(from: Settings): Changes {
@@ -262,7 +266,7 @@ window.littleJoanSettings = {
     showTab(tabFrom(name));
   },
   setTheme(theme: unknown) {
-    applyTheme(theme);
+    look.load(themeFrom(theme));
   },
 };
 
@@ -272,7 +276,7 @@ drawClearing();
 invoke<SettingsView>("get_settings")
   .then((view) => {
     saved = view.settings;
-    applyTheme(view.settings.theme);
+    look.load(themeFrom(view.settings.theme));
     isMac = view.platform === "macos";
     shortcut = view.settings.shortcut;
     fill(engine, view.engines, view.settings.searchEngine);

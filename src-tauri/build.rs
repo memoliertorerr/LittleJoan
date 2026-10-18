@@ -20,6 +20,7 @@ fn main() {
             "history_remove",
             "history_clear",
             "open_settings",
+            "preview_theme",
         ]),
     ))
     .expect("failed to run tauri-build");

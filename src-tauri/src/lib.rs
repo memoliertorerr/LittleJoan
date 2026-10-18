@@ -81,7 +81,8 @@ pub fn run() {
             commands::suggest,
             commands::history_remove,
             commands::history_clear,
-            commands::open_settings
+            commands::open_settings,
+            commands::preview_theme
         ])
         .on_window_event(|window, event| {
             joan::on_window_event(window, event);

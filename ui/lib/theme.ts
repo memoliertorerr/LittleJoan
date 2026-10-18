@@ -219,6 +219,20 @@ export function palette(theme: Theme, systemDark: boolean): Palette {
   return { ...draft, fg, fgMuted, accent, rowSelected, surface, shadow, tile };
 }
 
+/**
+ * The lowest contrast any text of `theme` has against anything it can sit on (text, muted text
+ * and the accent on every stop, grain speck and the panel; white on the selected row). Every
+ * theme keeps it at TEXT_CONTRAST or more.
+ */
+export function minimumContrast(theme: Theme, systemDark: boolean): number {
+  const p = palette(theme, systemDark);
+  const under = textBackgrounds(p, gradientStops(p.backgrounds), theme.grain);
+  const texts = [p.fg, p.fgMuted, p.accent].map((hex) => parseHex(hex) ?? { r: 0, g: 0, b: 0 });
+  const onText = texts.flatMap((text) => under.map((bg) => contrastRgb(text, bg)));
+  const selected = contrastRgb(parseHex(p.onSelected) ?? { r: 1, g: 1, b: 1 }, parseHex(p.rowSelected) ?? { r: 0, g: 0, b: 0 });
+  return Math.min(...onText, selected);
+}
+
 /** Positions (0–1) of the base gradient's stops: the midpoints are computed in OKLab. */
 const BASE_STOPS = [0, 0.25, 0.5, 0.75, 1];
 

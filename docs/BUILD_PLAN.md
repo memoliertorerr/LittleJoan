@@ -75,7 +75,7 @@
 | LJ25 | *(v0.2, round 2)* History view (Ctrl/Cmd+Y): by day, search, delete, clear | standard | auto | ✅ done |
 | LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ✅ done |
 | LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ✅ done |
-| LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ⬜ todo |
+| LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ✅ done |
 | LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ⬜ todo |
 | LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ⬜ todo |
 | LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ⬜ todo |
@@ -3434,6 +3434,59 @@ commit: "lj-step-28: appearance editor with color pads, presets and live preview
 CI until every job is green (two honest attempts, then stop). Look at the screenshot. This ends
 phase 15: fill the PR description, merge into main once green, then stop and report.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **`ui/settings/appearance-logic.ts`** (pure, 12 tests): pads (`colorAt` / `pointFor`: x = hue
+  0–360°, y = chroma from 0.12 at the top to grey at the bottom), `nudge` (arrow keys: 5° / 5 %,
+  Shift 30° / 20 %; hue wraps, chroma stops at the edges), `describePoint` (the pad's
+  `aria-valuetext`), `padField` (the pad's background: 13 hue stops at full pad chroma under a fade
+  to grey), `nextColor` (**+**: the last color's chroma, 45° further round), the editor state
+  (`saved`, `draft`, `selected`) and its `edit` steps (mode, preset, select, move, add, remove,
+  intensity, grain, cancel, saved), `sameTheme`, `isDirty`, `presetOf`, `swatch`, the sliders'
+  0–100 mapping.
+- **Pads at OKLCH L 0.75:** the one lightness where every hue reaches the pad's top chroma (0.12,
+  the themes' cap) inside sRGB (computed: the weakest hue, 200°, reaches 0.1275 there; at 0.78
+  blue falls to 0.111), so the pad is a true hue × chroma grid and the round trip holds. A pick is
+  stored at that lightness; the theme maps it into its band. The round-trip test allows the hue
+  error that rounding to `#rrggbb` really costs (about 0.07 / chroma degrees, so more near grey).
+- **One pad per color** (the decision's "one hue/chroma pad per color"), three side by side
+  (120 × 64 px); the selected pad has the accent ring and, with more than one color, a × in its
+  corner; an empty slot holds the dashed **+**. Focusing a pad selects its color.
+- **Presets** are round swatches of each preset's own colors (the first version drew them as the
+  muted backgrounds and they were too pale to tell apart in the local preview); the one the theme
+  matches has the accent ring. Mode buttons sit beside the heading. The live preview is a small
+  toolbar strip and command bar card over the theme's gradient; the whole settings window wears
+  the draft too, so everything re-colors as you edit. All of it fits the 600 × 480 window without
+  a scrollbar (checked in the local preview; CI's screenshot below).
+- **Previewing:** a new command `preview_theme(theme?)` (the settings window only;
+  `allow-preview-theme`) — the prompt's "app event" — checks the theme like a saved one, keeps it
+  in `AppState::theme_preview` (so a page window summoned while editing shows it too: `start_info`
+  hands out `shown_theme()`), and pushes it to the bar (`bar::set_theme`). The tab sends at most
+  one preview a frame. Closing Settings without saving (Cancel or the close button:
+  `settings_window`'s `Destroyed`) clears the preview and puts the saved theme back in the bar;
+  `save_settings` clears it too (the preview is the theme now). Smoke log: `theme-preview <mode>
+  colors=<n>` / `ended`.
+- **Save / Cancel:** `toInput` takes the draft theme (an optional 6th argument, so the existing
+  calls stay as they are) and `isChanged` compares it (`sameTheme`), so an edited theme enables
+  Save; Save sends it and Rust pushes the saved theme to the bar and the window.
+- **Styles** went into a new `ui/settings/appearance.css` (linked by settings.html, like the bar's
+  `history.css`) rather than `ui/style.css`, which the bar loads too. Buttons there are
+  `button.<class>` because settings.css styles `.settings-body button:not(.tab)` — a first try lost
+  the `[hidden]` rule of the × that way, and the local preview showed it on every pad.
+- **Checked locally** in the preview harness (Chromium, mocked IPC; not committed): a preset, a
+  mode, an arrow key and **+** each changed the window's variables and `color-scheme`, previews
+  were coalesced (two `preview_theme` calls for four edits), Save became enabled. Dragging and the
+  page window following live need a real window: human check (LJ35).
+- `theme.ts` gained `minimumContrast(theme, systemDark)` for the presets test.
+- **Smoke:** the history-off run adds `--settings appearance` after Privacy →
+  `settings-appearance.png` (default theme); `settingsFailures` wants Appearance after Privacy.
+  The theme runs open Settings on Appearance (`theme/settings.png`, `theme/settings-dark.png`).
+- Files beyond the prompt: `ui/settings/appearance.css`, `ui/settings-logic.ts` (+ test),
+  `src-tauri/src/{state,settings_window}.rs`, `ui/lib/theme.ts`, `scripts/ci/smoke-command.mts`
+  and `smoke-theme.mts` (+ tests), docs/architecture.md.
+- `npm run verify`: 220 TS tests, 169 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.3 GB.
 
 ### LJ29 — Extension runtime · strong · auto
 

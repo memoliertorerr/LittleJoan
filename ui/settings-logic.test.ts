@@ -29,6 +29,17 @@ const saved: Settings = {
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
 
 describe("settings logic", () => {
+  it("counts an edited theme as a change, and an equal one as none", () => {
+    const theme = { ...saved.theme, colors: [...saved.theme.colors] };
+    const withTheme = (t: typeof theme) => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory, t);
+    expect(isChanged(saved, withTheme(theme))).toBe(false);
+    expect(isChanged(saved, withTheme({ ...theme, mode: "dark" }))).toBe(true);
+    expect(isChanged(saved, withTheme({ ...theme, colors: [...theme.colors, "#123456"] }))).toBe(true);
+    expect(isChanged(saved, withTheme({ ...theme, grain: 0.9 }))).toBe(true);
+    expect(withTheme(theme).theme).toEqual(theme);
+    expect("theme" in same()).toBe(false);
+  });
+
   it("sends only the edited fields", () => {
     expect(toInput("Alt+KeyJ", "brave", "tr", false, false)).toEqual({
       shortcut: "Alt+KeyJ",

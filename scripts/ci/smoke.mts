@@ -709,8 +709,8 @@ await waitFor("history off: smoke page", (e) => lastTitle(e, "LJ-SMOKE ready") !
 await forward(["--hide"], historyOffEnv);
 await waitFor("history off: hibernated", (e) => count(e, "hibernated") > 0, 20_000, historyOffLogPath);
 // Settings (LJ26), while hibernating: `--settings` opens it on General, `--settings privacy`
-// switches the open window to Privacy (where "Remember history" is off in this run); neither
-// opens the page window.
+// switches the open window to Privacy (where "Remember history" is off in this run), `--settings
+// appearance` to the theme editor (LJ28); none opens the page window.
 const settingsFrom = events(historyOffLogPath).length;
 await forward(["--settings"], historyOffEnv);
 await waitFor("settings: General", (e) => sawSettings(e.slice(settingsFrom), "general"), 20_000, historyOffLogPath);
@@ -720,6 +720,11 @@ await forward(["--settings", "privacy"], historyOffEnv);
 await waitFor("settings: Privacy", (e) => settingsTabs(e.slice(settingsFrom)).includes("privacy"), 15_000, historyOffLogPath);
 await sleep(1000);
 screenshot("settings-privacy.png");
+// The theme editor (LJ28), in the default theme.
+await forward(["--settings", "appearance"], historyOffEnv);
+await waitFor("settings: Appearance", (e) => settingsTabs(e.slice(settingsFrom)).includes("appearance"), 15_000, historyOffLogPath);
+await sleep(1000);
+screenshot("settings-appearance.png");
 await forward(["--quit"], historyOffEnv);
 if (!(await exited(historyOffPid, 15_000))) {
   await quit(historyOffChild, historyOffPid);
@@ -769,8 +774,8 @@ async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
   await waitFor(`${run.name}: hibernated again`, (e) => count(e, "hibernated") > 1, 20_000, logFile);
   if (run.shots.settings) {
     const settingsAt = events(logFile).length;
-    await forward(["--settings"], runEnv);
-    await waitFor(`${run.name}: Settings`, (e) => sawSettings(e.slice(settingsAt), "general"), 20_000, logFile);
+    await forward(["--settings", "appearance"], runEnv);
+    await waitFor(`${run.name}: Settings`, (e) => sawSettings(e.slice(settingsAt), "appearance"), 20_000, logFile);
     await sleep(1500);
     shot(run.shots.settings);
   }

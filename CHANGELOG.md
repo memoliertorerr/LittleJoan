@@ -23,6 +23,12 @@ All notable changes to Little Joan are recorded here. The format follows
   colors blend, and text is chosen to stay readable (at least 4.5:1) on every part of the
   gradient. The default is a quiet blue-grey; saving a theme changes the open window at once.
   Kept in `settings.json` as `theme`.
+- **Settings → Appearance, the theme editor:** System / Light / Dark, eleven presets, up to three
+  color pads (a dot on a hue × color grid: drag it, or use the arrow keys; + adds a color, ×
+  removes one), Intensity and Grain sliders, and a live preview of the toolbar and the command
+  bar. Settings and the open Little Joan window show the theme while you edit; Save keeps it,
+  Cancel or closing Settings puts the saved one back. `little-joan --settings appearance` opens
+  it.
 - **Settings has tabs:** General (shortcut, search engine, translate language, mobile sites,
   start at login), Appearance and Extensions (coming next), Privacy (**Remember history**,
   **Clear history**, and what is kept where), and About (version, license, the project's page),

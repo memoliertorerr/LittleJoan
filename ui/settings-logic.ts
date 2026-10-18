@@ -2,6 +2,7 @@
 // (Save and Cancel cover every tab), and the Privacy tab's "Clear history" action.
 import { CLEAR_CHOICES, clearChoice, clearedText, type ClearRange } from "./history/logic.ts";
 import type { Theme } from "./lib/theme.ts";
+import { sameTheme } from "./settings/appearance-logic.ts";
 
 export interface Choice {
   id: string;
@@ -46,6 +47,8 @@ export interface SettingsInput {
   translateTo: string;
   mobileSites: boolean;
   rememberHistory: boolean;
+  /** The Appearance tab's theme; left out, Rust keeps the saved one. */
+  theme?: Theme;
 }
 
 /** The tabs, in the sidebar's order. */
@@ -89,8 +92,9 @@ export function toInput(
   translateTo: string,
   mobileSites: boolean,
   rememberHistory: boolean,
+  theme?: Theme,
 ): SettingsInput {
-  return { shortcut, searchEngine, translateTo, mobileSites, rememberHistory };
+  return { shortcut, searchEngine, translateTo, mobileSites, rememberHistory, ...(theme ? { theme } : {}) };
 }
 
 /** Whether anything differs from the saved settings (Save is disabled otherwise). */
@@ -100,7 +104,8 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     saved.searchEngine !== input.searchEngine ||
     saved.translateTo !== input.translateTo ||
     saved.mobileSites !== input.mobileSites ||
-    saved.rememberHistory !== input.rememberHistory
+    saved.rememberHistory !== input.rememberHistory ||
+    (input.theme !== undefined && !sameTheme(saved.theme, input.theme))
   );
 }
 

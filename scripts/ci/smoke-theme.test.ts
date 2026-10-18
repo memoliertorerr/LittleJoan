@@ -14,7 +14,7 @@ const GOOD_LIGHT = `1 started
 7 theme light colors=2
 8 suggestions 1 first=127.0.0.1:5000 typed=0
 9 hibernated
-10 settings-window general
+10 settings-window appearance
 11 settings-loaded
 `;
 
@@ -54,7 +54,7 @@ describe("theme runs", () => {
       "theme-light: the bar never asked for its theme",
       "theme-light: the smoke page never loaded",
       "theme-light: the command bar never offered the smoke page's site",
-      "theme-light: Settings never opened (or its page never loaded)",
+      "theme-light: Settings never opened on Appearance (or its page never loaded)",
     ]);
     expect(themeFailures(defaultDark, parseLog("1 theme dark colors=2\n2 suggestions 1 first=127.0.0.1:5000 typed=0\n"))).toEqual([
       "theme-default-dark: the bar got a dark theme with 2 colors, not dark with 1",

@@ -8,7 +8,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::cli::Args;
 use crate::cookies::SessionCookies;
 use crate::history_store::OpenHistory;
-use crate::settings::{self, SETTINGS_FILE, Settings};
+use crate::settings::{self, SETTINGS_FILE, Settings, Theme};
 
 /// Development builds point this at `.cache/dev-data` (see scripts/env.sh). Shipped builds never
 /// set it, so settings live in the OS config folder and browsing data where Tauri puts it (see
@@ -37,6 +37,18 @@ pub struct AppState {
     pub session_cookies: SessionCookies,
     /// Browsing history, only while the page window exists (history_store.rs); `None` at rest.
     pub history: Option<OpenHistory>,
+    /// The theme Settings' Appearance tab is previewing (not saved), while that window is open:
+    /// a page window summoned meanwhile shows it too. `None` = the saved theme.
+    pub theme_preview: Option<Theme>,
+}
+
+impl AppState {
+    /// The theme the bar shows: the preview while Settings edits one, else the saved theme.
+    pub fn shown_theme(&self) -> Theme {
+        self.theme_preview
+            .clone()
+            .unwrap_or_else(|| self.settings.theme.clone())
+    }
 }
 
 pub type SharedState = Mutex<AppState>;
@@ -63,6 +75,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         first_run,
         session_cookies: SessionCookies::default(),
         history: None,
+        theme_preview: None,
     }));
     Ok(())
 }
@@ -104,6 +117,33 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn the_bar_shows_the_preview_while_settings_edits_one() {
+        let mut state = AppState {
+            settings: Settings::default(),
+            data_dir: temp_dir("preview"),
+            webview_data_dir: None,
+            active_shortcut: None,
+            shortcut_suspended: false,
+            first_run: false,
+            session_cookies: SessionCookies::default(),
+            history: None,
+            theme_preview: None,
+        };
+        assert_eq!(state.shown_theme(), Theme::default());
+        let preview = Theme {
+            colors: vec!["#9d8fd0".into()],
+            ..Theme::default()
+        };
+        state.theme_preview = Some(preview.clone());
+        assert_eq!(state.shown_theme(), preview);
+        assert_eq!(
+            state.settings.theme,
+            Theme::default(),
+            "a preview is never saved"
+        );
     }
 
     #[test]

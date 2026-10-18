@@ -67,7 +67,8 @@ export const THEME_RUNS: readonly ThemeRun[] = [
 /**
  * A theme run: every time the bar loaded it was handed the run's theme (its mode, and its number
  * of colors — 1 for the default), the smoke page loaded when the run shows a page, the command bar
- * offered the smoke page's site, and Settings opened and loaded when the run shows it.
+ * offered the smoke page's site, and Settings opened on Appearance (the theme editor) and loaded
+ * when the run shows it.
  */
 export function themeFailures(run: ThemeRun, events: LogEvent[]): string[] {
   const failures: string[] = [];
@@ -87,8 +88,8 @@ export function themeFailures(run: ThemeRun, events: LogEvent[]): string[] {
   if (!sawSmokeTopSite(events)) {
     failures.push(`${run.name}: the command bar never offered the smoke page's site`);
   }
-  if (run.shots.settings && !sawSettings(events, "general")) {
-    failures.push(`${run.name}: Settings never opened (or its page never loaded)`);
+  if (run.shots.settings && !sawSettings(events, "appearance")) {
+    failures.push(`${run.name}: Settings never opened on Appearance (or its page never loaded)`);
   }
   return failures;
 }

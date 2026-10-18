@@ -75,8 +75,14 @@ ui/lib/apply-theme.ts              puts a theme on a page (custom properties on 
 ui/settings.html, ui/settings.ts   the settings window: tabs (General, Appearance, Extensions,
                                    Privacy, About), shortcut recorder, lists, switches, clear
                                    history; DOM glue only
-ui/settings-logic.ts               settings types, tabs, change detection across tabs, the
-                                   Privacy tab's clear action (unit-tested)
+ui/settings-logic.ts               settings types, tabs, change detection across tabs (the theme
+                                   too), the Privacy tab's clear action (unit-tested)
+ui/settings/appearance-logic.ts    the Appearance tab: color pads (hue × chroma ↔ color), arrow
+                                   keys, adding / removing colors, presets, sliders, the draft
+                                   against the saved theme (pure, unit-tested)
+ui/settings/appearance.ts          the Appearance tab's controls and live preview; every edit
+                                   re-themes the window and goes to preview_theme; DOM glue only
+ui/settings/appearance.css         the Appearance tab's styles (linked by settings.html)
 ui/settings.css                    the settings window's styles (style.css has the shared tokens)
 ui/style.css                       shared styles, all colors from the theme's --lj-* variables;
                                    `.themed` = the gradient with the grain on top
@@ -87,7 +93,7 @@ src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_
                                    history_remove, history_clear, open_settings, start_info,
                                    set_start_at_login; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
-                                   start at login, clear history, close
+                                   start at login, clear history, preview a theme, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
@@ -255,7 +261,7 @@ permission, and capabilities grant them per webview label or window:
 | Capability | Scope | Grants |
 |---|---|---|
 | `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
-| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `core:window:allow-close` |
+| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
@@ -280,6 +286,7 @@ settings window's `core:window:allow-close`).
 | `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → up to 8 top sites, leaving out the open page's site, or the 4 starters when there are none; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) |
 | `history_remove(url)` | the command bar (Shift+Delete on a history row), the history view (× or Shift+Delete) | forget that record and rewrite `history.json` at once; returns whether there was one |
 | `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
+| `preview_theme(theme?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` (checked like a saved one, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
@@ -395,7 +402,7 @@ all fields, whichever tab they are on):
 | Tab | Holds |
 |---|---|
 | General | shortcut, search engine, translate language, mobile sites, start at login |
-| Appearance | a placeholder until the theme editor (LJ28); the window already wears the theme |
+| Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
 | Extensions | a placeholder until extensions (LJ30) |
 | Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
 | About | version, license, the repository link, "Inspired by Little Arc…" as plain text |
@@ -584,7 +591,9 @@ WebKitGTK differ in CSS color-4 support, so no stylesheet uses `oklch()` or `col
   properties (CSSOM, which the CSP's `style-src 'self'` allows), with `color-scheme` so form
   controls match; a `system` theme re-applies when the system switches between light and dark.
   The bar gets the theme from `start_info` as it loads; the settings window from
-  `get_settings`; after Save, Rust pushes it to both. Until then pages show the default theme:
+  `get_settings`; after Save, Rust pushes it to both. While Settings' Appearance tab edits a
+  theme, every change re-themes the settings window itself and goes to the page window through
+  `preview_theme` (not saved); Cancel or closing Settings brings the saved theme back. Until then pages show the default theme:
   `ui/lib/theme-defaults.css` (generated, imported by `style.css`, checked by a test) holds its
   variables for the system's light and dark. `ui/index.html`, the page webview's first page, has
   no IPC and stays a plain neutral white / near-black.
@@ -665,7 +674,8 @@ bar was handed the first run), `quit` (Quit or `--quit` is about to exit),
 close, set again in the new window; counts only), `history-visit <kind> <url>` (a visit was
 recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl/Cmd+Y opened
 the history view), `history-list <pages>` (the history view asked for the pages; a count only),
-`theme <mode> colors=<n>` (the bar asked for its theme; never the colors).
+`theme <mode> colors=<n>` (the bar asked for its theme; never the colors), `theme-preview <mode>
+colors=<n> | ended` (Settings previewed a theme; the preview ended when it closed unsaved).
 Without the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
@@ -778,7 +788,8 @@ and pushes to `main`:
   window (followed by process id, so other apps' WebKit helpers on the runner don't count).
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`, `narrow.png`,
   `wide.png`, `command-bar.png`, `command-typing.png`, `history.png`, `settings-general.png`,
-  `settings-privacy.png`, `welcome.png`, and the theme runs' `theme/*.png`), the logs, and
+  `settings-privacy.png`, `settings-appearance.png`, `welcome.png`, and the theme runs'
+  `theme/*.png`), the logs, and
   The app runs on a fresh `LITTLEJOAN_DATA_DIR` that already holds the default `settings.json`,
   so it starts hibernating (memory at rest is measured before any window opens). Then the
   **login-persistence check**: the smoke page's `?persist=set&t=<token>` sets a persistent
@@ -793,12 +804,14 @@ and pushes to `main`:
   leave no records (log `smoke-history-off.log`); before it quits it runs the **settings
   check**: `--settings` must open Settings on General and its page load (`settings-window
   general`, `settings-loaded`; screenshot `settings-general.png`), `--settings privacy` must
-  switch it to Privacy (`settings-privacy.png`, where Remember history is off), and the page
-  window must not open. Then the **theme runs** (`smoke-theme.mts`), each its own launch on a
+  switch it to Privacy (`settings-privacy.png`, where Remember history is off), `--settings
+  appearance` to the theme editor (`settings-appearance.png`), and the page window must not
+  open. Then the **theme runs** (`smoke-theme.mts`), each its own launch on a
   fresh data folder whose `settings.json` carries a theme (so the main run's memory numbers
   don't move): a two-color theme with grain 0.4 in light (`theme/page.png`,
-  `theme/command-bar.png`, `theme/history.png`, `theme/settings.png`) and in dark
-  (`theme/page-dark.png`, `theme/command-bar-dark.png`, `theme/settings-dark.png`), and the
+  `theme/command-bar.png`, `theme/history.png`, `theme/settings.png` — Settings on Appearance)
+  and in dark (`theme/page-dark.png`, `theme/command-bar-dark.png`, `theme/settings-dark.png`),
+  and the
   default theme in dark (`theme/command-bar-default-dark.png`); every `theme` event must name the
   run's mode and number of colors. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch

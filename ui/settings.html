@@ -6,6 +6,7 @@
     <title>Little Joan Settings</title>
     <link rel="stylesheet" href="./style.css" />
     <link rel="stylesheet" href="./settings.css" />
+    <link rel="stylesheet" href="./settings/appearance.css" />
     <script type="module" src="./settings.ts"></script>
   </head>
   <!-- The settings window: tabs in a sidebar on the left, the chosen tab on the right, and
@@ -81,11 +82,55 @@
         </section>
 
         <section id="panel-appearance" class="tab-panel" role="tabpanel" aria-labelledby="tab-appearance" hidden>
-          <h1>Appearance</h1>
-          <p class="placeholder">
-            The theme editor is coming: one to three muted colors that blend into the toolbar, the
-            command bar and these windows, in light and dark.
-          </p>
+          <div class="appearance-head">
+            <h1>Appearance</h1>
+            <div class="modes" role="group" aria-label="Light or dark">
+              <button class="mode" type="button" data-mode="system" aria-pressed="true">System</button>
+              <button class="mode" type="button" data-mode="light" aria-pressed="false">Light</button>
+              <button class="mode" type="button" data-mode="dark" aria-pressed="false">Dark</button>
+            </div>
+          </div>
+          <!-- A live preview: the toolbar above a page, and the command bar, in this window's theme. -->
+          <div class="theme-preview themed" aria-hidden="true">
+            <div class="preview-toolbar">
+              <span class="preview-chevron"></span>
+              <span class="preview-site"><span class="preview-icon">e</span>example.com</span>
+              <span class="preview-open"></span>
+            </div>
+            <div class="preview-card">
+              <div class="preview-field">Search or enter URL…</div>
+              <div class="preview-row selected">Little Joan <span class="preview-domain">— github.com</span></div>
+              <div class="preview-row">Wikipedia <span class="preview-domain">— wikipedia.org</span></div>
+            </div>
+          </div>
+          <h2 class="appearance-label">Presets</h2>
+          <div id="presets" class="presets" role="group" aria-label="Presets"></div>
+          <h2 class="appearance-label" id="colors-label">Colors <span class="appearance-hint">drag a dot, or use the arrow keys</span></h2>
+          <div class="pads" role="group" aria-labelledby="colors-label">
+            <div class="pad" role="slider" tabindex="0" aria-label="Color 1" hidden>
+              <span class="pad-dot"></span>
+              <button class="pad-remove" type="button" aria-label="Remove color 1" title="Remove this color" hidden>×</button>
+            </div>
+            <div class="pad" role="slider" tabindex="0" aria-label="Color 2" hidden>
+              <span class="pad-dot"></span>
+              <button class="pad-remove" type="button" aria-label="Remove color 2" title="Remove this color" hidden>×</button>
+            </div>
+            <div class="pad" role="slider" tabindex="0" aria-label="Color 3" hidden>
+              <span class="pad-dot"></span>
+              <button class="pad-remove" type="button" aria-label="Remove color 3" title="Remove this color" hidden>×</button>
+            </div>
+            <button id="pad-add" class="pad-add" type="button" aria-label="Add a color" title="Add a color">+</button>
+          </div>
+          <div class="sliders">
+            <label class="slider" for="intensity">
+              <span>Intensity</span>
+              <input id="intensity" type="range" min="0" max="100" step="1" />
+            </label>
+            <label class="slider" for="grain">
+              <span>Grain</span>
+              <input id="grain" type="range" min="0" max="100" step="1" />
+            </label>
+          </div>
         </section>
 
         <section id="panel-extensions" class="tab-panel" role="tabpanel" aria-labelledby="tab-extensions" hidden>

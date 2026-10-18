@@ -116,7 +116,7 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
         (
             s.active_shortcut.clone(),
             std::mem::take(&mut s.first_run),
-            s.settings.theme.clone(),
+            s.shown_theme(),
         )
     });
     if first_run {
@@ -262,6 +262,8 @@ pub async fn save_settings<R: Runtime>(
     smoke::log("shortcut-registered", &wanted);
     let (dir, updated) = state::with(&app, |s| {
         s.active_shortcut = Some(wanted.clone());
+        // Saved: the preview (if any) is the theme now.
+        s.theme_preview = None;
         s.settings = Settings {
             shortcut: wanted,
             search_engine: settings.search_engine,
@@ -283,6 +285,18 @@ pub async fn save_settings<R: Runtime>(
     settings::save(&dir, &updated)
         .map_err(|err| format!("The new settings work now, but couldn't be saved: {err}"))?;
     Ok(updated)
+}
+
+/// Settings' Appearance tab previews `theme` in the open page window while it is edited (not
+/// saved; checked like a saved one). `null` puts the saved theme back.
+#[tauri::command]
+pub async fn preview_theme<R: Runtime>(app: AppHandle<R>, theme: Option<Value>) {
+    let shown = state::with(&app, |s| {
+        s.theme_preview = theme.as_ref().map(|v| settings::theme::parse(Some(v)));
+        s.shown_theme()
+    });
+    smoke::log("theme-preview", &theme_summary(&shown));
+    bar::set_theme(&app, &shown);
 }
 
 /// Every page in history, latest visit first: `[{ url, title, host, lastVisit, visitCount }]`

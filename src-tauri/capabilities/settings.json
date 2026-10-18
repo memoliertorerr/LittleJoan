@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "settings",
-  "description": "The settings window: read and save settings, pause the shortcut while recording, add or remove the login entry, clear history (the Privacy tab), close itself.",
+  "description": "The settings window: read and save settings, pause the shortcut while recording, add or remove the login entry, clear history (the Privacy tab), preview a theme in the page window while it is edited (the Appearance tab), close itself.",
   "windows": ["settings"],
   "permissions": [
     "allow-get-settings",
@@ -9,6 +9,7 @@
     "allow-suspend-shortcut",
     "allow-set-start-at-login",
     "allow-history-clear",
+    "allow-preview-theme",
     "core:window:allow-close"
   ]
 }

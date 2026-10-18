@@ -125,8 +125,8 @@ export function sawSettings(events: LogEvent[], tab: string): boolean {
 
 /**
  * The settings check (a run that is hibernating): `--settings` opened Settings on General and
- * its page loaded, `--settings privacy` then switched it to Privacy, and the page window never
- * opened meanwhile.
+ * its page loaded, `--settings privacy` then switched it to Privacy, `--settings appearance` to
+ * Appearance, and the page window never opened meanwhile.
  */
 export function settingsFailures(events: LogEvent[]): string[] {
   const failures: string[] = [];
@@ -137,6 +137,9 @@ export function settingsFailures(events: LogEvent[]): string[] {
   const tabs = settingsTabs(events);
   if (tabs.indexOf("privacy") <= tabs.indexOf("general")) {
     failures.push("--settings privacy never switched Settings to Privacy after General");
+  }
+  if (tabs.lastIndexOf("appearance") <= tabs.indexOf("privacy")) {
+    failures.push("--settings appearance never switched Settings to Appearance after Privacy");
   }
   if (first >= 0 && events.slice(first).some((e) => e.event === "window-created")) {
     failures.push("--settings opened the page window");
