@@ -28,6 +28,8 @@ static FIXTURE: Bundled = &[
 
 /// The secret token of hello's opening (the SDK served to its panel sends it as `X-LJ-Api`).
 const TOKEN: &str = "5f0c1e2d3b4a69788796a5b4c3d2e1f0";
+/// The nonce in the URL the app opened hello's panel at.
+const NONCE: &str = "0123456789abcdef0123456789abcdef";
 
 fn url(s: &str) -> Url {
     Url::parse(s).expect("valid")
@@ -69,13 +71,24 @@ fn without_header(mut incoming: Incoming, name: &str) -> Incoming {
 }
 
 /// Decides `incoming` on `platform` with the page webview at `page` — the extension the guard
-/// would say it shows after admitting that URL (none for anything else) — and `opened` the
-/// extension the app opened last.
+/// would say it shows after admitting that URL (none for anything else), its panel committed —
+/// and `opened` the extension the app opened last.
 fn decide_on(
     incoming: &Incoming,
     platform: Platform,
     page: Option<&str>,
     opened: Option<&str>,
+) -> Result<Route, Refusal> {
+    decide_committed(incoming, platform, page, opened, true)
+}
+
+/// As `decide_on`, with the panel `committed` by a load event or only admitted by the guard.
+fn decide_committed(
+    incoming: &Incoming,
+    platform: Platform,
+    page: Option<&str>,
+    opened: Option<&str>,
+    committed: bool,
 ) -> Result<Route, Refusal> {
     let registry = registry::build(FIXTURE, None, &[]);
     let showing = page
@@ -87,8 +100,10 @@ fn decide_on(
         &Context {
             platform,
             showing: showing.as_deref(),
+            committed: if committed { showing.as_deref() } else { None },
             registry: &registry,
             opened,
+            nonce: Some(NONCE),
             token: Some(TOKEN),
         },
     )
@@ -332,8 +347,10 @@ fn the_api_needs_its_header_exactly_once() {
         &Context {
             platform: Platform::MacOs,
             showing: Some("hello"),
+            committed: Some("hello"),
             registry: &registry,
             opened: Some("hello"),
+            nonce: Some(NONCE),
             token: None,
         },
     );
@@ -620,12 +637,150 @@ fn switched_off_extensions_are_unknown() {
             &Context {
                 platform: Platform::MacOs,
                 showing: Some("hello"),
+                committed: Some("hello"),
                 registry: &registry,
                 opened: Some("hello"),
+                nonce: Some(NONCE),
                 token: Some(TOKEN),
             },
         );
         assert_eq!(refusal(decided), Some(Refusal::Unknown), "{}", incoming.uri);
+    }
+}
+
+/// Hello's panel in this platform's form, and a good API call from it.
+fn panel_and_api(platform: Platform, method: &str) -> (&'static str, Incoming) {
+    match platform {
+        Platform::Windows => (
+            "http://ljext.hello.localhost/index.html",
+            with_header(api(method), "origin", "http://ljext.hello.localhost"),
+        ),
+        Platform::MacOs | Platform::Linux => ("ljext://hello.localhost/index.html", api(method)),
+    }
+}
+
+#[test]
+fn before_the_panel_commits_only_its_document_is_served() {
+    for platform in [Platform::Windows, Platform::MacOs, Platform::Linux] {
+        let (page, call) = panel_and_api(platform, "storage.get");
+        let before = |incoming: &Incoming| {
+            decide_committed(incoming, platform, Some(page), Some("hello"), false)
+        };
+        // The app's own navigation: the panel's URL with this opening's nonce.
+        let document = file(&format!("/index.html?lj-open={NONCE}"));
+        assert!(
+            matches!(before(&document), Ok(Route::File(_, _))),
+            "{platform:?}"
+        );
+        // Everything else waits for the load event that commits the panel — by then the web page
+        // whose frames and subresources raced the app's navigation is gone.
+        for incoming in [
+            file("/index.html"),
+            file("/index.html?lj-open="),
+            file(&format!("/index.html?lj-open={}", "f".repeat(32))),
+            file(&format!("/index.html?lj-open={}", NONCE.to_uppercase())),
+            file(&format!("/index.html?lj-open={NONCE}0")),
+            file(&format!("/index.html?lj-open={NONCE}&x=1")),
+            file(&format!("/index.html?x=1&lj-open={NONCE}")),
+            file(&format!("/index.html#lj-open={NONCE}")),
+            file("/hello.css"),
+            file(SDK_PATH),
+            file(&format!("{SDK_PATH}?lj-open={NONCE}")),
+            call.clone(),
+        ] {
+            assert_eq!(
+                refusal(before(&incoming)),
+                Some(Refusal::Uncommitted),
+                "{platform:?} {}",
+                incoming.uri
+            );
+            let committed = decide_committed(&incoming, platform, Some(page), Some("hello"), true);
+            assert!(committed.is_ok(), "{platform:?} {}", incoming.uri);
+        }
+        // Without an opening there is no nonce to match.
+        let registry = registry::build(FIXTURE, None, &[]);
+        let no_nonce = route(
+            &document,
+            &Context {
+                platform,
+                showing: Some("hello"),
+                committed: None,
+                registry: &registry,
+                opened: Some("hello"),
+                nonce: None,
+                token: Some(TOKEN),
+            },
+        );
+        assert_eq!(refusal(no_nonce), Some(Refusal::Uncommitted));
+        // A web page shown: refused at once, nonce or not (the page check comes first).
+        assert_eq!(
+            refusal(decide_committed(
+                &document,
+                platform,
+                None,
+                Some("hello"),
+                false
+            )),
+            Some(Refusal::Page)
+        );
+    }
+}
+
+#[test]
+fn a_referer_must_be_the_extensions_own() {
+    for platform in [Platform::Windows, Platform::MacOs] {
+        let (page, call) = panel_and_api(platform, "storage.get");
+        let own = format!("{page}?lj-open={NONCE}");
+        let document = file(&format!("/index.html?lj-open={NONCE}"));
+        let at = |incoming: &Incoming, committed: bool| {
+            decide_committed(incoming, platform, Some(page), Some("hello"), committed)
+        };
+        for incoming in [file("/hello.css"), file(SDK_PATH), call.clone()] {
+            // The panel's own requests carry its URL (or, on WebKit's GETs, no Referer).
+            assert!(at(&with_header(incoming.clone(), "referer", &own), true).is_ok());
+            assert!(at(&without_header(incoming.clone(), "referer"), true).is_ok());
+        }
+        for foreign in [
+            "http://127.0.0.1:55413/smoke.html?ext=race",
+            "https://example.com/",
+            "ljext://other.localhost/index.html",
+            "http://ljext.other.localhost/index.html",
+            "ljext://hello.localhost.example.com/",
+            "http://ljext.hello.localhost.example.com/",
+            "ljext://hello.localhost",
+            "http://ljext.hello.localhost",
+            "tauri://localhost/index.html",
+            "http://tauri.localhost/",
+            "null",
+            "",
+        ] {
+            if foreign.starts_with(&format!(
+                "{}/",
+                crate::extensions::urls::origin("hello", platform)
+            )) {
+                continue;
+            }
+            for (incoming, committed) in [
+                (file("/hello.css"), true),
+                (file(SDK_PATH), true),
+                (call.clone(), true),
+                (document.clone(), false),
+            ] {
+                assert_eq!(
+                    refusal(at(
+                        &with_header(incoming.clone(), "referer", foreign),
+                        committed
+                    )),
+                    Some(Refusal::Referer),
+                    "{platform:?} {foreign:?} {}",
+                    incoming.uri
+                );
+            }
+        }
+        // Sent twice, even if both are its own: refused.
+        let mut twice = with_header(file("/hello.css"), "referer", &own);
+        twice.headers.push(("Referer".to_owned(), own.clone()));
+        assert_eq!(refusal(at(&twice, true)), Some(Refusal::Referer));
     }
 }
 

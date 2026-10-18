@@ -9,8 +9,18 @@
 //!   (so a web page — or its frames — can't load an extension's files or call its API). "Shows"
 //!   is what the navigation guard last let through (session.rs `NavGate::showing`), not the
 //!   page's address from load events, which can arrive late;
+//! - **the panel committed**: between the guard admitting the panel and the panel's document
+//!   replacing the web page there is a moment in which the web page still runs. In it only the
+//!   panel's document itself is served — the request carrying this opening's nonce
+//!   (`?lj-open=<hex>`, which no other document knows); every other file, the SDK and the API wait
+//!   until a load event committed the panel (`NavGate::committed`; the handler waits up to
+//!   `COMMIT_WAIT`), by which time the web page is gone. Without this a web page's frames and
+//!   subresources racing the app's navigation were served there (CI, Windows);
+//! - a Referer, when sent, is from the extension's own origin (sent twice: refused);
 //! - never for a frame, a plugin or a service / shared worker (`Sec-Fetch-Dest`, refused when sent
-//!   twice; a `Service-Worker` header);
+//!   twice; a `Service-Worker` header) — kept for engines that send them: none of ours passes
+//!   `Sec-Fetch-*` to a custom-scheme handler (CI's header log, LJ29), so the guard, the page and
+//!   commit rules, the Referer and the response headers are what stop frames;
 //! - files and the SDK: a `GET`, a plain path (paths.rs) of a type we serve;
 //! - the API: a `POST` whose `X-LJ-Api` is this opening's secret token, compared in constant time
 //!   (only the SDK served to that panel carries it; the custom header also forces a CORS preflight
@@ -19,11 +29,17 @@
 //!
 //! **The Origin rule differs per engine** (CI, LJ29). WebView2 (Windows) sends `Origin` with
 //! every POST, so it must be there and be exactly the extension's origin. WebKit (macOS, Linux)
-//! sends **no** `Origin` (nor a Referer) with a same-origin POST to a custom scheme — only the
+//! sends **no** `Origin` with a same-origin POST to a custom scheme (a Referer, yes) — only the
 //! CORS path adds one, and every cross-origin request takes it (a web page's request arrived with
 //! `Origin: http://127.0.0.1:…`, without a preflight). So there an Origin that is sent must be
 //! exactly the extension's (`null` is refused too), a missing one means the request came from the
 //! extension's own origin, and a Referer, when sent, must be from that origin as well.
+//!
+//! **What each engine passes the handler** (CI's `ljext-headers` log): WebView2 — `Accept`,
+//! `Referer` (on everything but the app's own navigation), `User-Agent`, `sec-ch-ua*`, `Origin` on
+//! POST, never `Sec-Fetch-Dest` / `-Site` (only `Sec-Fetch-Mode` on a CORS preflight). WebKit —
+//! `Accept`, `User-Agent`, a `Referer` on POST only, no `Origin` from the panel itself, no
+//! `Sec-Fetch-*`.
 
 use std::net::Ipv4Addr;
 use std::sync::Arc;
@@ -138,15 +154,23 @@ impl Incoming {
 }
 
 /// What else a decision needs: the platform, the extension whose panel the page webview shows
-/// (as the navigation guard saw it), the registry, the extension the app opened last, and that
-/// opening's secret token (session.rs), which only the SDK served to that panel carries.
+/// (as the navigation guard saw it) and the one a load event committed, the registry, the
+/// extension the app opened last, and that opening's nonce (in the panel's URL) and secret token
+/// (session.rs), which only the SDK served to that panel carries.
 pub struct Context<'a> {
     pub platform: Platform,
     pub showing: Option<&'a str>,
+    pub committed: Option<&'a str>,
     pub registry: &'a Registry,
     pub opened: Option<&'a str>,
+    pub nonce: Option<&'a str>,
     pub token: Option<&'a str>,
 }
+
+/// How long the handler holds a request that came before the panel committed (`Uncommitted`)
+/// before it refuses it: the panel's own subresources can reach the handler a moment before the
+/// load event that commits it is handled.
+pub const COMMIT_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// An answered request.
 #[derive(Debug)]
@@ -165,6 +189,11 @@ pub enum Refusal {
     Unknown,
     /// The page webview isn't showing this extension, opened by the app.
     Page,
+    /// The panel hasn't committed yet, and this isn't its document (the handler waits, then
+    /// refuses).
+    Uncommitted,
+    /// A Referer from another origin (or sent twice).
+    Referer,
     /// Not GET (files) or POST (the API).
     HttpMethod,
     /// A frame, embed or object asked for a file (or `Sec-Fetch-Dest` came twice).
@@ -200,6 +229,8 @@ impl Refusal {
             Refusal::Webview => "webview",
             Refusal::Unknown => "unknown",
             Refusal::Page => "page",
+            Refusal::Uncommitted => "uncommitted",
+            Refusal::Referer => "referer",
             Refusal::HttpMethod => "http-method",
             Refusal::Frame => "frame",
             Refusal::Worker => "worker",
@@ -221,16 +252,33 @@ pub fn origin_ok(incoming: &Incoming, id: &str, platform: Platform) -> bool {
     match incoming.header("origin") {
         Some(origin) => origin == own,
         None if incoming.has_header("origin") => false,
-        None => {
-            platform != Platform::Windows
-                && match incoming.header("referer") {
-                    Some(referer) => referer
-                        .strip_prefix(own.as_str())
-                        .is_some_and(|rest| rest.starts_with('/')),
-                    None => !incoming.has_header("referer"),
-                }
-        }
+        None => platform != Platform::Windows && referer_ok(incoming, id, platform),
     }
+}
+
+/// Whether the request's Referer, if it sent one (once), is a page of the extension's own origin.
+/// The panel's own requests carry its URL or none; a web page's carry the web page (or none).
+pub fn referer_ok(incoming: &Incoming, id: &str, platform: Platform) -> bool {
+    let own = urls::origin(id, platform);
+    match incoming.header("referer") {
+        Some(referer) => referer
+            .strip_prefix(own.as_str())
+            .is_some_and(|rest| rest.starts_with('/')),
+        None => !incoming.has_header("referer"),
+    }
+}
+
+/// Whether `incoming` asks for the panel's document by the URL the app opened it at: its query
+/// is exactly `lj-open=<this opening's nonce>`.
+fn is_panel_document(incoming: &Incoming, nonce: Option<&str>) -> bool {
+    let Some(nonce) = nonce else {
+        return false;
+    };
+    Url::parse(&incoming.uri).is_ok_and(|url| {
+        url.query()
+            .and_then(|query| query.strip_prefix("lj-open="))
+            .is_some_and(|sent| nonce::same_secret(sent, nonce))
+    })
 }
 
 /// Request destinations that are frames or plugins: they would embed a panel in another page.
@@ -264,6 +312,7 @@ pub fn route(incoming: &Incoming, ctx: &Context<'_>) -> Result<Route, Refusal> {
     let target = urls::parse_request(&incoming.uri).ok_or(Refusal::Unknown)?;
     let extension = ctx.registry.get(&target.id).ok_or(Refusal::Unknown)?;
     let showing = ctx.showing == Some(target.id.as_str()) && ctx.opened == Some(target.id.as_str());
+    let committed = ctx.committed == Some(target.id.as_str());
     if let Some(refusal) = embedding(incoming) {
         return Err(refusal);
     }
@@ -291,6 +340,12 @@ pub fn route(incoming: &Incoming, ctx: &Context<'_>) -> Result<Route, Refusal> {
         if !showing {
             return Err(Refusal::Page);
         }
+        if !referer_ok(incoming, &target.id, ctx.platform) {
+            return Err(Refusal::Referer);
+        }
+        if !committed {
+            return Err(Refusal::Uncommitted);
+        }
         let method = Method::from_name(name).ok_or(Refusal::NoMethod)?;
         if let Some(permission) = method.permission()
             && !extension.manifest.has(&permission)
@@ -306,8 +361,19 @@ pub fn route(incoming: &Incoming, ctx: &Context<'_>) -> Result<Route, Refusal> {
     if !showing {
         return Err(Refusal::Page);
     }
+    if !referer_ok(incoming, &target.id, ctx.platform) {
+        return Err(Refusal::Referer);
+    }
     if target.path == SDK_PATH {
-        return Ok(Route::Sdk(extension));
+        return if committed {
+            Ok(Route::Sdk(extension))
+        } else {
+            Err(Refusal::Uncommitted)
+        };
+    }
+    // Before the panel committed, only its document — asked for by the app's URL — is served.
+    if !committed && !is_panel_document(incoming, ctx.nonce) {
+        return Err(Refusal::Uncommitted);
     }
     let rel = paths::clean(&target.path).map_err(|_| Refusal::NotFound)?;
     if paths::mime_type(&rel).is_none() {

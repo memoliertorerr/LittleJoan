@@ -135,8 +135,10 @@ function isOpenedPanel(url: string): boolean {
  * without the app's nonce — into iframes and window.open, `--extension hello` must still open the
  * panel (it reports again), every extension URL that loads in the page must carry the nonce, at
  * least one of the page's attempts must have been refused (the guard on macOS / Linux, the
- * handler on Windows, where the guard doesn't see frames), and the toolbar may name hello only
- * right after hello's own panel loaded — never while a web page is shown.
+ * handler on Windows, where the guard doesn't see frames), nothing may be served to a request
+ * whose Referer is another page (`servedToOthers` — CI saw the racers' frames served on Windows
+ * in the moment before the panel committed), and the toolbar may name hello only right after
+ * hello's own panel loaded — never while a web page is shown.
  */
 export function raceFailures(events: LogEvent[]): string[] {
   const failures: string[] = [];
@@ -162,8 +164,19 @@ export function raceFailures(events: LogEvent[]): string[] {
   if (!refusedRacer) {
     failures.push("race: none of the page's iframe attempts reached the guard or the handler to be refused");
   }
+  failures.push(...servedToOthers(events));
   failures.push(...labelFailures(events));
   return failures;
+}
+
+/**
+ * Requests the handler answered 200 although their Referer was another page (`ljext-headers …
+ * status=200 referer=other`, logged for every `ljext` request).
+ */
+export function servedToOthers(events: LogEvent[]): string[] {
+  return events
+    .filter((e) => e.event === "ljext-headers" && /\bstatus=200\b/.test(e.detail) && /\breferer=other\b/.test(e.detail))
+    .map((e) => `served to another page: ${e.detail.split(" names=")[0]}`);
 }
 
 /** The toolbar names an extension only right after that extension's panel (with its nonce) loaded. */

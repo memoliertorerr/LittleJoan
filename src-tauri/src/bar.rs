@@ -128,13 +128,14 @@ pub fn add_webviews<R: Runtime>(
                 PageLoadEvent::Started => {
                     address().started(payload.url().clone());
                     smoke::log("page-started", payload.url().as_str());
+                    // What the toolbar shows, and what the extension handler serves beyond a
+                    // panel's document: an extension only once its panel committed here.
+                    extensions::session::page_committed(payload.url());
                 }
                 PageLoadEvent::Finished => {
                     address().finished(payload.url().clone());
                 }
             }
-            // What the toolbar shows: an extension only once its panel's URL commits here.
-            extensions::session::page_event(payload.url());
             let app = webview.app_handle();
             publish_url(app);
             if payload.event() == PageLoadEvent::Finished {

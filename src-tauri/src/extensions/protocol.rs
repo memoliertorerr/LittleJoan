@@ -4,6 +4,7 @@
 //! allows nothing. Each request runs on a blocking worker, off the engine's thread.
 
 use std::borrow::Cow;
+use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value, json};
 use tauri::http::{Request, Response, StatusCode, header};
@@ -12,7 +13,7 @@ use tauri::{AppHandle, Runtime, UriSchemeContext, UriSchemeResponder};
 use super::api::{self, Context, Incoming, Method, Route};
 use super::manifest::Permission;
 use super::registry::{self, Extension};
-use super::{clipboard, csp, limits, paths, session, storage, theme};
+use super::{clipboard, csp, limits, paths, session, storage, theme, urls};
 use crate::bar;
 use crate::keys::Platform;
 use crate::smoke;
@@ -57,24 +58,51 @@ fn respond<R: Runtime>(
     incoming: &Incoming,
     body: &[u8],
 ) -> Response<Cow<'static, [u8]>> {
-    log_headers(incoming);
     let registry = registry::current(app);
-    let showing = session::showing();
-    let opened = session::opened();
-    let token = session::token();
-    let ctx = Context {
-        platform: Platform::current(),
-        showing: showing.as_deref(),
-        registry: &registry,
-        opened: opened.as_deref(),
-        token: token.as_deref(),
+    let deadline = Instant::now() + api::COMMIT_WAIT;
+    let response = loop {
+        let showing = session::showing();
+        let committed = session::committed();
+        let opened = session::opened();
+        let nonce = session::nonce();
+        let token = session::token();
+        let ctx = Context {
+            platform: Platform::current(),
+            showing: showing.as_deref(),
+            committed: committed.as_deref(),
+            registry: &registry,
+            opened: opened.as_deref(),
+            nonce: nonce.as_deref(),
+            token: token.as_deref(),
+        };
+        match api::route(incoming, &ctx) {
+            // The panel's own subresources can reach us a moment before its load event commits
+            // it: hold them until it has. (A web page's request racing the app's navigation
+            // waits too — and once the panel has committed, that page is gone.)
+            Err(api::Refusal::Uncommitted) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            routed => break answer(app, incoming, body, routed, token),
+        }
     };
-    match api::route(incoming, &ctx) {
+    log_request(incoming, response.status().as_u16());
+    response
+}
+
+/// The response to a routed (or refused) request.
+fn answer<R: Runtime>(
+    app: &AppHandle<R>,
+    incoming: &Incoming,
+    body: &[u8],
+    routed: Result<Route, api::Refusal>,
+    token: Option<String>,
+) -> Response<Cow<'static, [u8]>> {
+    match routed {
         Ok(Route::File(extension, rel)) => match (extension.read(&rel), paths::mime_type(&rel)) {
             (Some(bytes), Some(mime)) => response(200, mime, &extension.csp, bytes),
             _ => refuse(incoming, api::Refusal::NotFound),
         },
-        // Routed only while the page shows this extension's opening, so the token is its own.
+        // Routed only once the page shows this extension's committed opening: its own token.
         Ok(Route::Sdk(extension)) => match token {
             Some(token) => response(
                 200,
@@ -100,13 +128,25 @@ fn respond<R: Runtime>(
     }
 }
 
-/// The smoke log only: what the engine sent with an `ljext` request — header names, and the
-/// values of the ones the checks read (`Sec-Fetch-*`, `Origin`, `Service-Worker`); never the
-/// token or a Referer (which carries the panel's spent nonce).
-fn log_headers(incoming: &Incoming) {
+/// The smoke log only: an `ljext` request's answer (`status=`) and what the engine sent with it —
+/// header names, the values of the ones the checks read (`Sec-Fetch-*`, `Origin`,
+/// `Service-Worker`), and whose page the Referer is (`own` / `other`, never its value, which can
+/// carry a nonce); never the token.
+fn log_request(incoming: &Incoming, status: u16) {
     if !smoke::enabled() {
         return;
     }
+    let referer = match (
+        incoming.header("referer"),
+        urls::parse_request(&incoming.uri),
+    ) {
+        (None, _) if incoming.headers.iter().any(|(n, _)| n == "referer") => "twice",
+        (None, _) => "-",
+        (Some(_), Some(target)) if api::referer_ok(incoming, &target.id, Platform::current()) => {
+            "own"
+        }
+        (Some(_), _) => "other",
+    };
     let mut names: Vec<&str> = incoming.headers.iter().map(|(n, _)| n.as_str()).collect();
     names.sort_unstable();
     names.dedup();
@@ -115,7 +155,7 @@ fn log_headers(incoming: &Incoming) {
     smoke::log(
         "ljext-headers",
         &format!(
-            "{} {} {path} names={} dest={} site={} mode={} origin={} service-worker={}",
+            "{} {} {path} status={status} referer={referer} names={} dest={} site={} mode={} origin={} service-worker={}",
             incoming.webview,
             incoming.method,
             names.join(","),

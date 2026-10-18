@@ -18,10 +18,13 @@
 //! extension, any other navigation the guard lets through makes it none — every navigation passes
 //! the guard first and in order, while load events can arrive late (on Windows CI saw the start
 //! page's `Finished` land after the app had started opening a panel). For what the user sees —
-//! the toolbar's extension name and icon, and Reload — it is what a load event of the page then
-//! **committed** (`NavGate::committed`): the admitted extension's URL arriving in the page's own
-//! `Started` / `Finished`. A navigation that was refused or cancelled never commits, so the toolbar
-//! keeps showing the real page.
+//! the toolbar's extension name and icon, and Reload — and for everything the handler serves but
+//! the panel's document, it is what the page then **committed** (`NavGate::committed`): the
+//! admitted extension's URL arriving in the page's `Started` event — the engines' commit callback
+//! (WKWebView `didCommitNavigation`, WebKitGTK `LOAD_COMMITTED`, WebView2 `ContentLoading`), after
+//! which the previous page is gone. `Finished` doesn't count: it can come late, and WebKit reports
+//! the URL of a navigation that is still provisional. A navigation that was refused or cancelled
+//! never commits, so the toolbar keeps showing the real page.
 
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -70,8 +73,8 @@ impl NavGate {
         self.committed.as_deref()
     }
 
-    /// A load event (`Started` / `Finished`) of the page's main frame at `url`: the page shows the
-    /// admitted extension once its URL arrives that way; any other URL means no extension.
+    /// The page's main frame committed a document at `url` (its `Started` event): the page shows
+    /// the admitted extension once its URL arrives that way; any other URL means no extension.
     /// Returns whether that changed.
     pub fn commit(&mut self, url: &Url, platform: Platform) -> bool {
         let id = urls::parse(url, platform)
@@ -138,6 +141,9 @@ struct Session {
     id: String,
     /// What was opened, so Reload can open it again (with a new nonce).
     target: Target,
+    /// The nonce in the URL the panel was opened at (`?lj-open=`): until the panel commits, the
+    /// handler serves only the request that carries it.
+    nonce: String,
     /// This opening's secret: the SDK served to its panel sends it with every API call.
     token: String,
     page: Option<PageInfo>,
@@ -192,8 +198,8 @@ pub fn committed() -> Option<String> {
         .map(str::to_owned)
 }
 
-/// A load event of the page webview (bar.rs: `Started` and `Finished` of the main frame).
-pub fn page_event(url: &Url) {
+/// The page webview committed a document at `url` (bar.rs: its `Started` load event).
+pub fn page_committed(url: &Url) {
     GATE.lock()
         .unwrap_or_else(PoisonError::into_inner)
         .commit(url, Platform::current());
@@ -202,6 +208,11 @@ pub fn page_event(url: &Url) {
 /// The extension the app opened last in this window.
 pub fn opened() -> Option<String> {
     session().as_ref().map(|s| s.id.clone())
+}
+
+/// The nonce of the last opening (in its panel's URL).
+pub fn nonce() -> Option<String> {
+    session().as_ref().map(|s| s.nonce.clone())
 }
 
 /// The secret token of the last opening (its SDK sends it as `X-LJ-Api`).
@@ -246,7 +257,8 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<
     };
     let contribution =
         contribution.ok_or_else(|| format!("the extension `{id}` has no such command"))?;
-    let url = panel_url(id, contribution.panel.as_str(), &nonce::random_hex())
+    let nonce = nonce::random_hex();
+    let url = panel_url(id, contribution.panel.as_str(), &nonce)
         .ok_or_else(|| "no URL for the panel".to_owned())?;
     let before = bar::page_url(app).filter(|current| {
         navigation::is_external_openable(current) && !keys::is_app_url(&keys::app_origin(), current)
@@ -254,6 +266,7 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<
     *session() = Some(Session {
         id: id.to_owned(),
         target,
+        nonce,
         token: nonce::random_hex(),
         page,
         before,

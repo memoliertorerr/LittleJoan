@@ -8,6 +8,7 @@ import {
   helloOrigin,
   labelFailures,
   raceFailures,
+  servedToOthers,
   isExtUrl,
   parseStore,
   settingsExtensionsFailures,
@@ -151,6 +152,8 @@ describe("the race and the toolbar", () => {
 8 navigation-refused ljext://hello.localhost/index.html
 9 extension-opened hello
 10 navigation-refused ljext://hello.localhost/index.html
+10 ljext-headers joan-page GET ljext://hello.localhost/index.html status=403 referer=other names=accept,referer dest=- site=- mode=- origin=- service-worker=-
+10 ljext-headers joan-page GET ljext://hello.localhost/index.html status=200 referer=- names=accept dest=- site=- mode=- origin=- service-worker=-
 11 page-started ljext://hello.localhost/index.html?lj-open=${N.replace("0", "f")}
 12 toolbar-label hello
 13 title ${HELLO_TITLE}
@@ -168,6 +171,14 @@ describe("the race and the toolbar", () => {
     const lost = GOOD_RACE.replace(`13 title ${HELLO_TITLE}`, "13 title LJ-EXTRACE done opened=0");
     expect(raceFailures(parseLog(lost)).join()).toMatch(/didn't open the panel/);
     expect(raceFailures(parseLog("1 started\n"))).toEqual(["race: the smoke page's race never loaded"]);
+  });
+
+  it("fails when the handler served a request from another page", () => {
+    const served = GOOD_RACE.replace("status=403 referer=other", "status=200 referer=other");
+    expect(raceFailures(parseLog(served)).join()).toMatch(/served to another page: joan-page GET ljext:\/\/hello.localhost\/index.html status=200/);
+    expect(servedToOthers(parseLog(GOOD_RACE))).toEqual([]);
+    const own = "1 ljext-headers joan-page GET ljext://hello.localhost/hello.css status=200 referer=own names=accept,referer\n";
+    expect(servedToOthers(parseLog(own))).toEqual([]);
   });
 
   it("never lets the toolbar name an extension over a web page", () => {

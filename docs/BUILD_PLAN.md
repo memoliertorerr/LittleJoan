@@ -3821,7 +3821,46 @@ honest attempts, then stop).
     - **What the handler receives, per OS:** the smoke log now records each `ljext` request's
       header names and the values the checks read (`ljext-headers … dest= site= mode= origin=
       service-worker=`; never the token or a Referer), to answer the reviewer's open question
-      whether WebKit sends `Sec-Fetch-*` on custom-scheme requests (results in the CI notes).
+      whether WebKit sends `Sec-Fetch-*` on custom-scheme requests. **CI run 39097343759: no
+      engine does.** WebView2 passes `Accept`, `Referer` (on everything but the app's own
+      navigation), `User-Agent`, `sec-ch-ua*`, `Upgrade-Insecure-Requests` on documents, `Origin`
+      + `Content-Type` + `X-LJ-Api` on API POSTs — and `Sec-Fetch-Mode: cors` only on a CORS
+      preflight; WebKit (macOS, Linux alike) passes `Accept`, `User-Agent`, a `Referer` on POST
+      only, no `Origin` from the panel itself. So the `Sec-Fetch-Dest` / `-Site` checks never fire
+      on our engines (kept for one that sends them); whether WebKit honours `frame-ancestors` /
+      XFO for `ljext:` can't be watched from the log, since its guard refuses frame navigations
+      before any request. Landmines has it.
+  - **Fix 6 (`lj-step-29-fix6`) — what the header log showed on Windows.** In the race, three of
+    the page's iframe requests for hello's `index.html` arrived **between the guard admitting the
+    app's panel URL and the panel's commit** (~60 ms) and were **served** (status 200): the page
+    check passed (the guard already said "hello"), and with no `Sec-Fetch-Dest` there was nothing
+    to refuse a frame. `X-Frame-Options` / `frame-ancestors` and the API's Origin + token checks
+    kept them from doing anything (the web page couldn't script them or call the API), but files
+    — the SDK with the token too — could reach a web page in that moment. **Fix:** until a load
+    event committed the panel (`NavGate::committed`), only its document is served — the request
+    whose query is exactly `lj-open=<this opening's nonce>` (`session::nonce`, constant-time
+    compare); every other file, the SDK and the API are `Uncommitted` and the handler holds them
+    (10 ms polls, up to `api::COMMIT_WAIT` = 2 s) until the panel committed — by then the web page
+    and its frames are gone, so a racer that waited is answered into nothing — or refuses them.
+    And a Referer, when sent, must be a page of the extension's own origin (`api::referer_ok`;
+    twice: refused), which turns the Windows racers away at once. Only the page's `Started` event
+    commits now (the engines' commit callbacks), no longer `Finished`, which can arrive late and
+    on WebKit carries the URL of a navigation that is still provisional (WKWebView's `URL`,
+    WebKitGTK's `uri` change when a load starts). The panel's own subresources
+    came after its commit event in every CI log, by 1–50 ms, so the wait is a safety net, not the
+    usual path. The request log gained `status=` and `referer=own|other|-|twice`, and the race
+    rule `servedToOthers` fails on any `status=200 referer=other`. Tests:
+    `before_the_panel_commits_only_its_document_is_served` (all three platforms: the nonce
+    document served; no / empty / wrong / upper-case / extended / extra-parameter / fragment
+    nonces, other files, the SDK, the API all `Uncommitted`, then served once committed; no
+    opening, no nonce; a web page shown → `page`), `a_referer_must_be_the_extensions_own` (12
+    foreign forms incl. look-alike hosts and the other platform's form, on files, the SDK, the API
+    and the nonce document; twice), smoke `servedToOthers` (vitest). Also seen: fix4's CI run had
+    one Windows smoke failure in the race — hello's document loaded but none of its
+    subresources (unstyled, no script, broken icon; no refusal logged — fix4 logged refusals
+    only, so whether they reached the handler is unknown) while a racer's `window.open` landed in
+    the same moment; fix5's run was green.
+    Not reproduced since; noted in Landmines.
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
@@ -4449,6 +4488,20 @@ Populated from real friction, not speculation:
   reach the `ljext` handler (refused there by the page check). The cancelled navigation also raised
   one more `Finished` load event for the page that stayed (a second history visit). Never rely on
   the navigation guard alone for what a URL serves.
+- *(LJ29, security review)* **No engine passes `Sec-Fetch-*` to a custom-scheme handler** (CI's
+  `ljext-headers` log, all four smoke jobs): WebView2 gives the handler `Accept`, `Referer`,
+  `User-Agent`, `sec-ch-ua*`, `Origin` on POST and `Sec-Fetch-Mode` only on a CORS preflight;
+  WebKit gives `Accept`, `User-Agent` and a `Referer` on POST only. Checks keyed on
+  `Sec-Fetch-Dest` / `-Site` never fire on our engines; a frame's request on Windows looks like
+  any other GET except for its Referer. Don't build a defence on them.
+- *(LJ29, Windows)* **A web page still runs between the guard admitting a navigation and its
+  commit**, and its frames' requests reach the `ljext` handler in that moment (~60 ms in CI). The
+  guard's "showing" is therefore not enough to serve files: only the nonce document is served
+  before the commit (fix 6).
+- *(LJ29, Windows, seen once)* **A panel opened while the old page fires `window.open` at it
+  loaded without its subresources** in fix4's CI run (document and title arrived, `Finished`
+  came 41 ms later, nothing refused — that run didn't log served requests yet); green in every
+  run since; the request log (`ljext-headers … status=`) would now show where they went. If the race step flakes on Windows, look here first.
 - *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
   `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
   that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.

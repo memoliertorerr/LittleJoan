@@ -249,9 +249,11 @@ extension's own origin. Every request is checked from scratch:
 
 1. it comes from the page web view (never the toolbar or Settings);
 2. the extension exists and is switched on;
-3. the page web view is showing a panel of **that** extension, which Little Joan opened;
-4. never for a frame, a plugin, or a service or shared worker; files and the SDK: a `GET`, a
-   plain path of a served type;
+3. the page web view is showing a panel of **that** extension, which Little Joan opened — and,
+   for everything but the panel's document itself, that panel has replaced the previous page (a
+   request that comes a moment early waits for it);
+4. a `Referer`, when sent, is a page of the extension; never for a frame, a plugin, or a service
+   or shared worker; files and the SDK: a `GET`, a plain path of a served type;
 5. the API: a `POST` whose `X-LJ-Api` header is the secret token of this opening of the panel
    (only the SDK served to it carries it), sent from the extension's own origin — an `Origin`
    header that is exactly the extension's origin (on Windows it must be there; macOS and Linux
@@ -264,7 +266,9 @@ an extension URL only when it is the exact URL Little Joan is opening — includ
 single-use nonce that no page or panel can know beforehand — once, within a few seconds; every
 other attempt (a link, `location.href`, on macOS and Linux also an iframe) is refused, and on
 Windows, whose engine doesn't let the app see frame navigations, an iframe's request is refused by
-the handler itself (it's for a frame, and the page doesn't show that extension). Windows'
+the handler itself: the page doesn't show that extension — and in the moment while Little Joan's
+own navigation to the panel is under way, only the request carrying the nonce is answered, and
+the old page's requests are refused by their Referer or held until that page is gone. Windows'
 `http://ljext.…` form is never treated as a web address. The toolbar names an extension only after
 that extension's panel loaded, so a refused or cancelled attempt can't put an extension's name
 over a web page. Paths can't leave the
