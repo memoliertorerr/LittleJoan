@@ -14,6 +14,10 @@ use serde_json::Value;
 use crate::input::SearchEngine;
 use crate::translate::is_valid_lang;
 
+pub mod theme;
+
+pub use theme::{Theme, ThemeMode};
+
 pub const SETTINGS_FILE: &str = "settings.json";
 pub const SETTINGS_VERSION: u32 = 1;
 /// Cmd+Shift+Space on macOS, Ctrl+Shift+Space on Windows and Linux.
@@ -22,7 +26,7 @@ pub const MIN_WIDTH: u32 = 320;
 pub const MIN_HEIGHT: u32 = 300;
 pub const MAX_SIZE: u32 = 4096;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub version: u32,
@@ -39,6 +43,8 @@ pub struct Settings {
     /// Record visited pages in history.json (history_store.rs). Off: nothing new is recorded;
     /// what is there stays until it is cleared.
     pub remember_history: bool,
+    /// The look: light / dark / system, 1–3 colors, intensity, grain (settings/theme.rs).
+    pub theme: Theme,
 }
 
 impl Default for Settings {
@@ -52,6 +58,7 @@ impl Default for Settings {
             window_height: 640,
             mobile_sites: true,
             remember_history: true,
+            theme: Theme::default(),
         }
     }
 }
@@ -105,6 +112,7 @@ pub fn parse(json: &str) -> Settings {
         .get("rememberHistory")
         .and_then(Value::as_bool)
         .unwrap_or(defaults.remember_history);
+    let theme = theme::parse(map.get("theme"));
 
     Settings {
         version: SETTINGS_VERSION,
@@ -115,6 +123,7 @@ pub fn parse(json: &str) -> Settings {
         window_height,
         mobile_sites,
         remember_history,
+        theme,
     }
 }
 
@@ -199,6 +208,12 @@ mod tests {
             window_height: 500,
             mobile_sites: false,
             remember_history: false,
+            theme: Theme {
+                mode: ThemeMode::Dark,
+                colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],
+                intensity: 0.6,
+                grain: 0.4,
+            },
             ..Settings::default()
         };
         save(&dir, &settings).expect("save");
@@ -237,6 +252,21 @@ mod tests {
         );
         let json = serde_json::to_string(&Settings::default()).expect("json");
         assert!(json.contains(r#""rememberHistory":true"#), "{json}");
+    }
+
+    #[test]
+    fn the_theme_is_read_on_its_own() {
+        assert_eq!(parse("{}").theme, Theme::default());
+        let s = parse(
+            r##"{"shortcut": "Alt+KeyJ", "theme": {"mode": "light", "colors": ["#ABC", "x"], "grain": 3}}"##,
+        );
+        assert_eq!(s.shortcut, "Alt+KeyJ");
+        assert_eq!(s.theme.mode, ThemeMode::Light);
+        assert_eq!(s.theme.colors, vec!["#aabbcc"]);
+        assert_eq!(s.theme.grain, 1.0);
+        let s = parse(r#"{"theme": "dark", "mobileSites": false}"#);
+        assert_eq!(s.theme, Theme::default());
+        assert!(!s.mobile_sites, "a bad theme leaves the rest alone");
     }
 
     #[test]

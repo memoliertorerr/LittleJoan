@@ -7,6 +7,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::autostart;
@@ -18,7 +19,7 @@ use crate::joan;
 use crate::keys::PageAction;
 use crate::page_actions;
 use crate::phone_mode;
-use crate::settings::{self, Settings};
+use crate::settings::{self, Settings, Theme};
 use crate::settings_window::{self, SettingsTab};
 use crate::shortcut::{self, PluginRegistrar};
 use crate::smoke;
@@ -103,17 +104,27 @@ pub struct StartInfo {
     start_at_login: Option<bool>,
     /// A Linux Wayland session, where the X11 global shortcut can't fire.
     wayland_no_shortcut: bool,
+    /// The theme, which the bar applies as it loads (ui/lib/theme.ts makes the colors).
+    theme: Theme,
 }
 
-/// What the command bar needs for its hint line and, on the first launch, the welcome.
+/// What the bar needs as it loads: the theme, and for the command bar's welcome on the first
+/// launch the facts it shows.
 #[tauri::command]
 pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
-    let (shortcut, first_run) = state::with(&app, |s| {
-        (s.active_shortcut.clone(), std::mem::take(&mut s.first_run))
+    let (shortcut, first_run, theme) = state::with(&app, |s| {
+        (
+            s.active_shortcut.clone(),
+            std::mem::take(&mut s.first_run),
+            s.shown_theme(),
+        )
     });
     if first_run {
         smoke::log("welcome", "");
     }
+    smoke::log("theme", &theme_summary(&theme));
+    // The bar's script is running now: make sure it knows its view (bar::tell_state).
+    bar::tell_state(&app);
     StartInfo {
         shortcut,
         platform: std::env::consts::OS,
@@ -121,7 +132,13 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
         tray_hint: welcome::tray_hint(std::env::consts::OS),
         start_at_login: autostart::is_enabled(&app),
         wayland_no_shortcut: welcome::wayland_no_shortcut_here(),
+        theme,
     }
+}
+
+/// The smoke log's view of a theme: its mode and how many colors, never the colors.
+fn theme_summary(theme: &Theme) -> String {
+    format!("{} colors={}", theme.mode.name(), theme.colors.len())
 }
 
 /// One option in a settings list.
@@ -221,6 +238,9 @@ pub struct SettingsInput {
     translate_to: String,
     mobile_sites: bool,
     remember_history: bool,
+    /// The theme; checked field by field (settings/theme.rs). Left out, the saved one stays.
+    #[serde(default)]
+    theme: Option<Value>,
 }
 
 /// Validates and applies new settings: the shortcut is swapped live (the old one comes back if
@@ -242,21 +262,41 @@ pub async fn save_settings<R: Runtime>(
     smoke::log("shortcut-registered", &wanted);
     let (dir, updated) = state::with(&app, |s| {
         s.active_shortcut = Some(wanted.clone());
+        // Saved: the preview (if any) is the theme now.
+        s.theme_preview = None;
         s.settings = Settings {
             shortcut: wanted,
             search_engine: settings.search_engine,
             translate_to: settings.translate_to,
             mobile_sites: settings.mobile_sites,
             remember_history: settings.remember_history,
+            theme: settings.theme.as_ref().map_or_else(
+                || s.settings.theme.clone(),
+                |v| settings::theme::parse(Some(v)),
+            ),
             ..s.settings.clone()
         };
         (s.data_dir.clone(), s.settings.clone())
     });
-    // Phone mode on or off takes effect on the open page at once.
+    // Phone mode on or off takes effect on the open page at once, and so does the theme.
     phone_mode::apply(&app, true);
+    bar::set_theme(&app, &updated.theme);
+    settings_window::set_theme(&app, &updated.theme);
     settings::save(&dir, &updated)
         .map_err(|err| format!("The new settings work now, but couldn't be saved: {err}"))?;
     Ok(updated)
+}
+
+/// Settings' Appearance tab previews `theme` in the open page window while it is edited (not
+/// saved; checked like a saved one). `null` puts the saved theme back.
+#[tauri::command]
+pub async fn preview_theme<R: Runtime>(app: AppHandle<R>, theme: Option<Value>) {
+    let shown = state::with(&app, |s| {
+        s.theme_preview = theme.as_ref().map(|v| settings::theme::parse(Some(v)));
+        s.shown_theme()
+    });
+    smoke::log("theme-preview", &theme_summary(&shown));
+    bar::set_theme(&app, &shown);
 }
 
 /// Every page in history, latest visit first: `[{ url, title, host, lastVisit, visitCount }]`

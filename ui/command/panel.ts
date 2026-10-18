@@ -1,5 +1,6 @@
 // The welcome in the command bar's panel on the first launch (DOM glue only), with its
-// start-at-login checkbox. What it says comes from welcome.ts; the facts from Rust's start_info.
+// start-at-login checkbox. What it says comes from welcome.ts; the facts from Rust's start_info
+// (bar.ts asks for them when the bar loads).
 import { invoke } from "@tauri-apps/api/core";
 import { welcome, type ShortcutLine, type StartInfo, type Welcome } from "./welcome.ts";
 
@@ -66,16 +67,10 @@ function setUpLoginSwitch(enabled: boolean): void {
   });
 }
 
-/** Asks Rust once, when the bar loads; on the first run the welcome shows. */
-export function fillPanel(): void {
-  invoke<StartInfo>("start_info")
-    .then((info) => {
-      const shown = welcome(info);
-      if (shown) {
-        showWelcome(shown);
-      }
-    })
-    .catch(() => {
-      // Without the facts there is no welcome; the command bar works the same.
-    });
+/** On the first run, the welcome shows (`info`: start_info's answer). */
+export function fillPanel(info: StartInfo): void {
+  const shown = welcome(info);
+  if (shown) {
+    showWelcome(shown);
+  }
 }

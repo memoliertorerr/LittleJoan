@@ -1,34 +1,10 @@
+/* The theme's variables (--lj-*): the default theme until the page's script applies the user's
+   (ui/lib/theme.ts computes every color; ui/lib/apply-theme.ts sets them on <html>). */
+@import "./lib/theme-defaults.css";
+
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --fg: #1d1d1f;
-  --muted: #6e6e73;
-  --field-bg: #f2f2f4;
-  --accent: #3a6df0;
-  /* The command bar: a panel on a slightly darker backdrop; the selected row in the accent. */
-  --backdrop: #e7e7ec;
-  --panel: #ffffff;
-  --hairline: rgba(0, 0, 0, 0.08);
-  --shadow: rgba(0, 0, 0, 0.14);
-  --select-bg: #3a6df0;
-  --toolbar-bg: #f3f3f6;
   font-family: system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c1c1e;
-    --fg: #f5f5f7;
-    --muted: #98989d;
-    --field-bg: #2c2c2e;
-    --accent: #6e93ff;
-    --backdrop: #121214;
-    --panel: #232326;
-    --hairline: rgba(255, 255, 255, 0.09);
-    --shadow: rgba(0, 0, 0, 0.5);
-    --select-bg: #3b62d4;
-    --toolbar-bg: #1f1f22;
-  }
 }
 
 * {
@@ -39,20 +15,33 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--fg);
+  background: var(--lj-bg-0);
+  color: var(--lj-fg);
 }
 
-/* The page webview's first page, behind the command bar: nothing but the background. */
+/* A themed surface (the bar, the settings window): the theme's gradient, its grain on top. */
+.themed {
+  background-color: var(--lj-bg-0);
+  background-image: var(--lj-grain), var(--lj-gradient);
+}
+
+/* The page webview's first page, behind the command bar: a plain, neutral background (it has no
+   IPC, so it never learns the theme). */
 .blank {
-  background: var(--bg);
+  background: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .blank {
+    background: #1c1c1e;
+  }
 }
 
 /* The one-time welcome on the first launch, in the command bar under the field. */
 .welcome {
   margin: 4px 2px 18px;
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--field-bg);
+  border-bottom: 1px solid var(--lj-hairline);
   font-size: 14px;
   line-height: 1.45;
 }
@@ -72,7 +61,7 @@ body {
   padding: 1px 5px;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 13px;
-  background: var(--field-bg);
+  background: var(--lj-field);
   border-radius: 4px;
 }
 
@@ -88,7 +77,7 @@ body {
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: var(--accent);
+  accent-color: var(--lj-row-selected);
 }
 
 .welcome-login[hidden],
@@ -100,7 +89,7 @@ body {
 .error {
   margin: 10px 2px 0;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
 }
 
 .error {
@@ -145,8 +134,8 @@ body {
   padding: 0 10px;
   font: inherit;
   font-size: 13px;
-  color: var(--fg);
-  background: var(--field-bg);
+  color: var(--lj-fg);
+  background: var(--lj-field);
   border: 1px solid transparent;
   border-radius: 7px;
   outline: none;
@@ -154,11 +143,11 @@ body {
 }
 
 .bar-field:focus {
-  border-color: var(--accent);
+  border-color: var(--lj-accent);
 }
 
 .bar-field::placeholder {
-  color: var(--muted);
+  color: var(--lj-fg-muted);
 }
 
 .search-icon,
@@ -172,9 +161,6 @@ body {
   display: none;
 }
 
-.bar-body.toolbar {
-  background: var(--toolbar-bg);
-}
 
 .bar-body.toolbar .toolstrip {
   display: flex;
@@ -182,7 +168,7 @@ body {
   align-items: center;
   height: 40px;
   padding: 0 6px;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--lj-hairline);
 }
 
 .bar-body.toolbar .bar-top,
@@ -207,7 +193,7 @@ body {
   width: 28px;
   height: 28px;
   padding: 0;
-  color: var(--fg);
+  color: var(--lj-fg);
   background: transparent;
   border: 0;
   border-radius: 7px;
@@ -216,11 +202,11 @@ body {
 
 .tool:hover:not(:disabled),
 .site:hover {
-  background: var(--field-bg);
+  background: var(--lj-field);
 }
 
 .tool:disabled {
-  color: var(--muted);
+  color: var(--lj-fg-muted);
   cursor: default;
   opacity: 0.45;
 }
@@ -246,7 +232,7 @@ body {
   font: inherit;
   font-size: 13px;
   font-weight: 500;
-  color: var(--fg);
+  color: var(--lj-fg);
   background: transparent;
   border: 0;
   border-radius: 7px;
@@ -265,7 +251,7 @@ body {
 
 .site .row-favicon {
   padding: 1px;
-  background: var(--toolbar-bg);
+  background: var(--lj-tile);
   border-radius: 4px;
 }
 
@@ -275,10 +261,9 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Overlay view: the command bar. */
+/* Overlay view: the command bar, a frosted card over the theme's gradient. */
 .bar-body.overlay {
-  padding: 10px;
-  background: var(--backdrop);
+  padding: 12px;
 }
 
 /* macOS: a strip for the traffic lights above the panel (it drags the window too). */
@@ -288,17 +273,17 @@ body {
 
 .bar-body.overlay .command {
   overflow: hidden;
-  background: var(--panel);
+  background: var(--lj-panel);
   border-radius: 12px;
   box-shadow:
-    0 0 0 1px var(--hairline),
-    0 10px 30px var(--shadow);
+    0 0 0 1px var(--lj-hairline),
+    0 10px 30px var(--lj-shadow);
 }
 
 .bar-body.overlay .bar-top {
   height: 52px;
   padding: 0 10px 0 16px;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--lj-hairline);
 }
 
 .bar-body.overlay .bar-field {
@@ -316,7 +301,7 @@ body {
   width: 17px;
   height: 17px;
   fill: none;
-  stroke: var(--muted);
+  stroke: var(--lj-fg-muted);
   stroke-width: 1.7;
   stroke-linecap: round;
 }
@@ -328,7 +313,7 @@ body {
   width: 28px;
   height: 28px;
   padding: 0;
-  color: var(--muted);
+  color: var(--lj-fg-muted);
   background: transparent;
   border: 0;
   border-radius: 7px;
@@ -337,8 +322,8 @@ body {
 
 .close-button:hover,
 .close-button:focus-visible {
-  color: var(--fg);
-  background: var(--field-bg);
+  color: var(--lj-fg);
+  background: var(--lj-field);
   outline: none;
 }
 
@@ -390,22 +375,22 @@ body {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--fg);
+  color: var(--lj-fg);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .row-domain {
-  color: var(--muted);
+  color: var(--lj-fg-muted);
 }
 
 .row.selected {
-  background: var(--select-bg);
+  background: var(--lj-row-selected);
 }
 
 .row.selected .row-text,
 .row.selected .row-domain {
-  color: #ffffff;
+  color: var(--lj-on-selected);
 }
 
 .row.selected .row-domain {
@@ -439,7 +424,7 @@ body {
   height: 20px;
   padding: 2px;
   visibility: hidden;
-  background: var(--panel);
+  background: var(--lj-tile);
   border-radius: 5px;
 }
 
@@ -458,19 +443,29 @@ body {
   right: 10px;
   left: 10px;
   content: "";
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--lj-hairline);
 }
 
 .row-icon-settings {
-  background: center / 16px no-repeat
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='2.2'/%3E%3Ccircle cx='8' cy='8' r='4.7'/%3E%3Cpath d='M8 1.3v1.6M8 13.1v1.6M1.3 8h1.6M13.1 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M3.3 12.7l1.1-1.1M11.6 4.4l1.1-1.1'/%3E%3C/svg%3E");
-}
-
-.row.selected .row-icon-settings {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='2.2'/%3E%3Ccircle cx='8' cy='8' r='4.7'/%3E%3Cpath d='M8 1.3v1.6M8 13.1v1.6M1.3 8h1.6M13.1 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M3.3 12.7l1.1-1.1M11.6 4.4l1.1-1.1'/%3E%3C/svg%3E");
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='2.2'/%3E%3Ccircle cx='8' cy='8' r='4.7'/%3E%3Cpath d='M8 1.3v1.6M8 13.1v1.6M1.3 8h1.6M13.1 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M3.3 12.7l1.1-1.1M11.6 4.4l1.1-1.1'/%3E%3C/svg%3E");
 }
 
 .row-icon-search:empty {
-  background: center / 15px no-repeat
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236e6e73' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4 14 14'/%3E%3C/svg%3E");
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4 14 14'/%3E%3C/svg%3E");
+}
+
+/* The built-in rows' symbols (Settings, search, history.css's clock) are masks painted in the
+   theme's muted text color, and in the selected row's text color when selected. */
+.row-icon-settings,
+.row-icon-search:empty,
+.row-icon-clock {
+  background-color: var(--lj-fg-muted);
+  -webkit-mask: var(--icon) center / 16px no-repeat;
+  mask: var(--icon) center / 16px no-repeat;
+}
+
+.row.selected .row-icon-settings,
+.row.selected .row-icon-search:empty,
+.row.selected .row-icon-clock {
+  background-color: var(--lj-on-selected);
 }

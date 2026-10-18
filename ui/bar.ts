@@ -5,11 +5,15 @@
 // suggestions under it (and the welcome on the first run), or the history view (Ctrl/Cmd+Y,
 // which Rust passes on as window.littleJoan.showHistory, or the command bar's "History" row; Esc
 // returns to the command bar). Rust switches the view with window.littleJoan.setOverlay; every
-// summon, Ctrl/Cmd+L and a click on the domain open the overlay, opening a page closes it.
+// summon, Ctrl/Cmd+L and a click on the domain open the overlay, opening a page closes it. The
+// theme comes with start_info as the bar loads, and window.littleJoan.setTheme changes it (after
+// Settings saves one).
 import { invoke } from "@tauri-apps/api/core";
 import { mayReplace, textFor } from "./bar-logic.ts";
 import { commandBar } from "./command/command.ts";
 import { fillPanel } from "./command/panel.ts";
+import type { StartInfo } from "./command/welcome.ts";
+import { applyTheme } from "./lib/apply-theme.ts";
 import { initialState, onCloseButton, onKey, withOverlay, withShown, type KeyOutcome } from "./command/view-state.ts";
 import { historyView } from "./history/history.ts";
 import { isMac } from "./toolbar/logic.ts";
@@ -23,6 +27,7 @@ declare global {
       setCanGoBack(on: boolean): void;
       focusField(): void;
       showHistory(): void;
+      setTheme(theme: unknown): void;
     };
   }
 }
@@ -145,6 +150,9 @@ if (field && rowList && toolbarRoot && historyRoot) {
       field.select();
     },
     showHistory,
+    setTheme(theme: unknown) {
+      applyTheme(theme);
+    },
   };
 
   field.addEventListener("focus", () => field.select());
@@ -192,7 +200,14 @@ if (field && rowList && toolbarRoot && historyRoot) {
 
   render();
   tools.update(state.shown, canGoBack);
-  fillPanel();
+  invoke<StartInfo>("start_info")
+    .then((info) => {
+      applyTheme(info.theme);
+      fillPanel(info);
+    })
+    .catch(() => {
+      // Without the facts there is no welcome and the default theme stays; the bar works the same.
+    });
   invoke<string | null>("page_url")
     .then(setUrl)
     .catch(() => setUrl(null))

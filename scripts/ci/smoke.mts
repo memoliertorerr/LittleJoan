@@ -12,8 +12,11 @@
 // time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
 // then a relaunch on the same data folder), that history.json recorded the smoke page (and that
 // a run with history off records nothing; that run also opens Settings with `--settings` and
-// `--settings privacy`), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts) and
-// the webview helper processes. The app runs on a fresh
+// `--settings privacy`), then the theme runs (each its own launch with a theme in settings.json:
+// the page, the command bar, the history view and Settings in a two-color theme, light and dark,
+// and the default theme in dark; screenshots in <out>/theme/), then check the logs
+// (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper
+// processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
 // data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
@@ -57,6 +60,7 @@ import {
   settingsTabs,
   TYPED,
 } from "./smoke-command.mts";
+import { THEME_RUNS, parseTheme, themeFailures, type ThemeRun } from "./smoke-theme.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -705,8 +709,8 @@ await waitFor("history off: smoke page", (e) => lastTitle(e, "LJ-SMOKE ready") !
 await forward(["--hide"], historyOffEnv);
 await waitFor("history off: hibernated", (e) => count(e, "hibernated") > 0, 20_000, historyOffLogPath);
 // Settings (LJ26), while hibernating: `--settings` opens it on General, `--settings privacy`
-// switches the open window to Privacy (where "Remember history" is off in this run); neither
-// opens the page window.
+// switches the open window to Privacy (where "Remember history" is off in this run), `--settings
+// appearance` to the theme editor (LJ28); none opens the page window.
 const settingsFrom = events(historyOffLogPath).length;
 await forward(["--settings"], historyOffEnv);
 await waitFor("settings: General", (e) => sawSettings(e.slice(settingsFrom), "general"), 20_000, historyOffLogPath);
@@ -716,6 +720,11 @@ await forward(["--settings", "privacy"], historyOffEnv);
 await waitFor("settings: Privacy", (e) => settingsTabs(e.slice(settingsFrom)).includes("privacy"), 15_000, historyOffLogPath);
 await sleep(1000);
 screenshot("settings-privacy.png");
+// The theme editor (LJ28), in the default theme.
+await forward(["--settings", "appearance"], historyOffEnv);
+await waitFor("settings: Appearance", (e) => settingsTabs(e.slice(settingsFrom)).includes("appearance"), 15_000, historyOffLogPath);
+await sleep(1000);
+screenshot("settings-appearance.png");
 await forward(["--quit"], historyOffEnv);
 if (!(await exited(historyOffPid, 15_000))) {
   await quit(historyOffChild, historyOffPid);
@@ -724,6 +733,66 @@ const historyOff = readIfThere(join(historyOffDir, "history.json"));
 const historyOffEvents = events(historyOffLogPath);
 const historyCheck = { main: historyMain, pageUrl: smokePageUrl, off: historyOff };
 console.log(`history: main ${historyMain === undefined ? "no file" : `${historyMain.length} bytes`}, off ${historyOff ?? "no file"}`);
+
+/**
+ * A theme run (LJ27): its own launch on a fresh data folder whose settings.json carries the
+ * run's theme. The smoke page (the toolbar above it), a new window's command bar with the page's
+ * site, the history view (Ctrl/Cmd+Y, best effort as in the main run) and Settings, each
+ * screenshotted into <out>/theme/ when the run names it.
+ */
+async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
+  const logFile = join(out, `smoke-${run.name}.log`);
+  rmSync(logFile, { force: true });
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dataDir(run.name, true, { theme: run.theme }), LITTLEJOAN_SMOKE_LOG: logFile };
+  const shot = (name: string) => screenshot(join("theme", name));
+  const runChild = launch(runEnv);
+  await waitFor(`${run.name}: started`, (e) => count(e, "started") > 0, 30_000, logFile);
+  await sleep(1500);
+  const runPid = appPid(runChild);
+  // The page first, so the command bar has its site to offer.
+  await forward(["--show", smokePageUrl], runEnv);
+  await waitFor(`${run.name}: smoke page`, (e) => lastTitle(e, "LJ-SMOKE ready") !== undefined && count(e, "overlay", "false") > 0, 30_000, logFile);
+  await sleep(1500);
+  if (run.shots.page) {
+    shot(run.shots.page);
+  }
+  await forward(["--hide"], runEnv);
+  await waitFor(`${run.name}: hibernated`, (e) => count(e, "hibernated") > 0, 20_000, logFile);
+  const from = events(logFile).length;
+  await forward(["--show"], runEnv);
+  await waitFor(`${run.name}: command bar`, (e) => sawSmokeTopSite(e.slice(from)), 20_000, logFile);
+  await sleep(1500);
+  shot(run.shots.commandBar);
+  if (run.shots.history) {
+    const historyAt = events(logFile).length;
+    pressShortcut("y", runPid);
+    await waitFor(`${run.name}: history view`, (e) => sawHistoryView(e.slice(historyAt)), 10_000, logFile);
+    await sleep(1000);
+    shot(run.shots.history);
+  }
+  await forward(["--hide"], runEnv);
+  await waitFor(`${run.name}: hibernated again`, (e) => count(e, "hibernated") > 1, 20_000, logFile);
+  if (run.shots.settings) {
+    const settingsAt = events(logFile).length;
+    await forward(["--settings", "appearance"], runEnv);
+    await waitFor(`${run.name}: Settings`, (e) => sawSettings(e.slice(settingsAt), "appearance"), 20_000, logFile);
+    await sleep(1500);
+    shot(run.shots.settings);
+  }
+  await forward(["--quit"], runEnv);
+  if (!(await exited(runPid, 15_000))) {
+    await quit(runChild, runPid);
+  }
+  const runEvents = events(logFile);
+  console.log(`${run.name}: themes handed to the bar ${JSON.stringify(runEvents.map(parseTheme).filter((t) => t !== undefined))}`);
+  return runEvents;
+}
+
+mkdirSync(join(out, "theme"), { recursive: true });
+const themeRuns: { run: ThemeRun; events: LogEvent[] }[] = [];
+for (const run of THEME_RUNS) {
+  themeRuns.push({ run, events: await themeRun(run) });
+}
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -796,6 +865,11 @@ const summary = {
     historyView: sawHistoryView(log),
   },
   settings: settingsTabs(historyOffEvents),
+  themes: themeRuns.map(({ run, events: runEvents }) => ({
+    name: run.name,
+    theme: run.theme,
+    handed: runEvents.map(parseTheme).filter((t) => t !== undefined),
+  })),
   history: {
     mainRecords: parseHistory(historyMain)?.length ?? null,
     smokePage: parseHistory(historyMain)?.find((record) => record.url === smokePageUrl) ?? null,
@@ -826,10 +900,12 @@ const failures = evaluate(
   .concat(persistFailures(log, persistCheck))
   .concat(historyFailures(historyCheck))
   .concat(settingsFailures(historyOffEvents))
+  .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
-  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, firstLogPath, relaunchLogPath]) {
+  const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, ...themeLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

@@ -113,27 +113,30 @@ describe("the settings check", () => {
 4 settings-window general
 5 settings-loaded
 6 settings-window privacy
-7 quit
+7 settings-window appearance
+8 quit
 `;
 
   it("lists the tabs and sees the page load after General", () => {
     const events = parseLog(GOOD_SETTINGS);
-    expect(settingsTabs(events)).toEqual(["general", "privacy"]);
+    expect(settingsTabs(events)).toEqual(["general", "privacy", "appearance"]);
     expect(sawSettings(events, "general")).toBe(true);
     expect(sawSettings(parseLog("1 settings-loaded\n2 settings-window general\n"), "general")).toBe(false);
   });
 
-  it("passes General, then Privacy, with no page window", () => {
+  it("passes General, then Privacy, then Appearance, with no page window", () => {
     expect(settingsFailures(parseLog(GOOD_SETTINGS))).toEqual([]);
   });
 
-  it("wants the page to load, Privacy after General, and no page window", () => {
+  it("wants the page to load, Privacy after General, Appearance after Privacy, and no page window", () => {
     const unloaded = parseLog(GOOD_SETTINGS.replace("5 settings-loaded\n", ""));
     expect(settingsFailures(unloaded)).toEqual([expect.stringContaining("on General")]);
     const noPrivacy = parseLog(GOOD_SETTINGS.replace("6 settings-window privacy\n", ""));
     expect(settingsFailures(noPrivacy)).toEqual([expect.stringContaining("to Privacy")]);
-    const opened = parseLog(GOOD_SETTINGS.replace("7 quit", "7 window-created"));
+    const noAppearance = parseLog(GOOD_SETTINGS.replace("7 settings-window appearance\n", ""));
+    expect(settingsFailures(noAppearance)).toEqual([expect.stringContaining("to Appearance")]);
+    const opened = parseLog(GOOD_SETTINGS.replace("8 quit", "8 window-created"));
     expect(settingsFailures(opened)).toEqual([expect.stringContaining("page window")]);
-    expect(settingsFailures(parseLog("1 started\n"))).toHaveLength(2);
+    expect(settingsFailures(parseLog("1 started\n"))).toHaveLength(3);
   });
 });

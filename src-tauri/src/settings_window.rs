@@ -7,10 +7,12 @@
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 
+use crate::bar;
 use crate::keys;
 use crate::navigation;
 use crate::shortcut;
 use crate::smoke;
+use crate::state;
 
 pub const LABEL: &str = "settings";
 
@@ -109,11 +111,35 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
     });
 }
 
-/// If the window closes while it was recording a shortcut, the paused shortcut comes back.
+/// Shows `theme` in the open settings window at once (after a save).
+pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme) {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    // Checked hex colors, a mode name and two numbers: the JSON is a safe script literal.
+    if let Ok(json) = serde_json::to_string(theme) {
+        let _ = window.eval(format!(
+            "window.littleJoanSettings && window.littleJoanSettings.setTheme({json})"
+        ));
+    }
+}
+
+/// When the window closes: the shortcut it may have paused while recording comes back, and a
+/// theme it was previewing without saving (Cancel, or the close button) gives way to the saved
+/// one in the page window.
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if window.label() == LABEL && matches!(event, WindowEvent::Destroyed) {
         let app = window.app_handle().clone();
-        tauri::async_runtime::spawn(async move { shortcut::set_suspended(&app, false) });
+        tauri::async_runtime::spawn(async move {
+            shortcut::set_suspended(&app, false);
+            let previewed = state::with(&app, |s| {
+                s.theme_preview.take().map(|_| s.settings.theme.clone())
+            });
+            if let Some(saved) = previewed {
+                bar::set_theme(&app, &saved);
+                smoke::log("theme-preview", "ended");
+            }
+        });
     }
 }
 

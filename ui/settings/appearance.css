@@ -1,0 +1,269 @@
+/* The Appearance tab (settings.html): mode buttons beside the heading, a live preview of the
+   toolbar and the command bar, preset swatches, the color pads and the sliders. Every color is a
+   theme variable, so the tab re-colors itself while the theme is edited. (Buttons are
+   `button.<class>`: settings.css styles `.settings-body button:not(.tab)`.) */
+
+.appearance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 12px;
+}
+
+.tab-panel .appearance-head h1 {
+  margin: 0;
+}
+
+.modes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--lj-field);
+  border-radius: 8px;
+}
+
+.settings-body button.mode {
+  padding: 3px 11px;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.settings-body button.mode[aria-pressed="true"] {
+  color: var(--lj-on-selected);
+  background: var(--lj-row-selected);
+}
+
+/* The preview: a toolbar strip over the theme's gradient, and a command bar card under it. */
+.theme-preview {
+  position: relative;
+  height: 92px;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--lj-hairline);
+}
+
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lj-fg);
+  border-bottom: 1px solid var(--lj-hairline);
+}
+
+.preview-chevron,
+.preview-open {
+  width: 6px;
+  height: 6px;
+  border: solid var(--lj-fg);
+}
+
+.preview-chevron {
+  border-width: 0 0 1.5px 1.5px;
+  transform: rotate(45deg);
+}
+
+.preview-open {
+  border-width: 1.5px 1.5px 0 0;
+}
+
+.preview-site {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.preview-icon {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--lj-on-selected);
+  background: var(--lj-row-selected);
+  border-radius: 50%;
+}
+
+.preview-card {
+  position: absolute;
+  top: 34px;
+  right: 14px;
+  bottom: -10px;
+  left: 14px;
+  padding: 4px 6px;
+  font-size: 11px;
+  background: var(--lj-panel);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px var(--lj-hairline),
+    0 6px 16px var(--lj-shadow);
+}
+
+.preview-field {
+  margin-bottom: 3px;
+  padding: 2px 4px 4px;
+  color: var(--lj-fg-muted);
+  border-bottom: 1px solid var(--lj-hairline);
+}
+
+.preview-row {
+  overflow: hidden;
+  padding: 2px 6px;
+  color: var(--lj-fg);
+  white-space: nowrap;
+  border-radius: 5px;
+}
+
+.preview-row.selected {
+  color: var(--lj-on-selected);
+  background: var(--lj-row-selected);
+}
+
+.preview-domain {
+  color: var(--lj-fg-muted);
+}
+
+.preview-row.selected .preview-domain {
+  color: inherit;
+  opacity: 0.78;
+}
+
+.tab-panel h2.appearance-label {
+  margin: 12px 0 6px;
+  font-size: 12px;
+}
+
+.appearance-hint {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--lj-fg-muted);
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-body button.preset {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--swatch, var(--lj-field));
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--lj-hairline);
+  cursor: pointer;
+}
+
+.settings-body button.preset[aria-pressed="true"],
+.settings-body button.preset:focus-visible {
+  outline: 2px solid var(--lj-accent);
+  outline-offset: 2px;
+}
+
+/* A pad per color: hue across, chroma up (more color at the top), a dot where the color is. */
+.pads {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pad {
+  position: relative;
+  height: 64px;
+  background: var(--pad-field);
+  border-radius: 8px;
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--lj-hairline);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.pad[hidden],
+.settings-body button.pad-remove[hidden],
+.settings-body button.pad-add[hidden] {
+  display: none;
+}
+
+.pad.selected {
+  box-shadow:
+    inset 0 0 0 1px var(--lj-hairline),
+    0 0 0 2px var(--lj-accent);
+}
+
+.pad:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--lj-accent),
+    0 0 0 4px var(--lj-hairline);
+}
+
+.pad-dot {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.settings-body button.pad-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.settings-body button.pad-add {
+  height: 64px;
+  font-size: 20px;
+  color: var(--lj-fg-muted);
+  background: transparent;
+  border: 1px dashed var(--lj-fg-muted);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.settings-body button.pad-add:hover {
+  background: var(--lj-field);
+}
+
+.sliders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.slider {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--lj-fg);
+}
+
+.slider input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--lj-row-selected);
+}
