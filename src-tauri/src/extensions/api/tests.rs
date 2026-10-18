@@ -72,7 +72,7 @@ fn decide_on(
     page: Option<&str>,
     opened: Option<&str>,
 ) -> Result<Route, Refusal> {
-    let registry = registry::build(FIXTURE, None);
+    let registry = registry::build(FIXTURE, None, &[]);
     let page = page.map(url);
     route(
         incoming,
@@ -431,6 +431,24 @@ fn extensions_open_web_addresses_only() {
         "mailto:me@example.com",
     ] {
         assert!(openable(bad).is_none(), "{bad}");
+    }
+}
+
+#[test]
+fn switched_off_extensions_are_unknown() {
+    let registry = registry::build(FIXTURE, None, &["hello".to_owned()]);
+    let page = url("ljext://hello.localhost/index.html");
+    for incoming in [api("storage.get"), file("/index.html"), file(SDK_PATH)] {
+        let decided = route(
+            &incoming,
+            &Context {
+                platform: Platform::MacOs,
+                page: Some(&page),
+                registry: &registry,
+                opened: Some("hello"),
+            },
+        );
+        assert_eq!(refusal(decided), Some(Refusal::Unknown), "{}", incoming.uri);
     }
 }
 

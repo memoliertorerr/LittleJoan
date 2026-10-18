@@ -107,3 +107,48 @@ export function extensionFailures(events: LogEvent[], store: HelloStore | undefi
   }
   return failures;
 }
+
+/** The developer extensions the settings run puts in its folder: one that loads, one that can't. */
+export const DEV_EXTENSION = "dev-hello";
+export const BROKEN_EXTENSION = "broken";
+
+/**
+ * Settings → Extensions (the run with Developer mode on): `--settings extensions` opened the tab
+ * after Appearance, it listed hello and the developer copy with the broken one skipped
+ * (`extensions-list 2 skipped=1`), and the broken one's reason was logged.
+ */
+export function settingsExtensionsFailures(events: LogEvent[]): string[] {
+  const failures: string[] = [];
+  const at = events.findIndex((e) => e.event === "settings-window" && e.detail === "extensions");
+  if (at < 0) {
+    failures.push("--settings extensions never switched Settings to Extensions");
+    return failures;
+  }
+  const listed = events.slice(at).filter((e) => e.event === "extensions-list");
+  if (!listed.some((e) => e.detail === "2 skipped=1")) {
+    failures.push(
+      `Settings → Extensions didn't list hello and ${DEV_EXTENSION} with ${BROKEN_EXTENSION} skipped (${JSON.stringify(listed.map((e) => e.detail))})`,
+    );
+  }
+  if (!events.some((e) => e.event === "extension-skipped" && e.detail.startsWith(`${BROKEN_EXTENSION} `))) {
+    failures.push(`the broken developer extension wasn't reported as skipped`);
+  }
+  return failures;
+}
+
+/**
+ * The command bar's extension rows (the extension run): typing "hello" and picking "Say hello"
+ * (↓ ↓ Enter) opened hello a second time. Required where keys can be driven (Windows, Linux),
+ * best effort on macOS; the bar asked for the extensions either way.
+ */
+export function commandHelloFailures(events: LogEvent[], options: { driven: boolean }): string[] {
+  const failures: string[] = [];
+  if (!events.some((e) => e.event === "extensions-list")) {
+    failures.push("the command bar never asked for the extensions");
+  }
+  const opened = events.filter((e) => e.event === "extension-opened" && e.detail === "hello").length;
+  if (options.driven && opened < 2) {
+    failures.push(`picking "Say hello" in the command bar didn't open hello (opened ${opened} time(s) in all)`);
+  }
+  return failures;
+}

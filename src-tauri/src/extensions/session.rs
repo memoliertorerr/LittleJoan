@@ -135,28 +135,38 @@ pub fn page_info() -> Option<PageInfo> {
     session().as_ref().and_then(|s| s.page.clone())
 }
 
-/// Opens the extension `id`'s command `command` (its first command when `None`) in the page.
-/// `page`: the web page a page action is for. The window must exist.
-pub fn open<R: Runtime>(
-    app: &AppHandle<R>,
-    id: &str,
-    command: Option<&str>,
-    page: Option<PageInfo>,
-) -> Result<(), String> {
+/// What to open of an extension.
+#[derive(Debug, Clone)]
+pub enum Target {
+    /// Its first command (`--extension <id>`).
+    First,
+    /// One of its commands (the command bar).
+    Command(String),
+    /// One of its page actions, for the web page that is open (the command bar).
+    PageAction(String, PageInfo),
+}
+
+/// Opens `target` of the extension `id` in the page (switched-off extensions can't be). A page
+/// action's panel gets the page (`pageInfo`) only when its manifest asks for it. The window must
+/// exist.
+pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<(), String> {
     let registry = registry::current(app);
     let extension = registry
         .get(id)
-        .ok_or_else(|| format!("there is no extension `{id}`"))?;
+        .ok_or_else(|| format!("there is no extension `{id}` (or it is switched off)"))?;
     let manifest = &extension.manifest;
-    let contribution = match command {
-        Some(command) => manifest
-            .commands
-            .iter()
-            .chain(&manifest.page_actions)
-            .find(|c| c.id == command),
-        None => manifest.commands.first(),
-    }
-    .ok_or_else(|| format!("the extension `{id}` has nothing to open"))?;
+    let (contribution, page) = match &target {
+        Target::First => (manifest.commands.first(), None),
+        Target::Command(command) => (manifest.commands.iter().find(|c| &c.id == command), None),
+        Target::PageAction(action, page) => (
+            manifest.page_actions.iter().find(|c| &c.id == action),
+            manifest
+                .has(&super::manifest::Permission::PageInfo)
+                .then(|| page.clone()),
+        ),
+    };
+    let contribution =
+        contribution.ok_or_else(|| format!("the extension `{id}` has no such command"))?;
     let url = urls::file_url(id, contribution.panel.as_str(), Platform::current())
         .ok_or_else(|| "no URL for the panel".to_owned())?;
     let before = bar::page_url(app).filter(|current| {

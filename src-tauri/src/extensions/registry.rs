@@ -59,6 +59,9 @@ pub struct Extension {
     pub kind: Kind,
     /// Its Content-Security-Policy (csp.rs).
     pub csp: String,
+    /// Not switched off in Settings (`disabledExtensions`). A switched-off extension is listed
+    /// there, and nothing else sees it: it can't be opened, served or called.
+    pub enabled: bool,
     source: Source,
 }
 
@@ -69,6 +72,7 @@ impl Extension {
             manifest,
             kind,
             csp,
+            enabled: true,
             source,
         }
     }
@@ -128,12 +132,25 @@ pub struct Registry {
 }
 
 impl Registry {
+    /// The extension `id`, if it is there and switched on — what everything but Settings' list
+    /// uses.
     pub fn get(&self, id: &str) -> Option<Arc<Extension>> {
+        self.find(id).filter(|e| e.enabled)
+    }
+
+    /// The extension `id`, switched on or off.
+    pub fn find(&self, id: &str) -> Option<Arc<Extension>> {
         self.extensions.iter().find(|e| e.id() == id).cloned()
     }
 
+    /// Every extension that loaded, switched on or off (Settings' list).
     pub fn all(&self) -> &[Arc<Extension>] {
         &self.extensions
+    }
+
+    fn add(&mut self, mut extension: Extension, disabled: &[String]) {
+        extension.enabled = !disabled.iter().any(|id| id == extension.id());
+        self.extensions.push(Arc::new(extension));
     }
 
     fn skip(&mut self, name: &str, reason: String) {
@@ -144,8 +161,9 @@ impl Registry {
     }
 }
 
-/// Reads the extensions: `bundled`, then (when given) the unpacked folders in `unpacked`.
-pub fn build(bundled: Bundled, unpacked: Option<&Path>) -> Registry {
+/// Reads the extensions: `bundled`, then (when given) the unpacked folders in `unpacked`; the ids
+/// in `disabled` are switched off.
+pub fn build(bundled: Bundled, unpacked: Option<&Path>, disabled: &[String]) -> Registry {
     let mut registry = Registry::default();
     for (folder, files) in bundled {
         let manifest = files
@@ -161,12 +179,12 @@ pub fn build(bundled: Bundled, unpacked: Option<&Path>) -> Registry {
             )
         });
         match extension {
-            Ok(extension) => registry.extensions.push(Arc::new(extension)),
+            Ok(extension) => registry.add(extension, disabled),
             Err(reason) => registry.skip(folder, reason),
         }
     }
     if let Some(dir) = unpacked {
-        read_unpacked(&mut registry, dir);
+        read_unpacked(&mut registry, dir, disabled);
     }
     registry
 }
@@ -179,7 +197,7 @@ fn check(registry: &Registry, folder: &str, extension: Extension) -> Result<Exte
             extension.id()
         ));
     }
-    if registry.get(extension.id()).is_some() {
+    if registry.find(extension.id()).is_some() {
         return Err(format!("the id `{}` is already taken", extension.id()));
     }
     for file in extension.manifest.named_files() {
@@ -190,7 +208,7 @@ fn check(registry: &Registry, folder: &str, extension: Extension) -> Result<Exte
     Ok(extension)
 }
 
-fn read_unpacked(registry: &mut Registry, dir: &Path) {
+fn read_unpacked(registry: &mut Registry, dir: &Path, disabled: &[String]) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -223,7 +241,7 @@ fn read_unpacked(registry: &mut Registry, dir: &Path) {
             )
         });
         match extension {
-            Ok(extension) => registry.extensions.push(Arc::new(extension)),
+            Ok(extension) => registry.add(extension, disabled),
             Err(reason) => registry.skip(&name, reason),
         }
     }
@@ -269,8 +287,12 @@ static CACHE: Mutex<Option<Arc<Registry>>> = Mutex::new(None);
 /// The registry, read now if it isn't yet (bundled, plus the developer folder while Developer
 /// mode is on). Skipped extensions are logged once per read.
 pub fn current<R: Runtime>(app: &AppHandle<R>) -> Arc<Registry> {
-    let (dir, developer_mode) = state::with(app, |s| {
-        (s.data_dir.join(EXTENSIONS_DIR), s.settings.developer_mode)
+    let (dir, developer_mode, disabled) = state::with(app, |s| {
+        (
+            s.data_dir.join(EXTENSIONS_DIR),
+            s.settings.developer_mode,
+            s.settings.disabled_extensions.clone(),
+        )
     });
     let mut cache = CACHE.lock().unwrap_or_else(PoisonError::into_inner);
     if let Some(registry) = cache.as_ref() {
@@ -279,6 +301,7 @@ pub fn current<R: Runtime>(app: &AppHandle<R>) -> Arc<Registry> {
     let registry = Arc::new(build(
         embedded::BUNDLED,
         developer_mode.then_some(dir.as_path()),
+        &disabled,
     ));
     for skipped in &registry.skipped {
         eprintln!(
@@ -294,8 +317,8 @@ pub fn current<R: Runtime>(app: &AppHandle<R>) -> Arc<Registry> {
     registry
 }
 
-/// Forgets the registry (the window closed, or Developer mode changed): the next use reads it
-/// again.
+/// Forgets the registry (the window closed, Settings saved, Reload extensions): the next use
+/// reads it again.
 pub fn forget() {
     *CACHE.lock().unwrap_or_else(PoisonError::into_inner) = None;
 }

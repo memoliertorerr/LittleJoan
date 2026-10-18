@@ -58,10 +58,20 @@ export function siteIcon<E extends ElementLike>(doc: DocumentLike<E>, host: stri
   return box;
 }
 
-/** A row's icon: its site's, or for Settings and built-in commands their own symbol (style.css). */
+/**
+ * A row's icon: its site's, or for Settings and built-in commands their own symbol (style.css);
+ * an extension's command shows its extension's icon (a data: URI) over the symbol.
+ */
 function icon<E extends ElementLike>(doc: DocumentLike<E>, row: Row): E {
   if (row.icon !== undefined) {
-    return siteIcon(doc, "", row.icon);
+    const box = siteIcon(doc, "", row.icon);
+    if (row.image) {
+      const img = element(doc, "img", "row-favicon loaded");
+      img.setAttribute("alt", "");
+      img.setAttribute("src", row.image);
+      box.append(img);
+    }
+    return box;
   }
   return siteIcon(doc, row.kind === "settings" ? "" : row.host, row.kind);
 }

@@ -25,8 +25,8 @@ export type Action =
   | { kind: "settings"; tab: string }
   /** Show the history view (the built-in "History" command). */
   | { kind: "history" }
-  /** An extension's command (LJ30). */
-  | { kind: "command"; id: string }
+  /** An extension's command, or a page action for the open web page (extensions.ts). */
+  | { kind: "command"; extension: string; command: string; pageAction: boolean }
   /** A quick answer's text, to copy (LJ31). */
   | { kind: "copy"; text: string };
 
@@ -40,6 +40,8 @@ export interface Row {
   host: string;
   /** A built-in symbol instead of the kind's icon (style.css: `row-icon-<icon>`). */
   icon?: string;
+  /** An extension's own icon (a checked data: URI), drawn over the symbol. */
+  image?: string;
   action: Action;
   /** The history record Shift+Delete removes, if this row is one. */
   removable?: string;

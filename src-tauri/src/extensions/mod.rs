@@ -17,6 +17,7 @@
 pub mod api;
 pub mod clipboard;
 pub mod csp;
+pub mod list;
 pub mod manifest;
 pub mod paths;
 pub mod protocol;

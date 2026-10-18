@@ -24,6 +24,8 @@ const saved: Settings = {
   mobileSites: true,
   rememberHistory: true,
   theme: DEFAULT_THEME,
+  developerMode: false,
+  disabledExtensions: ["hello"],
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -38,6 +40,21 @@ describe("settings logic", () => {
     expect(isChanged(saved, withTheme({ ...theme, grain: 0.9 }))).toBe(true);
     expect(withTheme(theme).theme).toEqual(theme);
     expect("theme" in same()).toBe(false);
+  });
+
+  it("counts the Extensions tab's switches as changes, in any order", () => {
+    const withExtensions = (disabledExtensions: string[], developerMode: boolean) =>
+      toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory, undefined, {
+        disabledExtensions,
+        developerMode,
+      });
+    expect(isChanged(saved, withExtensions(["hello"], false))).toBe(false);
+    expect(isChanged(saved, withExtensions([], false))).toBe(true);
+    expect(isChanged(saved, withExtensions(["hello", "builtin:calc"], false))).toBe(true);
+    expect(isChanged(saved, withExtensions(["hello"], true))).toBe(true);
+    expect(isChanged({ ...saved, disabledExtensions: ["b", "a"] }, withExtensions(["a", "b"], false))).toBe(false);
+    expect(withExtensions([], true)).toMatchObject({ disabledExtensions: [], developerMode: true });
+    expect("developerMode" in same()).toBe(false);
   });
 
   it("sends only the edited fields", () => {

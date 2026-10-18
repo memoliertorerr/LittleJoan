@@ -1,6 +1,7 @@
 // The Little Arc-style toolbar's logic (pure, unit-tested): what it shows for the open page —
 // the site's icon and domain in the middle (for an extension's panel: its name and icon), a back
 // button on the left, "open in default browser" on the right. toolbar.ts draws it.
+import { ICON_URI } from "../command/extensions.ts";
 
 /** Domains longer than this are shortened in the middle. */
 export const MAX_DOMAIN = 32;
@@ -55,7 +56,6 @@ export interface ExtensionLabel {
 /** The longest extension name shown. */
 export const MAX_NAME = 40;
 
-const ICON_URI = /^data:image\/(svg\+xml|png);base64,[A-Za-z0-9+/]+={0,2}$/;
 
 /** The label Rust sent (anything: checked) — or null for a web page, nothing, or a bad label. */
 export function extensionLabel(value: unknown): ExtensionLabel | null {

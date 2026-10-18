@@ -27,6 +27,10 @@ fn main() {
             "open_settings",
             "preview_theme",
             "set_theme_tokens",
+            "extensions_list",
+            "reload_extensions",
+            "open_extensions_folder",
+            "open_extension",
         ]),
     ))
     .expect("failed to run tauri-build");

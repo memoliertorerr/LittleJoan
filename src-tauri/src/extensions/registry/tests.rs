@@ -14,7 +14,7 @@ static GOOD: Bundled = &[(
 
 #[test]
 fn the_shipped_extensions_are_all_valid() {
-    let registry = build(embedded::BUNDLED, None);
+    let registry = build(embedded::BUNDLED, None, &[]);
     assert_eq!(
         registry.skipped,
         Vec::new(),
@@ -36,7 +36,7 @@ fn the_shipped_extensions_are_all_valid() {
 
 #[test]
 fn bundled_files_are_served_by_exact_path() {
-    let registry = build(GOOD, None);
+    let registry = build(GOOD, None, &[]);
     let hello = registry.get("hello").expect("loaded");
     let read = |p: &str| hello.read(&paths::clean(p).expect("clean"));
     assert_eq!(read("index.html").as_deref(), Some(&b"<!doctype html>"[..]));
@@ -63,7 +63,7 @@ fn bad_bundled_extensions_are_skipped_with_a_reason() {
         ("hello", &[("extension.json", HELLO), ("icon.svg", b"x")]),
         ("broken", &[("extension.json", b"{")]),
     ];
-    let registry = build(BAD, None);
+    let registry = build(BAD, None, &[]);
     assert!(registry.all().is_empty());
     let names: Vec<&str> = registry.skipped.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, vec!["nomanifest", "wrong-folder", "hello", "broken"]);
@@ -110,7 +110,7 @@ fn developer_extensions_load_from_their_folders() {
         &[],
     );
     fs::create_dir_all(dir.join(".git")).expect("hidden folders are ignored");
-    let registry = build(GOOD, Some(&dir));
+    let registry = build(GOOD, Some(&dir), &[]);
     let ids: Vec<&str> = registry.all().iter().map(|e| e.id()).collect();
     assert_eq!(ids, vec!["hello", "my-notes"]);
     assert_eq!(
@@ -133,7 +133,7 @@ fn developer_files_never_come_from_outside_their_folder() {
     unpacked(&dir, "leaky", manifest, &["index.html"]);
     fs::write(dir.join("secret.txt"), "secret").expect("write");
     symlink(dir.join("secret.txt"), dir.join("leaky").join("secret.txt")).expect("symlink");
-    let registry = build(GOOD, Some(&dir));
+    let registry = build(GOOD, Some(&dir), &[]);
     let leaky = registry.get("leaky").expect("loaded");
     assert!(
         leaky
@@ -162,4 +162,21 @@ fn base64_matches_rfc_4648() {
         assert_eq!(base64(input.as_bytes()), want, "{input}");
     }
     assert_eq!(base64(&[0xff, 0xfe, 0xfd]), "//79");
+}
+
+#[test]
+fn switched_off_extensions_are_listed_but_never_found() {
+    let registry = build(GOOD, None, &["hello".to_owned(), "builtin:calc".to_owned()]);
+    assert!(
+        registry.get("hello").is_none(),
+        "opening, serving and the API use get"
+    );
+    let hello = registry.find("hello").expect("still listed");
+    assert!(!hello.enabled);
+    assert_eq!(registry.all().len(), 1);
+    assert!(
+        build(GOOD, None, &[])
+            .get("hello")
+            .is_some_and(|e| e.enabled)
+    );
 }

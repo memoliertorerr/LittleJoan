@@ -12,6 +12,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use crate::autostart;
 use crate::bar;
+use crate::extensions::{self, list::ExtensionsView, session};
 use crate::history::{ClearRange, Listed, VisitKind};
 use crate::history_store;
 use crate::input::{self, SearchEngine};
@@ -241,6 +242,12 @@ pub struct SettingsInput {
     /// The theme; checked field by field (settings/theme.rs). Left out, the saved one stays.
     #[serde(default)]
     theme: Option<Value>,
+    /// Settings → Extensions: the switched-off extensions (checked one by one) and Developer
+    /// mode. Left out, the saved ones stay.
+    #[serde(default)]
+    disabled_extensions: Option<Value>,
+    #[serde(default)]
+    developer_mode: Option<bool>,
 }
 
 /// Validates and applies new settings: the shortcut is swapped live (the old one comes back if
@@ -274,10 +281,17 @@ pub async fn save_settings<R: Runtime>(
                 || s.settings.theme.clone(),
                 |v| settings::theme::parse(Some(v)),
             ),
+            disabled_extensions: settings.disabled_extensions.as_ref().map_or_else(
+                || s.settings.disabled_extensions.clone(),
+                |v| settings::disabled_extensions(Some(v)),
+            ),
+            developer_mode: settings.developer_mode.unwrap_or(s.settings.developer_mode),
             ..s.settings.clone()
         };
         (s.data_dir.clone(), s.settings.clone())
     });
+    // Switched-off extensions and Developer mode take effect with the next read.
+    extensions::registry::forget();
     // Phone mode on or off takes effect on the open page at once, and so does the theme.
     phone_mode::apply(&app, true);
     bar::set_theme(&app, &updated.theme);
@@ -308,6 +322,83 @@ pub async fn set_theme_tokens(tokens: Value) {
         Some(tokens) => crate::extensions::theme::store(tokens),
         None => eprintln!("little-joan: the bar's theme report didn't pass the checks"),
     }
+}
+
+/// Every extension that loaded — with its commands, page actions, permissions and whether it is
+/// switched on — and what was skipped (the command bar's extension rows; Settings → Extensions).
+#[tauri::command]
+pub async fn extensions_list<R: Runtime>(app: AppHandle<R>) -> ExtensionsView {
+    extensions_view(&app)
+}
+
+fn extensions_view<R: Runtime>(app: &AppHandle<R>) -> ExtensionsView {
+    let registry = extensions::registry::current(app);
+    let (developer_mode, folder) = state::with(app, |s| {
+        (
+            s.settings.developer_mode,
+            s.data_dir.join(extensions::registry::EXTENSIONS_DIR),
+        )
+    });
+    let view = extensions::list::view(&registry, developer_mode, folder.display().to_string());
+    smoke::log(
+        "extensions-list",
+        &format!("{} skipped={}", view.extensions.len(), view.skipped.len()),
+    );
+    view
+}
+
+/// Settings → Extensions → Reload extensions: reads them again (a developer's edits, new
+/// folders) and returns the new list.
+#[tauri::command]
+pub async fn reload_extensions<R: Runtime>(app: AppHandle<R>) -> ExtensionsView {
+    extensions::registry::forget();
+    extensions_view(&app)
+}
+
+/// Settings → Extensions → Open extensions folder: creates it if needed and shows it in the
+/// file manager.
+#[tauri::command]
+pub async fn open_extensions_folder<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    let folder = state::with(&app, |s| {
+        s.data_dir.join(extensions::registry::EXTENSIONS_DIR)
+    });
+    std::fs::create_dir_all(&folder).map_err(|err| format!("Couldn't create the folder: {err}"))?;
+    tauri_plugin_opener::reveal_item_in_dir(&folder)
+        .map_err(|err| format!("Couldn't show the folder: {err}"))
+}
+
+/// The command bar picked an extension's command, or a page action (`page_action`) for the web
+/// page that is open — whose address and title its panel gets when its manifest asks for
+/// `pageInfo`.
+#[tauri::command]
+pub async fn open_extension<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    command: String,
+    page_action: bool,
+) -> Result<(), String> {
+    let target = if page_action {
+        let url = bar::page_url(&app)
+            .filter(|url| {
+                crate::navigation::is_external_openable(url)
+                    && !crate::keys::is_app_url(&crate::keys::app_origin(), url)
+            })
+            .ok_or_else(|| "Page actions work on a web page.".to_owned())?;
+        let title = app
+            .get_window(joan::LABEL)
+            .and_then(|window| window.title().ok())
+            .unwrap_or_default();
+        session::Target::PageAction(
+            command,
+            session::PageInfo {
+                url: url.to_string(),
+                title,
+            },
+        )
+    } else {
+        session::Target::Command(command)
+    };
+    session::open(&app, &id, target)
 }
 
 /// Every page in history, latest visit first: `[{ url, title, host, lastVisit, visitCount }]`

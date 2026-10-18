@@ -139,6 +139,10 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
                 bar::set_theme(&app, &saved);
                 smoke::log("theme-preview", "ended");
             }
+            // The Extensions tab read the registry; with no page window, nothing stays at rest.
+            if app.get_window(crate::joan::LABEL).is_none() {
+                crate::extensions::registry::forget();
+            }
         });
     }
 }

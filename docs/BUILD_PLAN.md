@@ -77,7 +77,7 @@
 | LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ✅ done |
 | LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ✅ done |
 | LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ✅ done |
-| LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ⬜ todo |
+| LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ✅ done |
 | LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ⬜ todo |
 | LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ⬜ todo |
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ⬜ todo |
@@ -3753,6 +3753,59 @@ Push and watch CI until every job is green (two honest attempts, then stop). Loo
 screenshots.
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **Commands:** `extensions_list()` (bar and settings) returns every loaded extension —
+  `{ id, name, version, description, author, kind, enabled, icon, permissions, commands,
+  pageActions }` — with `developerMode`, the folder and what was skipped (`extensions/list.rs`,
+  1 test); the bar keeps the switched-on ones. Beyond the prompt, because the command bar must
+  open what it lists and Settings needs its buttons: `open_extension(id, command, pageAction)`
+  (bar only; a page action needs an open web page, and its panel gets the page's address and
+  window title only when the manifest asks for `pageInfo`), `reload_extensions()` and
+  `open_extensions_folder()` (Settings only; the folder is created, then revealed with the
+  opener's `reveal_item_in_dir`). `session::open` takes a `Target` (first command, a command, a
+  page action with its page).
+- **Switched off** (`disabledExtensions`, settings.rs: valid ids and `builtin:<name>`, each once,
+  at most 256; 1 test): the registry marks them, `Registry::get` (opening, serving, the API)
+  never returns one, `find` / `all` (Settings) do (tests in registry and api). Saving settings
+  forgets the registry so the next use reads the new switches; closing Settings forgets it too
+  when no page window is open (nothing at rest). `save_settings` takes optional
+  `disabledExtensions` and `developerMode`.
+- **The command bar** (`ui/command/extensions.ts`, 6 tests): `extensions_list` once each time the
+  command bar opens; a command matches when every typed word starts a word of its title, its
+  keywords or its extension's name; rows show "Title — Extension" with the extension's icon (a
+  checked `data:image/…;base64` URI drawn over a four-tile symbol, `row-icon-extension`); page
+  actions only while the bar's address is http(s), as "Extension, for this page". The drawn-text
+  test renders a title with markup through `view.ts` into a stand-in document that refuses
+  `innerHTML`.
+- **Settings → Extensions** (`ui/settings/extensions-logic.ts`, 4 tests; `extensions.ts`,
+  `extensions.css`): "Experimental" badge and a link to the guide; groups Built-in (hidden until
+  LJ31 fills it), Bundled, Developer — icon, name, version · author, description, permissions in
+  plain words, a switch; Developer mode with its warning, the folder, the two buttons, a note when
+  the group is empty, and each skipped folder with its reason. Switches and Developer mode are a
+  draft that Save covers (`settings-logic.ts`: `toInput` gained an optional 7th argument and
+  `isChanged` compares the ids in any order; 1 test).
+- **Docs:** `docs/extensions.md` (experimental: what an extension is and isn't, quick start with
+  the folder per OS — the copy needs a new id, since unpacked extensions can't take a bundled
+  one's —, the manifest reference, permissions, the SDK with examples, panels and origins, files,
+  the CSP, storage, testing, the security model, getting a bundled extension in); README
+  "Extensions (experimental)"; `extensions/hello/README.md` (each file, as the template — it is
+  embedded and served as text like any `.md`).
+- **Smoke:** the history-off run turns Developer mode on with a copy of hello as `dev-hello` and a
+  manifest with `apiVersion: 2` in its extensions folder; `--settings extensions` must list two
+  and skip one (`extensions-list 2 skipped=1`, `extension-skipped broken …`) →
+  `settings-extensions.png`. The extension run, after `--extension hello`: hide, summon, type
+  `hello` → `command-hello.png`, then ↓ ↓ Enter must open hello a second time (Windows, Linux;
+  best effort on macOS) — a new `pressKeys` helper (xdotool, SendKeys, CGEvent key codes). Rules in
+  `smoke-extensions.mts` (`settingsExtensionsFailures`, `commandHelloFailures`; 3 more tests).
+- **LJ29's CI, observed on the fixed run, recorded for later:** on Windows a navigation the guard
+  cancelled still sent its request to the handler (`navigation-refused http://ljext.hello…` then
+  `ljext-refused page … index.html`) — the page check refused it — and the cancelled navigation
+  raised one more `Finished` for the page that stayed (a second `page-loaded` and history visit).
+  Landmines has both.
+- `npm run verify`: 244 TS tests, 234 Rust tests, clippy clean. Disk: 13 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
+
 ### LJ31 — Built-in quick answers · standard · auto
 
 **Verify:** `npm run verify` green, including vitest tests for `ui/answers/`:
@@ -4002,6 +4055,10 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   a snapshot; a panel learns of a new theme (Save, a preview, the system switching) only when it
   asks again. Option: the bar's report also evals a `littleJoan` event into the open panel (Rust,
   not the panel, decides when).
+- **A cancelled navigation counts as a second visit on Windows** (surfaced by LJ29's probe):
+  WebView2 raises one more `Finished` load event for the page that stays when `NavigationStarting`
+  cancels a navigation, so history records that page twice. Option: ignore a `Finished` whose URL
+  equals the last finished one within a short time (history_store), or track cancellations.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -4171,6 +4228,11 @@ Populated from real friction, not speculation:
   pages. The `ljext` responses use `same-origin`. And **WebKit sends cross-origin requests to a
   custom scheme without a CORS preflight**, custom header and all: a web page's POST to `ljext:`
   reaches the handler, and only the handler's checks (Origin, page) refuse it.
+- *(LJ29, Windows)* **A navigation cancelled in `NavigationStarting` may still request its URL**:
+  CI's probe saw the guard refuse `http://ljext.hello.localhost/index.html` and then that very GET
+  reach the `ljext` handler (refused there by the page check). The cancelled navigation also raised
+  one more `Finished` load event for the page that stayed (a second history visit). Never rely on
+  the navigation guard alone for what a URL serves.
 - *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
   `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
   that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.

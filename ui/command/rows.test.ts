@@ -82,7 +82,7 @@ describe("rows while nothing is typed", () => {
 describe("rows while typing", () => {
   it("orders: quick answer, best match, search, more matches, commands; Settings last", () => {
     const answer: Row = { kind: "answer", title: "84", domain: "= 12*7", host: "", action: { kind: "copy", text: "84" } };
-    const command: Row = { kind: "command", title: "Snake", domain: "", host: "", action: { kind: "command", id: "snake" } };
+    const command: Row = { kind: "command", title: "Snake", domain: "", host: "", action: { kind: "command", extension: "snake", command: "play", pageAction: false } };
     const { rows } = buildRows("e", [SMOKE, EXAMPLE, GOOGLE], {
       quickAnswer: () => answer,
       commands: () => [command],
@@ -113,7 +113,7 @@ describe("rows while typing", () => {
   });
 
   it("offers the History command for its name, after the matches and before extensions'", () => {
-    const command: Row = { kind: "command", title: "Snake", domain: "", host: "", action: { kind: "command", id: "snake" } };
+    const command: Row = { kind: "command", title: "Snake", domain: "", host: "", action: { kind: "command", extension: "snake", command: "play", pageAction: false } };
     const { rows } = buildRows("hist", [SMOKE, GOOGLE], { commands: () => [command] });
     expect(rows.map((row) => row.title)).toEqual([SMOKE.title, "Search Google for “hist”", "History", "Snake", SETTINGS_ROW.title]);
     expect(rows[2]).toEqual(HISTORY_ROW);

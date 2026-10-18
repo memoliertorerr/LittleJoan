@@ -52,6 +52,9 @@ ui/command/panel.ts                the welcome in the command bar, with its star
 ui/command/rows.ts                 the command bar's rows: order, autofill, keys, site icons
                                    (pure, unit-tested)
 ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document)
+ui/command/extensions.ts           extension commands and page actions as command-bar rows:
+                                   matching, "for this page", switched-off ones hidden (pure,
+                                   unit-tested)
 ui/command/command.ts              the command bar's list: suggest() as you type, autofill, keys,
                                    mouse; DOM glue only
 ui/history/logic.ts                the history view: search, grouping by local day (Today,
@@ -89,6 +92,13 @@ ui/settings/appearance-logic.ts    the Appearance tab: color pads (hue × chroma
 ui/settings/appearance.ts          the Appearance tab's controls and live preview; every edit
                                    re-themes the window and goes to preview_theme; DOM glue only
 ui/settings/appearance.css         the Appearance tab's styles (linked by settings.html)
+ui/settings/extensions-logic.ts    the Extensions tab: groups (Built-in, Bundled, Developer),
+                                   permissions in plain words, the switches' draft (pure,
+                                   unit-tested)
+ui/settings/extensions.ts          the Extensions tab's list, switches, Developer mode, folder
+                                   and reload buttons; DOM glue only
+ui/settings/extensions.css         the Extensions tab's styles
+docs/extensions.md                 the extension authors' guide (experimental)
 ui/settings.css                    the settings window's styles (style.css has the shared tokens)
 ui/style.css                       shared styles, all colors from the theme's --lj-* variables;
                                    `.themed` = the gradient with the grain on top
@@ -98,9 +108,11 @@ src-tauri/build.rs                 tauri-build + the app manifest (which command
 src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_page, set_overlay,
                                    go_back, open_in_browser, hibernate, history_list, suggest,
                                    history_remove, history_clear, open_settings, start_info,
-                                   set_start_at_login, set_theme_tokens; drag the window
+                                   set_start_at_login, set_theme_tokens, extensions_list,
+                                   open_extension; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
-                                   start at login, clear history, preview a theme, close
+                                   start at login, clear history, preview a theme, list / reload
+                                   extensions, show their folder, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
@@ -284,8 +296,8 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
-| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `core:window:allow-close` |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
+| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
@@ -312,6 +324,10 @@ settings window's `core:window:allow-close`).
 | `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
 | `preview_theme(theme?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` (checked like a saved one, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
 | `set_theme_tokens(tokens)` | the bar, each time it paints a theme (`apply-theme.ts`'s `onPaint`) | keep `{ scheme, vars }` — the `--lj-*` variables it computed — in memory for extension panels (`littleJoan.theme`); checked first (names `--lj-*`, short CSS values without `;{}<>\`), a bad report is dropped; forgotten when the window closes |
+| `extensions_list()` | the command bar, each time it opens; Settings → Extensions | `{ developerMode, folder, extensions: [{ id, name, version, description, author, kind: bundled \| developer, enabled, icon (data: URI), permissions, commands, pageActions }], skipped: [{ name, reason }] }` (`extensions/list.rs`); logs `extensions-list <n> skipped=<m>` |
+| `open_extension(id, command, pageAction)` | the command bar, an extension's row | opens that command's panel — or, for a page action, its panel for the open web page (refused without one), handing it the page's address and title only when its manifest asks for `pageInfo`; never a switched-off extension (`session::open`) |
+| `reload_extensions()` | Settings → Extensions → Reload extensions | read the registry again; returns the new list |
+| `open_extensions_folder()` | Settings → Extensions → Open extensions folder | create `<config dir>/extensions/` if needed and show it in the file manager (`tauri_plugin_opener::reveal_item_in_dir`) |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
@@ -429,7 +445,7 @@ all fields, whichever tab they are on):
 |---|---|
 | General | shortcut, search engine, translate language, mobile sites, start at login |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
-| Extensions | a placeholder until extensions (LJ30) |
+| Extensions | "Experimental"; **Built-in** (the quick answers, LJ31), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
 | Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
 | About | version, license, the repository link, "Inspired by Little Arc…" as plain text |
 
@@ -547,8 +563,12 @@ page; it is a separate webview with its own capability, and the page webview has
   the domain muted; the selected row is filled with the accent color; **"Settings & extensions"**
   (a gear) is always the last row. Rows (`rows.ts`): nothing typed → the top sites (or the
   starters); typing → a quick answer (LJ31's hook, empty now), the best history match, "Search
-  <engine> for …", more matches, extension commands (LJ30's hook, empty now) — at most 8, then
-  Settings. **Autofill:** when the best match's site starts with what was typed (a host prefix)
+  <engine> for …", more matches, extension commands — at most 8, then Settings. **Extension rows**
+  (`ui/command/extensions.ts`) come from `extensions_list`, read each time the command bar opens: a
+  switched-on extension's command matches when every typed word starts a word of its title, its
+  keywords or the extension's name, and shows as "Title — Extension" with the extension's icon;
+  page actions show only while a web page is open ("Extension, for this page"). Picking one calls
+  `open_extension`. **Autofill:** when the best match's site starts with what was typed (a host prefix)
   and its score is at least the matches' average, the field completes it with that address
   (scheme and `www.` left out), the completion selected and its row selected; only right after
   typing at the end of the field, never after a deletion. **Keys:** ↑/↓ move without wrapping (↑
@@ -671,7 +691,8 @@ window closes. The authors' guide is LJ30's `docs/extensions.md`.
 | The API: `POST`, `X-LJ-Api: 1` exactly once (which also forces a refused CORS preflight for a web page), `Origin` exactly the extension's origin (once), `Sec-Fetch-Site: same-origin` when sent, the page showing that extension, a method on the allowlist (`storage.get/set/remove/keys`, `theme`, `pageInfo`, `openUrl`, `clipboard.writeText`, `close`), and the method's manifest permission | `api::route` | `api::tests::*`; smoke: the probe's API calls are refused and nothing reaches hello's storage |
 | Storage: keys 1–128 characters, 1 MB of JSON per extension, a refused write changes nothing, one file per extension, atomic writes | `storage.rs` | `storage::tests::*` |
 | Manifests: strict (unknown fields refused), `id` `^[a-z0-9][a-z0-9-]{1,31}$`, `apiVersion` 1, permissions from `storage`, `clipboard`, `pageInfo`, `network:<host>` (lower-case DNS names, optional `*.`, at least two labels, no IPs or ports), panels `.html` inside the folder, an icon `.svg` / `.png` | `manifest.rs` | `manifest::tests::*`, `registry::tests::the_shipped_extensions_are_all_valid` |
-| What extensions supply is drawn as text: the toolbar's name through `textContent`, the icon only as a checked `data:image/(svg+xml|png);base64` URI in an `<img>` | `ui/toolbar/`, `session::publish_label` | `ui/toolbar/logic.test.ts` |
+| What extensions supply is drawn as text: the toolbar's name through `textContent`, the icon only as a checked `data:image/(svg+xml|png);base64` URI in an `<img>` | `ui/toolbar/`, `session::publish_label`, `ui/command/extensions.ts` + `view.ts`, `ui/settings/extensions.ts` | `ui/toolbar/logic.test.ts`, `ui/command/extensions.test.ts` (a title with markup renders as text; only image data: URIs) |
+| Switched-off extensions can't be opened, served or called; only Settings lists them | `registry::Registry::get` / `find` | `registry::tests::switched_off_extensions_are_listed_but_never_found`, `api::tests::switched_off_extensions_are_unknown`, `ui/command/extensions.test.ts` |
 
 **The API** (SDK: `extensions/sdk/v1.js`, a global `littleJoan`). Every call is a same-origin
 `POST /__lj/api/v1/<method>` with a JSON object body (at most 1 MB + 64 KB) and answers
@@ -786,7 +807,8 @@ The modules below hold every decision the app makes; the native glue only calls 
   which redirects to `<host>.translate.goog`; skipped for non-web pages and pages that are
   already translated.
 - **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
-  mobileSites, rememberHistory, theme}` (camelCase JSON). Each field falls back to its default on its own; sizes are clamped to
+  mobileSites, rememberHistory, theme, developerMode, disabledExtensions}` (camelCase JSON;
+  `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; `theme` = `{mode, colors, intensity, grain}`, each part on its own too
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
@@ -898,10 +920,14 @@ and pushes to `main`:
   check**: `--settings` must open Settings on General and its page load (`settings-window
   general`, `settings-loaded`; screenshot `settings-general.png`), `--settings privacy` must
   switch it to Privacy (`settings-privacy.png`, where Remember history is off), `--settings
-  appearance` to the theme editor (`settings-appearance.png`), and the page window must not
-  open. Then the **extension run** (`smoke-extensions.mts`), its own launch: `--extension hello`
+  appearance` to the theme editor (`settings-appearance.png`), and `--settings extensions` to the
+  extensions (this run has Developer mode on, with a copy of hello as `dev-hello` and a broken
+  manifest in its extensions folder: `extensions-list 2 skipped=1`, `settings-extensions.png`), and
+  the page window must not open. Then the **extension run** (`smoke-extensions.mts`), its own launch: `--extension hello`
   must load hello's panel and report `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked`
-  (screenshot `extension-hello.png`), with its storage file counting the visit; then the smoke page
+  (screenshot `extension-hello.png`), with its storage file counting the visit; a new window's
+  command bar, typing `hello`, must offer "Say hello" (`command-hello.png`), and ↓ ↓ Enter must open
+  hello again (Windows, Linux; best effort on macOS); then the smoke page
   with `?ext=probe&base=<hello's origin>` tries hello's API (as the SDK would, and as a simple
   request), one of its files (as an image) and `location.href` to its panel, and must report
   `LJ-EXTPROBE ljext-api=blocked ljext-file=blocked ljext-nav=refused`, with no API call

@@ -1,6 +1,7 @@
 // The command bar's list (DOM glue): asks Rust for suggestions as you type (60 ms debounce, only
-// the latest answer counts), builds the rows (rows.ts), draws them as text (view.ts), and
-// handles the inline autofill, the keys and the mouse.
+// the latest answer counts), builds the rows (rows.ts; extension commands from extensions.ts,
+// read once each time the command bar opens), draws them as text (view.ts), and handles the
+// inline autofill, the keys and the mouse.
 import { invoke } from "@tauri-apps/api/core";
 import {
   buildRows,
@@ -13,6 +14,7 @@ import {
   type Suggestion,
 } from "./rows.ts";
 import { renderRows } from "./view.ts";
+import { commandRows, isWebPage, type ExtensionInfo, type ExtensionsView } from "./extensions.ts";
 
 /** How long typing must pause before Rust is asked. */
 export const DEBOUNCE_MS = 60;
@@ -45,6 +47,18 @@ export function commandBar(
   let keep: number | null | undefined;
   let latest = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** The extensions (their commands and page actions), as of the command bar's opening. */
+  let extensions: ExtensionInfo[] = [];
+
+  const loadExtensions = (): void => {
+    invoke<ExtensionsView>("extensions_list")
+      .then((view) => {
+        extensions = view.extensions;
+      })
+      .catch(() => {
+        extensions = [];
+      });
+  };
 
   const draw = (): void => {
     list.replaceChildren(...renderRows<HTMLElement>(document, rows.rows, selected));
@@ -82,7 +96,9 @@ export function commandBar(
   };
 
   const show = (query: string, suggestions: Suggestion[]): void => {
-    rows = buildRows(query, suggestions);
+    rows = buildRows(query, suggestions, {
+      commands: (typedText) => commandRows(typedText, extensions, isWebPage(shown())),
+    });
     if (applyAutofill()) {
       selected = initialSelection(rows);
     } else {
@@ -136,8 +152,14 @@ export function commandBar(
         showHistory();
         break;
       case "command":
+        void invoke("open_extension", {
+          id: action.extension,
+          command: action.command,
+          pageAction: action.pageAction,
+        });
+        break;
       case "copy":
-        // Extension commands (LJ30) and quick answers (LJ31) come later.
+        // Quick answers (LJ31) come later.
         break;
     }
   };
@@ -177,6 +199,7 @@ export function commandBar(
       selected = null;
       document.body.classList.remove("typing");
       if (open) {
+        loadExtensions();
         ask("");
       } else {
         latest++;

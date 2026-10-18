@@ -84,7 +84,11 @@ pub fn run() {
             commands::history_clear,
             commands::open_settings,
             commands::preview_theme,
-            commands::set_theme_tokens
+            commands::set_theme_tokens,
+            commands::extensions_list,
+            commands::reload_extensions,
+            commands::open_extensions_folder,
+            commands::open_extension
         ])
         // Extension panels and their API (extensions/protocol.rs). Registered for every
         // webview; each request is checked (extensions/api.rs), and only the page webview's

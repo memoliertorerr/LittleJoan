@@ -454,10 +454,17 @@ body {
   --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4 14 14'/%3E%3C/svg%3E");
 }
 
-/* The built-in rows' symbols (Settings, search, history.css's clock) are masks painted in the
-   theme's muted text color, and in the selected row's text color when selected. */
+/* An extension's command without an icon of its own: four tiles. (With one, its image fills the
+   box over the tile, unmasked.) */
+.row-icon-extension:empty {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5'%3E%3Crect x='2.2' y='2.2' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='9' y='2.2' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='2.2' y='9' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='9' y='9' width='4.8' height='4.8' rx='2.4'/%3E%3C/svg%3E");
+}
+
+/* The built-in rows' symbols (Settings, search, history.css's clock, extensions) are masks painted
+   in the theme's muted text color, and in the selected row's text color when selected. */
 .row-icon-settings,
 .row-icon-search:empty,
+.row-icon-extension:empty,
 .row-icon-clock {
   background-color: var(--lj-fg-muted);
   -webkit-mask: var(--icon) center / 16px no-repeat;
@@ -466,6 +473,7 @@ body {
 
 .row.selected .row-icon-settings,
 .row.selected .row-icon-search:empty,
+.row.selected .row-icon-extension:empty,
 .row.selected .row-icon-clock {
   background-color: var(--lj-on-selected);
 }

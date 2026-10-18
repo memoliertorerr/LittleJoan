@@ -3,12 +3,14 @@
 // in Rust; this page shows what it says. Rust picks the first tab (window.__littleJoanSettingsTab,
 // set before this script runs) and switches an open window with window.littleJoanSettings.showTab.
 // The window wears the saved theme; the Appearance tab (settings/appearance.ts) edits it, the
-// window and the open page window previewing every change, and Save keeps it.
+// window and the open page window previewing every change, and Save keeps it. The Extensions tab
+// (settings/extensions.ts) lists them with their switches and Developer mode.
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeFrom } from "./lib/theme.ts";
 import { acceleratorFromEvent, displayShortcut } from "./lib/shortcut.ts";
 import { appearance } from "./settings/appearance.ts";
+import { extensionsTab } from "./settings/extensions.ts";
 import {
   CLEAR_CHOICES,
   CLEAR_START,
@@ -69,6 +71,8 @@ const cancel = element<HTMLButtonElement>("#cancel");
 const NOTE = "Click, then press the keys you want to use.";
 
 const look = appearance(element<HTMLElement>("#panel-appearance"), refresh);
+// Built-in quick answers join the list with LJ31.
+const extensionsPanel = extensionsTab(element<HTMLElement>("#panel-extensions"), refresh, []);
 
 let saved: Settings | null = null;
 let savedLogin: boolean | null = null;
@@ -120,7 +124,7 @@ function refresh(): void {
 }
 
 function input(): SettingsInput {
-  return toInput(shortcut, engine.value, language.value, mobile.checked, remember.checked, look.draft());
+  return toInput(shortcut, engine.value, language.value, mobile.checked, remember.checked, look.draft(), extensionsPanel.draft());
 }
 
 function pending(from: Settings): Changes {
@@ -283,6 +287,7 @@ invoke<SettingsView>("get_settings")
     fill(language, view.languages, view.settings.translateTo);
     mobile.checked = view.settings.mobileSites;
     remember.checked = view.settings.rememberHistory;
+    extensionsPanel.load({ disabledExtensions: view.settings.disabledExtensions, developerMode: view.settings.developerMode });
     savedLogin = view.startAtLogin;
     login.checked = view.startAtLogin ?? false;
     login.disabled = view.startAtLogin === null;

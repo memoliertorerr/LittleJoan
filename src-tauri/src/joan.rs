@@ -112,7 +112,7 @@ pub fn quit<R: Runtime>(app: &AppHandle<R>) {
 
 /// Opens the extension `id`'s first command in the open window (`--extension`).
 fn open_extension<R: Runtime>(app: &AppHandle<R>, id: &str) -> tauri::Result<()> {
-    if let Err(err) = extensions::session::open(app, id, None, None) {
+    if let Err(err) = extensions::session::open(app, id, extensions::session::Target::First) {
         eprintln!("little-joan: could not open the extension: {err}");
         missing_extension(id);
     }

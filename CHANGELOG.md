@@ -17,6 +17,13 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Extensions in the command bar and Settings (experimental):** type an extension's name (or
+  what it does) in the command bar to open it; page actions — extensions for the page you're on —
+  show only while a web page is open. **Settings → Extensions** lists every extension with a
+  switch to turn it off, its version, author and what it may do in plain words, plus **Developer
+  mode** (load your own unpacked extensions from the extensions folder), **Open extensions
+  folder** and **Reload extensions**, and what couldn't be loaded and why. How to write one:
+  [docs/extensions.md](docs/extensions.md).
 - **Extensions (experimental), the runtime:** an extension is a folder with an `extension.json`
   and plain web files that opens as a panel in the Little Joan window. Each runs on an origin of
   its own with a strict Content-Security-Policy (its own files only; network only to the https
@@ -25,8 +32,7 @@ All notable changes to Little Joan are recorded here. The format follows
   was opened for, opening a web address, the clipboard, and closing itself. Web pages can't call
   that API, load an extension's files, or open an extension. `little-joan --extension <id>` opens
   one; **Hello**, the bundled example, shows what an extension can and can't do. With Developer
-  mode on (`"developerMode": true` in settings.json for now), unpacked extensions in the
-  `extensions` folder next to settings.json load too.
+  mode on, unpacked extensions in the `extensions` folder next to settings.json load too.
 - **Themes:** one to three colors, an intensity and a grain become a muted gradient on the
   toolbar, the command bar, the history view and Settings, in light, dark or following the
   system (and switching with it). Picks are kept pale in light mode and deep in dark mode, so any

@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { HELLO_TITLE, PROBE_TITLE, extensionFailures, helloOrigin, isExtUrl, parseStore, type HelloStore } from "./smoke-extensions.mts";
+import {
+  HELLO_TITLE,
+  PROBE_TITLE,
+  commandHelloFailures,
+  extensionFailures,
+  helloOrigin,
+  isExtUrl,
+  parseStore,
+  settingsExtensionsFailures,
+  type HelloStore,
+} from "./smoke-extensions.mts";
 
 const PROBE_URL = "http://127.0.0.1:5000/smoke.html?ext=probe&base=ljext%3A%2F%2Fhello.localhost";
 
@@ -71,5 +81,36 @@ describe("the extension run", () => {
     expect(parseStore('{"version":1,"items":{"opened":2}}')).toEqual({ opened: 2, keys: ["opened"] });
     expect(parseStore("nope")).toBeUndefined();
     expect(parseStore(undefined)).toBeUndefined();
+  });
+});
+
+describe("Settings → Extensions in the developer run", () => {
+  const GOOD_SETTINGS = `1 settings-window appearance
+2 settings-window extensions
+3 extension-skipped broken \`apiVersion\` must be 1
+4 extensions-list 2 skipped=1
+`;
+
+  it("passes when the tab listed hello and the developer copy, the broken one skipped", () => {
+    expect(settingsExtensionsFailures(parseLog(GOOD_SETTINGS))).toEqual([]);
+  });
+
+  it("fails without the tab, the right counts or the skipped reason", () => {
+    expect(settingsExtensionsFailures(parseLog("1 settings-window appearance\n")).join()).toMatch(/never switched/);
+    expect(settingsExtensionsFailures(parseLog(GOOD_SETTINGS.replace("2 skipped=1", "1 skipped=0"))).join()).toMatch(/didn't list/);
+    expect(settingsExtensionsFailures(parseLog(GOOD_SETTINGS.replace("3 extension-skipped broken", "3 extension-skipped other"))).join()).toMatch(
+      /wasn't reported/,
+    );
+  });
+});
+
+describe("the command bar's extension rows", () => {
+  it("want hello opened twice where keys are driven", () => {
+    const once = parseLog("1 extension-opened hello\n2 extensions-list 1 skipped=0\n");
+    const twice = parseLog("1 extension-opened hello\n2 extensions-list 1 skipped=0\n3 extension-opened hello\n");
+    expect(commandHelloFailures(twice, { driven: true })).toEqual([]);
+    expect(commandHelloFailures(once, { driven: true }).join()).toMatch(/didn't open hello/);
+    expect(commandHelloFailures(once, { driven: false })).toEqual([]);
+    expect(commandHelloFailures(parseLog("1 extension-opened hello\n"), { driven: false }).join()).toMatch(/never asked/);
   });
 });
