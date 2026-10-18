@@ -189,8 +189,9 @@ permission is no wider than before:** it merges a phase PR once verify, package 
 on every OS job; the security-sensitive phases 21, 22 and 24 end in a `review` step — ready, green,
 NOT merged — for an independent review and the owner's decision; tags and releases happen only on
 the owner's word. LJ18 runs only if the owner's Apple signing secrets exist, and is otherwise
-recorded as skipped. CLAUDE.md's standing exception names "the v0.2 plan", so v0.3's `auto` phases
-(23, 25) stop before merging until the owner extends it (Ground Rule 24).
+recorded as skipped. CLAUDE.md's standing exception covers the approved plan's v0.2 and v0.3
+phases (confirmed 2026-10-18 for round 3), so v0.3's `auto` phases (23, 25) merge when green like
+v0.2's (Ground Rule 24).
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -281,11 +282,12 @@ phases 7–11 keep their numbers and steps (LJ13–LJ19), adjusted where round 2
     changed, the handoff loop guard.
 22. **LJ47 → LJ48** · strong — `lj/p22-popups`, after phase 21 is merged. **Security-sensitive
     (`review`).** Review: popups have no IPC, what decides a popup, its lifecycle.
-23. **LJ49 → LJ50** · strong — `lj/p23-find-pins`. Review: the per-engine find glue.
+23. **LJ49 → LJ50** · strong — `lj/p23-find-pins`. Review: the per-engine find glue. Merged when
+    green.
 24. **LJ51 → LJ52** · strong — `lj/p24-saved-logins`. **Security-sensitive (`review`).** Review:
     password saving off by default, removal clears the right profile, no credential handling.
 25. **LJ53 → LJ56** · standard — `lj/p25-more-extensions`. Review: the bundled extensions' rules
-    (no network, text as text), the two platform touch-ups.
+    (no network, text as text), the two platform touch-ups. Merged when green.
 26. **LJ57** · standard — `lj/p26-v0.3-docs`. **Checkpoint:** the owner's v0.3 checklist; a
     pre-release only on their word.
 
@@ -531,13 +533,13 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
     it — nothing survives at rest.
 24. *(round 3, the owner's update 2026-10-18)* **Merging, checkpoints and reviews.** The agent
     merges a phase PR into `main` — a merge commit, never squash, never `--delete-branch` — once
-    verify, package and smoke are green on every OS job (CLAUDE.md's standing exception). That
-    permission is no wider than before: a `review` step (a security-sensitive phase's end) marks
-    the PR ready and STOPS for an independent review and the owner's decision; a `checkpoint`
-    step fills the PR with a precise checklist, may merge its green PR, and STOPS — the next phase
-    starts only when the owner says go; tags and releases happen only on the owner's word, one at
-    a time. The standing exception names "the v0.2 plan": until the owner extends it to v0.3, a
-    v0.3 phase PR is marked ready and the agent stops before merging.
+    verify, package and smoke are green on every OS job (CLAUDE.md's standing exception, which
+    covers the approved plan's v0.2 and v0.3 phases). That permission is no wider than before: a
+    `review` step (a security-sensitive phase's end) marks the PR ready and STOPS — never merged
+    by the agent — for an independent review and the owner's decision; a `checkpoint` step fills
+    the PR with a precise checklist, may merge its green PR, and STOPS — the next phase starts
+    only when the owner says go; tags and releases happen only on the owner's word, one at a
+    time.
 25. *(round 3)* **One keymap.** From LJ43 on, every key of Little Joan's own (page keys, the macOS
     menu's key equivalents, keys shown in the bar or Settings) comes from `keymap.rs` and the
     user's overrides in settings; no other file hard-codes such a key. Typing keys (a letter or
@@ -5773,9 +5775,8 @@ commit, then stop and report.
 > merged; an independent read-only review follows (as for phase 16), its findings are fixed in
 > `lj-step-N-fix<k>` commits, and the owner decides the merge. The next phase starts from `main`
 > only when the owner says go; phase 22 changes the same new-window code as phase 21, so it waits
-> until phase 21 is merged. CLAUDE.md's standing exception names "the v0.2 plan": until the owner
-> extends it to v0.3, the `auto` phases 23 and 25 are marked ready and stop before merging too
-> (Ground Rule 24).
+> until phase 21 is merged. The `auto` phases 23 and 25 are merged by the agent once green, as in
+> v0.2 (CLAUDE.md's standing exception covers v0.3; Ground Rule 24); LJ57 is a checkpoint.
 
 ### LJ45 — Links from other apps: register as a browser and receive links · strong · auto
 
@@ -6231,9 +6232,8 @@ the command bar". Push and watch CI until every job is green (Ground Rule 3; two
 attempts, then stop). Look at pinned.png. This ends phase 23. Fill the PR description from the
 template. Needs human check: Ctrl/Cmd+F on a long article and on a page in another language;
 Enter / Shift+Enter; Esc; pin two sites and summon: they lead the list; unpin one with
-Shift+Delete; the must-not-disturb list. Once every job is green: merge the PR into main with a
-merge commit if CLAUDE.md's standing exception covers v0.3 phases by then; otherwise mark it
-ready and stop (Ground Rule 24).
+Shift+Delete; the must-not-disturb list. Once every job is green, merge the PR into main with a
+merge commit (Ground Rule 24), then stop and report.
 ```
 
 ### LJ51 — Saved logins on Windows: the engine's password saving and autofill as Privacy settings · strong · auto
@@ -6526,9 +6526,8 @@ notes (with df -h), and commit everything as one commit: "lj-step-56: panels fol
 honest fix attempts, then stop). This ends phase 25. Fill the PR description from the template.
 Needs human check: each of the nine new extensions with the keyboard only, in light and dark;
 change the theme with Snake open — Snake recolors; bind `little-joan --extension reading-list` to a
-key in your OS and save a page with it. Once every job is green: merge the PR into main with a
-merge commit if CLAUDE.md's standing exception covers v0.3 phases by then; otherwise mark it ready
-and stop (Ground Rule 24).
+key in your OS and save a page with it. Once every job is green, merge the PR into main with a
+merge commit (Ground Rule 24), then stop and report.
 ```
 
 ### LJ57 — v0.3: docs, screenshots, the owner's checklist · standard · checkpoint
@@ -6565,12 +6564,12 @@ this PR (and Windows / Linux where you have them):
       quick commands, downloads, zoom, fullscreen.
 - [ ] Memory at rest: no webview helpers while hibernating, also after a popup was open.
 
-Once every CI job is green, merge the PR (docs only) if CLAUDE.md's standing exception covers v0.3
-by then, otherwise leave it ready; then STOP for the checklist (Ground Rule 24). Do not start any
-further work until the owner says go. A `v0.3.0-beta.1` pre-release happens only
-on the owner's word, the way beta.2 was made: bump the three versions through a PR, merge it, let
-main's CI build the installers, rename them (LittleJoan-0.3.0-beta.1-windows-x64-setup.exe,
--macos-universal.dmg, -linux-amd64.deb, -linux-x86_64.AppImage), write SHA256SUMS.txt, then
+Once every CI job is green, merge the PR into main with a merge commit (docs only), then STOP for
+the checklist (Ground Rule 24). Do not start any further work until the owner says go. A
+`v0.3.0-beta.1` pre-release happens only on the owner's word, the way beta.2 was made: bump the
+three versions through a PR, merge it, let main's CI build the installers, rename them
+(LittleJoan-0.3.0-beta.1-windows-x64-setup.exe, -macos-universal.dmg, -linux-amd64.deb,
+-linux-x86_64.AppImage), write SHA256SUMS.txt, then
 `gh release create v0.3.0-beta.1 --repo memoliertorerr/LittleJoan --prerelease --latest=false
 --target <that main commit>` with notes from the CHANGELOG, and check the release, its tag and one
 asset's checksum.
@@ -6578,9 +6577,9 @@ asset's checksum.
 Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ57 to ✅ with the note
 "waiting for the owner's checklist", add implementation notes (with df -h), and commit everything
 as one commit: "lj-step-57: docs and screenshots for v0.3". Push, open the phase-26 PR into main,
-and watch CI until every job is green (two honest fix attempts, then stop). This is a checkpoint: fill the PR with the checklist
-above, merge it when green as the paragraph above allows, tell the owner exactly what to check and
-where, then stop.
+and watch CI until every job is green (two honest fix attempts, then stop). This is a checkpoint:
+fill the PR with the checklist above, merge it when green, tell the owner exactly what to check
+and where, then stop.
 ```
 
 ---
