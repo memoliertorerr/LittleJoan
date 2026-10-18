@@ -180,8 +180,12 @@ mod tests {
 
     #[test]
     fn the_plain_colors_are_the_start_pages() {
-        let css = include_str!("../../../ui/style.css");
-        assert!(css.contains(".blank {\n  background: #ffffff;"), "light");
-        assert!(css.contains(".blank {\n    background: #1c1c1e;"), "dark");
+        // Whitespace folded: Windows checks the file out with CRLF line ends.
+        let css = include_str!("../../../ui/style.css")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(css.contains(".blank { background: #ffffff; }"), "light");
+        assert!(css.contains(".blank { background: #1c1c1e; }"), "dark");
     }
 }

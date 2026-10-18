@@ -5593,6 +5593,9 @@ honest fix attempts, then stop). Look at both screenshots on every OS.
   second instances can land out of order.
 - `npm run verify`: 506 TS tests, 296 Rust tests, clippy clean. Disk: 12 GiB free at the start of
   the phase, 11 GiB after verify; `.cache/target` 1.4 GB.
+- **`lj-step-39-fix`:** Windows' verify (run 39160049052) failed one new test only — the check that
+  the fallback colors are the start page's read `ui/style.css` with `\n` line ends, and Windows
+  checks the file out with CRLF; the test now folds whitespace first.
 
 ### LJ40 — Phone mode per site: a command, a toolbar pill, Windows' agent with client hints; the owner's check · strong · checkpoint
 
