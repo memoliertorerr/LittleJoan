@@ -3769,6 +3769,59 @@ honest attempts, then stop).
     `toolbar-label`, `new-window-refused`. Docs no longer say "web pages can't, in any form":
     architecture.md and extensions.md describe the nonce, the frames each engine shows the guard,
     and the commit rule.
+  - **The cheaper findings (`lj-step-29-fix5`):**
+    - **L4 (Windows) service / shared workers:** a worker would serve the extension's documents
+      without the handler's policy or checks and outlive the panel. `api::embedding` refuses
+      `Sec-Fetch-Dest: serviceworker` / `sharedworker` and any `Service-Worker` header, for every
+      request (`Refusal::Worker`). Test: `service_and_shared_workers_get_nothing` (a dedicated
+      `worker` stays allowed).
+    - **I4 duplicated headers:** a `Sec-Fetch-Dest` sent twice is now a refusal (`X-LJ-Api` and
+      `Origin` already were: `Incoming::header` treats a repeat as missing, and missing is refused).
+      Tests in `files_are_get_only_…` (two values, and the same value twice).
+    - **L1 `openUrl`:** to the default browser it needs a new manifest permission, `openBrowser`
+      ("Open web addresses in your default browser" in Settings), and runs at most once every 2 s
+      per extension (429 `busy`); both targets refuse this computer and the local network
+      (`api::is_private_host`: 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, 0/8, `::1`, `::`,
+      fc00::/7, fe80::/10, IPv4-mapped forms, `localhost`, `*.localhost`, `*.local`; the URL parser
+      already turns `2130706433` and `0x7f000001` into 127.0.0.1). No bundled extension used it.
+      Tests: `extensions_open_web_addresses_only` (21 private forms, 5 public),
+      `open_browser_is_a_permission_of_its_own`, `a_rate_limit_counts_per_key_within_its_window`.
+    - **L3 names:** manifest texts (name, description, author, titles, keywords) refuse Unicode
+      format characters (Cf, incl. the bidi controls and U+200B–U+200F, U+FEFF, tags) as well as
+      controls (`manifest::is_hidden_char`, a table of the Unicode 15 Cf ranges — std has no
+      categories); a name that reads as a web address (a URL, `www.…`, a host name with an
+      alphabetic TLD, an IP address) is refused (`looks_like_address`; "Node.js"-style names go
+      too — restrictive by choice); the toolbar shows an **"Extension"** badge next to an
+      extension's name (`toolbarView().badge`). Tests: `texts_refuse_invisible_and_bidi_characters`,
+      `names_never_read_as_web_addresses`, toolbar `logic.test.ts`.
+    - **L2 `network:` isn't a confidentiality boundary:** `X-DNS-Prefetch-Control: off` on every
+      response (csp test), and docs/extensions.md now says plainly what the CSP doesn't cover
+      (WebRTC, DNS prefetch, preconnect) and that extensions are local tools, not a sandbox for
+      hostile code. Removing the WebRTC constructors is a Deferred follow-up (reason there).
+    - **L5 resources:** `theme` no longer blocks a thread for up to 3 s — until the bar reports
+      it answers at once with the default theme's light variables, parsed from the generated
+      `ui/lib/theme-defaults.css` (test `the_default_theme_answers_at_once_until_the_bar_reports`);
+      at most 8 API calls in flight per extension (`limits::Call`, released on drop; 429),
+      `storage.set` at most 20 a second (429); a body whose `Content-Length` is over the limit is
+      refused before parsing. What wry already did by then: every engine's handler gets the
+      **whole body in memory** (WebView2 reads the request stream to the end, WebKitGTK reads
+      `http_body`, WKWebView takes `HTTPBody` or drains `HTTPBodyStream`), so an oversized body is
+      refused after it was buffered, never parsed. Tests: `limits::tests` (3).
+    - **I2 `pageInfo`:** checked again inside the call — the opening's extension must be the
+      caller — not only at routing.
+    - **I3 ids:** `is_valid_id` refuses Windows device names (`con`, `nul`, `aux`, `prn`,
+      `com1`–`com9`, `lpt1`–`lpt9`; `paths::DEVICES`), which would name a device as the storage
+      file. Test: `ids_are_never_windows_device_names`.
+    - **I1 a session token:** each opening gets a second 128-bit secret; the handler writes it into
+      the SDK it serves to that panel (`__LJ_SESSION_TOKEN__`), and the API wants it as `X-LJ-Api`,
+      compared in constant time (`nonce::same_secret`), instead of the fixed `1`. The WebKit
+      missing-Origin acceptance no longer rests on the engine's behaviour alone: a request also
+      needs a secret only the panel's own SDK has. Tests: `the_api_needs_its_header_exactly_once`
+      (the old `1`, near misses, a prefix, padding, upper case, twice, no opening at all).
+    - **What the handler receives, per OS:** the smoke log now records each `ljext` request's
+      header names and the values the checks read (`ljext-headers … dest= site= mode= origin=
+      service-worker=`; never the token or a Referer), to answer the reviewer's open question
+      whether WebKit sends `Sec-Fetch-*` on custom-scheme requests (results in the CI notes).
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
@@ -4207,6 +4260,14 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   WebView2 raises one more `Finished` load event for the page that stays when `NavigationStarting`
   cancels a navigation, so history records that page twice. Option: ignore a `Finished` whose URL
   equals the last finished one within a short time (history_store), or track cancellations.
+- **WebRTC is open to extension panels** (security review, L2). The CSP doesn't cover
+  `RTCPeerConnection`, so a panel can reach a STUN/TURN server it doesn't declare (and learn local
+  addresses where the engine exposes them). Not fixed in phase 16: removing the constructors needs
+  a script injected before every panel's own (a user script per engine, or a wrapper the handler
+  adds to each served HTML file — which the panel's own code could still undo before it runs),
+  and WebKitGTK's `enable-webrtc` setting would also turn it off for web pages. Options: wry/Tauri
+  per-webview WebRTC switches if they appear; an injected freeze of `RTCPeerConnection` for
+  `ljext:` documents; a `webrtc` permission. Documented as a limit (docs/extensions.md).
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

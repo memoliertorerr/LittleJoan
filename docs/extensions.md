@@ -69,8 +69,8 @@ lists what couldn't be loaded, and why.
 
 | Field | Required | Rules |
 |---|---|---|
-| `id` | yes | 2–32 characters: `a-z`, `0-9` and `-`, not starting with `-` (`^[a-z0-9][a-z0-9-]{1,31}$`); the folder's name |
-| `name` | yes | 1–40 characters, shown in the command bar, the toolbar and Settings (as plain text) |
+| `id` | yes | 2–32 characters: `a-z`, `0-9` and `-`, not starting with `-` (`^[a-z0-9][a-z0-9-]{1,31}$`), and not a Windows device name (`con`, `nul`, `aux`, `prn`, `com1`–`com9`, `lpt1`–`lpt9`); the folder's name |
+| `name` | yes | 1–40 characters, shown in the command bar, the toolbar (with an "Extension" badge) and Settings (as plain text); it may not read like a web address (`paypal.com`, `https://…`, an IP address) |
 | `version` | yes | 1–32 characters: letters, digits, `.`, `-`, `+` |
 | `description` | no | up to 200 characters (Settings) |
 | `author` | no | up to 80 characters (Settings) |
@@ -83,7 +83,9 @@ lists what couldn't be loaded, and why.
 
 Each command or page action has an `id` (1–32 characters, `a-z`, `0-9`, `-`, unique within its
 list), a `title` (1–60 characters), up to 8 `keywords` (1–32 characters each) and a `panel` — an
-`.html` file in the folder. Texts may not contain control characters. **Unknown fields are
+`.html` file in the folder. Texts may not contain control characters or invisible formatting
+characters (Unicode's Cf, such as the bidi controls U+202A–U+202E and U+2066–U+2069, U+200B–U+200F,
+U+FEFF). **Unknown fields are
 refused** (a misspelled `permisions` fails loudly instead of being ignored), and so is a manifest
 over 64 KB. The command bar matches what you type against the title, the keywords and the
 extension's name: every typed word must start one of their words. Page actions show only while a
@@ -96,10 +98,11 @@ web page is open, marked "for this page".
 | `storage` | use `littleJoan.storage` (1 MB) |
 | `clipboard` | use `littleJoan.clipboard.writeText` |
 | `pageInfo` | read the address and title of the page a page action was opened on (`littleJoan.pageInfo()`) |
+| `openBrowser` | hand a web address to the default browser (`littleJoan.openUrl(url, { where: "browser" })`), at most one every 2 seconds |
 | `network:<host>` | fetch from `https://<host>` — e.g. `network:api.example.com`, or `network:*.example.com` for its subdomains. Lower-case DNS names only, with at least two labels after `*.` (no `*.com`), no IP addresses, ports, paths or schemes; https only |
 
-Settings → Extensions shows them in plain words. `theme`, `openUrl` and `close` need no
-permission.
+Settings → Extensions shows them in plain words. `theme`, `openUrl` into the window and `close`
+need no permission.
 
 ## The SDK
 
@@ -128,7 +131,9 @@ const { scheme, vars } = await littleJoan.theme.get();
 // The page a page action was opened on (permission "pageInfo"), or null.
 const page = await littleJoan.pageInfo(); // { url, title }
 
-// Open a web address in the window (the panel goes away) or in the default browser.
+// Open a public web address in the window (the panel goes away), or — permission "openBrowser",
+// one every 2 s — in the default browser. Never this computer or the local network (localhost,
+// *.local, 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, ::1, fc00::/7, fe80::/10).
 await littleJoan.openUrl("https://example.com/", { where: "browser" });
 
 // Copy text (permission "clipboard").
@@ -143,11 +148,16 @@ The variables `theme` hands out are the ones Little Joan's own screens use: `--l
 `--lj-fg`, `--lj-fg-muted` (text), `--lj-accent`, `--lj-panel`, `--lj-surface`, `--lj-field`,
 `--lj-row-hover`, `--lj-row-selected`, `--lj-on-selected`, `--lj-tile`, `--lj-hairline`,
 `--lj-shadow`. Text in `--lj-fg` stays readable (4.5:1) on every background. `get()` is a
-snapshot: ask again to follow a theme change.
+snapshot: ask again to follow a theme change. Until Little Joan's own toolbar has loaded, it
+answers with the default theme's light colors (it never makes a panel wait).
 
 Under the hood each call is a `POST` to the panel's own origin, `/__lj/api/v1/<method>`, with a
-JSON body and the header `X-LJ-Api: 1`, answered `{ "ok": true, "value": … }` or
-`{ "ok": false, "error": "<code>", "message": "…" }` — the SDK does this for you.
+JSON body and the header `X-LJ-Api: <token>` — a secret Little Joan puts into the SDK it serves to
+this opening of the panel, so **use the SDK**: calls without it are refused. Answers are
+`{ "ok": true, "value": … }` or `{ "ok": false, "error": "<code>", "message": "…" }`. Limits: at
+most 8 calls in flight per extension, 20 `storage.set` calls a second, one browser `openUrl` every
+2 seconds, request bodies up to 1 MB + 64 KB; over a limit a call fails with `busy` (or
+`too-large`) and does nothing.
 
 ## Panels, URLs and origins
 
@@ -197,8 +207,13 @@ base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   `Cache-Control: no-store`, and a `Permissions-Policy` that denies camera, microphone,
   geolocation, reading the clipboard, screen capture, USB, serial, HID, Bluetooth and payments.
 
-`network:` limits what a panel can fetch, not where it can go: a panel can still take the window
-to a web page (a link, `openUrl`), which you see.
+**`network:` is not a confidentiality boundary.** It limits what a panel can fetch, not every way
+data can leave: a panel can take the window to a web page (a link, `openUrl`), which you see; and
+the policy doesn't cover WebRTC (`RTCPeerConnection` can reach a STUN/TURN server), DNS prefetching
+or `preconnect` hints, through which a determined panel can leak small amounts of data to a server
+it doesn't declare. Little Joan sends `X-DNS-Prefetch-Control: off` (Chromium honours it). Don't
+put secrets into an extension you don't trust; extensions are local tools, not a sandbox for
+hostile code.
 
 ## Storage limits
 
@@ -235,11 +250,14 @@ extension's own origin. Every request is checked from scratch:
 1. it comes from the page web view (never the toolbar or Settings);
 2. the extension exists and is switched on;
 3. the page web view is showing a panel of **that** extension, which Little Joan opened;
-4. files and the SDK: a `GET`, not for a frame, a plain path of a served type;
-5. the API: a `POST` with `X-LJ-Api: 1`, sent from the extension's own origin — an `Origin`
+4. never for a frame, a plugin, or a service or shared worker; files and the SDK: a `GET`, a
+   plain path of a served type;
+5. the API: a `POST` whose `X-LJ-Api` header is the secret token of this opening of the panel
+   (only the SDK served to it carries it), sent from the extension's own origin — an `Origin`
    header that is exactly the extension's origin (on Windows it must be there; macOS and Linux
    send none with a request to the panel's own origin, while every request from another origin
-   carries one), a method on the list above, and the permission that method needs.
+   carries one), a method on the list above, the permission that method needs, and within the
+   limits above.
 
 Little Joan never sends CORS headers, so no other page can read an answer. The window navigates to
 an extension URL only when it is the exact URL Little Joan is opening — including a fresh 128-bit

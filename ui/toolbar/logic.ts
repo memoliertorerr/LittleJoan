@@ -56,6 +56,9 @@ export interface ExtensionLabel {
 /** The longest extension name shown. */
 export const MAX_NAME = 40;
 
+/** What an extension's panel shows next to its name: never just a name that could pass for a domain. */
+export const EXTENSION_BADGE = "Extension";
+
 
 /** The label Rust sent (anything: checked) — or null for a web page, nothing, or a bad label. */
 export function extensionLabel(value: unknown): ExtensionLabel | null {
@@ -78,6 +81,8 @@ export interface ToolbarView {
   site: string;
   /** An extension's own icon (a data: URI), or null. */
   icon: string | null;
+  /** "Extension" for an extension's panel (shown as a badge next to its name), else "". */
+  badge: string;
   /** The back button works: the page navigated within this window. */
   back: boolean;
   /** "Open in default browser" works: a web page is open. */
@@ -91,13 +96,21 @@ export interface ToolbarView {
  */
 export function toolbarView(address: string, canGoBack: boolean, extension: ExtensionLabel | null = null): ToolbarView {
   if (extension) {
-    return { domain: middleEllipsis(extension.name), site: "", icon: extension.icon, back: canGoBack, openInBrowser: false };
+    return {
+      domain: middleEllipsis(extension.name),
+      site: "",
+      icon: extension.icon,
+      badge: EXTENSION_BADGE,
+      back: canGoBack,
+      openInBrowser: false,
+    };
   }
   const web = /^https?:\/\//i.test(address);
   return {
     domain: web ? displayDomain(address) : "",
     site: web ? siteFor(address) : "",
     icon: null,
+    badge: "",
     back: web && canGoBack,
     openInBrowser: web,
   };

@@ -10,8 +10,9 @@ use tauri::http::{Request, Response, StatusCode, header};
 use tauri::{AppHandle, Runtime, UriSchemeContext, UriSchemeResponder};
 
 use super::api::{self, Context, Incoming, Method, Route};
+use super::manifest::Permission;
 use super::registry::{self, Extension};
-use super::{clipboard, csp, paths, session, storage, theme};
+use super::{clipboard, csp, limits, paths, session, storage, theme};
 use crate::bar;
 use crate::keys::Platform;
 use crate::smoke;
@@ -19,6 +20,8 @@ use crate::state;
 
 /// The SDK every panel loads from `/__lj/sdk/v1.js`.
 pub const SDK: &str = include_str!("../../../extensions/sdk/v1.js");
+/// Where the served SDK carries the opening's token (`X-LJ-Api`).
+pub const TOKEN_PLACEHOLDER: &str = "__LJ_SESSION_TOKEN__";
 
 /// The handler: `tauri::Builder::register_asynchronous_uri_scheme_protocol(urls::SCHEME, …)`.
 pub fn handle<R: Runtime>(
@@ -54,28 +57,38 @@ fn respond<R: Runtime>(
     incoming: &Incoming,
     body: &[u8],
 ) -> Response<Cow<'static, [u8]>> {
+    log_headers(incoming);
     let registry = registry::current(app);
     let showing = session::showing();
     let opened = session::opened();
+    let token = session::token();
     let ctx = Context {
         platform: Platform::current(),
         showing: showing.as_deref(),
         registry: &registry,
         opened: opened.as_deref(),
+        token: token.as_deref(),
     };
     match api::route(incoming, &ctx) {
         Ok(Route::File(extension, rel)) => match (extension.read(&rel), paths::mime_type(&rel)) {
             (Some(bytes), Some(mime)) => response(200, mime, &extension.csp, bytes),
             _ => refuse(incoming, api::Refusal::NotFound),
         },
-        Ok(Route::Sdk(extension)) => response(
-            200,
-            "text/javascript; charset=utf-8",
-            &extension.csp,
-            Cow::Borrowed(SDK.as_bytes()),
-        ),
+        // Routed only while the page shows this extension's opening, so the token is its own.
+        Ok(Route::Sdk(extension)) => match token {
+            Some(token) => response(
+                200,
+                "text/javascript; charset=utf-8",
+                &extension.csp,
+                Cow::Owned(SDK.replace(TOKEN_PLACEHOLDER, &token).into_bytes()),
+            ),
+            None => refuse(incoming, api::Refusal::Page),
+        },
         Ok(Route::Api(extension, method)) => {
-            let (status, answer) = call(app, &extension, method, body);
+            let (status, answer) = match limits::Call::start(extension.id()) {
+                Some(_running) => answer_call(app, &extension, method, incoming, body),
+                None => error(429, "busy", "Too many calls at once."),
+            };
             let outcome = answer.get("error").and_then(Value::as_str).unwrap_or("ok");
             smoke::log(
                 "ext-api",
@@ -85,6 +98,52 @@ fn respond<R: Runtime>(
         }
         Err(refusal) => refuse(incoming, refusal),
     }
+}
+
+/// The smoke log only: what the engine sent with an `ljext` request — header names, and the
+/// values of the ones the checks read (`Sec-Fetch-*`, `Origin`, `Service-Worker`); never the
+/// token or a Referer (which carries the panel's spent nonce).
+fn log_headers(incoming: &Incoming) {
+    if !smoke::enabled() {
+        return;
+    }
+    let mut names: Vec<&str> = incoming.headers.iter().map(|(n, _)| n.as_str()).collect();
+    names.sort_unstable();
+    names.dedup();
+    let value = |name: &str| incoming.header(name).unwrap_or("-").to_owned();
+    let path = incoming.uri.split(['?', '#']).next().unwrap_or_default();
+    smoke::log(
+        "ljext-headers",
+        &format!(
+            "{} {} {path} names={} dest={} site={} mode={} origin={} service-worker={}",
+            incoming.webview,
+            incoming.method,
+            names.join(","),
+            value("sec-fetch-dest"),
+            value("sec-fetch-site"),
+            value("sec-fetch-mode"),
+            value("origin"),
+            value("service-worker"),
+        ),
+    );
+}
+
+/// An allowed API call: an over-long body is turned away before it is parsed (wry has read it
+/// into memory by now — every engine's handler gets the whole body), then the method runs.
+fn answer_call<R: Runtime>(
+    app: &AppHandle<R>,
+    extension: &Extension,
+    method: Method,
+    incoming: &Incoming,
+    body: &[u8],
+) -> (u16, Value) {
+    let declared = incoming
+        .header("content-length")
+        .and_then(|length| length.trim().parse::<usize>().ok());
+    if declared.is_some_and(|length| length > api::MAX_BODY_BYTES) {
+        return error(413, "too-large", "The request is too large.");
+    }
+    call(app, extension, method, body)
 }
 
 fn refuse(incoming: &Incoming, refusal: api::Refusal) -> Response<Cow<'static, [u8]>> {
@@ -204,6 +263,9 @@ fn call<R: Runtime>(
                 )
             }
             Method::StorageSet => {
+                if !limits::storage_set(id) {
+                    return Err(error(429, "busy", "Too many writes (20 a second at most)."));
+                }
                 let key = text_param(&params, "key")?;
                 let value = params
                     .get("value")
@@ -235,14 +297,23 @@ fn call<R: Runtime>(
                 }),
                 |keys| Some(json!(keys)),
             ),
-            Method::Theme => match theme::current(theme::WAIT) {
-                Some(tokens) => ok(Some(json!(tokens))),
-                None => error(503, "unavailable", "The theme isn't known yet."),
-            },
-            Method::PageInfo => ok(Some(json!(session::page_info()))),
+            // The bar's colors, or the default theme's until the bar has reported (never a wait).
+            Method::Theme => ok(Some(json!(theme::current()))),
+            Method::PageInfo => {
+                // Routing checked the opening; this checks it again where the page is handed out.
+                if session::opened().as_deref() != Some(id) {
+                    return Err(error(403, "page", "Not this extension's page."));
+                }
+                ok(Some(json!(session::page_info())))
+            }
             Method::OpenUrl => {
-                let url = api::openable(text_param(&params, "url")?)
-                    .ok_or_else(|| error(400, "bad-url", "Only http and https addresses open."))?;
+                let url = api::openable(text_param(&params, "url")?).ok_or_else(|| {
+                    error(
+                        400,
+                        "bad-url",
+                        "Only public http and https addresses open (not this computer or the local network).",
+                    )
+                })?;
                 match params
                     .get("where")
                     .and_then(Value::as_str)
@@ -253,10 +324,22 @@ fn call<R: Runtime>(
                         Ok(()) => ok(None),
                         Err(err) => error(500, "failed", err.to_string()),
                     },
-                    "browser" => match tauri_plugin_opener::open_url(url.as_str(), None::<&str>) {
-                        Ok(()) => ok(None),
-                        Err(err) => error(500, "failed", err.to_string()),
-                    },
+                    "browser" => {
+                        if !extension.manifest.has(&Permission::OpenBrowser) {
+                            return Err(error(
+                                403,
+                                "permission",
+                                "This needs the openBrowser permission.",
+                            ));
+                        }
+                        if !limits::browser_open(id) {
+                            return Err(error(429, "busy", "One address every 2 seconds at most."));
+                        }
+                        match tauri_plugin_opener::open_url(url.as_str(), None::<&str>) {
+                            Ok(()) => ok(None),
+                            Err(err) => error(500, "failed", err.to_string()),
+                        }
+                    }
                     _ => error(400, "bad-request", "`where` is \"page\" or \"browser\"."),
                 }
             }

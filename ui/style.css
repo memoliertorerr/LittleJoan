@@ -261,6 +261,17 @@ body {
   text-overflow: ellipsis;
 }
 
+/* An extension's panel says so next to its name, so a name never passes for a domain. */
+.site-badge {
+  flex: none;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--lj-fg-muted);
+  background: var(--lj-field);
+  border-radius: 999px;
+}
+
 /* Overlay view: the command bar, a frosted card over the theme's gradient. */
 .bar-body.overlay {
   padding: 12px;

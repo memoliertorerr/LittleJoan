@@ -69,6 +69,7 @@ fn permission_name(permission: &Permission) -> String {
         Permission::Storage => "storage".to_owned(),
         Permission::Clipboard => "clipboard".to_owned(),
         Permission::PageInfo => "pageInfo".to_owned(),
+        Permission::OpenBrowser => "openBrowser".to_owned(),
         Permission::Network(host) => format!("network:{host}"),
     }
 }

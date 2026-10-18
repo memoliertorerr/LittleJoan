@@ -138,6 +138,8 @@ struct Session {
     id: String,
     /// What was opened, so Reload can open it again (with a new nonce).
     target: Target,
+    /// This opening's secret: the SDK served to its panel sends it with every API call.
+    token: String,
     page: Option<PageInfo>,
     /// The web page that was open when the panel opened: `close` goes back to it.
     before: Option<Url>,
@@ -202,6 +204,11 @@ pub fn opened() -> Option<String> {
     session().as_ref().map(|s| s.id.clone())
 }
 
+/// The secret token of the last opening (its SDK sends it as `X-LJ-Api`).
+pub fn token() -> Option<String> {
+    session().as_ref().map(|s| s.token.clone())
+}
+
 /// The page the open panel was opened for, if any.
 pub fn page_info() -> Option<PageInfo> {
     session().as_ref().and_then(|s| s.page.clone())
@@ -247,6 +254,7 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<
     *session() = Some(Session {
         id: id.to_owned(),
         target,
+        token: nonce::random_hex(),
         page,
         before,
     });

@@ -17,6 +17,7 @@
 pub mod api;
 pub mod clipboard;
 pub mod csp;
+pub mod limits;
 pub mod list;
 pub mod manifest;
 pub mod nonce;

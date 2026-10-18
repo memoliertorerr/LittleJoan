@@ -5,6 +5,8 @@
 // which Little Joan checks before it answers (docs/extensions.md, "Security model").
 (() => {
   const API = "/__lj/api/v1/";
+  // This panel's secret, filled in by Little Joan when it serves this file; every call carries it.
+  const TOKEN = "__LJ_SESSION_TOKEN__";
 
   /** An API call Little Joan refused or couldn't do; `code` says why ("permission", "quota", …). */
   class LittleJoanError extends Error {
@@ -28,7 +30,7 @@
   async function call(method, params = {}) {
     const response = await fetch(API + method, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-LJ-Api": "1" },
+      headers: { "Content-Type": "application/json", "X-LJ-Api": TOKEN },
       body: JSON.stringify(params),
       cache: "no-store",
       credentials: "same-origin",

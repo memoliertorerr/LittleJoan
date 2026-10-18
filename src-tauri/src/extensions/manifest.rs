@@ -29,6 +29,9 @@ pub enum Permission {
     Clipboard,
     /// `pageInfo`: the URL and title of the page a page action was opened for.
     PageInfo,
+    /// `openBrowser`: littleJoan.openUrl(url, { where: "browser" }) — hand a web address to the
+    /// default browser (at most one every 2 s).
+    OpenBrowser,
     /// `network:<host>`: fetch from `https://<host>` (`*.` allowed in front).
     Network(String),
 }
@@ -39,6 +42,7 @@ impl Permission {
             "storage" => Some(Permission::Storage),
             "clipboard" => Some(Permission::Clipboard),
             "pageInfo" => Some(Permission::PageInfo),
+            "openBrowser" => Some(Permission::OpenBrowser),
             _ => {
                 let host = text.strip_prefix("network:")?;
                 is_valid_network_host(host).then(|| Permission::Network(host.to_owned()))
@@ -95,7 +99,8 @@ impl Manifest {
     }
 }
 
-/// An extension id: `^[a-z0-9][a-z0-9-]{1,31}$` (2 to 32 characters).
+/// An extension id: `^[a-z0-9][a-z0-9-]{1,31}$` (2 to 32 characters), and never a Windows device
+/// name (`con`, `nul`, `com1` …), which would name a device as a file (its storage file).
 pub fn is_valid_id(id: &str) -> bool {
     let bytes = id.as_bytes();
     (2..=32).contains(&bytes.len())
@@ -103,6 +108,60 @@ pub fn is_valid_id(id: &str) -> bool {
         && bytes
             .iter()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'-')
+        && !paths::DEVICES.contains(&id.to_ascii_lowercase().as_str())
+}
+
+/// Unicode's format characters (general category Cf, Unicode 15): invisible, and some — the bidi
+/// controls U+202A–U+202E and U+2066–U+2069, U+200E/F — reorder the text around them.
+const FORMAT_CHARS: [(u32, u32); 21] = [
+    (0x00AD, 0x00AD),
+    (0x0600, 0x0605),
+    (0x061C, 0x061C),
+    (0x06DD, 0x06DD),
+    (0x070F, 0x070F),
+    (0x0890, 0x0891),
+    (0x08E2, 0x08E2),
+    (0x180E, 0x180E),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x2064),
+    (0x2066, 0x206F),
+    (0xFEFF, 0xFEFF),
+    (0xFFF9, 0xFFFB),
+    (0x110BD, 0x110BD),
+    (0x110CD, 0x110CD),
+    (0x13430, 0x1343F),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0001, 0xE0001),
+    (0xE0020, 0xE007F),
+];
+
+/// Whether `c` is invisible or reorders text: a control (Cc) or a format character (Cf).
+pub fn is_hidden_char(c: char) -> bool {
+    let code = u32::from(c);
+    c.is_control()
+        || FORMAT_CHARS
+            .iter()
+            .any(|(low, high)| (*low..=*high).contains(&code))
+}
+
+/// Whether a name reads as a web address — a URL, a host name like `paypal.com`, an IP address —
+/// which the toolbar could otherwise pass off as the page's domain.
+pub fn looks_like_address(name: &str) -> bool {
+    let name = name.trim().trim_end_matches('.').to_ascii_lowercase();
+    if name.contains("://") || name.starts_with("www.") || name.parse::<std::net::IpAddr>().is_ok()
+    {
+        return true;
+    }
+    let labels: Vec<&str> = name.split('.').collect();
+    labels.len() >= 2
+        && labels.iter().all(|label| {
+            !label.is_empty() && label.chars().all(|c| c.is_alphanumeric() || c == '-')
+        })
+        && labels
+            .last()
+            .is_some_and(|tld| tld.chars().count() >= 2 && tld.chars().all(char::is_alphabetic))
 }
 
 /// A contribution id: `^[a-z0-9][a-z0-9-]{0,31}$`.
@@ -154,8 +213,10 @@ fn text(map: &Map<String, Value>, key: &str, max: usize, optional: bool) -> Resu
     };
     let text = text.trim();
     let chars = text.chars().count();
-    if text.chars().any(char::is_control) {
-        return Err(format!("`{key}` has control characters"));
+    if text.chars().any(is_hidden_char) {
+        return Err(format!(
+            "`{key}` has control or invisible formatting characters"
+        ));
     }
     if chars > max || (chars == 0 && !optional) {
         return Err(format!("`{key}` must be 1 to {max} characters"));
@@ -209,7 +270,7 @@ fn contributions(value: Option<&Value>, what: &str) -> Result<Vec<Contribution>,
                 .map(|word| match word.as_str().map(str::trim) {
                     Some(w)
                         if (1..=32).contains(&w.chars().count())
-                            && !w.chars().any(char::is_control) =>
+                            && !w.chars().any(is_hidden_char) =>
                     {
                         Ok(w.to_owned())
                     }
@@ -316,8 +377,14 @@ pub fn parse(bytes: &[u8]) -> Result<Manifest, String> {
         }
         Some(_) => return Err("`contributes` must be an object".to_owned()),
     };
+    let name = text(map, "name", 40, false)?;
+    if looks_like_address(&name) {
+        return Err(format!(
+            "`name` `{name}` reads like a web address; give the extension a name"
+        ));
+    }
     Ok(Manifest {
-        name: text(map, "name", 40, false)?,
+        name,
         description: text(map, "description", 200, true)?,
         author: text(map, "author", 80, true)?,
         id,

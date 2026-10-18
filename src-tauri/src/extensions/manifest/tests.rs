@@ -205,3 +205,94 @@ fn texts_have_limits() {
         "keywords": ["1", "2", "3", "4", "5", "6", "7", "8", "9"] }]});
     assert!(parse_value(&with("contributes", many)).is_err());
 }
+
+#[test]
+fn ids_are_never_windows_device_names() {
+    for id in ["con", "nul", "aux", "prn", "com1", "com9", "lpt1", "lpt9"] {
+        assert!(!is_valid_id(id), "{id}");
+        assert!(parse_value(&with("id", json!(id))).is_err(), "{id}");
+    }
+    for id in ["console", "com10", "lpt", "nulls", "aux-tools"] {
+        assert!(is_valid_id(id), "{id}");
+    }
+}
+
+#[test]
+fn texts_refuse_invisible_and_bidi_characters() {
+    for hidden in [
+        "Hel\u{202E}lo",
+        "Hel\u{2066}lo",
+        "Hel\u{200F}lo",
+        "Hel\u{200E}lo",
+        "Hel\u{200B}lo",
+        "Hel\u{FEFF}lo",
+        "Hel\u{00AD}lo",
+        "Hel\u{E0041}lo",
+        "Hel\u{0007}lo",
+    ] {
+        assert!(
+            parse_value(&with("name", json!(hidden))).is_err(),
+            "{hidden:?}"
+        );
+        assert!(
+            parse_value(&with("description", json!(hidden))).is_err(),
+            "{hidden:?}"
+        );
+        assert!(
+            parse_value(&with("author", json!(hidden))).is_err(),
+            "{hidden:?}"
+        );
+        let titled = json!({ "commands": [{ "id": "a", "title": hidden, "panel": "a.html" }] });
+        assert!(
+            parse_value(&with("contributes", titled)).is_err(),
+            "{hidden:?}"
+        );
+        let keyword = json!({ "commands": [{ "id": "a", "title": "A", "keywords": [hidden], "panel": "a.html" }] });
+        assert!(
+            parse_value(&with("contributes", keyword)).is_err(),
+            "{hidden:?}"
+        );
+    }
+    // Ordinary letters of any script are fine.
+    assert!(parse_value(&with("name", json!("Héllo · 你好 · مرحبا"))).is_ok());
+}
+
+#[test]
+fn names_never_read_as_web_addresses() {
+    for address in [
+        "paypal.com",
+        "PayPal.com",
+        "accounts.google.com",
+        "www.example",
+        "https://example.com",
+        "ljext://hello.localhost",
+        "127.0.0.1",
+        "::1",
+        "bank.co.uk.",
+        "bücher.de",
+    ] {
+        assert!(looks_like_address(address), "{address}");
+        assert!(
+            parse_value(&with("name", json!(address))).is_err(),
+            "{address}"
+        );
+    }
+    for name in [
+        "Hello",
+        "QR code",
+        "2048",
+        "Clean link",
+        "Notes 2.0",
+        "v1.2",
+        "Hello (unpacked)",
+    ] {
+        assert!(!looks_like_address(name), "{name}");
+    }
+}
+
+#[test]
+fn open_browser_is_a_permission_of_its_own() {
+    let manifest = parse_value(&with("permissions", json!(["openBrowser"]))).expect("valid");
+    assert!(manifest.has(&Permission::OpenBrowser));
+    assert!(parse_value(&with("permissions", json!(["openbrowser"]))).is_err());
+}

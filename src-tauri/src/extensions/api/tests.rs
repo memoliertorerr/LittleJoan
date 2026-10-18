@@ -26,6 +26,9 @@ static FIXTURE: Bundled = &[
     ),
 ];
 
+/// The secret token of hello's opening (the SDK served to its panel sends it as `X-LJ-Api`).
+const TOKEN: &str = "5f0c1e2d3b4a69788796a5b4c3d2e1f0";
+
 fn url(s: &str) -> Url {
     Url::parse(s).expect("valid")
 }
@@ -38,7 +41,7 @@ fn api(method: &str) -> Incoming {
         uri: format!("ljext://hello.localhost/__lj/api/v1/{method}"),
         headers: vec![
             ("origin".to_owned(), "ljext://hello.localhost".to_owned()),
-            ("x-lj-api".to_owned(), "1".to_owned()),
+            ("x-lj-api".to_owned(), TOKEN.to_owned()),
             ("content-type".to_owned(), "application/json".to_owned()),
         ],
     }
@@ -86,6 +89,7 @@ fn decide_on(
             showing: showing.as_deref(),
             registry: &registry,
             opened,
+            token: Some(TOKEN),
         },
     )
 }
@@ -207,6 +211,16 @@ fn files_are_get_only_never_for_frames_and_only_plain_paths_of_known_types() {
         let incoming = with_header(file("/index.html"), "sec-fetch-dest", dest);
         assert_eq!(refusal(decide(&incoming)), Some(Refusal::Frame), "{dest}");
     }
+    // Sent twice — even if each is harmless — it can't be trusted.
+    let mut twice = with_header(file("/index.html"), "sec-fetch-dest", "document");
+    twice
+        .headers
+        .push(("Sec-Fetch-Dest".to_owned(), "iframe".to_owned()));
+    assert_eq!(refusal(decide(&twice)), Some(Refusal::Frame));
+    let mut same = with_header(file("/index.html"), "sec-fetch-dest", "script");
+    same.headers
+        .push(("sec-fetch-dest".to_owned(), "script".to_owned()));
+    assert_eq!(refusal(decide(&same)), Some(Refusal::Frame));
     for path in [
         "/",
         "/a/..%2findex.html",
@@ -246,6 +260,28 @@ fn dot_segments_resolve_inside_the_extension() {
 }
 
 #[test]
+fn service_and_shared_workers_get_nothing() {
+    for (name, value) in [
+        ("sec-fetch-dest", "serviceworker"),
+        ("sec-fetch-dest", "sharedworker"),
+        ("service-worker", "script"),
+        ("service-worker", ""),
+    ] {
+        for incoming in [file("/hello.js"), file(SDK_PATH), api("storage.get")] {
+            let incoming = with_header(incoming, name, value);
+            assert_eq!(
+                refusal(decide(&incoming)),
+                Some(Refusal::Worker),
+                "{name}: {value} {}",
+                incoming.uri
+            );
+        }
+    }
+    // A dedicated worker of the panel's own is fine.
+    assert!(decide(&with_header(file("/hello.js"), "sec-fetch-dest", "worker")).is_ok());
+}
+
+#[test]
 fn the_api_is_post_only() {
     for method in ["GET", "PUT", "OPTIONS", "HEAD"] {
         let incoming = Incoming {
@@ -266,7 +302,17 @@ fn the_api_needs_its_header_exactly_once() {
         refusal(decide(&without_header(api("storage.get"), "x-lj-api"))),
         Some(Refusal::Header)
     );
-    for value in ["0", "true", "", "1 "] {
+    // Anything but this opening's token: the old fixed "1", a near miss, a prefix, padding.
+    for value in [
+        "1",
+        "0",
+        "true",
+        "",
+        "5f0c1e2d3b4a69788796a5b4c3d2e1f1",
+        "5f0c1e2d3b4a69788796a5b4c3d2e1f",
+        "5f0c1e2d3b4a69788796a5b4c3d2e1f0 ",
+        "5F0C1E2D3B4A69788796A5B4C3D2E1F0",
+    ] {
         let incoming = with_header(api("storage.get"), "x-lj-api", value);
         assert_eq!(
             refusal(decide(&incoming)),
@@ -275,8 +321,23 @@ fn the_api_needs_its_header_exactly_once() {
         );
     }
     let mut twice = api("storage.get");
-    twice.headers.push(("X-LJ-Api".to_owned(), "1".to_owned()));
+    twice
+        .headers
+        .push(("X-LJ-Api".to_owned(), TOKEN.to_owned()));
     assert_eq!(refusal(decide(&twice)), Some(Refusal::Header));
+    // No opening, no token: nothing is answered.
+    let registry = registry::build(FIXTURE, None, &[]);
+    let untokened = route(
+        &api("storage.get"),
+        &Context {
+            platform: Platform::MacOs,
+            showing: Some("hello"),
+            registry: &registry,
+            opened: Some("hello"),
+            token: None,
+        },
+    );
+    assert_eq!(refusal(untokened), Some(Refusal::Header));
 }
 
 #[test]
@@ -504,10 +565,38 @@ fn bodies_are_json_objects_of_limited_size() {
 
 #[test]
 fn extensions_open_web_addresses_only() {
-    for good in ["https://example.com/a?b=1", "http://127.0.0.1:8080/"] {
+    for good in [
+        "https://example.com/a?b=1",
+        "http://8.8.8.8/",
+        "http://172.32.0.1/",
+        "https://[2606:4700::1111]/",
+        "https://localhost.example.com/",
+    ] {
         assert!(openable(good).is_some(), "{good}");
     }
     for bad in [
+        // This computer and the local network.
+        "http://localhost/",
+        "http://LOCALHOST.:8080/",
+        "http://app.localhost/",
+        "http://printer.local/",
+        "http://127.0.0.1/",
+        "http://127.1.2.3:9/",
+        "http://2130706433/",
+        "http://0x7f000001/",
+        "http://10.0.0.8/",
+        "http://172.16.5.4/",
+        "http://172.31.255.255/",
+        "http://192.168.1.1/",
+        "http://169.254.169.254/latest/meta-data",
+        "http://0.0.0.0/",
+        "http://[::1]/",
+        "http://[::]/",
+        "http://[fc00::1]/",
+        "http://[fd12:3456::1]/",
+        "http://[fe80::1]/",
+        "http://[::ffff:127.0.0.1]/",
+        "http://[::ffff:192.168.0.1]/",
         "javascript:alert(1)",
         "file:///etc/passwd",
         "ljext://hello.localhost/index.html",
@@ -533,6 +622,7 @@ fn switched_off_extensions_are_unknown() {
                 showing: Some("hello"),
                 registry: &registry,
                 opened: Some("hello"),
+                token: Some(TOKEN),
             },
         );
         assert_eq!(refusal(decided), Some(Refusal::Unknown), "{}", incoming.uri);

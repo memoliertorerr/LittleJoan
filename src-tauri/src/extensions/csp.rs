@@ -35,7 +35,7 @@ pub const PERMISSIONS_POLICY: &str = "camera=(), microphone=(), geolocation=(), 
 pub const REFERRER_POLICY: &str = "same-origin";
 
 /// The headers of every `ljext` response (files, the SDK, the API, refusals), given its CSP.
-pub fn headers(policy: &str) -> [(&'static str, String); 7] {
+pub fn headers(policy: &str) -> [(&'static str, String); 8] {
     [
         ("Content-Security-Policy", policy.to_owned()),
         ("X-Content-Type-Options", "nosniff".to_owned()),
@@ -44,6 +44,9 @@ pub fn headers(policy: &str) -> [(&'static str, String); 7] {
         ("Referrer-Policy", REFERRER_POLICY.to_owned()),
         ("Permissions-Policy", PERMISSIONS_POLICY.to_owned()),
         ("Cache-Control", "no-store".to_owned()),
+        // The CSP doesn't cover DNS prefetching (a name lookup can carry data out); this asks the
+        // engine not to (WebView2 honours it; not a confidentiality boundary — docs/extensions.md).
+        ("X-DNS-Prefetch-Control", "off".to_owned()),
     ]
 }
 
@@ -98,6 +101,7 @@ mod tests {
         assert_eq!(get("X-Frame-Options"), Some("DENY"));
         assert_eq!(get("Cross-Origin-Resource-Policy"), Some("same-origin"));
         assert_eq!(get("Cache-Control"), Some("no-store"));
+        assert_eq!(get("X-DNS-Prefetch-Control"), Some("off"));
         // Never "no-referrer": it would make the engines send `Origin: null` to the API.
         assert_eq!(get("Referrer-Policy"), Some("same-origin"));
         assert!(get("Content-Security-Policy").is_some_and(|v| v.starts_with("default-src")));

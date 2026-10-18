@@ -41,18 +41,18 @@ describe("the toolbar", () => {
   const page = "http://127.0.0.1:5000/smoke.html";
 
   it("has no domain and no working buttons without a page", () => {
-    expect(toolbarView("", true)).toEqual({ domain: "", site: "", icon: null, back: false, openInBrowser: false });
+    expect(toolbarView("", true)).toEqual({ domain: "", site: "", icon: null, badge: "", back: false, openInBrowser: false });
   });
 
   it("enables back only once the page navigated within this window", () => {
     // A new window: Rust's counter says there is nowhere to go back to yet.
-    expect(toolbarView(page, false)).toEqual({ domain: "127.0.0.1", site: "127.0.0.1:5000", icon: null, back: false, openInBrowser: true });
+    expect(toolbarView(page, false)).toEqual({ domain: "127.0.0.1", site: "127.0.0.1:5000", icon: null, badge: "", back: false, openInBrowser: true });
     // After a second page in the same window.
     expect(toolbarView("https://example.com/next", true).back).toBe(true);
   });
 
   it("never offers web actions for the app's own pages", () => {
-    expect(toolbarView("tauri://localhost/index.html", true)).toEqual({ domain: "", site: "", icon: null, back: false, openInBrowser: false });
+    expect(toolbarView("tauri://localhost/index.html", true)).toEqual({ domain: "", site: "", icon: null, badge: "", back: false, openInBrowser: false });
   });
 });
 
@@ -61,7 +61,9 @@ describe("an extension's panel", () => {
 
   it("shows the extension's name and icon, and never the default browser", () => {
     const label = extensionLabel({ name: "Hello", icon });
-    expect(toolbarView("", false, label)).toEqual({ domain: "Hello", site: "", icon, back: false, openInBrowser: false });
+    expect(toolbarView("", false, label)).toEqual({ domain: "Hello", site: "", icon, badge: "Extension", back: false, openInBrowser: false });
+    // A web page never carries the badge, so a name next to it reads as an extension's.
+    expect(toolbarView("https://paypal.com/", false).badge).toBe("");
     expect(toolbarView("", true, label).back).toBe(true);
   });
 

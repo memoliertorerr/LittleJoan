@@ -16,6 +16,7 @@ export function toolbar(root: HTMLElement): Toolbar {
   const back = root.querySelector<HTMLButtonElement>("#back");
   const site = root.querySelector<HTMLButtonElement>("#site");
   const domain = root.querySelector<HTMLElement>("#domain");
+  const badge = root.querySelector<HTMLElement>("#site-badge");
   const openInBrowser = root.querySelector<HTMLButtonElement>("#open-browser");
   /** What the icon shows now: a site, or `ext:<name>`. */
   let shownSite: string | null = null;
@@ -29,6 +30,10 @@ export function toolbar(root: HTMLElement): Toolbar {
       const view = toolbarView(address, canGoBack, extension);
       if (domain) {
         domain.textContent = view.domain;
+      }
+      if (badge) {
+        badge.textContent = view.badge;
+        badge.hidden = view.badge === "";
       }
       if (site) {
         site.title = extension ? extension.name : address;

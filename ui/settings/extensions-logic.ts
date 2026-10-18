@@ -42,6 +42,8 @@ export function permissionWords(permission: string): string {
       return "Copy text to your clipboard";
     case "pageInfo":
       return "See the address and title of the page you use it on";
+    case "openBrowser":
+      return "Open web addresses in your default browser";
     default:
       return permission;
   }

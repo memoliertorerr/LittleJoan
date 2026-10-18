@@ -53,6 +53,7 @@ describe("Settings → Extensions", () => {
       "Connect to api.example.com",
     ]);
     expect(permissionWords("network:*.example.org")).toBe("Connect to *.example.org");
+    expect(permissionWords("openBrowser")).toBe("Open web addresses in your default browser");
     expect(details("2.0", "Little Joan")).toBe("Version 2.0 · by Little Joan");
     expect(details("", "")).toBe("");
   });

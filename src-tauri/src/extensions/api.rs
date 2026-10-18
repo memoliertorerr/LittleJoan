@@ -9,10 +9,12 @@
 //!   (so a web page — or its frames — can't load an extension's files or call its API). "Shows"
 //!   is what the navigation guard last let through (session.rs `NavGate::showing`), not the
 //!   page's address from load events, which can arrive late;
-//! - files and the SDK: a `GET`, not for a frame (`Sec-Fetch-Dest`), a plain path (paths.rs) of a
-//!   type we serve;
-//! - the API: a `POST` with `X-LJ-Api: 1` (on Chromium this also forces a CORS preflight, which
-//!   is refused), the extension's own origin (`origin_ok`), `Sec-Fetch-Site: same-origin` when the
+//! - never for a frame, a plugin or a service / shared worker (`Sec-Fetch-Dest`, refused when sent
+//!   twice; a `Service-Worker` header);
+//! - files and the SDK: a `GET`, a plain path (paths.rs) of a type we serve;
+//! - the API: a `POST` whose `X-LJ-Api` is this opening's secret token, compared in constant time
+//!   (only the SDK served to that panel carries it; the custom header also forces a CORS preflight
+//!   on Chromium, which is refused), the extension's own origin (`origin_ok`), `Sec-Fetch-Site: same-origin` when the
 //!   engine sends it, a method on the allowlist, and the manifest permission that method needs.
 //!
 //! **The Origin rule differs per engine** (CI, LJ29). WebView2 (Windows) sends `Origin` with
@@ -23,12 +25,14 @@
 //! exactly the extension's (`null` is refused too), a missing one means the request came from the
 //! extension's own origin, and a Referer, when sent, must be from that origin as well.
 
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 use serde_json::{Map, Value};
-use url::Url;
+use url::{Host, Url};
 
 use super::manifest::Permission;
+use super::nonce;
 use super::paths::{self, RelPath};
 use super::registry::{Extension, Registry};
 use super::storage;
@@ -134,13 +138,14 @@ impl Incoming {
 }
 
 /// What else a decision needs: the platform, the extension whose panel the page webview shows
-/// (as the navigation guard saw it), the registry, and the extension the app opened last
-/// (session.rs).
+/// (as the navigation guard saw it), the registry, the extension the app opened last, and that
+/// opening's secret token (session.rs), which only the SDK served to that panel carries.
 pub struct Context<'a> {
     pub platform: Platform,
     pub showing: Option<&'a str>,
     pub registry: &'a Registry,
     pub opened: Option<&'a str>,
+    pub token: Option<&'a str>,
 }
 
 /// An answered request.
@@ -162,11 +167,13 @@ pub enum Refusal {
     Page,
     /// Not GET (files) or POST (the API).
     HttpMethod,
-    /// A frame, embed or object asked for a file.
+    /// A frame, embed or object asked for a file (or `Sec-Fetch-Dest` came twice).
     Frame,
+    /// A service or shared worker asked (`Sec-Fetch-Dest`, the `Service-Worker` header).
+    Worker,
     /// No such file, or a path or type that is never served.
     NotFound,
-    /// The API call lacks `X-LJ-Api: 1`.
+    /// The API call lacks `X-LJ-Api: <the session's token>` (exactly once).
     Header,
     /// The `Origin` is not the extension's.
     Origin,
@@ -195,6 +202,7 @@ impl Refusal {
             Refusal::Page => "page",
             Refusal::HttpMethod => "http-method",
             Refusal::Frame => "frame",
+            Refusal::Worker => "worker",
             Refusal::NotFound => "not-found",
             Refusal::Header => "header",
             Refusal::Origin => "origin",
@@ -225,8 +233,28 @@ pub fn origin_ok(incoming: &Incoming, id: &str, platform: Platform) -> bool {
     }
 }
 
-/// Request destinations that are frames or plugins.
+/// Request destinations that are frames or plugins: they would embed a panel in another page.
 const FRAME_DESTS: [&str; 5] = ["iframe", "frame", "embed", "object", "fencedframe"];
+/// Service and shared workers: one would serve the extension's pages without the handler's
+/// policy or checks, and outlive the panel.
+const WORKER_DESTS: [&str; 2] = ["serviceworker", "sharedworker"];
+
+/// Whether a frame, a plugin or a worker that must never get extension files asked — or a
+/// `Sec-Fetch-Dest` sent twice, which can't be trusted either way.
+fn embedding(incoming: &Incoming) -> Option<Refusal> {
+    if incoming.has_header("service-worker") {
+        return Some(Refusal::Worker);
+    }
+    if !incoming.has_header("sec-fetch-dest") {
+        return None;
+    }
+    match incoming.header("sec-fetch-dest") {
+        None => Some(Refusal::Frame),
+        Some(dest) if FRAME_DESTS.contains(&dest) => Some(Refusal::Frame),
+        Some(dest) if WORKER_DESTS.contains(&dest) => Some(Refusal::Worker),
+        Some(_) => None,
+    }
+}
 
 /// Decides `incoming` (see the module docs for the checks, in order).
 pub fn route(incoming: &Incoming, ctx: &Context<'_>) -> Result<Route, Refusal> {
@@ -236,12 +264,20 @@ pub fn route(incoming: &Incoming, ctx: &Context<'_>) -> Result<Route, Refusal> {
     let target = urls::parse_request(&incoming.uri).ok_or(Refusal::Unknown)?;
     let extension = ctx.registry.get(&target.id).ok_or(Refusal::Unknown)?;
     let showing = ctx.showing == Some(target.id.as_str()) && ctx.opened == Some(target.id.as_str());
+    if let Some(refusal) = embedding(incoming) {
+        return Err(refusal);
+    }
 
     if let Some(name) = target.path.strip_prefix(API_PREFIX) {
         if incoming.method != "POST" {
             return Err(Refusal::HttpMethod);
         }
-        if incoming.header(API_HEADER) != Some("1") {
+        let token_ok = ctx.token.is_some_and(|token| {
+            incoming
+                .header(API_HEADER)
+                .is_some_and(|sent| nonce::same_secret(sent, token))
+        });
+        if !token_ok {
             return Err(Refusal::Header);
         }
         if !origin_ok(incoming, &target.id, ctx.platform) {
@@ -266,12 +302,6 @@ pub fn route(incoming: &Incoming, ctx: &Context<'_>) -> Result<Route, Refusal> {
 
     if incoming.method != "GET" {
         return Err(Refusal::HttpMethod);
-    }
-    if incoming
-        .header("sec-fetch-dest")
-        .is_some_and(|dest| FRAME_DESTS.contains(&dest))
-    {
-        return Err(Refusal::Frame);
     }
     if !showing {
         return Err(Refusal::Page);
@@ -300,12 +330,49 @@ pub fn params(body: &[u8]) -> Result<Map<String, Value>, (u16, &'static str)> {
     }
 }
 
-/// A web address an extension may open: an absolute http(s) URL with a host, never an extension
-/// URL in any form.
+/// A web address an extension may open: an absolute http(s) URL with a public host — never an
+/// extension URL in any form, and never this computer or the local network (`is_private_host`).
 pub fn openable(text: &str) -> Option<Url> {
     let url = Url::parse(text).ok()?;
-    (matches!(url.scheme(), "http" | "https") && url.has_host() && !urls::is_ext_like(&url))
-        .then_some(url)
+    (matches!(url.scheme(), "http" | "https")
+        && url.has_host()
+        && !urls::is_ext_like(&url)
+        && !is_private_host(&url))
+    .then_some(url)
+}
+
+fn private_v4(ip: Ipv4Addr) -> bool {
+    ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_broadcast()
+        || ip.octets()[0] == 0
+}
+
+/// Loopback, private, link-local and unspecified addresses (127/8, 10/8, 172.16/12, 192.168/16,
+/// 169.254/16, 0/8, ::1, ::, fc00::/7, fe80::/10, and IPv4 mapped into IPv6), `localhost` and
+/// `*.localhost`, `*.local`: places a panel must not send the page (or the default browser) to.
+pub fn is_private_host(url: &Url) -> bool {
+    match url.host() {
+        Some(Host::Ipv4(ip)) => private_v4(ip),
+        Some(Host::Ipv6(ip)) => {
+            let first = ip.segments()[0];
+            ip.is_loopback()
+                || ip.is_unspecified()
+                || (first & 0xfe00) == 0xfc00
+                || (first & 0xffc0) == 0xfe80
+                || ip.to_ipv4_mapped().is_some_and(private_v4)
+        }
+        Some(Host::Domain(name)) => {
+            let name = name.trim_end_matches('.').to_ascii_lowercase();
+            name == "localhost"
+                || name.ends_with(".localhost")
+                || name == "local"
+                || name.ends_with(".local")
+        }
+        None => true,
+    }
 }
 
 #[cfg(test)]
