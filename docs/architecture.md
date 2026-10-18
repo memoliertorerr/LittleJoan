@@ -52,6 +52,14 @@ ui/command/panel.ts                the welcome in the command bar, with its star
 ui/command/rows.ts                 the command bar's rows: order, autofill, keys, site icons
                                    (pure, unit-tested)
 ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document)
+ui/answers/                        quick answers, our own code in the bar: calc.ts (a tokenizer
+                                   and precedence-climbing parser, never eval), units.ts, time.ts
+                                   (+ cities.ts, ~200 names → IANA zones; Intl with a passed-in
+                                   clock), random.ts (web crypto, no modulo bias), timestamp.ts,
+                                   index.ts (the built-ins, their order, the answer row) — each
+                                   pure and unit-tested
+ui/command/copy.ts                 copies a quick answer: the async clipboard API on the keypress,
+                                   a hidden-textarea fallback
 ui/command/extensions.ts           extension commands and page actions as command-bar rows:
                                    matching, "for this page", switched-off ones hidden (pure,
                                    unit-tested)
@@ -324,7 +332,7 @@ settings window's `core:window:allow-close`).
 | `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
 | `preview_theme(theme?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` (checked like a saved one, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
 | `set_theme_tokens(tokens)` | the bar, each time it paints a theme (`apply-theme.ts`'s `onPaint`) | keep `{ scheme, vars }` — the `--lj-*` variables it computed — in memory for extension panels (`littleJoan.theme`); checked first (names `--lj-*`, short CSS values without `;{}<>\`), a bad report is dropped; forgotten when the window closes |
-| `extensions_list()` | the command bar, each time it opens; Settings → Extensions | `{ developerMode, folder, extensions: [{ id, name, version, description, author, kind: bundled \| developer, enabled, icon (data: URI), permissions, commands, pageActions }], skipped: [{ name, reason }] }` (`extensions/list.rs`); logs `extensions-list <n> skipped=<m>` |
+| `extensions_list()` | the command bar, each time it opens; Settings → Extensions | `{ developerMode, folder, extensions: [{ id, name, version, description, author, kind: bundled \| developer, enabled, icon (data: URI), permissions, commands, pageActions }], skipped: [{ name, reason }], disabledBuiltIns }` (`extensions/list.rs`; the last: the quick answers switched off); logs `extensions-list <n> skipped=<m>` |
 | `open_extension(id, command, pageAction)` | the command bar, an extension's row | opens that command's panel — or, for a page action, its panel for the open web page (refused without one), handing it the page's address and title only when its manifest asks for `pageInfo`; never a switched-off extension (`session::open`) |
 | `reload_extensions()` | Settings → Extensions → Reload extensions | read the registry again; returns the new list |
 | `open_extensions_folder()` | Settings → Extensions → Open extensions folder | create `<config dir>/extensions/` if needed and show it in the file manager (`tauri_plugin_opener::reveal_item_in_dir`) |
@@ -445,7 +453,7 @@ all fields, whichever tab they are on):
 |---|---|
 | General | shortcut, search engine, translate language, mobile sites, start at login |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
-| Extensions | "Experimental"; **Built-in** (the quick answers, LJ31), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
+| Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
 | Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
 | About | version, license, the repository link, "Inspired by Little Arc…" as plain text |
 
@@ -562,8 +570,17 @@ page; it is a separate webview with its own capability, and the page webview has
   under it the welcome on the first run, then the rows — a site icon, then "Title — domain" with
   the domain muted; the selected row is filled with the accent color; **"Settings & extensions"**
   (a gear) is always the last row. Rows (`rows.ts`): nothing typed → the top sites (or the
-  starters); typing → a quick answer (LJ31's hook, empty now), the best history match, "Search
-  <engine> for …", more matches, extension commands — at most 8, then Settings. **Extension rows**
+  starters); typing → a quick answer, the best history match, "Search <engine> for …", more
+  matches, extension commands — at most 8, then Settings. **Quick answers** (`ui/answers/`) are
+  Little Joan's own TypeScript, asked in order — calculator (`= …` always; bare text only when it
+  has a digit and an operator or a function, and isn't a date), units (`<n> <unit> in|to|as
+  <unit>`), time zones (`time in <city>`, `<time> <city> to <city>`), random (`uuid`,
+  `password [8–128]`, `[roll] NdM`, `flip a coin`, `random [a-b]`), Unix timestamps (10 or 13
+  digits, `now unix`); a built-in switched off in Settings (`disabledBuiltIns` in
+  `extensions_list`) is skipped. The answer row comes first and is selected, so Enter copies it
+  (`copy.ts`: `navigator.clipboard` from the trusted bar on the keypress, else a hidden textarea
+  and `execCommand`), and the row says "Copied" for a moment. No third-party code runs per
+  keystroke. **Extension rows**
   (`ui/command/extensions.ts`) come from `extensions_list`, read each time the command bar opens: a
   switched-on extension's command matches when every typed word starts a word of its title, its
   keywords or the extension's name, and shows as "Title — Extension" with the extension's icon;
@@ -927,7 +944,9 @@ and pushes to `main`:
   must load hello's panel and report `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked`
   (screenshot `extension-hello.png`), with its storage file counting the visit; a new window's
   command bar, typing `hello`, must offer "Say hello" (`command-hello.png`), and ↓ ↓ Enter must open
-  hello again (Windows, Linux; best effort on macOS); then the smoke page
+  hello again (Windows, Linux; best effort on macOS); a third window's command bar, typing
+  `= 12*7`, shows the answer 84 first (`answer.png`), and Enter copies it (the clipboard is read
+  back where the runner has a tool for it, informational: `summary.json`); then the smoke page
   with `?ext=probe&base=<hello's origin>` tries hello's API (as the SDK would, and as a simple
   request), one of its files (as an image) and `location.href` to its panel, and must report
   `LJ-EXTPROBE ljext-api=blocked ljext-file=blocked ljext-nav=refused`, with no API call

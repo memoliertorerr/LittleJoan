@@ -77,6 +77,16 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   removes a page from your history, × or Esc closes the command bar. Typing "history" (or just
   "hi") offers **History**. The last row, **Settings & extensions**, opens Settings on its
   Extensions tab.
+- **Quick answers** come first in the command bar as you type; Enter copies the answer:
+  - calculator: `= 12*7`, `(1+2)^3`, `sqrt(2)`, `50% * 30`, `2pi`;
+  - units: `10 km in mi`, `72f to c`, `5 kg in lb`, `1 gallon to liters`, `100 km/h in mph`,
+    `1.5 GiB in MB`;
+  - time zones: `time in Tokyo`, `3pm london to new york`;
+  - random: `uuid`, `password 20`, `roll 2d6`, `flip a coin`, `random 1-100`;
+  - Unix timestamps: `1700000000`, `now unix`.
+
+  They are Little Joan's own code, run on your computer as you type; each can be switched off in
+  Settings → Extensions → Built-in.
 - **History:** press **Ctrl+Y** (Windows, Linux) or **Cmd+Y** (macOS) — or pick History in the
   command bar — to see the pages you opened, by day (Today, Yesterday, then dates), each with its
   time. Type to search them; click one (or ↑/↓ and Enter) to open it; × or Shift+Delete removes a

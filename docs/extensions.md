@@ -246,6 +246,16 @@ the test for each check, are in [architecture.md](architecture.md#extensions-exp
 
 Report a hole privately: see [SECURITY.md](../SECURITY.md).
 
+## Built-in quick answers
+
+Little Joan's own **quick answers** — calculator, unit conversion, time zones, random values and
+Unix timestamps — answer in the command bar's first row as you type (Enter copies the answer).
+They are part of Little Joan, not extensions: an extension can't add one, because a quick answer
+runs on every keystroke, and extensions run only as panels (third-party quick answers are designed
+for later). Settings → Extensions lists them under **Built-in**, each with a switch; switched off,
+their ids (`builtin:calc`, `builtin:units`, `builtin:time`, `builtin:random`, `builtin:timestamp`)
+go into `disabledExtensions` in settings.json.
+
 ## Getting a bundled extension into Little Joan
 
 Bundled extensions live in the repository's [`extensions/`](../extensions/) folder, one folder per

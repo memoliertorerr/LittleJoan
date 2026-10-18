@@ -48,6 +48,8 @@ pub struct ExtensionsView {
     pub developer_mode: bool,
     /// Where developer extensions go.
     pub folder: String,
+    /// The built-in quick answers switched off (`builtin:<name>`): the command bar skips them.
+    pub disabled_built_ins: Vec<String>,
     pub extensions: Vec<ExtensionInfo>,
     pub skipped: Vec<SkippedInfo>,
 }
@@ -91,10 +93,21 @@ pub fn info(extension: &Extension) -> ExtensionInfo {
     }
 }
 
-pub fn view(registry: &Registry, developer_mode: bool, folder: String) -> ExtensionsView {
+/// The list for the bar and Settings; `disabled` is settings' `disabledExtensions`.
+pub fn view(
+    registry: &Registry,
+    developer_mode: bool,
+    folder: String,
+    disabled: &[String],
+) -> ExtensionsView {
     ExtensionsView {
         developer_mode,
         folder,
+        disabled_built_ins: disabled
+            .iter()
+            .filter(|id| id.starts_with("builtin:"))
+            .cloned()
+            .collect(),
         extensions: registry.all().iter().map(|e| info(e)).collect(),
         skipped: registry
             .skipped
@@ -131,7 +144,12 @@ mod tests {
     #[test]
     fn the_list_carries_what_the_bar_and_settings_show() {
         let registry = build(FIXTURE, None, &["notes".to_owned()]);
-        let view = view(&registry, true, "/config/extensions".to_owned());
+        let view = view(
+            &registry,
+            true,
+            "/config/extensions".to_owned(),
+            &["notes".to_owned(), "builtin:calc".to_owned()],
+        );
         assert!(view.developer_mode);
         let notes = &view.extensions[0];
         assert_eq!(notes.kind, "bundled");
@@ -146,5 +164,9 @@ mod tests {
         let json = serde_json::to_value(&view).expect("json");
         assert_eq!(json["extensions"][0]["pageActions"][0]["id"], "clip");
         assert_eq!(json["developerMode"], true);
+        assert_eq!(
+            json["disabledBuiltIns"],
+            serde_json::json!(["builtin:calc"])
+        );
     }
 }

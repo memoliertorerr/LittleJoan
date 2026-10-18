@@ -215,8 +215,14 @@ export function showsTyped(value: string, typed: string, start: number | null, e
   return value.startsWith(typed) && start === typed.length;
 }
 
-/** The row selected when a list appears: the autofill's row, else none (Enter = the field). */
+/**
+ * The row selected when a list appears: a quick answer (Enter copies it), else the autofill's
+ * row, else none (Enter = the field).
+ */
 export function initialSelection(list: RowList): number | null {
+  if (list.rows[0]?.kind === "answer") {
+    return 0;
+  }
   return list.autofill?.row ?? null;
 }
 

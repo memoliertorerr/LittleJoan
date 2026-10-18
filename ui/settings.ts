@@ -11,6 +11,7 @@ import { themeFrom } from "./lib/theme.ts";
 import { acceleratorFromEvent, displayShortcut } from "./lib/shortcut.ts";
 import { appearance } from "./settings/appearance.ts";
 import { extensionsTab } from "./settings/extensions.ts";
+import { BUILT_INS } from "./answers/index.ts";
 import {
   CLEAR_CHOICES,
   CLEAR_START,
@@ -71,8 +72,7 @@ const cancel = element<HTMLButtonElement>("#cancel");
 const NOTE = "Click, then press the keys you want to use.";
 
 const look = appearance(element<HTMLElement>("#panel-appearance"), refresh);
-// Built-in quick answers join the list with LJ31.
-const extensionsPanel = extensionsTab(element<HTMLElement>("#panel-extensions"), refresh, []);
+const extensionsPanel = extensionsTab(element<HTMLElement>("#panel-extensions"), refresh, BUILT_INS);
 
 let saved: Settings | null = null;
 let savedLogin: boolean | null = null;

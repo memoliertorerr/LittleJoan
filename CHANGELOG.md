@@ -17,6 +17,12 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Quick answers in the command bar:** type `= 12*7`, `10 km in mi`, `72f to c`, `time in
+  Tokyo`, `3pm london to new york`, `uuid`, `password 20`, `roll 2d6`, `flip a coin`,
+  `random 1-100`, `1700000000` or `now unix`, and the answer is the first row — Enter copies it.
+  The calculator is a real parser (never `eval`); time zones follow daylight saving time; random
+  values come from the system's secure randomness. Each can be switched off in Settings →
+  Extensions → Built-in.
 - **Extensions in the command bar and Settings (experimental):** type an extension's name (or
   what it does) in the command bar to open it; page actions — extensions for the page you're on —
   show only while a web page is open. **Settings → Extensions** lists every extension with a

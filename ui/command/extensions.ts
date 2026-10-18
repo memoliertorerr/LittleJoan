@@ -29,6 +29,8 @@ export interface ExtensionInfo {
 export interface ExtensionsView {
   developerMode: boolean;
   folder: string;
+  /** The built-in quick answers switched off (`builtin:<name>`), for the command bar. */
+  disabledBuiltIns: string[];
   extensions: ExtensionInfo[];
   skipped: { name: string; reason: string }[];
 }

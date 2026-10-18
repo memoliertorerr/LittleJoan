@@ -333,13 +333,19 @@ pub async fn extensions_list<R: Runtime>(app: AppHandle<R>) -> ExtensionsView {
 
 fn extensions_view<R: Runtime>(app: &AppHandle<R>) -> ExtensionsView {
     let registry = extensions::registry::current(app);
-    let (developer_mode, folder) = state::with(app, |s| {
+    let (developer_mode, folder, disabled) = state::with(app, |s| {
         (
             s.settings.developer_mode,
             s.data_dir.join(extensions::registry::EXTENSIONS_DIR),
+            s.settings.disabled_extensions.clone(),
         )
     });
-    let view = extensions::list::view(&registry, developer_mode, folder.display().to_string());
+    let view = extensions::list::view(
+        &registry,
+        developer_mode,
+        folder.display().to_string(),
+        &disabled,
+    );
     smoke::log(
         "extensions-list",
         &format!("{} skipped={}", view.extensions.len(), view.skipped.len()),

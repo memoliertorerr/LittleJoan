@@ -870,6 +870,25 @@ async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
  * bundled example, which reports its checks in its title; then the smoke page's probe (a web
  * page) tries hello's API, one of its files, and a navigation to its panel.
  */
+/** The system clipboard's text, where the runner has a tool to read it (else null). */
+function readClipboard(): string | null {
+  if (os === "win32") {
+    return powershell("Get-Clipboard -Raw").replace(/\r?\n$/, "");
+  }
+  if (os === "darwin") {
+    return run("pbpaste", []);
+  }
+  for (const [tool, args] of [["xclip", ["-o", "-selection", "clipboard"]], ["xsel", ["--clipboard", "--output"]]] as const) {
+    if (run("which", [tool]).trim()) {
+      return run(tool, [...args]);
+    }
+  }
+  return null;
+}
+
+/** What Enter on the quick answer left on the clipboard (informational, see extensionRun). */
+let clipboard: string | null = null;
+
 async function extensionRun(): Promise<{ events: LogEvent[]; store: string | undefined }> {
   const logFile = join(out, "smoke-extensions.log");
   rmSync(logFile, { force: true });
@@ -904,6 +923,23 @@ async function extensionRun(): Promise<{ events: LogEvent[]; store: string | und
     logFile,
   );
   await sleep(1500);
+  // A quick answer (LJ31): "= 12*7" answers 84 in the command bar's first row; Enter copies it
+  // (read back from the system clipboard where the runner has a tool for it: informational).
+  const answerHibernated = count(events(logFile), "hibernated");
+  await forward(["--hide"], runEnv);
+  await waitFor("answers: hibernated", (e) => count(e, "hibernated") > answerHibernated, 20_000, logFile);
+  const answerFrom = events(logFile).length;
+  await forward(["--show"], runEnv);
+  await waitFor("answers: command bar", (e) => e.slice(answerFrom).some((x) => x.event === "extensions-list"), 20_000, logFile);
+  await sleep(1500);
+  typeText("= 12*7", runPid);
+  await waitFor("answers: typed", (e) => e.slice(answerFrom).some((x) => x.event === "suggestions" && x.detail.endsWith("typed=6")), 15_000, logFile);
+  await sleep(1000);
+  screenshot("answer.png");
+  pressKeys(["Return"], runPid);
+  await sleep(1000);
+  clipboard = readClipboard();
+  console.log(`answers: the clipboard holds ${JSON.stringify(clipboard)}`);
   const probeUrl = `${smokePageUrl}?ext=probe&base=${encodeURIComponent(helloOrigin(os))}`;
   await forward(["--show", probeUrl], runEnv);
   await waitFor("extensions: the probe reported", (e) => lastTitle(e, "LJ-EXTPROBE ljext-api") !== undefined, 40_000, logFile);
@@ -1001,6 +1037,7 @@ const summary = {
     probe: lastTitle(extensionCheck.events, "LJ-EXTPROBE") ?? null,
     refused: extensionCheck.events.filter((e) => e.event === "ljext-refused" || e.event === "navigation-refused").map((e) => `${e.event} ${e.detail}`),
     store: parseStore(extensionCheck.store) ?? null,
+    answerCopied: clipboard,
   },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,

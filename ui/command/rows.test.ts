@@ -196,6 +196,16 @@ describe("autofill", () => {
   });
 });
 
+describe("a quick answer", () => {
+  it("is selected when the list appears, so Enter copies it", () => {
+    const answer: Row = { kind: "answer", title: "84", domain: "= 12*7", host: "", action: { kind: "copy", text: "84" } };
+    const list = buildRows("= 12*7", [GOOGLE], { quickAnswer: () => answer });
+    expect(initialSelection(list)).toBe(0);
+    expect(listKey(list, initialSelection(list), "Enter", false, "= 12*7")).toEqual({ kind: "act", action: { kind: "copy", text: "84" } });
+    expect(initialSelection(buildRows("rust", [GOOGLE]))).toBeNull();
+  });
+});
+
 describe("keys", () => {
   const list = buildRows("127", [SMOKE, EXAMPLE, GOOGLE]);
   const last = list.rows.length - 1;

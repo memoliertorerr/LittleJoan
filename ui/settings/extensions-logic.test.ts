@@ -22,6 +22,7 @@ function extension(id: string, kind: "bundled" | "developer", overrides: Partial
 const VIEW: ExtensionsView = {
   developerMode: true,
   folder: "/config/extensions",
+  disabledBuiltIns: [],
   extensions: [
     extension("hello", "bundled", { permissions: ["storage", "clipboard", "pageInfo", "network:api.example.com"] }),
     extension("mine", "developer", { author: "" }),

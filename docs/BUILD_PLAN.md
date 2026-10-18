@@ -78,7 +78,7 @@
 | LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ✅ done |
 | LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ✅ done |
 | LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ✅ done |
-| LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ⬜ todo |
+| LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ✅ done |
 | LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ⬜ todo |
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ⬜ todo |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ⬜ todo |
@@ -3855,6 +3855,54 @@ This ends phase 16:
   each one is tested.
 - Merge into main once green (merge commit), then stop and report.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **`ui/answers/`** — each module a pure `answer(query, …) → { title, subtitle, copy } | null`
+  with its own tests (27 in all):
+  - `calc.ts`: a tokenizer and a precedence-climbing parser (never `eval` / `Function`): + − × ÷
+    (also `x`, `−`), `^` (right-associative, tighter than a unary minus: `-2^2 = -4`), `%` as a
+    percent after an operand (`50% * 30 = 15`) and modulo between two (`10 % 3 = 1`), parentheses,
+    implicit multiplication (`2(3+4)`, `2pi`), decimals and exponents, `pi`, `e`, `tau`, `sqrt`,
+    `cbrt`, `abs`, `sin`/`cos`/`tan` (and inverses), `log` (base 10), `ln`, `exp`,
+    `round`/`floor`/`ceil`. Division by zero, unknown names, unbalanced parentheses and
+    non-finite results have no answer. Results are written with 12 significant digits
+    (`0.1 + 0.2 = 0.3`), exponents past 1e15. `= …` always asks it; bare text only with a digit
+    and an operator or a function — not a lone number (timestamps), not `2024-10-18`, not an IP.
+  - `units.ts`: length, mass, temperature, volume (US cups / pints / quarts / gallons), speed,
+    data sizes (decimal kB… and binary KiB…; `b` is bytes, bits aren't converted), by symbol or
+    name, `in` / `to` / `as` / `into`, 10 significant digits.
+  - `time.ts` + `cities.ts` (203 names: ~170 cities, a few countries' capitals and zone
+    abbreviations → IANA; every zone checked against Intl in a test): `time in <city>` /
+    `<city> time` / `what time is it in …`, and `<3pm | 15:30 | noon | midnight> <city> to|in
+    <city>` (a bare `3` is too vague). Offsets come from `Intl.DateTimeFormat#formatToParts`
+    with a passed-in clock and locale; tested across the 2026 October week when Europe has left
+    summer time and the US hasn't. `Europe/Kiev`, not `Kyiv`, for older ICU data.
+  - `random.ts`: `uuid` (v4), `password [8–128]` (default 16; letters, digits, symbols, no
+    look-alikes, at least one of each kind, shuffled), `[roll] NdM` (≤ 20 dice), `flip a coin`,
+    `random [a-b]` (default 1–100). The randomness is passed in; in the bar it is
+    `crypto.getRandomValues` with rejection sampling (`cryptoInt`), never `Math.random`.
+  - `timestamp.ts`: 10 digits = seconds, 13 = milliseconds → UTC time and ISO 8601 (copied);
+    `now unix` / `unix now` / `timestamp` / `epoch`.
+  - `index.ts`: `BUILT_INS` (ids `builtin:calc`, `builtin:units`, `builtin:time`,
+    `builtin:random`, `builtin:timestamp`), asked in that order; the first answer becomes the row.
+- **The command bar:** the quick-answer hook from LJ23 is filled (`command.ts`), the answer row
+  comes first **and is selected** (`rows.ts` `initialSelection`, tested), so Enter copies it;
+  a click copies too. `copy.ts` uses `navigator.clipboard.writeText` in the trusted bar on that
+  keypress, falling back to a hidden textarea and `execCommand("copy")`, then gives the field the
+  keyboard back; the row's subtitle says "Copied" (or "Couldn't copy") for 1.2 s, as text. An
+  equals-sign symbol (`row-icon-answer`).
+- **Switching off:** Settings → Extensions → Built-in lists the five with their examples and a
+  switch each (the `disabledExtensions` draft from LJ30); `extensions_list` now also returns
+  `disabledBuiltIns` (the `builtin:` entries), which the command bar skips.
+- **Smoke:** in the extension run, after the command-bar hello, a third window: type `= 12*7` →
+  `answer.png`, Enter, and the system clipboard is read back (`Get-Clipboard`, `pbpaste`, `xclip`
+  / `xsel` if the runner has one) into `summary.json` — informational, not a pass/fail rule.
+- Files beyond the prompt: `ui/command/copy.ts`, `ui/command/command.ts`, `ui/command/extensions.ts`
+  (the view's type), `ui/settings.ts`, `ui/style.css`, `src-tauri/src/extensions/list.rs`,
+  `src-tauri/src/commands.rs`, docs/architecture.md.
+- `npm run verify`: 272 TS tests, 235 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.3 GB.
 
 ### LJ32 — Bundled games: Snake and 2048 · standard · auto
 
