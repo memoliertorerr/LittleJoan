@@ -17,6 +17,29 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Page actions and tools,** bundled: **QR code** (the page's address as a QR code, made locally —
+  byte mode, versions 1–10), **Clean link** (copies the address without tracking parameters and
+  out of redirect wrappers; Little Joan's own rules, keeping the parameters that make a link work),
+  **Wayback Machine** (opens the Internet Archive's snapshots of the page), **Copy as Markdown
+  link** (also HTML, plain text or Org mode; the title is editable) — these four appear in the
+  command bar only while a web page is open —, and the tools **JSON** (format, minify, sort keys,
+  validate with the error's line and column, without changing a number or string), **Text tools**
+  (counts, case, Base64 / URL encoding, line sorting) and **Color tools** (hex / RGB / HSL / OKLCH,
+  WCAG contrast). None of them fetches anything from the network.
+- **Notes, Focus timer and World clock,** bundled productivity extensions. **Notes:** several
+  notes that save as you type, search, copy a note, delete with Undo; N for a new note, `/` to
+  search. **Focus timer:** 25-minute focus sessions, 5-minute breaks and a 15-minute break after
+  four, pause and resume, a soft chime when a phase ends while the panel is open; it keeps the end
+  time, so reopening the panel shows the time left (it says so when a session ended while it was
+  closed — there are no background alarms while Little Joan hibernates). **World clock:** your
+  time plus the cities you pick, with the difference and the day there, right across daylight
+  saving time; Delete removes a city, Alt+↑/↓ moves it. All three keep their data in the
+  extension's own storage on this computer.
+- **Snake and 2048,** bundled games: type "snake" or "2048" in the command bar (or run
+  `little-joan --extension snake` / `--extension 2048`). Both are played with the keyboard (arrows
+  or WASD; Snake pauses on Space; Esc closes), take the theme's colors, fit any window size down to
+  phone width, and keep your best score — 2048 also keeps the game in progress — in the extension's
+  own storage.
 - **Quick answers in the command bar:** type `= 12*7`, `10 km in mi`, `72f to c`, `time in
   Tokyo`, `3pm london to new york`, `uuid`, `password 20`, `roll 2d6`, `flip a coin`,
   `random 1-100`, `1700000000` or `now unix`, and the answer is the first row — Enter copies it.

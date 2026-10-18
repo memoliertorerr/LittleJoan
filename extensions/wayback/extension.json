@@ -1,0 +1,20 @@
+{
+  "id": "wayback",
+  "name": "Wayback Machine",
+  "version": "1.0.0",
+  "description": "Opens the Internet Archive's snapshots of the page you're on — every copy in a calendar, or the newest one.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["pageInfo"],
+  "contributes": {
+    "pageActions": [
+      {
+        "id": "open",
+        "title": "Wayback Machine",
+        "keywords": ["wayback", "archive", "snapshot", "history", "old", "cache"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

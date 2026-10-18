@@ -24,7 +24,7 @@ CONTRIBUTING.md, SECURITY.md       how to build and check changes; how to report
 package.json, package-lock.json   npm scripts (verify, icons, dev); all JS tooling is local
 tsconfig.json                      strict TS for ui/, scripts/, tests/, config files
 vite.config.mts                    UI build: root ui/, output dist/ (embedded into the binary)
-vitest.config.mts                  TS unit tests: ui/**, scripts/**, tests/** *.test.ts — each
+vitest.config.mts                  TS unit tests: ui/**, scripts/**, tests/**, extensions/** *.test.ts — each
                                    *.test.ts sits next to the module it tests (Rust tests are
                                    #[cfg(test)] modules inside each .rs file)
 eslint.config.mjs                  typescript-eslint recommended (type-checked)
@@ -38,7 +38,33 @@ scripts/theme-css.mts              writes ui/lib/theme-defaults.css (`npm run th
 scripts/copy-icons.mts             copies the desktop icon set from `tauri icon` output
 extensions/<id>/                   bundled extensions (embedded at build time by build.rs): an
                                    extension.json and plain web files; hello/ is the example and
-                                   the smoke test's target
+                                   the smoke test's target. The others share one layout:
+                                   index.html (the SDK, then `<script type="module" src="ui.js">`),
+                                   ui.js (DOM glue), logic.js (pure, an ES module the tests import),
+                                   logic.test.ts, style.css (the theme's --lj-* variables), icon.svg
+extensions/snake/, extensions/2048/  the bundled games: Snake (a canvas; grid, turns without 180°
+                                   reversal, growth, walls and self, speed-up, Space pauses) and 2048
+                                   (DOM tiles keyed by id so they slide; one merge per tile per move;
+                                   the game in progress is saved); best scores in littleJoan.storage
+extensions/notes/, extensions/focus/, extensions/clock/  the bundled productivity extensions: Notes
+                                   (list + editor, search, autosave with a debounce, copy with the
+                                   clipboard permission, delete with Undo), Focus timer (25 / 5 / 15
+                                   cycles from a stored end time; a Web Audio chime while open), World
+                                   clock (cities.js: ~180 cities → IANA zones; Intl does daylight
+                                   saving; add, remove, reorder)
+extensions/qr/, clean-link/, wayback/, markdown-link/  the bundled page actions (permission `pageInfo`;
+                                   Clean link and Markdown link also `clipboard`): a QR encoder (byte
+                                   mode, versions 1–10, level M; reference matrices in
+                                   reference.test-data.json), tracking-parameter rules and redirect
+                                   unwrapping written for Little Joan, the Wayback Machine's addresses,
+                                   Markdown / HTML / Org link escaping
+extensions/json/, text-tools/, color/  the bundled tools: a JSON parser with line / column errors and
+                                   printers that keep numbers and strings as written; counts, case,
+                                   Base64 / URL encoding, line operations; color parsing (hex, rgb(),
+                                   hsl(), oklch(), names), conversions and WCAG contrast
+extensions/bundled.test.ts         every bundled extension: folder = id, the SDK first and no inline
+                                   script, no network API and no `network:` host, text drawn as text,
+                                   a pure logic.js with tests
 extensions/sdk/v1.js, v1.d.ts      the extension SDK (served to panels at /__lj/sdk/v1.js) and its
                                    types
 ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above the page, or the
@@ -107,6 +133,8 @@ ui/settings/extensions.ts          the Extensions tab's list, switches, Develope
                                    and reload buttons; DOM glue only
 ui/settings/extensions.css         the Extensions tab's styles
 docs/extensions.md                 the extension authors' guide (experimental)
+docs/images/                       the README's screenshots, cropped from CI's macOS smoke run (its
+                                   test page and sample data only — nothing personal)
 ui/settings.css                    the settings window's styles (style.css has the shared tokens)
 ui/style.css                       shared styles, all colors from the theme's --lj-* variables;
                                    `.themed` = the gradient with the grain on top
@@ -221,6 +249,11 @@ scripts/ci/smoke-command.mts       CI: the command bar's and history view's smok
                                    unit-tested
 scripts/ci/smoke-theme.mts         CI: the theme runs (themes, screenshots) and their rules,
                                    unit-tested
+scripts/ci/smoke-keys.mts          CI: typing on macOS runners — characters as real key codes (US
+                                   layout), a Unicode string only for the rest (unit-tested)
+scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which panels open, and when a
+                                   panel counts as up (its URL with the nonce, its own theme call,
+                                   the toolbar's label, none of its requests refused); unit-tested
 scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report, the probe),
                                    unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
@@ -676,7 +709,10 @@ open as **panels** in the page window. Bundled ones live in the repository's `ex
 and are embedded into the binary at build time (`build.rs` → `$OUT_DIR/bundled_extensions.rs`,
 `include_bytes!`); with **Developer mode** on (`developerMode` in settings.json, off by default)
 unpacked folders in `<config dir>/extensions/<id>/` load too. `little-joan --extension <id>`
-opens one (its first command). The registry is read when first needed and forgotten when the
+opens one (its first command). Besides hello, twelve are bundled (LJ32–LJ34): Snake, 2048, Notes,
+Focus timer, World clock, JSON, Text tools and Color tools (commands), and QR code, Clean link,
+Wayback Machine and Copy as Markdown link (page actions) — none declares a network host or asks to
+open the default browser (a Rust test checks it), and their pure logic is unit-tested in TypeScript. The registry is read when first needed and forgotten when the
 window closes. The authors' guide is LJ30's `docs/extensions.md`.
 
 ```
@@ -971,7 +1007,21 @@ and pushes to `main`:
   page with `?ext=race` keeps putting hello's panel URL (no nonce) into iframes and `window.open`
   while `--extension hello` opens it — hello must report again, every extension URL that loads
   must carry the app's nonce, at least one racer must be refused, and the toolbar may name hello
-  only right after hello's own panel loaded (`extension-race.png`). Then the **theme runs**
+  only right after hello's own panel loaded (`extension-race.png`). Then the **bundled extensions
+  run** (`smoke-bundled.mts`), its own launch on a data folder whose `extension-data/` already
+  holds sample content (three notes, a focus session 7½ minutes in, four cities): the window first
+  (`--show`; hello's run covers opening from hibernation), then `--extension <id>` for each
+  bundled panel in turn (Snake, 2048, Notes, Focus timer, World clock, JSON, Text tools, Color
+  tools — the tools with sample drafts too) — each must
+  come up (its URL with the app's nonce, its script's own `theme` call, the toolbar naming it, none
+  of its requests refused, no failed call) and is screenshotted (`snake.png`, `2048.png`,
+  `notes.png`, `focus.png`, `clock.png`, `json.png`, `text-tools.png`, `color.png`); then the
+  **page actions** on the smoke page: Ctrl/Cmd+L, typing `qr`, ↓ ↓ Enter must open QR code for the
+  page (it must come up like any panel and have `pageInfo` answered; required on Windows and Linux,
+  best effort on macOS) → `qr.png`; the focus timer must show the session running from its
+  stored end time (its title counts down, `1x:xx · Focus`); 2048 gets four arrow keys first
+  (whether they reached it — its own save — goes into `summary.json`, informational) (log
+  `smoke-bundled.log`). Then the **theme runs**
   (`smoke-theme.mts`), each its own launch on a
   fresh data folder whose `settings.json` carries a theme (so the main run's memory numbers
   don't move): a two-color theme with grain 0.4 in light (`theme/page.png`,

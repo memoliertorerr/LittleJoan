@@ -1,0 +1,20 @@
+{
+  "id": "text-tools",
+  "name": "Text tools",
+  "version": "1.0.0",
+  "description": "Count characters, words and lines; change case (UPPER, Title, camelCase, snake_case…); Base64 and URL encode or decode; sort and tidy lines.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage", "clipboard"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "Text tools",
+        "keywords": ["text", "count", "words", "case", "base64", "encode", "sort", "lines"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

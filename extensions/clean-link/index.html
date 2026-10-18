@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clean link</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main id="app" class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>Clean link</h1>
+      </header>
+      <section class="card result-card">
+        <span class="label">Clean link</span>
+        <p id="result" class="url result"></p>
+        <p id="verdict" class="verdict"></p>
+        <ul id="removed" class="chips" aria-label="Removed"></ul>
+      </section>
+      <details class="before-box">
+        <summary>The page's address</summary>
+        <p id="before" class="url before"></p>
+      </details>
+      <div class="actions">
+        <button id="copy" class="btn primary" type="button">Copy clean link</button>
+        <button id="open" class="btn" type="button">Open it here</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p class="hint"><span><kbd>Enter</kbd> copy</span><span><kbd>Esc</kbd> back to the page</span></p>
+    </main>
+  </body>
+</html>

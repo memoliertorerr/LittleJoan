@@ -1,0 +1,20 @@
+{
+  "id": "snake",
+  "name": "Snake",
+  "version": "1.0.0",
+  "description": "The classic: steer with the arrow keys or WASD, eat, grow, and don't hit the walls or yourself. It gets faster as you go.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "play",
+        "title": "Play Snake",
+        "keywords": ["snake", "game", "play", "arcade"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

@@ -13,7 +13,8 @@
 // then a relaunch on the same data folder), that history.json recorded the smoke page (and that
 // a run with history off records nothing; that run also opens Settings with `--settings` and
 // `--settings privacy`), then the extension run (its own launch: `--extension hello`, then the
-// smoke page's probe of what a web page can't do to an extension), then the theme runs (each its
+// smoke page's probe of what a web page can't do to an extension), then the bundled extensions
+// run (its own launch: `--extension <id>` for each bundled panel, screenshots), then the theme runs (each its
 // own launch with a theme in settings.json:
 // the page, the command bar, the history view and Settings in a two-color theme, light and dark,
 // and the default theme in dark; screenshots in <out>/theme/), then check the logs
@@ -63,6 +64,7 @@ import {
   TYPED,
 } from "./smoke-command.mts";
 import { THEME_RUNS, parseTheme, themeFailures, type ThemeRun } from "./smoke-theme.mts";
+import { macKeyToken } from "./smoke-keys.mts";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
@@ -73,9 +75,12 @@ import {
   parseStore,
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
+import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
+/** How many extensions the app bundles: the repository's extensions/<id>/ with a manifest. */
+const bundledCount = readdirSync(join(root, "extensions")).filter((name) => existsSync(join(root, "extensions", name, "extension.json"))).length;
 const os = process.platform;
 
 function arg(name: string): string | undefined {
@@ -250,17 +255,20 @@ for t in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
 
 /**
  * Types `text` into the focused window: xdotool on Linux, SendKeys on Windows (after bringing the
- * app's window to the front), key events from a small Swift script on macOS (best effort: the
- * runner may not let them through).
+ * app's window to the front — unless `activate` is false: activating a window that is already in
+ * front can hand the keyboard back to the page webview after the app moved it to the bar), key
+ * events from a small Swift script on macOS (best effort: the runner may not let them through).
  */
-function typeText(text: string, appPid: number): void {
+function typeText(text: string, appPid: number, activate = true): void {
   if (os === "win32") {
     powershell(`Add-Type -AssemblyName System.Windows.Forms
-$shell = New-Object -ComObject WScript.Shell
+${activate ? `$shell = New-Object -ComObject WScript.Shell
 $null = $shell.AppActivate(${appPid})
-Start-Sleep -Milliseconds 400
+Start-Sleep -Milliseconds 400` : "Start-Sleep -Milliseconds 100"}
 [System.Windows.Forms.SendKeys]::SendWait('${text}')`);
   } else if (os === "darwin") {
+    // Real key codes (US layout) where there is one — events that only carry a Unicode string
+    // never reached the app on CI's macOS runners —, the Unicode string otherwise.
     const swift = join(out, "type.swift");
     writeFileSync(
       swift,
@@ -268,18 +276,26 @@ Start-Sleep -Milliseconds 400
 let pid = pid_t(CommandLine.arguments[1]) ?? 0
 NSRunningApplication(processIdentifier: pid)?.activate(options: [])
 usleep(400000)
-for ch in CommandLine.arguments[2] {
+for token in CommandLine.arguments.dropFirst(2) {
+  let kind = token.first
+  let rest = String(token.dropFirst())
   for down in [true, false] {
-    let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
-    var units = Array(String(ch).utf16)
-    event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
-    event?.post(tap: .cghidEventTap)
+    if kind == "k" {
+      let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(rest.filter { $0.isNumber }) ?? 0, keyDown: down)
+      if rest.hasSuffix("s") { event?.flags = .maskShift }
+      event?.post(tap: .cghidEventTap)
+    } else {
+      let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+      var units = Array(rest.utf16)
+      event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+      event?.post(tap: .cghidEventTap)
+    }
     usleep(60000)
   }
 }
 `,
     );
-    run("swift", [swift, String(appPid), text]);
+    run("swift", [swift, String(appPid), ...[...text].map(macKeyToken)]);
   } else {
     run("xdotool", ["type", "--delay", "120", text]);
   }
@@ -287,15 +303,15 @@ for ch in CommandLine.arguments[2] {
 }
 
 /** macOS virtual key codes of the keys `pressKeys` sends. */
-const MAC_NAMED_KEYS: Record<string, number> = { Down: 125, Return: 36 };
-const SEND_KEYS: Record<string, string> = { Down: "{DOWN}", Return: "{ENTER}" };
+const MAC_NAMED_KEYS: Record<string, number> = { Left: 123, Right: 124, Down: 125, Up: 126, Return: 36 };
+const SEND_KEYS: Record<string, string> = { Left: "{LEFT}", Right: "{RIGHT}", Down: "{DOWN}", Up: "{UP}", Return: "{ENTER}" };
 
-/** Presses named keys (Down, Return) in the app's window, as typeText does (best effort on macOS). */
-function pressKeys(keys: string[], appPid: number): void {
+/** Presses named keys (arrows, Return) in the app's window, as typeText does (best effort on macOS). */
+function pressKeys(keys: string[], appPid: number, activate = true): void {
   if (os === "win32") {
-    powershell(`$shell = New-Object -ComObject WScript.Shell
+    powershell(`${activate ? `$shell = New-Object -ComObject WScript.Shell
 $null = $shell.AppActivate(${appPid})
-Start-Sleep -Milliseconds 400
+Start-Sleep -Milliseconds 400` : "Start-Sleep -Milliseconds 100"}
 Add-Type -AssemblyName System.Windows.Forms
 ${keys.map((key) => `[System.Windows.Forms.SendKeys]::SendWait('${SEND_KEYS[key] ?? ""}'); Start-Sleep -Milliseconds 150`).join("\n")}`);
   } else if (os === "darwin") {
@@ -323,7 +339,7 @@ for code in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16 };
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37 };
 
 /**
  * Presses Ctrl+<letter> (Cmd+<letter> on macOS) in the app's window: xdotool on Linux, SendKeys
@@ -576,6 +592,8 @@ await forward(["--show"]);
 await waitFor("window-created", (e) => count(e, "window-created") > 0, 20_000);
 await waitFor("command bar open (overlay true)", (e) => count(e, "overlay", "true") > 0, 20_000);
 await waitFor("start page title", (e) => count(e, "title", "Little Joan") > 0, 20_000);
+// The command bar's first suggestions (a slow runner's first window can take a moment).
+await waitFor("command bar: first suggestions", (e) => count(e, "suggestions") > 0, 15_000);
 await sleep(1500);
 // The command bar covers the whole window (the page behind it is hidden).
 screenshot("start.png");
@@ -989,6 +1007,80 @@ async function extensionRun(): Promise<{ events: LogEvent[]; store: string | und
 const extensionCheck = await extensionRun();
 console.log(`extensions: hello ${lastTitle(extensionCheck.events, "LJ-EXT hello") ?? "no report"}; probe ${lastTitle(extensionCheck.events, "LJ-EXTPROBE") ?? "no report"}`);
 
+/**
+ * The bundled extensions run (LJ32–LJ34): its own launch on a fresh data folder. Each bundled
+ * panel in BUNDLED_PANELS opens with `--extension <id>` and is screenshotted once it is up (some
+ * get a few keys first — whether they reached the panel is recorded, informational).
+ */
+async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, boolean> }> {
+  const logFile = join(out, "smoke-bundled.log");
+  rmSync(logFile, { force: true });
+  const dir = dataDir("bundled", true);
+  mkdirSync(join(dir, "extension-data"), { recursive: true });
+  for (const panel of BUNDLED_PANELS) {
+    if (panel.seed) {
+      writeFileSync(join(dir, "extension-data", `${panel.id}.json`), seedFile(panel.seed(Date.now())));
+    }
+  }
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dir, LITTLEJOAN_SMOKE_LOG: logFile };
+  const runChild = launch(runEnv);
+  await waitFor("bundled: started", (e) => count(e, "started") > 0, 30_000, logFile);
+  await sleep(1500);
+  const runPid = appPid(runChild);
+  // The window first (hello's run covers opening from hibernation): on macOS a panel that loads
+  // before the bar's own page can leave the toolbar unpainted (Deferred follow-ups).
+  await forward(["--show"], runEnv);
+  await waitFor("bundled: the window", (e) => count(e, "bar-loaded") > 0 && count(e, "suggestions") > 0, 20_000, logFile);
+  await sleep(500);
+  const keys: Record<string, boolean> = {};
+  for (const panel of BUNDLED_PANELS) {
+    await forward(["--extension", panel.id], runEnv);
+    await waitFor(`bundled: ${panel.id} is up`, (e) => panelUp(e, panel.id), 30_000, logFile);
+    await sleep(1500);
+    if (panel.keys) {
+      pressKeys(panel.keys, runPid);
+      await sleep(1200);
+      keys[panel.id] = keysReached(events(logFile), panel.id);
+    }
+    screenshot(panel.shot);
+  }
+  // Page actions (LJ34) on the smoke page, from the command bar: Ctrl/Cmd+L, type, ↓ ↓ Enter
+  // (search row first, then the page action; best effort on macOS).
+  for (const action of PAGE_ACTIONS) {
+    const pageFrom = events(logFile).length;
+    await forward(["--show", smokePageUrl], runEnv);
+    await waitFor(`page action ${action.id}: the smoke page`, (e) => e.slice(pageFrom).some((x) => x.event === "title" && x.detail.startsWith("LJ-SMOKE ready")), 30_000, logFile);
+    await sleep(1000);
+    const barFrom = events(logFile).length;
+    pressShortcut("l", runPid);
+    await waitFor(`page action ${action.id}: the command bar`, (e) => count(e.slice(barFrom), "overlay", "true") > 0, 10_000, logFile);
+    await sleep(500);
+    // The window is in front already (Ctrl/Cmd+L went to it): no second activation.
+    typeText(action.typed, runPid, false);
+    const typed = await waitFor(
+      `page action ${action.id}: typed`,
+      (e) => e.slice(barFrom).some((x) => x.event === "suggestions" && x.detail.endsWith(`typed=${action.typed.length}`)),
+      15_000,
+      logFile,
+    );
+    if (typed) {
+      await sleep(800);
+      pressKeys(["Down", "Down", "Return"], runPid, false);
+      await waitFor(`page action ${action.id}: up`, (e) => panelUp(e.slice(barFrom), action.id), 20_000, logFile);
+    }
+    await sleep(1500);
+    screenshot(action.shot);
+  }
+  await forward(["--quit"], runEnv);
+  if (!(await exited(runPid, 15_000))) {
+    await quit(runChild, runPid);
+  }
+  return { events: events(logFile), keys };
+}
+
+const bundledCheck = await bundledRun();
+console.log(`bundled: keys reached ${JSON.stringify(bundledCheck.keys)}`);
+
 mkdirSync(join(out, "theme"), { recursive: true });
 const themeRuns: { run: ThemeRun; events: LogEvent[] }[] = [];
 for (const run of THEME_RUNS) {
@@ -1073,6 +1165,11 @@ const summary = {
     store: parseStore(extensionCheck.store) ?? null,
     answerCopied: clipboard,
   },
+  bundled: {
+    count: bundledCount,
+    up: [...BUNDLED_PANELS, ...PAGE_ACTIONS].filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
+    keysReached: bundledCheck.keys,
+  },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1111,14 +1208,17 @@ const failures = evaluate(
   .concat(extensionFailures(extensionCheck.events, parseStore(extensionCheck.store)))
   .concat(raceFailures(extensionCheck.events))
   .concat(commandHelloFailures(extensionCheck.events, { driven: typingDriven }))
-  .concat(settingsExtensionsFailures(historyOffEvents))
+  .concat(settingsExtensionsFailures(historyOffEvents, bundledCount))
+  .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
+  .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
   const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
   const extensionLog = join(out, "smoke-extensions.log");
-  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, ...themeLogs, firstLogPath, relaunchLogPath]) {
+  const bundledLog = join(out, "smoke-bundled.log");
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

@@ -1,0 +1,20 @@
+{
+  "id": "focus",
+  "name": "Focus timer",
+  "version": "1.0.0",
+  "description": "Work in 25-minute focus sessions with 5-minute breaks and a longer one after four. A soft chime plays while the panel is open.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "Focus timer",
+        "keywords": ["focus", "timer", "pomodoro", "break", "work", "countdown"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

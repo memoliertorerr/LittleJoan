@@ -1,0 +1,20 @@
+{
+  "id": "clean-link",
+  "name": "Clean link",
+  "version": "1.0.0",
+  "description": "Copies the page's address without tracking parameters (utm_…, fbclid, share ids) and out of redirect wrappers, keeping what makes the link work.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["pageInfo", "clipboard"],
+  "contributes": {
+    "pageActions": [
+      {
+        "id": "clean",
+        "title": "Clean link",
+        "keywords": ["clean", "link", "copy", "tracking", "utm", "share", "url"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

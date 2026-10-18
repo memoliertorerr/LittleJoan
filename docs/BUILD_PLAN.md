@@ -79,10 +79,10 @@
 | LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ✅ done |
 | LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ✅ done |
 | LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ✅ done |
-| LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ⬜ todo |
-| LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ⬜ todo |
-| LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ⬜ todo |
-| LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ⬜ todo |
+| LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ✅ done |
+| LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
+| LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
+| LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — waiting for the owner's checklist |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
@@ -120,7 +120,12 @@ Settings with developer mode and `docs/extensions.md`, and the built-in quick an
 `lj/p16-extensions`. It is security-critical, so it is **not** merged by the agent. An
 independent security review (2026-10-18) found no Critical/High issues; its findings, and what the
 new request log showed while fixing them, are fixed in `lj-step-29-fix4` → `fix8` (LJ29's notes,
-"Security review"); the merge decision is the owner's. Next after it: phase 17 (LJ32 → LJ35).**
+"Security review"); the merge decision is the owner's; it was merged on 2026-10-18, and `main`'s CI for the merge
+commit is green (run 39116954733). Phase 17 (LJ32 → LJ35: the
+bundled extensions — games, productivity, page actions and tools — then the docs and the owner's
+checklist) is PR #18 on `lj/p17-bundled-extensions`, merged by the agent once verify, package and
+smoke were green on every OS (the standing exception); LJ35 is a checkpoint: the owner's checklist
+is in PR #18, and `v0.2.0-beta.2` waits for the owner's word. Next after it: phases 7–10.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -4179,6 +4184,86 @@ draft, and watch CI until every job is green (two honest attempts, then stop). L
 screenshots.
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **One layout for every bundled extension after hello** (documented in architecture.md and
+  extensions.md): `index.html` loads the SDK (a classic script) and then `<script type="module"
+  src="ui.js">`; `ui.js` is the DOM glue and imports `./logic.js`, the pure rules (an ES module,
+  JSDoc-typed, `// @ts-check`), which `logic.test.ts` imports too; `style.css` paints with the
+  theme's `--lj-*` variables (system-color fallbacks until `littleJoan.theme.apply()` answers — at
+  first the body was hidden until then, which `lj-step-32-fix` undid); `icon.svg` is original
+  geometry. Module scripts
+  over `ljext:` work on every engine the way the app's own Vite pages do over `tauri:` (same-origin
+  CORS-mode fetches; WebKitGTK registers both schemes alike, as secure). vitest now includes
+  `extensions/**/*.test.ts`. Esc closes a panel (`littleJoan.close()`) — in Snake it first pauses a
+  running game; Ctrl/Alt/Cmd presses are left to Little Joan and the system.
+- **Snake** (`extensions/snake/`, permission `storage`): an 18 × 18 grid on a canvas sized to the
+  largest whole-cell square that fits (sharp at any device pixel ratio, down to phone width). Rules
+  (`logic.js`, 13 tests): movement one cell per step, growth on food, walls and the body end it (the
+  cell the tail leaves is free unless it grows), no 180° reversal — also not through two quick
+  presses, since a turn is compared with the last *waiting* one (up to two wait, so a U-turn in two
+  steps works) —, food on a random free cell (none left = a win), 140 ms per step minus 4 per food,
+  never under 60 ms; Space pauses / resumes / starts, a turn resumes, Enter starts again; arrows and
+  WASD by `KeyboardEvent.code` (the same place on AZERTY). The snake is the accent, fading toward
+  `--lj-surface` at the tail; the food is the accent turned 180° and a little more saturated; eyes
+  look where it goes next. The loop runs on `requestAnimationFrame` only while a game runs; it
+  pauses when the panel loses focus. Best score in storage.
+- **2048** (`extensions/2048/`, permission `storage`): DOM tiles keyed by id so they slide (CSS
+  transforms, 110 ms; the merged-away tile slides under its partner and goes, the doubled one pops,
+  the new one appears; none of it with reduced motion). Rules (`logic.js`, 11 tests): lines packed
+  toward the move's edge, one merge per tile per move (`[2,2,2,2] → [4,4]`, `[4,4,8] → [8,8]`), the
+  tile nearer the edge survives a merge, a new 2 (a 4 one time in ten) only after a real move, game
+  over with a full board and no equal neighbours, won at 2048 (Enter keeps playing), N for a new
+  game. Tile colors come from the theme (`palette`): light mode from `--lj-surface` to
+  `--lj-row-selected`, dark mode from a lifted surface to `--lj-accent` (so tiles always stand out
+  from the empty cells), with whichever of `--lj-fg`, `--lj-on-selected` and `--lj-surface` reads
+  best — tested at ≥ 3:1 (large bold text) for every tile up to 2^17 in both default palettes. The
+  game in progress and the best score are saved 400 ms after the last move (storage takes 20 writes
+  a second at most), and before Esc closes the panel; a saved game is checked from scratch when read
+  (`restore`).
+- **`extensions/bundled.test.ts`** checks every bundled extension (folder = id, icon and panels
+  exist, the SDK first, no inline script or event handler, no network API or `network:` host, no
+  `innerHTML` / `eval`, a pure `logic.js` with tests); the Rust test
+  `the_shipped_extensions_are_all_valid` now also wants every bundled extension's icon and panels
+  served and no network host, and Snake and 2048 present.
+- **Smoke** (`scripts/ci/smoke-bundled.mts`, 5 tests): a launch of its own, `--extension snake` then
+  `--extension 2048`; each panel must come up — `extension-opened`, its URL with the nonce in
+  `page-started`, its script's own `ext-api <id> theme ok`, `toolbar-label <id>`, none of its
+  requests refused (the engine's favicon aside), no failed call — then `snake.png` / `2048.png`.
+  2048 gets ← ↑ → ↓ first; whether they reached the panel (its own save) is recorded in
+  `summary.json`, informational. `pressKeys` learned the arrows (SendKeys, xdotool, macOS key codes).
+  Settings → Extensions' rule now counts the bundled extensions (`extensions-list <bundled + 1>
+  skipped=1`).
+- Files beyond the prompt: `vitest.config.mts`, `extensions/bundled.test.ts`,
+  `scripts/ci/smoke-bundled.mts` (+ test), `scripts/ci/smoke.mts`, `scripts/ci/smoke-extensions.mts`
+  (+ test), `src-tauri/src/extensions/registry/tests.rs`, README (a table of the bundled
+  extensions), CHANGELOG, architecture.md, extensions.md. Checked locally in a plain browser with a
+  stand-in SDK (a dev aid, not committed): both games at 480 × 600 and 360 × 560, light and dark.
+- `npm run verify`: 324 TS tests, 256 Rust tests, clippy clean. Disk: 15 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
+- **CI (run 39118669089): verify ×3, package ×3 and smoke on Windows, macOS and Linux green;
+  `smoke (linux-scale-2)` red on an older rule** — "the command bar never asked for suggestions
+  before the smoke page opened": that runner's first window took longer than the smoke's fixed
+  1.5 s to ask (later windows asked within ~220 ms). Both games came up on all four jobs, and the
+  arrow keys reached 2048 on Windows and both Linux jobs (its own save; not on macOS, where
+  synthetic keys are best effort). Screenshots: Windows and Linux — the themed panels with the
+  toolbar's icon, name and "Extension" badge; Snake's board with the snake, the food and the start
+  card; 2048 after four moves (score 12 / 8). But **Snake, the first panel of the run (opened from
+  hibernation), was a blank white page on macOS and Linux at scale 2** (its script had run: theme
+  and storage calls were answered), and on macOS the toolbar showed an empty field — hello's
+  screenshot in the extension run had that empty toolbar on macOS too. Two causes: (1) the panels
+  hid `<body>` (opacity 0) until the theme answered, and WebKit doesn't commit a first frame for a
+  page with nothing visible, so a page that becomes visible a moment later may stay unpainted;
+  (2) on macOS, when the panel commits before the bar's own page has loaded (the window built for
+  `--extension` from hibernation), the toolbar can stay unpainted — the app logged `toolbar-label`
+  for it twice, so it is the bar's view, not the label (Deferred follow-ups). **Fix
+  (`lj-step-32-fix`):** no more hidden body (the fallback colors show for at most a frame); the
+  smoke waits for the first window's suggestions instead of a fixed pause, and the bundled run
+  summons the window before opening panels (hello's run keeps covering hibernation), with 1.5 s
+  before each screenshot. Its run (39120155218) had verify ×3 and package on macOS and Linux green,
+  but `package (windows)` hung in `actions/cache` restoring for more than 15 minutes (a GitHub
+  cache stall; the job has no timeout), so the LJ33 push superseded it — LJ33's run checks the fix.
+
 ### LJ33 — Bundled productivity: Notes, Focus timer, World clock · standard · auto
 
 **Verify:** `npm run verify` green, including vitest tests for each `logic.js`:
@@ -4200,6 +4285,69 @@ Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ33 to ✅,
 commit: "lj-step-33: bundled productivity — Notes, Focus timer, World clock". Push and watch CI
 until every job is green (two honest attempts, then stop). Look at the screenshots.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- Same layout as LJ32 (`index.html`, `ui.js`, pure `logic.js` + `logic.test.ts`, `style.css`,
+  original `icon.svg`); each panel is keyboard-first, fits phone width and takes the theme.
+- **Notes** (`extensions/notes/`, permissions `storage`, `clipboard`; 10 tests): several notes
+  (`{ id, text, created, updated }`, newest edit first, at most 500, 200,000 characters each), a
+  title from the first line (Markdown `#` dropped) and a preview from the rest, search where every
+  word must appear (any order, case and accent: `fold`), autosave with a debounce
+  (`autosave(save, timers, 500 ms)`: one save per burst with the latest text, `flush()` on leaving
+  the editor, Esc, blur and `pagehide`, a failed save stays waiting — tested with fake timers),
+  copy through `littleJoan.clipboard.writeText`, delete with a 6-second Undo (also Ctrl/Cmd+Z), an
+  empty note isn't kept, a "Saved" / quota message, and how much of the 1 MB the notes use past
+  75 %. One pane at a time in a narrow window (list ↔ editor), side by side from 640 px. The list
+  takes the keys (N new, `/` search, ↑ ↓, Enter, Delete); what storage holds is checked from
+  scratch (`parseNotes`).
+- **Focus timer** (`extensions/focus/`, permission `storage`; 9 tests): focus 25, short break 5,
+  long break 15 after the fourth round; Space starts / pauses / resumes, R resets the phase, S skips
+  (a skipped focus session doesn't count). Storage keeps the **end time** of a running phase, so a
+  reopened panel shows the time left; a phase that ran out while the panel was closed is reported
+  ("Focus ended at 10:25, while this panel was closed.") and the next phase waits — only one phase
+  ends per tick, nothing runs on by itself (`restore`, `tick`). The panel says that Little Joan has
+  no background alarms and the chime plays only while it is open. The chime is Web Audio (a rising
+  triad after focus, a falling pair after a break; an `AudioContext` made on the first Start, since
+  engines allow audio only after a key press or click). A ring (SVG stroke) empties as the phase
+  runs; the window title counts down while it runs (`17:29 · Focus`).
+- **World clock** (`extensions/clock/`, permission `storage`; 10 tests): `cities.js`, 177 cities
+  (name, country, IANA zone — Little Joan's own list, the zones the quick answers use; every zone
+  checked against Intl in a test); your time (zone, UTC offset, date) and the cities you add —
+  each with its time in your locale's style, the difference ("+9 h", "−4 h", "+5 h 30 min"), the
+  day there (Today / Tomorrow / Yesterday) and a sun or moon. Intl does the daylight-saving work
+  (`formatToParts` with a passed-in instant): tests stand on both sides of 2026's European (25 Oct)
+  and US (1 Nov) changes, Sydney's start (4 Oct), half- and quarter-hour zones, the hour that
+  repeats in London, and a month's end. Add in the combobox (type, ↑ ↓, Enter), Delete removes a
+  city, Alt+↑ ↓ moves it; the first list (nothing saved yet) is London, New York, Tokyo, Sydney
+  minus your own zone.
+- **Smoke** (`smoke-bundled.mts`, 7 tests now): the bundled run's data folder starts with sample
+  content in `extension-data/` (three notes, a focus session 7½ minutes in, four cities —
+  `seedFile` writes Little Joan's own storage format), and opens Notes, Focus timer and World clock
+  after the games (`notes.png`, `focus.png`, `clock.png`); the focus timer must show the session
+  running from its stored end time — its title `1x:xx · Focus` (`title` rule).
+- Checked locally in a plain browser with a stand-in SDK (not committed): all three at 480 × 600
+  and Notes at 760 px (two panes), Notes' keys and search, the timer running and its "ended while
+  closed" message after a reload, adding a city with the keyboard.
+- Files beyond the prompt: `extensions/bundled.test.ts`, `scripts/ci/smoke-bundled.mts` (+ test),
+  `scripts/ci/smoke.mts`, `src-tauri/src/extensions/registry/tests.rs`, README, CHANGELOG,
+  architecture.md.
+- `npm run verify`: 370 TS tests, 256 Rust tests, clippy clean. Disk: 15 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
+- **CI (run 39121642833, with `lj-step-32-fix`): all 10 jobs green** — verify ×3, package ×3, smoke
+  on Windows, macOS, Linux and Linux at scale 2; the first window's suggestions now arrive before
+  the smoke page on every job. All five panels came up on all four smoke jobs (the focus timer's
+  title counted down from its stored end time: `17:2x · Focus`), and the arrow keys reached 2048 on
+  Windows and both Linux jobs (not on macOS — see Deferred follow-ups). Screenshots, alike on every
+  OS (crisp at scale 2): `snake.png` — the toolbar with Snake's icon, name and "Extension" badge
+  (on macOS beside the traffic lights now that the panel opens in a summoned window), the board,
+  the snake and the food, the start card above it; `2048.png` — after four moves on Windows and
+  Linux, the first two tiles on macOS; `notes.png` — the three sample notes (Groceries selected,
+  "4 min ago", "Yesterday", "Oct 9") with search and New note; `focus.png` — FOCUS, a ring a
+  third empty, 17:13, "Ends at 11:41 AM", round 2 of 4 with one dot done, Pause, the note about
+  background alarms; `clock.png` — your time (UTC on the runners, shown as "UTC · UTC", which
+  LJ34 tidies to "UTC"), London +1 h, New York −4 h, Tokyo +9 h, Sydney +11 h (all "Today"), suns
+  and a moon.
 
 ### LJ34 — Bundled page actions and tools · standard · auto
 
@@ -4230,6 +4378,102 @@ Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ34 to ✅,
 commit: "lj-step-34: bundled page actions and tools". Push and watch CI until every job is green
 (two honest attempts, then stop). Look at the screenshots.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- Seven bundled extensions in LJ32's layout. Page actions (`pageInfo`): **QR code** (`qr`),
+  **Clean link** (`clean-link`, + `clipboard`), **Wayback Machine** (`wayback`), **Copy as
+  Markdown link** (`markdown-link`, + `clipboard`); commands: **JSON** (`json`), **Text tools**
+  (`text-tools`), **Color tools** (`color`) — the three with `storage` (drafts, last colors) and
+  `clipboard`. None declares a `network:` host, and none asks for `openBrowser` (a Rust test checks
+  both, and that the four page actions are page actions with `pageInfo`); `extensions/bundled.test.ts`
+  finds no network API in any of them.
+- **QR code** (7 tests): an encoder written from the standard — byte mode (UTF-8), versions 1–10,
+  level M: the data codewords (mode, count, terminator, 0xEC / 0x11 padding), Reed–Solomon over
+  GF(256) (generator per block size), the block split and interleaving, finders, separators,
+  timing, alignment patterns, the dark module, format bits (BCH, XOR 0x5412) and version bits
+  (v7+), the zigzag placement, the eight masks and the standard's penalty (runs, 2 × 2 blocks,
+  finder-like patterns, dark balance). **Reference matrices:** 13 texts covering versions 1–10
+  (UTF-8 too) were encoded locally with macOS Core Image's `CIQRCodeGenerator` at level M — an
+  independent encoder — and stored as `reference.test-data.json` (not embedded: build.rs leaves
+  `*.test.*` out); 11 match ours module for module with the same mask, and the 2 where Core Image
+  picked another mask (penalty heuristics differ between encoders) match exactly with its mask.
+  Every code ours made for them also decoded with Core Image's `CIDetector` (a local, one-off
+  check with a small Swift tool kept out of the repository). Also tested: the standard's format
+  and version bit tables, alignment positions, capacities, and two Reed–Solomon worked examples.
+  The panel draws the code as one SVG path (black on white whatever the theme, so cameras read it),
+  shows version and size, and lets you edit what it encodes; over 213 bytes it says so.
+- **Clean link** (6 tests): rules written for Little Joan (not ClearURLs'): tracking names removed
+  everywhere (`utm_*`, `pk_*`, `mtm_*`, `fbclid`, `gclid`, `dclid`, `gbraid`, `wbraid`, `msclkid`,
+  `yclid`, `twclid`, `ttclid`, `mc_cid`, `mc_eid`, `_hsenc`, `mkt_tok`, `igshid`, `ref_src`, …) and
+  names that are tracking only on their own sites (YouTube `si` / `feature` / `pp`, Spotify `si`,
+  X `s` / `t`, Amazon `ref`, `pd_rd_*`, `pf_rd_*`, `tag`, `crid`, Google's `ved` / `ei` / `oq` /
+  `sxsrf` …, Bing's `form` / `cvid`, LinkedIn's `trk`, Reddit's `share_id`, TikTok's share
+  fields, eBay's `_trk*`, AliExpress's `spm` / `aff_*`, Etsy, Medium's `source`, NYT's `smid`);
+  Amazon's `/ref=…` path segment; redirect wrappers unwrapped (Google `/url`, `l.facebook.com`,
+  `l.instagram.com`, `out.reddit.com`, YouTube `/redirect`, Tumblr, Slack, Messenger, VK) — only
+  into http(s), never for look-alike hosts. What stays keeps its exact spelling and order (raw
+  pairs, not re-encoded); unknown parameters stay. The panel shows the clean link, what was
+  removed (struck-through chips) and the original; Enter copies and returns to the page.
+- **Wayback Machine** (4 tests): `https://web.archive.org/web/*/<url>` (every snapshot, the default)
+  or `…/web/<url>` (newest), without user info or fragment; ↑ ↓ and Enter; opened with
+  `littleJoan.openUrl` in the window — nothing is fetched before.
+- **Copy as Markdown link** (7 tests): `[text](url)` with backslashes, brackets, `*`, `_`,
+  backticks and angle brackets escaped in the text and spaces, parentheses and angle brackets
+  percent-encoded in the address; also HTML (escaped),
+  plain "Title — address" and Org mode; an editable title with an offer to drop a trailing site
+  name ("… - YouTube"); ↑ ↓ format, Enter copies and returns to the page.
+- **JSON** (9 tests): its own parser (RFC 8259, BOM allowed, depth ≤ 256) with messages and
+  line / column that are the same on every engine (trailing commas, single quotes, unclosed
+  strings, bad escapes, leading zeros, extra text…), a caret excerpt, and printers (2 / 4 spaces,
+  tabs, minified; sort keys) that keep every number and string exactly as written (no rounding of
+  `12345678901234567890`); highlighting with text nodes only; Ctrl/Cmd+Enter formats in place.
+- **Text tools** (6 tests): counts (code points, words in any script, lines, UTF-8 bytes,
+  sentences, reading time), nine cases (Title Case keeps small words lower inside), Base64 (UTF-8,
+  URL-safe and unpadded input accepted, invalid input and non-UTF-8 bytes refused) and URL
+  encoding, six line operations (natural sort with Intl.Collator); tools act on the selection or
+  everything, with an Undo (also Ctrl/Cmd+Z right after a tool).
+- **Color tools** (7 tests): hex (3/4/6/8), `rgb()` / `rgba()`, `hsl()` / `hsla()` (deg, turn,
+  rad, grad), `oklch()` (percent forms; out-of-gamut colors lose chroma until they fit) and 23
+  names; hex / RGB / HSL / OKLCH with a Copy each (OKLab with Björn Ottosson's matrices, checked
+  against his reference values); WCAG contrast (see-through colors composited), the AA / AA large /
+  AAA levels, ratios rounded down so 4.499 never reads as 4.5; the theme's colors as chips.
+- **Smoke** (`smoke-bundled.mts`, 8 tests): JSON, Text tools and Color tools open after the
+  productivity panels with sample drafts (`json.png`, `text-tools.png`, `color.png`); then the smoke
+  page and, from the command bar, Ctrl/Cmd+L, `qr`, ↓ ↓ Enter → the QR code page action must come
+  up and have `pageInfo` answered (`pageActionFailures`; required on Windows and Linux, best effort
+  on macOS) → `qr.png`. `pressShortcut` learned L. **Typing on macOS** now posts real key codes
+  (US layout; `scripts/ci/smoke-keys.mts`, 2 tests) instead of key events that carry only a
+  Unicode string — those never reached the app on CI's macOS runners, while ↓ ↓ Enter, sent as
+  key codes, did (LJ31's notes); the macOS rules stay best effort.
+- Found while building, not fixed (Deferred follow-ups): Back after a panel opened a page (Wayback,
+  Clean link's "Open it here") meets the panel's own entry in the engine's history. Also: the World
+  clock's "your time" no longer says "UTC · UTC" when the zone is UTC itself (seen in LJ33's CI).
+- Checked locally in a plain browser with a stand-in SDK (not committed): every panel at 480 × 600,
+  the QR code against Core Image's decoder (above).
+- Files beyond the prompt: `extensions/bundled.test.ts`, `scripts/ci/smoke-bundled.mts` (+ test),
+  `scripts/ci/smoke.mts`, `src-tauri/src/extensions/registry/tests.rs`, README, CHANGELOG,
+  architecture.md, extensions.md.
+- `npm run verify`: 454 TS tests, 256 Rust tests, clippy clean. Disk: 14 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
+- **CI (run 39123351961): verify ×3, package ×3 and smoke on macOS, Linux and Linux at scale 2
+  green; `smoke (windows)` red on the new page-action rule** — "picking qr in the command bar never
+  opened it": Ctrl+L opened the command bar over the smoke page (`overlay true`, its suggestions),
+  but the typed "qr" never arrived. The smoke's typing activates the app's window first
+  (`AppActivate`), and activating a window already in front evidently gave the keyboard back to
+  the page webview the app had just moved it away from (typing into a command bar opened by Ctrl+L
+  over a page hadn't been tried on Windows before; the other typing follows a fresh window). On
+  both Linux jobs the QR code opened for the smoke page (`qr.png`: its title from `pageInfo`, the
+  code, "Version 3 · 33 of 213 bytes"); on macOS the typing didn't arrive (best effort — though the
+  main run's "127" did, with the new key-code typing). Every command panel came up on all four
+  jobs, and the arrows reached 2048 everywhere, macOS included this time. Screenshots: `json.png`
+  — the sample formatted with highlighted keys, "Valid JSON · 2 objects, 1 array, 9 values, 2
+  levels deep", but the input showing the far end of its one long minified line; `text-tools.png`
+  — the sample with "86 characters · 16 words · 2 lines · 86 bytes · 1 min read" and the three
+  tool groups; `color.png` — #e0675a as HEX / RGB / HSL / OKLCH, 3.35:1 on white (AA large only),
+  6.25:1 on black (AA), the sample text. **Fix (`lj-step-34-fix`):** the page-action flow types
+  and presses keys without activating the window again (`typeText` / `pressKeys` take
+  `activate`); JSON's input wraps long lines and starts at the top.
 
 ### LJ35 — Docs, screenshots, the user's checklist · standard · checkpoint
 
@@ -4263,6 +4507,27 @@ pre-release happens only on the user's word, the same way as beta.1: bump the ve
 a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
 `gh release create v0.2.0-beta.2 --prerelease --latest=false --target <main commit>`.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **README:** the status line says what `main` adds since beta.1; "Using it" gained an Extensions
+  bullet (how to open one, the twelve bundled, the badge, Esc); the command-line bullet says
+  `--extension` opens a first command and page actions open from the command bar; the Extensions
+  section lists every bundled extension and page action and says none reaches the network.
+  **Screenshots** (`docs/images/`, 424 KB): six cropped from CI's macOS smoke run 39124661621 —
+  the smoke test's page and its sample data only, nothing personal — `command-bar.png`,
+  `snake.png` (under the intro), `appearance.png` and `theme-dark.png` (Settings → Appearance),
+  `notes.png` and `focus.png` (Extensions). Cropped with ImageMagick (the window's bounding box,
+  rounded transparent corners) and quantized to 256 colors with dithering (the grain makes
+  full-color PNGs ~390 KB each).
+- **The other docs:** CHANGELOG `[Unreleased]` already lists every round-2 change (command bar,
+  toolbar, logins, history, themes, Appearance, Settings tabs, the extension runtime, the command
+  bar's extensions, quick answers, and LJ32–LJ34's bundled extensions); architecture.md has the
+  bundled extensions, the smoke's bundled run and `docs/images/`; extensions.md points at the
+  bundled ones as worked examples; CONTRIBUTING.md says how a bundled extension is laid out and
+  checked. SECURITY.md needed nothing new (no new permission or API).
+- `npm run verify`: 454 TS tests, 256 Rust tests, clippy clean. Disk: 14 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
 
 ---
 
@@ -4399,6 +4664,34 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   `WebsiteDataManager` needs `webkit2gtk` — new crates — and Tauri's `clear_all_browsing_data`
   would wipe the user's cookies and sites too. Options: those calls behind a small platform
   module once a step allows the crates.
+- **`--extension <id>` can't open a page action** (surfaced by LJ34): it opens an extension's
+  first *command*, and the four bundled page actions have none, so `little-joan --extension qr`
+  only logs `extension-missing` (a key binding for "QR code of this page" isn't possible yet).
+  Options: fall back to the first page action for the open web page (as the command bar's
+  `open_extension` builds its `pageInfo`), or a `--page-action <id>` flag.
+- **Back after a panel opens a page meets the panel's own history entry** (surfaced by LJ34, from
+  reading the code — not seen in CI). A panel's `openUrl(…, { where: "page" })` (Wayback Machine,
+  Clean link's "Open it here") and a link followed from a panel navigate the page webview from
+  the panel, so the engine's history holds the panel (and, when it was opened from a web page, the
+  start page of the detour) before the new page. The toolbar's Back (`history.back()`) then goes to
+  the panel's URL, which the guard refuses (its nonce was used), so Back seems to do nothing; the
+  command bar still opens anything. Options: Back goes `history.go(-n)` past extension and start-page
+  entries (`back_stack` would count them), or the app navigates to the previous web page itself.
+- **macOS CI: synthetic arrow keys don't always reach a panel** (surfaced by LJ32–LJ34's CI): 2048
+  got its four arrows on Windows and both Linux jobs in every run, on macOS in two runs out of four
+  (not in LJ32's and LJ33's, yes in LJ34's and its fix's), while key codes sent to the command bar
+  do arrive there. Possibly a CI-only matter (the page webview's first responder on an unattended
+  runner), possibly real; the owner's checklist asks whether the games take the keys without a
+  click. Option, if real: make the page webview first responder when a panel commits
+  (`focus_page`).
+- **macOS: a panel opened from hibernation can leave the toolbar unpainted** (surfaced by LJ32's
+  CI). With `--extension <id>` while hibernating, the window is built with the command bar and the
+  panel's commit can arrive before the bar's own page has loaded; on macOS the toolbar then showed
+  an empty field instead of the extension's name (hello in run 39118669089; the label was sent
+  twice, once with `start_info`), while the same flow on `main` (bar loaded first) drew it. Opening
+  from the command bar (the window already open) isn't affected. Options: have the bar ask for its
+  label and overlay state in one call when it loads (`start_info` already forces the label); or
+  open the panel only after the bar reported `bar-loaded`.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -4597,6 +4890,10 @@ Populated from real friction, not speculation:
   panel's URL — though the handler had answered the document 200. Don't load something important
   while a hostile page is still alive: the app leaves the web page for its start page first
   (fix 7). If the race step flakes on Windows, look here first.
+- *(LJ32)* **WebKit may not paint a page that starts invisible.** A panel that hid `<body>` with
+  `opacity: 0` until its theme arrived stayed a blank white page in CI (macOS, Linux at scale 2)
+  although its script ran and showed it a moment later — WebKit waits for a visually non-empty
+  first layout before committing frames. Show content from the first frame (fallback colors).
 - *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
   `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
   that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.

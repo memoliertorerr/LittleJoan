@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>2048</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>2048</h1>
+        <dl class="stats">
+          <div><dt>Score</dt><dd id="score">0</dd></div>
+          <div><dt>Best</dt><dd id="best">0</dd></div>
+        </dl>
+        <button id="new-game" class="btn" type="button">New game</button>
+      </header>
+      <div id="board-box" class="board-box">
+        <div id="board" class="board" tabindex="0" role="img" aria-label="2048 board">
+          <div class="cells" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <div id="tiles" class="tiles" aria-hidden="true"></div>
+          <div id="message" class="message" role="status" aria-live="polite" hidden>
+            <div class="card">
+              <strong id="message-title">No moves left</strong>
+              <span id="message-text"></span>
+              <div class="actions">
+                <button id="message-continue" class="btn primary" type="button">Try again</button>
+                <button id="message-new" class="btn" type="button">New game</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="hint">
+        <span><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> slide</span>
+        <span><kbd>N</kbd> new game</span>
+        <span><kbd>Esc</kbd> close</span>
+      </p>
+    </main>
+  </body>
+</html>

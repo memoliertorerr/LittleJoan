@@ -1,0 +1,20 @@
+{
+  "id": "qr",
+  "name": "QR code",
+  "version": "1.0.0",
+  "description": "Shows the page's address as a QR code, to open it on your phone. Made right here — nothing is sent anywhere.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["pageInfo"],
+  "contributes": {
+    "pageActions": [
+      {
+        "id": "show",
+        "title": "QR code",
+        "keywords": ["qr", "code", "phone", "scan", "share"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Focus timer</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main id="app" class="app" data-phase="focus" data-running="false">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>Focus timer</h1>
+        <span id="done" class="pill">0 sessions done</span>
+      </header>
+      <section class="timer" aria-label="Timer">
+        <div id="phase" class="phase">Focus</div>
+        <div class="dial">
+          <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
+            <circle class="track" cx="100" cy="100" r="88" />
+            <circle id="arc" class="arc" cx="100" cy="100" r="88" />
+          </svg>
+          <div class="face">
+            <time id="left" class="left">25:00</time>
+            <span id="ends" class="ends"></span>
+          </div>
+        </div>
+        <div class="rounds">
+          <span id="dots" class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span id="round" class="round">Round 1 of 4</span>
+        </div>
+        <div class="controls">
+          <button id="reset" class="btn" type="button">Reset</button>
+          <button id="toggle" class="btn primary big" type="button">Start</button>
+          <button id="skip" class="btn" type="button">Skip</button>
+        </div>
+        <p id="message" class="message" role="status" aria-live="polite"></p>
+      </section>
+      <p class="note">
+        Little Joan doesn't run in the background: the chime plays only while this panel is open.
+        The timer remembers when the session ends, so you can close it and come back to the time left.
+      </p>
+      <p class="hint">
+        <span><kbd>Space</kbd> start · pause</span>
+        <span><kbd>R</kbd> reset</span>
+        <span><kbd>S</kbd> skip</span>
+        <span><kbd>Esc</kbd> close</span>
+      </p>
+    </main>
+  </body>
+</html>

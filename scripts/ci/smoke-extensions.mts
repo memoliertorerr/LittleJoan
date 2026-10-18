@@ -238,11 +238,11 @@ export const BROKEN_EXTENSION = "broken";
 
 /**
  * Settings → Extensions (the run with Developer mode on): `--settings extensions` switched Settings
- * to the tab, the settings window listed hello and the developer copy with the broken one skipped
- * (`extensions-list 2 skipped=1` — the tab asks once, when the window loads, whichever tab it
- * opens on), and the broken one's reason was logged.
+ * to the tab, the settings window listed the `bundled` extensions and the developer copy with the
+ * broken one skipped (`extensions-list <bundled + 1> skipped=1` — the tab asks once, when the
+ * window loads, whichever tab it opens on), and the broken one's reason was logged.
  */
-export function settingsExtensionsFailures(events: LogEvent[]): string[] {
+export function settingsExtensionsFailures(events: LogEvent[], bundled = 1): string[] {
   const failures: string[] = [];
   if (!events.some((e) => e.event === "settings-window" && e.detail === "extensions")) {
     failures.push("--settings extensions never switched Settings to Extensions");
@@ -250,9 +250,9 @@ export function settingsExtensionsFailures(events: LogEvent[]): string[] {
   }
   const opened = events.findIndex((e) => e.event === "settings-window");
   const listed = events.slice(opened).filter((e) => e.event === "extensions-list");
-  if (!listed.some((e) => e.detail === "2 skipped=1")) {
+  if (!listed.some((e) => e.detail === `${bundled + 1} skipped=1`)) {
     failures.push(
-      `Settings → Extensions didn't list hello and ${DEV_EXTENSION} with ${BROKEN_EXTENSION} skipped (${JSON.stringify(listed.map((e) => e.detail))})`,
+      `Settings → Extensions didn't list the ${bundled} bundled extensions and ${DEV_EXTENSION} with ${BROKEN_EXTENSION} skipped (${JSON.stringify(listed.map((e) => e.detail))})`,
     );
   }
   if (!events.some((e) => e.event === "extension-skipped" && e.detail.startsWith(`${BROKEN_EXTENSION} `))) {

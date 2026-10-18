@@ -1,0 +1,181 @@
+/* Little Joan's colors come from littleJoan.theme.apply() (the --lj-* variables on <html>); the
+   fallbacks show only until it answers. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background-color: var(--lj-bg-0, Canvas);
+  background-image: var(--lj-grain, none), var(--lj-gradient, none);
+  color: var(--lj-fg, CanvasText);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible {
+  outline: 2px solid var(--lj-accent, Highlight);
+  outline-offset: 2px;
+}
+.btn {
+  appearance: none;
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  color: inherit;
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--lj-row-hover, rgba(127, 127, 127, 0.16));
+}
+.card {
+  background: var(--lj-panel, Canvas);
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-radius: 14px;
+  box-shadow: 0 12px 32px -16px var(--lj-shadow, rgba(0, 0, 0, 0.3));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  margin: 0 1px;
+  padding: 1px 5px;
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  font: 600 11px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  text-align: center;
+}
+.hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  margin: 0;
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 12px;
+}
+
+/* The game. */
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 14px 16px 16px;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo {
+  border-radius: 7px;
+}
+h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.stats {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+}
+.stats div {
+  min-width: 52px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  text-align: center;
+}
+.stats dt {
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.stats dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.board-box {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: center;
+}
+canvas {
+  display: block;
+  border-radius: 14px;
+}
+canvas:focus {
+  outline: none;
+}
+/* Above the middle, where the snake starts. */
+.message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding: 18% 16px 16px;
+  pointer-events: none;
+}
+.message[hidden] {
+  display: none;
+}
+.message .card {
+  display: grid;
+  gap: 4px;
+  max-width: 280px;
+  padding: 14px 18px;
+  text-align: center;
+}
+.message strong {
+  font-size: 17px;
+}
+.message span {
+  color: var(--lj-fg-muted, GrayText);
+}
+
+@media (max-width: 380px) {
+  .app {
+    padding: 10px 10px 12px;
+  }
+  .top {
+    gap: 6px;
+  }
+  h1 {
+    font-size: 16px;
+  }
+  .stats div {
+    min-width: 44px;
+    padding: 3px 6px;
+  }
+  .btn {
+    padding: 6px 9px;
+  }
+}

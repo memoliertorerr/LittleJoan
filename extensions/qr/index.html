@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QR code</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <div class="page">
+          <h1 id="page-title">QR code</h1>
+          <span id="page-host" class="muted"></span>
+        </div>
+      </header>
+      <div class="stage">
+        <div id="code" class="code"></div>
+      </div>
+      <label class="label" for="text">Encodes</label>
+      <div class="row">
+        <textarea id="text" class="field" rows="2" spellcheck="false" autocomplete="off"></textarea>
+        <button id="reset" class="btn" type="button" title="Back to the page's address">Page address</button>
+      </div>
+      <p id="info" class="info muted" aria-live="polite"></p>
+      <p class="hint"><span>Edit the text to change the code</span><span><kbd>Esc</kbd> back to the page</span></p>
+    </main>
+  </body>
+</html>

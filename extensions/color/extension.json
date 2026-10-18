@@ -1,0 +1,20 @@
+{
+  "id": "color",
+  "name": "Color tools",
+  "version": "1.0.0",
+  "description": "Convert a color between hex, RGB, HSL and OKLCH, and check its contrast as text (WCAG AA and AAA) — on white, black or a color of your own.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage", "clipboard"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "Color tools",
+        "keywords": ["color", "colour", "hex", "rgb", "hsl", "oklch", "contrast", "wcag"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

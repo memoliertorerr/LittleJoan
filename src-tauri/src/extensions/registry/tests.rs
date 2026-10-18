@@ -1,4 +1,5 @@
 use super::*;
+use crate::extensions::manifest::Permission;
 
 const HELLO: &[u8] = br#"{ "id": "hello", "name": "Hello", "version": "1", "apiVersion": 1,
     "icon": "icon.svg",
@@ -31,6 +32,56 @@ fn the_shipped_extensions_are_all_valid() {
         hello
             .icon_data_uri()
             .is_some_and(|uri| uri.starts_with("data:image/svg+xml;base64,"))
+    );
+    // Every bundled extension: its icon and every panel it names are served, and it declares no
+    // network host (bundled extensions are local tools).
+    for extension in registry.all() {
+        let id = extension.id();
+        assert!(extension.icon_data_uri().is_some(), "{id} has an icon");
+        let manifest = &extension.manifest;
+        for item in manifest.commands.iter().chain(&manifest.page_actions) {
+            assert!(
+                extension.read(&item.panel).is_some(),
+                "{id}: {}",
+                item.panel.as_str()
+            );
+        }
+        assert!(manifest.network_hosts().is_empty(), "{id} fetches nothing");
+    }
+    for id in [
+        "snake",
+        "2048",
+        "notes",
+        "focus",
+        "clock",
+        "qr",
+        "clean-link",
+        "wayback",
+        "markdown-link",
+        "json",
+        "text-tools",
+        "color",
+    ] {
+        assert!(registry.get(id).is_some(), "{id} is bundled");
+    }
+    // The page actions get the page; nothing bundled may hand an address to the default browser.
+    for id in ["qr", "clean-link", "wayback", "markdown-link"] {
+        let extension = registry.get(id).expect("bundled");
+        assert!(
+            !extension.manifest.page_actions.is_empty(),
+            "{id} is a page action"
+        );
+        assert!(
+            extension.manifest.has(&Permission::PageInfo),
+            "{id} reads the page"
+        );
+    }
+    assert!(
+        registry
+            .all()
+            .iter()
+            .all(|e| !e.manifest.has(&Permission::OpenBrowser)),
+        "no bundled extension opens the default browser"
     );
 }
 

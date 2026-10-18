@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wayback Machine</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>Wayback Machine</h1>
+      </header>
+      <section class="card page">
+        <strong id="page-title"></strong>
+        <span id="page-url" class="url"></span>
+      </section>
+      <div class="choices">
+        <button id="calendar" class="choice" type="button">
+          <strong>Every snapshot</strong>
+          <span>A calendar of the copies the Internet Archive kept of this page</span>
+        </button>
+        <button id="newest" class="choice" type="button">
+          <strong>Newest snapshot</strong>
+          <span>The latest copy, to read a page that changed or went away</span>
+        </button>
+      </div>
+      <p class="note">Opens web.archive.org in this window. Nothing is sent before you choose.</p>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p class="hint"><span><kbd>↑</kbd><kbd>↓</kbd> choose</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> back to the page</span></p>
+    </main>
+  </body>
+</html>

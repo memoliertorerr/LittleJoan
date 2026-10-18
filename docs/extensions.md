@@ -229,12 +229,18 @@ are atomic. Each extension sees only its own store.
 
 - **Keep the logic pure.** Put what can be tested (game rules, parsers, formatting) in a plain
   JavaScript module with no DOM, and test it with any test runner (bundled extensions bring their
-  tests along, and CI runs them).
+  tests along, and CI runs them). Panels may use ES modules — the bundled ones load
+  `<script type="module" src="ui.js">` after the SDK, and `ui.js` imports `./logic.js`, which
+  their `logic.test.ts` imports too (see `extensions/snake/`).
 - **Try it in Little Joan** with Developer mode on; Settings → Extensions lists what couldn't be
   loaded and why (a manifest error names the field).
 - **See what Little Joan decided:** start it with the environment variable
   `LITTLEJOAN_SMOKE_LOG=<file>` and it writes events there — `extension-opened <id>`,
   `ext-api <id> <method> ok|<error>`, `ljext-refused <reason> …` and `navigation-refused <url>`.
+- The bundled extensions are worked examples of the rest: `extensions/qr/` is a page action
+  (`pageInfo`), `extensions/clean-link/` a page action that copies (`clipboard`),
+  `extensions/notes/` a command that keeps data (`storage`) and saves as you type, and
+  `extensions/snake/` a canvas game.
 - `extensions/hello/` is the reference: CI opens it on Windows, macOS and Linux and checks that
   storage and the theme work, that Little Joan's IPC is refused, that the CSP blocks a fetch it
   didn't declare, and that registering a service worker fails.
@@ -305,5 +311,7 @@ extension, and are built into Little Joan. To add one, open a pull request with:
 - the fewest permissions it needs — no `network:` unless the extension can't work without it;
 - an MIT license (the repository's) for everything in it.
 
-CI checks that every bundled extension loads (a Rust test reads all of them) and runs the whole
-test suite. See [CONTRIBUTING.md](../CONTRIBUTING.md) for building and checking changes.
+CI checks that every bundled extension loads (a Rust test reads all of them), that each one
+loads the SDK first, runs no inline script, uses no network API, draws text as text and has a
+tested `logic.js` (`extensions/bundled.test.ts`), opens it in the installed app on Windows, macOS
+and Linux (the smoke test), and runs the whole test suite. See [CONTRIBUTING.md](../CONTRIBUTING.md) for building and checking changes.

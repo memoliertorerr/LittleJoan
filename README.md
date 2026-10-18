@@ -14,12 +14,21 @@ WebKitGTK on Linux), which keeps the download to a few megabytes.
 Inspired by Little Arc in the Arc browser. Little Joan is an independent project and is not
 affiliated with or endorsed by The Browser Company.
 
+<p align="center">
+  <img src="docs/images/command-bar.png" width="380" alt="The command bar over the window: a search field on a soft gradient, a suggested site, and Settings &amp; extensions">
+  <img src="docs/images/snake.png" width="253" alt="Snake, one of the bundled extensions, in the Little Joan window: the toolbar names it, with an Extension badge">
+</p>
+<p align="center"><sub>Screenshots from the CI smoke test on macOS (its test page and sample data only).</sub></p>
+
 > **Status:** [v0.1.0](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0) is the
 > latest release; the
 > [v0.2.0-beta.1 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.1)
-> adds start at login and a first-launch welcome. Every build is smoke-tested in CI on all three
-> systems (Linux on Ubuntu 24.04); none is code-signed yet. See the known issue under Fullscreen
-> video. The build plan and progress tracker live in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
+> adds start at login and a first-launch welcome. The `main` branch goes further — the Little
+> Arc-style command bar and toolbar, logins that survive closing, local history, themes, and
+> extensions (experimental) with twelve bundled ones — for the next pre-release. Every build is
+> smoke-tested in CI on all three systems (Linux on Ubuntu 24.04); none is code-signed yet. See the
+> known issue under Fullscreen video. The build plan and progress tracker live in
+> [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## Install
 
@@ -104,6 +113,13 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   following your system. Whatever colors you pick, Little Joan keeps them pale in light mode and
   deep in dark mode, and picks the text color so it stays readable. The default is a quiet
   blue-grey; make your own in **Settings → Appearance** (below).
+- **Extensions** (experimental) open as a panel in the window: type a name or what it does in the
+  command bar ("snake", "notes", "json", "clock"…) or run `little-joan --extension <id>`.
+  Twelve come with Little Joan — games, Notes, a focus timer, a world clock, tools for JSON, text
+  and colors, and page actions (QR code, Clean link, Wayback Machine, Copy as Markdown link) that
+  appear while a web page is open. The toolbar shows the extension's name with an "Extension"
+  badge; Esc closes it, back to the page or the command bar. See
+  [Extensions](#extensions-experimental) below.
 - **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
   narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
   macOS and Linux, Chrome on Android on Windows), so Google, YouTube and others serve their
@@ -134,8 +150,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),
   `little-joan --start-at-login on|off`, `little-joan --settings [general|appearance|extensions|privacy|about]`
-  (open Settings on a tab), `little-joan --extension <id>` (open an extension, e.g. `hello`;
-  experimental), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
+  (open Settings on a tab), `little-joan --extension <id>` (open an extension's first command,
+  e.g. `snake` — page actions open from the command bar, on a page; experimental), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
 - **Quit:** tray menu → **Quit Little Joan**, `little-joan --quit`, or Cmd+Q on macOS while
   it's in front.
@@ -172,6 +188,11 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
   **Grain**. Settings and the open Little Joan window change as you edit; **Save** keeps the
   theme, **Cancel** (or closing Settings) puts the saved one back. It's stored in `settings.json`
   as `"theme": { "mode", "colors", "intensity", "grain" }`.
+
+  <p>
+    <img src="docs/images/appearance.png" width="420" alt="Settings, Appearance: System, Light and Dark, a live preview, presets, a color pad, Intensity and Grain">
+    <img src="docs/images/theme-dark.png" width="252" alt="The command bar in a dark two-color theme">
+  </p>
 - **Extensions** — every extension with a switch to turn it off, its version, author and what it
   may do in plain words; **Developer mode** (load your own unpacked extensions — only ones you
   trust), **Open extensions folder** and **Reload extensions**. See below.
@@ -190,7 +211,37 @@ name (or what it does) in the command bar, or run `little-joan --extension <id>`
 extensions that work on the page you're looking at — show up in the command bar only while a web
 page is open. Each extension runs in a sandbox of its own: no access to Little Joan's internals or
 to the pages you open, its own storage, and network access only to the hosts it declares.
-**Hello** is the bundled example.
+
+Bundled with Little Joan (type the name in the command bar, or use `little-joan --extension <id>`):
+
+| Extension | What it does |
+|---|---|
+| **Snake** (`snake`) | The classic, in your theme's colors: arrows or WASD steer, Space pauses, Esc closes; it speeds up as you eat. Keeps your best score. |
+| **2048** (`2048`) | Slide the tiles with the arrows or WASD; equal tiles merge. Your game in progress and your best score wait for you. |
+| **Notes** (`notes`) | Quick notes that save as you type: several notes, search (`/`), copy one to the clipboard. N writes a new one. |
+| **Focus timer** (`focus`) | 25-minute focus sessions with 5-minute breaks and a 15-minute one after four; Space starts and pauses. It keeps the end time, so a reopened panel shows the time left — but it chimes only while its panel is open (Little Joan has no background alarms). |
+| **World clock** (`clock`) | Your time and the cities you add (about 180 to pick from): how far ahead or behind, and which day it is there, right across daylight saving time. |
+| **JSON** (`json`) | Format (2 or 4 spaces, tabs), minify, sort keys and check JSON — an error comes with its line and column; numbers and strings are never changed. |
+| **Text tools** (`text-tools`) | Counts (characters, words, lines, bytes, reading time); UPPER / lower / Title / Sentence case, camelCase, snake_case, kebab-case; Base64 and URL encode / decode; sort, reverse, de-duplicate and tidy lines — on the selection or all of the text. |
+| **Color tools** (`color`) | A color in any CSS form as hex, RGB, HSL and OKLCH, and its contrast as text on white, black or a color of yours, with the WCAG levels it passes. |
+| **Hello** (`hello`) | The example extension: it shows what an extension can and can't do. |
+
+<p>
+  <img src="docs/images/notes.png" width="300" alt="Notes: a search field and three notes, the first selected">
+  <img src="docs/images/focus.png" width="300" alt="Focus timer: a ring two-thirds full around 17:13, Ends at 11:41 AM, round 2 of 4, Pause">
+</p>
+
+Page actions — in the command bar only while a web page is open, for that page:
+
+| Page action | What it does |
+|---|---|
+| **QR code** (`qr`) | The page's address as a QR code to scan with your phone (made right here; edit the text to encode something else). |
+| **Clean link** (`clean-link`) | Copies the address without tracking parameters (`utm_…`, `fbclid`, share ids…) and out of redirect wrappers, keeping what makes the link work; Enter copies. |
+| **Wayback Machine** (`wayback`) | Opens the Internet Archive's snapshots of the page — every copy, or the newest — in the window. |
+| **Copy as Markdown link** (`markdown-link`) | Copies `[Title](address)` — or HTML, plain text, Org mode — with the title yours to edit. |
+
+None of the bundled extensions reaches the network: everything happens on your computer (the
+Wayback Machine only opens web.archive.org when you pick it).
 
 You can write your own with plain HTML, CSS and JavaScript — see
 **[docs/extensions.md](docs/extensions.md)** (experimental: the API may still change). Turn on

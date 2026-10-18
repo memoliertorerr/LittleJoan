@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Copy as Markdown link</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>Copy as Markdown link</h1>
+      </header>
+      <label class="label" for="title">Link text</label>
+      <div class="row">
+        <input id="title" class="field" type="text" autocomplete="off" spellcheck="false" />
+        <button id="trim" class="btn" type="button" title="Leave out the site's name" hidden>Drop site name</button>
+      </div>
+      <p id="url" class="url"></p>
+      <div id="formats" class="formats" role="radiogroup" aria-label="Format"></div>
+      <section class="card preview-card">
+        <span class="label">Copies</span>
+        <pre id="preview" class="preview"></pre>
+      </section>
+      <div class="actions">
+        <button id="copy" class="btn primary" type="button">Copy</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p class="hint"><span><kbd>↑</kbd><kbd>↓</kbd> format</span><span><kbd>Enter</kbd> copy</span><span><kbd>Esc</kbd> back to the page</span></p>
+    </main>
+  </body>
+</html>
