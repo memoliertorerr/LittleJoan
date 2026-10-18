@@ -6,6 +6,11 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0-beta.3] — 2026-10-18
+
+A third pre-release of v0.2: smoother resizing, phone or desktop per site, and fixes — YouTube's
+fullscreen button on macOS among them.
+
 ### Changed
 - **History is Ctrl+H on Windows and Linux** (Chrome's key), so Ctrl+Y is redo again in text
   fields; macOS keeps Cmd+Y.
@@ -40,10 +45,18 @@ All notable changes to Little Joan are recorded here. The format follows
   open as `www.youtube.com` — and `"siteModes"` in settings.json chooses the phone or desktop
   site per host (`"auto"` undoes the built-in). On macOS nothing resizes, moves or reloads the
   page while WebKit shows it fullscreen any more, nor opens the command bar over it.
-- **No flash of the default theme on summon.** The bar gets your theme before its first frame
-  (only the bar: web pages never get a script from Little Joan).
+- **Less flash of the default theme on summon.** The bar gets your theme before its first frame
+  (only the bar: web pages never get a script from Little Joan). Part of the toolbar can still
+  show the default colours for a split second while the window opens.
 - **macOS: an extension opened while Little Joan was asleep** (`little-joan --extension snake`)
   could leave the toolbar empty; the panel now opens once the toolbar is ready.
+
+### Known issues
+- With a non-default theme, part of the toolbar can show the default colours for a split
+  second while the window opens.
+- "Request desktop site" changes nothing on sites that serve the same page to every device.
+- On Ubuntu 22.04, and in the AppImage, a video's fullscreen button can crash WebKitGTK 2.50
+  (unchanged since v0.1.0).
 
 ## [0.2.0-beta.2] — 2026-10-18
 
@@ -233,7 +246,8 @@ global shortcut calls it.
   a Gatekeeper or SmartScreen warning.
 - Linux global shortcuts work on X11 only; on Wayland, bind `little-joan --toggle` instead.
 
-[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.0-beta.2...HEAD
+[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.0-beta.3...HEAD
+[0.2.0-beta.3]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.3
 [0.2.0-beta.2]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.2
 [0.2.0-beta.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.1
 [0.1.0]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0

@@ -105,7 +105,7 @@
 | LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ✅ done |
 | LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ✅ done |
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ✅ done (the bar's background only — see notes) |
-| LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ✅ done — waiting for the owner's check |
+| LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ✅ done — the owner's check passed 2026-10-18 (see LJ40's notes); `v0.2.0-beta.3` released |
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ⬜ todo |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ⬜ todo |
@@ -180,7 +180,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26.**
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). Next: phase 20.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -5826,6 +5826,16 @@ exactly what to check and where, then STOP — don't start phase 20 until the ow
   Side effect: the bundled run's QR page action now opens on macOS too (`qr.png` shows the code for
   the smoke page), and the app no longer quits mid-run there.
 
+**The owner's check (2026-10-18), on their Mac with `main` at 3200ea2:** YouTube in the narrow
+window gets the desktop site; its fullscreen button, F, the exit button and Esc all work, and
+leaving fullscreen puts Little Joan back exactly as it was (same size, same place). Dragging the
+window's edges is smooth with no gaps, in light and dark. Crossing 600 px switches once each way;
+the pill and "Request desktop site" work; double-clicking the toolbar zooms the window. Two notes
+for later (Deferred follow-ups): with a non-default theme, half of the toolbar shows the default
+colours for a split second while the window opens; and "Request desktop site" changes nothing on
+sites that serve one responsive page to every agent. On the owner's word the state was released
+as `v0.2.0-beta.3` (pre-release).
+
 ### LJ41 — Hide the tray / menu-bar icon (safely); Settings and Quit in the command bar · standard · auto
 
 > Phase 20. Branch `lj/p20-control` from the latest `main`; the PR goes into `main`.
@@ -7181,7 +7191,9 @@ and where, then stop.
   restored size afterwards, but the user's size is lost. Unknown whether a window resized by
   dragging (not `set_size`) does the same on a real Mac. Options, if it does: remember the window's
   frame when WebKit's fullscreen starts and set it again when it ends (macOS only); or find what
-  AppKit restores (tao's `set_inner_size` uses `setContentSize:` asynchronously).
+  AppKit restores (tao's `set_inner_size` uses `setContentSize:` asynchronously). → *The owner
+  (2026-10-18): after leaving fullscreen the window was back exactly as before — same size and
+  place — for a window sized by dragging; CI's case (a scripted `--size`) stays a note.*
 - **The page webview's background stays white** (surfaced by LJ39). The round-3 decision gave both
   webviews the theme's background; LJ39 gave it only to the bar, because every engine draws a page
   without a CSS background over the webview's color (a dark theme would make such pages dark on
@@ -7201,6 +7213,18 @@ and where, then stop.
   agent string says Chrome) with WebView2's version, and a fixed GREASE brand. Sites that read
   high-entropy hints see a generic Android phone. Option: follow Chrome's own GREASE algorithm per
   version, if a site ever cares.
+- **The toolbar can still show the default theme for a split second while the window opens**
+  (the owner, 2026-10-18, after LJ38). With a non-default theme, about half of the toolbar paints
+  in the default colours during the window's opening, then turns. LJ38 hands the bar its theme
+  before its first frame, so this is likely the native window or the bar webview's background
+  showing before the page paints. Leads: give the bar webview and the window the theme's
+  background colour at creation (WebviewBuilder::background_color / the window's background), and
+  show the window only after the bar reports its first frame.
+- **"Request desktop site" changes nothing on some sites** (the owner, 2026-10-18). Sites that send
+  one responsive page to every agent look the same either way, so the pill and the command seem to
+  do nothing. Options: say so in the pill's tooltip, hide the pill for hosts where both agents gave
+  the same page (Windows can compare `Page.getLayoutMetrics`; WebKit can't without page script),
+  or offer page zoom (phase 8) as the way to get a "desktop" layout in a narrow window.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

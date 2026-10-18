@@ -1,6 +1,6 @@
 [package]
 name = "little-joan"
-version = "0.2.0-beta.2"
+version = "0.2.0-beta.3"
 description = "A tiny pop-up browser that hibernates until a global shortcut calls it."
 authors = ["Mehmet Ali Ertorer"]
 license = "MIT"
