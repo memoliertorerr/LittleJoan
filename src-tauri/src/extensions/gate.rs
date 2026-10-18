@@ -20,6 +20,9 @@ pub const EXPECT_FOR: Duration = Duration::from_secs(5);
 #[derive(Debug, Default)]
 pub struct NavGate {
     expected: Option<(String, Instant)>,
+    /// The extension URL the guard last admitted (nonce included), until it let the page go
+    /// anywhere else.
+    admitted: Option<String>,
     showing: Option<String>,
     committed: Option<String>,
 }
@@ -28,6 +31,7 @@ impl NavGate {
     pub const fn new() -> Self {
         NavGate {
             expected: None,
+            admitted: None,
             showing: None,
             committed: None,
         }
@@ -45,12 +49,14 @@ impl NavGate {
     }
 
     /// The page's main frame committed a document at `url` (its `Started` event): the page shows
-    /// the admitted extension once its URL arrives that way; any other URL means no extension.
-    /// Returns whether that changed.
+    /// the admitted extension once exactly the admitted URL — its nonce included — arrives that
+    /// way (a late event of an earlier opening of the same extension doesn't count); any other
+    /// URL means no extension. Returns whether that changed.
     pub fn commit(&mut self, url: &Url, platform: Platform) -> bool {
         let id = urls::parse(url, platform)
             .map(|ext| ext.id)
-            .filter(|id| self.showing.as_deref() == Some(id.as_str()));
+            .filter(|id| self.showing.as_deref() == Some(id.as_str()))
+            .filter(|_| self.admitted.as_deref() == Some(url.as_str()));
         let changed = self.committed != id;
         self.committed = id;
         changed
@@ -86,7 +92,11 @@ pub fn page_may_navigate(url: &Url, gate: &mut NavGate, now: Instant, platform: 
     if urls::is_ext_like(url) {
         let admitted = gate.admit(url, now);
         if admitted {
+            gate.admitted = Some(url.as_str().to_owned());
             gate.showing = urls::parse(url, platform).map(|ext| ext.id);
+            // A new opening (Reload of the same panel too) isn't committed until its own commit
+            // event: until then only its nonce document is served (api.rs).
+            gate.committed = None;
         }
         return admitted;
     }
@@ -95,6 +105,7 @@ pub fn page_may_navigate(url: &Url, gate: &mut NavGate, now: Instant, platform: 
     }
     let allowed = navigation::is_allowed_navigation(url);
     if allowed {
+        gate.admitted = None;
         gate.showing = None;
     }
     allowed

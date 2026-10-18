@@ -202,6 +202,9 @@ base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   hosts from `network:` permissions; images, media and fonts only from the extension's files and
   `data:` / `blob:` URLs.
 - **No frames, plugins or forms**, and no page may frame a panel.
+- **No service or shared workers**: Little Joan refuses their scripts (a service worker would
+  answer the extension's requests without these checks and outlive the panel). Dedicated workers
+  (`new Worker("worker.js")`) are fine.
 - Also sent: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
   `Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: same-origin`,
   `Cache-Control: no-store`, and a `Permissions-Policy` that denies camera, microphone,
@@ -233,8 +236,8 @@ are atomic. Each extension sees only its own store.
   `LITTLEJOAN_SMOKE_LOG=<file>` and it writes events there — `extension-opened <id>`,
   `ext-api <id> <method> ok|<error>`, `ljext-refused <reason> …` and `navigation-refused <url>`.
 - `extensions/hello/` is the reference: CI opens it on Windows, macOS and Linux and checks that
-  storage and the theme work, that Little Joan's IPC is refused, and that the CSP blocks a fetch it
-  didn't declare.
+  storage and the theme work, that Little Joan's IPC is refused, that the CSP blocks a fetch it
+  didn't declare, and that registering a service worker fails.
 
 ## The security model
 
@@ -270,7 +273,9 @@ the handler itself: the page doesn't show that extension — and in the moment w
 own navigation to the panel is under way, only the request carrying the nonce is answered, and
 the old page's requests are refused by their Referer or held until that page is gone. Opening
 an extension while a web page is shown first takes the window to Little Joan's start page, so that
-web page is gone before the panel starts loading. Windows'
+web page is normally gone before the panel starts loading — best effort, against a page spoiling
+the panel's load (after a second the panel opens anyway); what keeps web pages out of a panel is
+the nonce and the commit rule above, not this detour. Windows'
 `http://ljext.…` form is never treated as a web address. The toolbar names an extension only after
 that extension's panel loaded, so a refused or cancelled attempt can't put an extension's name
 over a web page. Paths can't leave the

@@ -7,8 +7,17 @@
 // `ljext-refused <reason> <webview> <url>` and `navigation-refused <url>`.
 import type { LogEvent } from "./smoke-log.mts";
 
-/** What hello must report. */
-export const HELLO_TITLE = "LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked";
+/** What hello reports when all is well (`sw=unsupported` is fine too: see `isHelloReport`). */
+export const HELLO_TITLE = "LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked sw=refused";
+
+/**
+ * Whether `title` is hello's good report: storage and the theme work, Tauri's IPC is refused, the
+ * CSP blocks the network, and a service worker couldn't be registered — Little Joan refused its
+ * script, or the engine has none for extensions.
+ */
+export function isHelloReport(title: string): boolean {
+  return /^LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked sw=(refused|unsupported)$/.test(title);
+}
 /** What the smoke page's probe must report. */
 export const PROBE_TITLE = "LJ-EXTPROBE ljext-api=blocked ljext-file=blocked ljext-nav=refused";
 
@@ -70,19 +79,22 @@ export function extensionFailures(events: LogEvent[], store: HelloStore | undefi
     failures.push("extensions: hello's panel never loaded in the page");
   }
   const reported = titles(events, "LJ-EXT hello");
-  if (!reported.includes(HELLO_TITLE)) {
-    failures.push(`extensions: hello reported ${JSON.stringify(reported.at(-1) ?? "nothing")}, not "${HELLO_TITLE}"`);
+  if (!reported.some(isHelloReport)) {
+    failures.push(`extensions: hello reported ${JSON.stringify(reported.at(-1) ?? "nothing")}, not "${HELLO_TITLE.replace("sw=refused", "sw=refused|unsupported")}"`);
   }
+  failures.push(...serviceWorkerFailures(events));
   const firstOpen = events.findIndex((e) => e.event === "extension-opened" && e.detail === "hello");
   if (firstOpen >= 0) {
     const next = events.findIndex(
       (e, i) => i > firstOpen && ((e.event === "extension-opened") || (e.event === "page-loaded" && e.detail.includes("ext=probe"))),
     );
     const firstPanel = events.slice(firstOpen, next < 0 ? undefined : next);
-    if (!firstPanel.some((e) => e.event === "title" && e.detail === HELLO_TITLE)) {
+    if (!firstPanel.some((e) => e.event === "title" && isHelloReport(e.detail))) {
       failures.push("extensions: --extension hello's own panel never reported its checks (before anything opened it again)");
     }
-    for (const refused of firstPanel.filter((e) => e.event === "ljext-refused" && /\/\/hello\.localhost\//.test(e.detail) && !e.detail.includes("favicon.ico"))) {
+    // The engine's favicon request and hello's service worker are refused on purpose.
+    const expected = (detail: string) => detail.includes("favicon.ico") || /\/sw\.js$/.test(detail);
+    for (const refused of firstPanel.filter((e) => e.event === "ljext-refused" && /\/\/hello\.localhost\//.test(e.detail) && !expected(e.detail))) {
       failures.push(`extensions: a request of hello's own panel was refused: ${refused.detail}`);
     }
   }
@@ -153,7 +165,7 @@ export function raceFailures(events: LogEvent[]): string[] {
     return ["race: the smoke page's race never loaded"];
   }
   const after = events.slice(raceAt);
-  if (!after.some((e) => e.event === "title" && e.detail === HELLO_TITLE)) {
+  if (!after.some((e) => e.event === "title" && isHelloReport(e.detail))) {
     failures.push("race: --extension hello didn't open the panel while the page raced it");
   }
   for (const load of events.filter((e) => (e.event === "page-loaded" || e.event === "page-started") && isExtUrl(e.detail))) {
@@ -178,6 +190,16 @@ export function raceFailures(events: LogEvent[]): string[] {
   failures.push(...servedToOthers(events));
   failures.push(...labelFailures(events));
   return failures;
+}
+
+/**
+ * hello's service worker script (`/sw.js`) must never be served — whatever the engine reports, a
+ * 200 for it would mean a worker could have been installed (the request log has every answer).
+ */
+export function serviceWorkerFailures(events: LogEvent[]): string[] {
+  return events
+    .filter((e) => e.event === "ljext-headers" && /\/sw\.js status=200\b/.test(e.detail))
+    .map((e) => `extensions: a service worker's script was served: ${e.detail.split(" names=")[0]}`);
 }
 
 /**

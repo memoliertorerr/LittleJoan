@@ -246,3 +246,31 @@ fn an_opening_waits_for_the_page_to_leave_its_web_page() {
     );
     assert_eq!(leaving.left(), None);
 }
+
+#[test]
+fn a_new_opening_is_uncommitted_until_its_own_commit() {
+    let now = Instant::now();
+    let mut gate = NavGate::new();
+    let first = url("ljext://hello.localhost/index.html?lj-open=11111111111111111111111111111111");
+    gate.expect(&first, now);
+    assert!(page_may_navigate(&first, &mut gate, now, Platform::MacOs));
+    gate.commit(&first, Platform::MacOs);
+    assert_eq!(gate.committed(), Some("hello"));
+    // Reload opens the same extension again: admitted, but not committed until its commit event —
+    // the old panel's (or a late) commit for the same extension no longer counts for it.
+    let again = url("ljext://hello.localhost/index.html?lj-open=22222222222222222222222222222222");
+    gate.expect(&again, now);
+    assert!(page_may_navigate(&again, &mut gate, now, Platform::MacOs));
+    assert_eq!(gate.showing(), Some("hello"));
+    assert_eq!(gate.committed(), None);
+    // A late commit event of the first opening (its nonce) doesn't commit the second.
+    gate.commit(&first, Platform::MacOs);
+    assert_eq!(gate.committed(), None);
+    gate.commit(&url("ljext://hello.localhost/index.html"), Platform::MacOs);
+    assert_eq!(gate.committed(), None, "no nonce: not the admitted URL");
+    gate.commit(&again, Platform::MacOs);
+    assert_eq!(gate.committed(), Some("hello"));
+    // A refused extension URL changes nothing.
+    assert!(!page_may_navigate(&first, &mut gate, now, Platform::MacOs));
+    assert_eq!(gate.committed(), Some("hello"));
+}

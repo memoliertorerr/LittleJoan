@@ -35,11 +35,12 @@ All notable changes to Little Joan are recorded here. The format follows
   its own with a strict Content-Security-Policy (its own files only; network only to the https
   hosts its manifest declares), in the web view that has no access to the app, and reaches Little
   Joan only through a small checked API: storage (1 MB), the current theme's colors, the page it
-  was opened for, opening a public web address (in the default browser only with the
-  `openBrowser` permission), the clipboard, and closing itself. Web pages can't call that API,
-  load an extension's files, or open an extension; the toolbar marks an open extension with an
-  **Extension** badge. `little-joan --extension <id>` opens one; **Hello**, the bundled example, shows what an extension can and can't do. With Developer
-  mode on, unpacked extensions in the `extensions` folder next to settings.json load too.
+  was opened for, opening a public web address (in the default browser only with the `openBrowser`
+  permission), the clipboard, and closing itself; it can't install service workers. Web pages
+  can't call that API, load an extension's files, or open an extension; the toolbar marks an open
+  extension with an **Extension** badge. `little-joan --extension <id>` opens one; **Hello**, the
+  bundled example, shows what an extension can and can't do. With Developer mode on, unpacked
+  extensions in the `extensions` folder next to settings.json load too.
 - **Themes:** one to three colors, an intensity and a grain become a muted gradient on the
   toolbar, the command bar, the history view and Settings, in light, dark or following the
   system (and switching with it). Picks are kept pale in light mode and deep in dark mode, so any

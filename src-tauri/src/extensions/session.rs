@@ -28,10 +28,13 @@
 //!
 //! **Opening from a web page leaves it first.** The app navigates the page to its own start page
 //! (what it shows when nothing is open, whose load events CI has seen on every engine), and only
-//! once that committed (or after `LEAVE_FOR`) expects and opens the panel — so no web page
-//! is alive while a panel loads: none of its frames, subresources or popups can race the panel's
-//! navigation. (CI on Windows: a web page's `window.open` landing while the panel loaded left the
-//! panel without its files — once unstyled with no script, once WebView2's own 404 page.)
+//! once that committed (or after `LEAVE_FOR`) expects and opens the panel — so normally no web
+//! page is alive while a panel loads, and its frames, subresources or popups can't spoil the
+//! panel's load (CI on Windows: a web page's `window.open` landing while the panel loaded left the
+//! panel without its files — once unstyled with no script, once WebView2's own 404 page). It is
+//! best effort, for availability: after `LEAVE_FOR` the panel opens anyway, and another navigation
+//! can supersede the detour. What keeps web pages out of a panel is the nonce and the commit rule
+//! (gate.rs, api.rs), not this.
 
 use std::sync::{Mutex, PoisonError};
 use std::time::Instant;

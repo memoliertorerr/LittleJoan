@@ -3755,8 +3755,9 @@ honest attempts, then stop).
     crate — and a keyed-hash fallback that logs), and the guard wants that exact URL; the panel's
     own later navigations inside its extension stay refused (it is one page), so nothing ever
     re-arms the gate for another document. What the user sees now follows what a load event
-    **committed** (`NavGate::commit`: the admitted panel's URL arriving in the page's own
-    `Started` / `Finished`), not the guard's admission; the app's extension navigations — opening,
+    **committed** (`NavGate::commit`: the admitted panel's URL arriving in the page's own load
+    event — since fix 6 only `Started`, the engines' commit callback, not `Finished`; since
+    fix 10 exactly the admitted URL, nonce included), not the guard's admission; the app's extension navigations — opening,
     closing, `openUrl` to the page (also review item I5) — go through `bar::navigate_pending`, which
     leaves the page's address alone until those events arrive (`PageAddress::pending`). Reload on a
     committed panel opens the same thing again with a new nonce (`session::reopen`), never from
@@ -3872,10 +3873,12 @@ honest attempts, then stop).
     from here — wry answers `NewWindowRequested` through a deferral). **Fix:** when the page
     shows a web page, `session::open` navigates it to the app's start page first (what it shows
     when nothing is open, whose load events CI has seen on every engine — not so for
-    `about:blank` on WebView2) and opens the panel (expect + navigate) only when that page committed (`session::page_committed`, from a
-    thread of its own, not inside the engine's event) or after `LEAVE_FOR` = 1 s — so no web page,
-    nor its frames, subresources or popups, is alive while a panel loads. That also closes fix 6's
-    window at the root; fix 6's checks stay as the second line. `gate::Leaving` numbers each wait
+    `about:blank` on WebView2) and opens the panel (expect + navigate) only when that page
+    committed (`session::page_committed`, from a thread of its own, not inside the engine's
+    event) or after `LEAVE_FOR` = 1 s — so normally no web page, nor its frames, subresources or
+    popups, is alive while a panel loads. The detour is **best effort, for availability**: after
+    1 s the panel opens anyway, and another navigation can supersede the detour. Security rests
+    on the nonce and the commit rule (fixes 4, 6, 10), not on it. `gate::Leaving` numbers each wait
     so a stale timer can't open a later opening early; `close` and a new window drop a wait.
     Reload on a panel keeps the web page Close returns to (it lost it since fix 4). Opening from
     the start page, hibernation or another panel goes straight to the panel, as before. The start
@@ -3896,6 +3899,34 @@ honest attempts, then stop).
     (`servedToOthers`). On Linux the race's popups never reach the app at all (WebKitGTK blocks a
     `window.open` without a user gesture; 0 `new-window-refused` in every run), so there the race
     is its iframes only.
+  - **Fix 10 (`lj-step-29-fix10`) — the follow-up review of `aa14610` ("merge": M1 fixed, nothing
+    usable leaks) asked for four last changes.**
+    - **A new opening starts uncommitted.** When the guard admits a panel URL it now also clears
+      `committed` (`gate::page_may_navigate`), so Reload of the same extension — whose old panel
+      had committed — gets the "nonce document only" rule until its own commit too. And `commit`
+      now wants **exactly the admitted URL** (`NavGate::admitted`, nonce included), so a late
+      commit event of an earlier opening of the same extension can't commit the new one. Test:
+      `a_new_opening_is_uncommitted_until_its_own_commit`.
+    - **Service workers, end to end.** L4 rested on WebView2 passing `Service-Worker: script` to
+      the handler, which nothing tested. Hello now ships a real `sw.js` and calls
+      `navigator.serviceWorker.register("sw.js")` from its panel (`checkServiceWorker`), reporting
+      `sw=refused` (the registration failed — the handler refused the script, or the engine
+      couldn't fetch it), `sw=unsupported` (no `navigator.serviceWorker`, or a `SecurityError` /
+      `NotSupportedError`), or `sw=registered` (unregistered at once). The smoke requires
+      `refused` or `unsupported` on every OS (`isHelloReport`) and fails on any `200` for
+      `/sw.js` in the request log (`serviceWorkerFailures`), whatever the page reports; hello's
+      own expected `ljext-refused … /sw.js` doesn't count as a refused request of its panel. What
+      each engine did is in the CI notes of the PR and the report of this round. The backstop —
+      clearing `ljext` service-worker registrations on reload / switch-off — needs new crates, so
+      it is a Deferred follow-up.
+    - **Docs:** the start-page detour is described as best effort, for availability (the panel
+      opens after 1 s anyway; a navigation can supersede it) — security rests on the nonce and
+      the commit rule; this plan's M1 entry says commit is the `Started` event only (since fix 6)
+      and the exact admitted URL (since fix 10); the PR description gives the real body limit,
+      `MAX_BODY_BYTES` = the 1 MB storage quota + 64 KB.
+    - **Deferred follow-ups** gained: the private-host filter is best effort (`openBrowser` is the
+      real control), dot look-alikes in names (the badge covers them), no cap on concurrent file
+      GETs plus wry's body buffering, and the service-worker backstop.
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
@@ -4342,6 +4373,32 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   and WebKitGTK's `enable-webrtc` setting would also turn it off for web pages. Options: wry/Tauri
   per-webview WebRTC switches if they appear; an injected freeze of `RTCPeerConnection` for
   `ljext:` documents; a `webrtc` permission. Documented as a limit (docs/extensions.md).
+- **`openUrl`'s private-host filter is best effort** (follow-up review). It looks at the URL
+  only: a DNS name that resolves to a private address, single-label hosts (`http://router/`),
+  `.lan` / `.internal` / `.home.arpa`, carrier-grade NAT 100.64/10 and benchmarking 198.18/15
+  all pass. For the page it's the same reach any web page has; for the default browser the
+  **`openBrowser` permission is the real control** (the user sees it in Settings before turning
+  an extension on), the filter and the 2 s limit only narrow it. Options: add those suffixes and
+  ranges; resolve the host first (and accept the race with DNS); ask before a browser open.
+- **Dot look-alikes pass the name check** (follow-up review): `looks_like_address` splits on the
+  ASCII dot only, so `paypal․com` (U+2024 ONE DOT LEADER), `paypal．com` (U+FF0E) or `paypal。com`
+  (U+3002) is a valid name. The toolbar's "Extension" badge next to every extension name is what
+  covers it. Options: normalize those to `.` before the check (or refuse them in names).
+- **File requests have no concurrency cap, and wry buffers every body** (follow-up review): the
+  8-calls-in-flight limit covers the API only; a panel can fire any number of file GETs (each a
+  blocking-pool task that reads a file of at most 16 MB). And wry reads a whole request body into
+  memory before the handler runs, on every engine, so `MAX_BODY_BYTES` refuses an oversized body
+  only after it was buffered. Options: a per-extension cap on concurrent file reads; a streaming
+  body in wry (upstream).
+- **Service-worker registrations of `ljext` origins aren't cleared** (follow-up review, L4
+  backstop). The handler refuses a service worker's script (and the smoke checks it on every OS),
+  so none should exist; clearing them anyway when extensions are reloaded or switched off needs
+  per-origin website-data removal, which the app's dependencies don't expose: WebView2's
+  `Storage.clearDataForOrigin` (DevTools protocol) needs `webview2-com` as a direct dependency,
+  WKWebView's `WKWebsiteDataStore.removeData` needs `objc2-web-kit`, WebKitGTK's
+  `WebsiteDataManager` needs `webkit2gtk` — new crates — and Tauri's `clear_all_browsing_data`
+  would wipe the user's cookies and sites too. Options: those calls behind a small platform
+  module once a step allows the crates.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
 import {
   HELLO_TITLE,
+  isHelloReport,
+  serviceWorkerFailures,
   PROBE_TITLE,
   commandHelloFailures,
   extensionFailures,
@@ -49,11 +51,28 @@ describe("the extension run", () => {
   it("fails when hello didn't open, load or report", () => {
     expect(extensionFailures(parseLog(without(GOOD, "extension-opened")), STORE).join()).toMatch(/never opened/);
     expect(extensionFailures(parseLog(without(GOOD, "4 page-loaded")), STORE).join()).toMatch(/never loaded in the page/);
-    const wrong = GOOD.replace(HELLO_TITLE, "LJ-EXT hello storage=ok theme=ok ipc=open net=blocked");
+    const wrong = GOOD.replace(HELLO_TITLE, "LJ-EXT hello storage=ok theme=ok ipc=open net=blocked sw=refused");
     expect(extensionFailures(parseLog(wrong), STORE).join()).toMatch(/ipc=open/);
     expect(extensionFailures(parseLog(without(GOOD, "theme ok")), STORE).join()).toMatch(/theme call never succeeded/);
     const skipped = GOOD.replace("3 extension", "2 extension-skipped hello `index.html` is missing\n3 extension");
     expect(extensionFailures(parseLog(skipped), STORE).join()).toMatch(/was skipped/);
+  });
+
+  it("takes a refused or unsupported service worker, nothing else, and never a served sw.js", () => {
+    expect(isHelloReport(HELLO_TITLE)).toBe(true);
+    expect(isHelloReport(HELLO_TITLE.replace("sw=refused", "sw=unsupported"))).toBe(true);
+    for (const sw of ["registered", "timeout", "error", ""]) {
+      expect(isHelloReport(HELLO_TITLE.replace("sw=refused", `sw=${sw}`))).toBe(false);
+    }
+    expect(isHelloReport("LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked")).toBe(false);
+    const registered = GOOD.replace(HELLO_TITLE, HELLO_TITLE.replace("sw=refused", "sw=registered"));
+    expect(extensionFailures(parseLog(registered), STORE).join()).toMatch(/hello reported/);
+    const served = "1 ljext-headers joan-page GET ljext://hello.localhost/sw.js status=200 referer=own names=accept,referer,service-worker\n";
+    expect(serviceWorkerFailures(parseLog(served)).join()).toMatch(/service worker's script was served/);
+    const refused = "1 ljext-headers joan-page GET ljext://hello.localhost/sw.js status=403 referer=own names=accept,referer,service-worker\n2 ljext-refused worker joan-page ljext://hello.localhost/sw.js\n";
+    expect(serviceWorkerFailures(parseLog(refused))).toEqual([]);
+    const withRefusal = GOOD.replace(`8 title ${HELLO_TITLE}`, `7 ljext-refused worker joan-page ljext://hello.localhost/sw.js\n8 title ${HELLO_TITLE}`);
+    expect(extensionFailures(parseLog(withRefusal), STORE)).toEqual([]);
   });
 
   it("fails when --extension hello's own panel was refused (the Windows race CI saw)", () => {
