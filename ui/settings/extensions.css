@@ -43,6 +43,26 @@
   border-radius: 6px;
 }
 
+.ext-icon-builtin::before,
+.ext-icon-none::before {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 4px;
+  content: "";
+  background-color: var(--lj-fg-muted);
+  -webkit-mask: var(--icon) center / 16px no-repeat;
+  mask: var(--icon) center / 16px no-repeat;
+}
+
+.ext-icon-builtin {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M3.5 6h9M3.5 10h9'/%3E%3C/svg%3E");
+}
+
+.ext-icon-none {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5'%3E%3Crect x='2.2' y='2.2' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='9' y='2.2' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='2.2' y='9' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='9' y='9' width='4.8' height='4.8' rx='2.4'/%3E%3C/svg%3E");
+}
+
 .ext-icon img {
   display: block;
   width: 24px;

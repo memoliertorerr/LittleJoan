@@ -114,7 +114,12 @@ on disk at once, the tabbed Settings window with `--settings [tab]`) is PR #15 o
 `lj/p14-history-settings`, merged. Phase 15 (LJ27 → LJ28: the theme engine — muted gradients from
 1–3 colors on every surface we draw — and the Appearance editor; it also fixed the bar missing a
 view change while its page loaded) is PR #16 on `lj/p15-themes`, merged once verify, package and
-smoke are green. Next: phase 16 (LJ29 → LJ31).**
+smoke are green. Phase 16 (LJ29 → LJ31: the extension platform — the `ljext` runtime with one
+origin per extension, a CSP from the manifest and a checked API, extensions in the command bar and
+Settings with developer mode and `docs/extensions.md`, and the built-in quick answers) is PR #17 on
+`lj/p16-extensions`. It is security-critical, so it is **not** merged by the agent: an
+independent security review comes first, then the merge decision. Next after it: phase 17
+(LJ32 → LJ35).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -3941,6 +3946,24 @@ This ends phase 16:
   `src-tauri/src/commands.rs`, docs/architecture.md.
 - `npm run verify`: 272 TS tests, 235 Rust tests, clippy clean. Disk: 13 GiB free at the start
   and after verify; `.cache/target` 1.3 GB.
+- **CI (run 39092961418: LJ31 with `lj-step-30-fix` and `lj-step-29-fix3`): every job green** —
+  verify ×3, package ×3, smoke on Windows, macOS, Linux and Linux at scale 2. `--extension hello`
+  from hibernation now reports on its own on every OS with none of its requests refused (Windows
+  too: only WebView2's own `favicon.ico` request is answered 404); the probe is refused as before;
+  "Say hello" picked in the command bar opened hello again on Windows and Linux; Enter on the
+  quick answer put **`84` on the Windows clipboard** (read back with `Get-Clipboard`; the Linux
+  runners have no clipboard tool; macOS's typing didn't arrive). Screenshots: `answer.png`
+  (Windows, Linux, scale 2) — "= 12*7" typed, the first row selected (accent fill, white text):
+  an equals sign, "84 — = 12*7", then "Search Google for “= 12*7”" and Settings; on macOS the
+  command bar without the typing — and, a finding, with "YouTube — m.youtube.com" as a top site:
+  the earlier ↓ ↓ Enter had arrived although the typing hadn't, and opened a starter. **Fix
+  (`lj-step-31-fix`):** the smoke presses keys only after its typing showed up in the log.
+  `settings-extensions.png` (all four) now starts with **Built-in**: Calculator, Unit conversion,
+  Time zones, Random, Unix timestamps, each "Built in" with its examples and a switch — but with an
+  empty white tile where an icon goes; the same fix gives icon-less rows a symbol ("=" for the
+  built-ins, the four tiles for an extension without an icon). `extension-hello.png` on Windows:
+  the themed Hello panel (the race is gone). `command-hello.png`, `extension-probe.png`: as in
+  LJ30's notes.
 
 ### LJ32 — Bundled games: Snake and 2048 · standard · auto
 

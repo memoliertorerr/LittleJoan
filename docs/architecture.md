@@ -943,8 +943,9 @@ and pushes to `main`:
   the page window must not open. Then the **extension run** (`smoke-extensions.mts`), its own launch: `--extension hello`
   must load hello's panel and report `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked`
   (screenshot `extension-hello.png`), with its storage file counting the visit; a new window's
-  command bar, typing `hello`, must offer "Say hello" (`command-hello.png`), and ↓ ↓ Enter must open
-  hello again (Windows, Linux; best effort on macOS); a third window's command bar, typing
+  command bar, typing `hello`, must offer "Say hello" (`command-hello.png`), and ↓ ↓ Enter — pressed
+  only once the typing showed up in the log — must open hello again (Windows, Linux; best effort on
+  macOS); a third window's command bar, typing
   `= 12*7`, shows the answer 84 first (`answer.png`), and Enter copies it (the clipboard is read
   back where the runner has a tool for it, informational: `summary.json`); then the smoke page
   with `?ext=probe&base=<hello's origin>` tries hello's API (as the SDK would, and as a simple

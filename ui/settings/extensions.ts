@@ -63,6 +63,9 @@ export function extensionsTab(root: HTMLElement, changed: () => void, builtIns: 
       img.alt = "";
       img.src = extension.icon;
       icon.append(img);
+    } else {
+      // No icon of its own: a symbol (extensions.css) — "=" for a quick answer, tiles otherwise.
+      icon.classList.add(extension.id.startsWith("builtin:") ? "ext-icon-builtin" : "ext-icon-none");
     }
     const body = document.createElement("div");
     body.className = "ext-text";

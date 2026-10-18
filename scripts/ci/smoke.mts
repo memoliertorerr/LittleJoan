@@ -912,16 +912,25 @@ async function extensionRun(): Promise<{ events: LogEvent[]; store: string | und
   await waitFor("extensions: command bar", (e) => e.slice(commandFrom).some((x) => x.event === "extensions-list"), 20_000, logFile);
   await sleep(1500);
   typeText("hello", runPid);
-  await waitFor("extensions: typed hello", (e) => e.slice(commandFrom).some((x) => x.event === "suggestions" && x.detail.endsWith("typed=5")), 15_000, logFile);
-  await sleep(1000);
-  screenshot("command-hello.png");
-  pressKeys(["Down", "Down", "Return"], runPid);
-  await waitFor(
-    "extensions: Say hello opened hello",
-    (e) => e.filter((x) => x.event === "extension-opened" && x.detail === "hello").length >= 2,
+  const typedHello = await waitFor(
+    "extensions: typed hello",
+    (e) => e.slice(commandFrom).some((x) => x.event === "suggestions" && x.detail.endsWith("typed=5")),
     15_000,
     logFile,
   );
+  await sleep(1000);
+  screenshot("command-hello.png");
+  // Only when the typing arrived: otherwise ↓ ↓ Enter would open whatever the empty command bar
+  // offers (CI's macOS once opened a starter site that way).
+  if (typedHello) {
+    pressKeys(["Down", "Down", "Return"], runPid);
+    await waitFor(
+      "extensions: Say hello opened hello",
+      (e) => e.filter((x) => x.event === "extension-opened" && x.detail === "hello").length >= 2,
+      15_000,
+      logFile,
+    );
+  }
   await sleep(1500);
   // A quick answer (LJ31): "= 12*7" answers 84 in the command bar's first row; Enter copies it
   // (read back from the system clipboard where the runner has a tool for it: informational).
@@ -933,12 +942,19 @@ async function extensionRun(): Promise<{ events: LogEvent[]; store: string | und
   await waitFor("answers: command bar", (e) => e.slice(answerFrom).some((x) => x.event === "extensions-list"), 20_000, logFile);
   await sleep(1500);
   typeText("= 12*7", runPid);
-  await waitFor("answers: typed", (e) => e.slice(answerFrom).some((x) => x.event === "suggestions" && x.detail.endsWith("typed=6")), 15_000, logFile);
+  const typedAnswer = await waitFor(
+    "answers: typed",
+    (e) => e.slice(answerFrom).some((x) => x.event === "suggestions" && x.detail.endsWith("typed=6")),
+    15_000,
+    logFile,
+  );
   await sleep(1000);
   screenshot("answer.png");
-  pressKeys(["Return"], runPid);
-  await sleep(1000);
-  clipboard = readClipboard();
+  if (typedAnswer) {
+    pressKeys(["Return"], runPid);
+    await sleep(1000);
+    clipboard = readClipboard();
+  }
   console.log(`answers: the clipboard holds ${JSON.stringify(clipboard)}`);
   const probeUrl = `${smokePageUrl}?ext=probe&base=${encodeURIComponent(helloOrigin(os))}`;
   await forward(["--show", probeUrl], runEnv);
