@@ -160,8 +160,10 @@ extension's name and icon instead of a domain. Each extension has an **origin of
 | Windows | `http://ljext.<id>.localhost/<path>` | `http://ljext.<id>.localhost` |
 
 So `localStorage`, IndexedDB and cookies are per extension too — but use `littleJoan.storage`,
-which is the documented, size-limited store. Only Little Joan opens a panel: a page (or a panel)
-can't navigate the window to an extension's URL. A panel is one page: links to other pages of the
+which is the documented, size-limited store. Only Little Joan opens a panel: it navigates to the
+panel's URL with a fresh, single-use nonce only it knows (`?lj-open=…`), and admits nothing else,
+so a page (or a panel) can't take the window to an extension's URL. Its toolbar names the
+extension only once that panel has actually loaded. A panel is one page: links to other pages of the
 same extension don't open (build your UI in the page; that includes `#anchor` links and
 `location.reload()` — scroll with `scrollIntoView()`, re-render instead of reloading), and a panel
 can't become a `blob:` or `data:` document. Following a link to the web leaves the panel, like `openUrl`. Popups
@@ -240,8 +242,14 @@ extension's own origin. Every request is checked from scratch:
    carries one), a method on the list above, and the permission that method needs.
 
 Little Joan never sends CORS headers, so no other page can read an answer. The window navigates to
-an extension URL only when Little Joan itself opens that exact URL; web pages can't, in any form
-(Windows' `http://ljext.…` form is never treated as a web address). Paths can't leave the
+an extension URL only when it is the exact URL Little Joan is opening — including a fresh 128-bit
+single-use nonce that no page or panel can know beforehand — once, within a few seconds; every
+other attempt (a link, `location.href`, on macOS and Linux also an iframe) is refused, and on
+Windows, whose engine doesn't let the app see frame navigations, an iframe's request is refused by
+the handler itself (it's for a frame, and the page doesn't show that extension). Windows'
+`http://ljext.…` form is never treated as a web address. The toolbar names an extension only after
+that extension's panel loaded, so a refused or cancelled attempt can't put an extension's name
+over a web page. Paths can't leave the
 extension's folder (no `..`, absolute paths, percent-encoding or symlinks out). The details, and
 the test for each check, are in [architecture.md](architecture.md#extensions-experimental).
 

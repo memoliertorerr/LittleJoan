@@ -3741,6 +3741,34 @@ honest attempts, then stop).
   wants `--extension hello`'s own panel to report before anything opens it again, with none of
   hello's requests refused meanwhile (2 more test cases, one replaying CI's log). The blob / data
   rule uses the same state.
+- **Security review (2026-10-18), an independent read-only review of PR #17 at `cdc3225`: no
+  Critical or High findings; one must-fix and a list of cheaper ones, fixed on the branch:**
+  - **M1 — the expected URL was predictable (`lj-step-29-fix4`).** On WebKit the guard is asked
+    for frames too, so a web page looping `<iframe src="ljext://<id>.localhost/<panel>">` (or a
+    malicious panel navigating and stopping) could consume the app's expectation in the moment
+    between `expect` and the app's own navigation: the app's navigation was then refused while
+    `navigating()` had already set the address, and the toolbar showed the extension's name and
+    icon over the web page; Reload re-armed the gate from that stale address. **Fix:** the URL the
+    app opens carries a fresh single-use 128-bit nonce, `?lj-open=<hex>` (`extensions/nonce.rs`:
+    `/dev/urandom`, `BCryptGenRandom` — one feature added to the existing `windows` crate, no new
+    crate — and a keyed-hash fallback that logs), and the guard wants that exact URL; the panel's
+    own later navigations inside its extension stay refused (it is one page), so nothing ever
+    re-arms the gate for another document. What the user sees now follows what a load event
+    **committed** (`NavGate::commit`: the admitted panel's URL arriving in the page's own
+    `Started` / `Finished`), not the guard's admission; the app's extension navigations — opening,
+    closing, `openUrl` to the page (also review item I5) — go through `bar::navigate_pending`, which
+    leaves the page's address alone until those events arrive (`PageAddress::pending`). Reload on a
+    committed panel opens the same thing again with a new nonce (`session::reopen`), never from
+    the old address; on an uncommitted one the guard refuses it. Tests:
+    `a_racing_document_cant_claim_the_expected_panel` (no-nonce, empty, wrong, extended and
+    fragment forms all refused, the expectation survives, the app's URL is admitted, once),
+    `the_toolbar_follows_what_a_load_event_committed`, `panel_urls_carry_the_nonce`,
+    `a_pending_navigation_keeps_the_address_until_its_events_arrive`, nonce tests (1,000 distinct
+    128-bit values, the OS source works, constant-time compare). Smoke: the race above
+    (`raceFailures`, `labelFailures`; 3 test cases), with new log events `page-started`,
+    `toolbar-label`, `new-window-refused`. Docs no longer say "web pages can't, in any form":
+    architecture.md and extensions.md describe the nonce, the frames each engine shows the guard,
+    and the commit rule.
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 

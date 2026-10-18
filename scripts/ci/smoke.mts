@@ -69,6 +69,7 @@ import {
   commandHelloFailures,
   extensionFailures,
   helloOrigin,
+  raceFailures,
   parseStore,
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
@@ -961,6 +962,23 @@ async function extensionRun(): Promise<{ events: LogEvent[]; store: string | und
   await waitFor("extensions: the probe reported", (e) => lastTitle(e, "LJ-EXTPROBE ljext-api") !== undefined, 40_000, logFile);
   await sleep(500);
   screenshot("extension-probe.png");
+  // The race (security review, M1): the page keeps putting hello's panel URL (without the app's
+  // nonce) into iframes and window.open while `--extension hello` opens it; the app's navigation
+  // must win, the racers be refused, and the toolbar never name hello over the web page.
+  const raceUrl = `${smokePageUrl}?ext=race&base=${encodeURIComponent(helloOrigin(os))}`;
+  await forward(["--show", raceUrl], runEnv);
+  await waitFor("extensions: the race runs", (e) => lastTitle(e, "LJ-EXTRACE running") !== undefined, 30_000, logFile);
+  await sleep(1500);
+  const reportsBefore = events(logFile).filter((e) => e.event === "title" && e.detail.startsWith("LJ-EXT hello")).length;
+  await forward(["--extension", "hello"], runEnv);
+  await waitFor(
+    "extensions: hello opened through the race",
+    (e) => e.filter((x) => x.event === "title" && x.detail.startsWith("LJ-EXT hello")).length > reportsBefore,
+    30_000,
+    logFile,
+  );
+  await sleep(1000);
+  screenshot("extension-race.png");
   await forward(["--quit"], runEnv);
   if (!(await exited(runPid, 15_000))) {
     await quit(runChild, runPid);
@@ -1091,6 +1109,7 @@ const failures = evaluate(
   .concat(historyFailures(historyCheck))
   .concat(settingsFailures(historyOffEvents))
   .concat(extensionFailures(extensionCheck.events, parseStore(extensionCheck.store)))
+  .concat(raceFailures(extensionCheck.events))
   .concat(commandHelloFailures(extensionCheck.events, { driven: typingDriven }))
   .concat(settingsExtensionsFailures(historyOffEvents))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))

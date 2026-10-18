@@ -127,11 +127,14 @@ pub fn add_webviews<R: Runtime>(
             match payload.event() {
                 PageLoadEvent::Started => {
                     address().started(payload.url().clone());
+                    smoke::log("page-started", payload.url().as_str());
                 }
                 PageLoadEvent::Finished => {
                     address().finished(payload.url().clone());
                 }
             }
+            // What the toolbar shows: an extension only once its panel's URL commits here.
+            extensions::session::page_event(payload.url());
             let app = webview.app_handle();
             publish_url(app);
             if payload.event() == PageLoadEvent::Finished {
@@ -150,9 +153,9 @@ pub fn add_webviews<R: Runtime>(
         })
         // target=_blank and window.open go to the default browser (web URLs only).
         .on_new_window(|url, _features| {
-            if navigation::is_external_openable(&url)
-                && let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>)
-            {
+            if !navigation::is_external_openable(&url) {
+                smoke::log("new-window-refused", url.as_str());
+            } else if let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>) {
                 eprintln!("little-joan: could not open the link in the default browser: {err}");
             }
             NewWindowResponse::Deny
@@ -204,7 +207,7 @@ pub fn tell_state<R: Runtime>(app: &AppHandle<R>) {
         view::tell_overlay(&bar, overlay());
         tell_back(&bar, can_go_back());
     }
-    extensions::session::publish_label(app, page_url(app).as_ref(), true);
+    extensions::session::publish_label(app, true);
 }
 
 fn tell_back<R: Runtime>(bar: &Webview<R>, on: bool) {
@@ -232,7 +235,7 @@ pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
     let Some(url) = page_url(app) else {
         return;
     };
-    extensions::session::publish_label(app, Some(&url), false);
+    extensions::session::publish_label(app, false);
     let text = bar_text(&url, &keys::app_origin());
     {
         let mut last = LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner);
@@ -308,6 +311,23 @@ pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
         address().navigating(url.clone());
         page.navigate(url)?;
         publish_url(app);
+        if was_open {
+            focus_page(app);
+        }
+    }
+    Ok(())
+}
+
+/// Loads `url` in the page — an extension's panel, or a page an extension asks for — without
+/// taking it as the page's address yet: the address and the toolbar change when the page's own
+/// load events arrive, so a navigation the guard refuses (or the engine cancels) leaves the real
+/// page named. Closes the command bar like `navigate`.
+pub fn navigate_pending<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
+    if let Some(page) = app.get_webview(PAGE) {
+        let was_open = overlay();
+        set_overlay(app, false);
+        address().pending();
+        page.navigate(url)?;
         if was_open {
             focus_page(app);
         }

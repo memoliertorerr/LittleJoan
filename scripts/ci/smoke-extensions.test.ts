@@ -6,6 +6,8 @@ import {
   commandHelloFailures,
   extensionFailures,
   helloOrigin,
+  labelFailures,
+  raceFailures,
   isExtUrl,
   parseStore,
   settingsExtensionsFailures,
@@ -133,5 +135,48 @@ describe("the command bar's extension rows", () => {
     expect(commandHelloFailures(once, { driven: true }).join()).toMatch(/didn't open hello/);
     expect(commandHelloFailures(once, { driven: false })).toEqual([]);
     expect(commandHelloFailures(parseLog("1 extension-opened hello\n"), { driven: false }).join()).toMatch(/never asked/);
+  });
+});
+
+describe("the race and the toolbar", () => {
+  const N = "0123456789abcdef0123456789abcdef";
+  const RACE_URL = "http://127.0.0.1:5000/smoke.html?ext=race&base=ljext%3A%2F%2Fhello.localhost";
+  const GOOD_RACE = `1 page-started ljext://hello.localhost/index.html?lj-open=${N}
+2 toolbar-label hello
+3 page-loaded ljext://hello.localhost/index.html?lj-open=${N}
+4 page-started ${RACE_URL}
+5 toolbar-label none
+6 page-loaded ${RACE_URL}
+7 title LJ-EXTRACE running
+8 navigation-refused ljext://hello.localhost/index.html
+9 extension-opened hello
+10 navigation-refused ljext://hello.localhost/index.html
+11 page-started ljext://hello.localhost/index.html?lj-open=${N.replace("0", "f")}
+12 toolbar-label hello
+13 title ${HELLO_TITLE}
+`;
+
+  it("passes when the app's panel wins and every racer is refused", () => {
+    expect(raceFailures(parseLog(GOOD_RACE))).toEqual([]);
+  });
+
+  it("fails when a racer's URL loaded, nothing was refused, or the app's panel didn't open", () => {
+    const loaded = GOOD_RACE.replace("10 navigation-refused ljext://hello.localhost/index.html", "10 page-started ljext://hello.localhost/index.html");
+    expect(raceFailures(parseLog(loaded)).join()).toMatch(/without the app's nonce loaded/);
+    const quiet = GOOD_RACE.replaceAll(/\d+ navigation-refused .*\n/g, "");
+    expect(raceFailures(parseLog(quiet)).join()).toMatch(/none of the page's iframe attempts/);
+    const lost = GOOD_RACE.replace(`13 title ${HELLO_TITLE}`, "13 title LJ-EXTRACE done opened=0");
+    expect(raceFailures(parseLog(lost)).join()).toMatch(/didn't open the panel/);
+    expect(raceFailures(parseLog("1 started\n"))).toEqual(["race: the smoke page's race never loaded"]);
+  });
+
+  it("never lets the toolbar name an extension over a web page", () => {
+    const spoofed = GOOD_RACE.replace("8 navigation-refused", "8 toolbar-label hello\n8 navigation-refused");
+    expect(labelFailures(parseLog(spoofed)).join()).toMatch(/named hello while the page was/);
+    const otherName = GOOD_RACE.replace("2 toolbar-label hello", "2 toolbar-label other");
+    expect(labelFailures(parseLog(otherName)).join()).toMatch(/named other/);
+    expect(labelFailures(parseLog("1 toolbar-label none\n")).join()).toMatch(/never named hello/);
+    const windows = `1 page-started http://ljext.hello.localhost/index.html?lj-open=${N}\n2 toolbar-label hello\n`;
+    expect(labelFailures(parseLog(windows))).toEqual([]);
   });
 });

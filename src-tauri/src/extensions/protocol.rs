@@ -248,7 +248,8 @@ fn call<R: Runtime>(
                     .and_then(Value::as_str)
                     .unwrap_or("page")
                 {
-                    "page" => match bar::navigate(app, url) {
+                    // Not the address until the new page's own events say so.
+                    "page" => match bar::navigate_pending(app, url) {
                         Ok(()) => ok(None),
                         Err(err) => error(500, "failed", err.to_string()),
                     },

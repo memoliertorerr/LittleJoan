@@ -67,7 +67,7 @@
         requestFullscreen,
         viewportTitle,
       } from "./smoke-logic.mjs";
-      import { probeApi, probeFile, probeRequest, probeTitle } from "./ext-probe.mjs";
+      import { probeApi, probeFile, probeRequest, probeTitle, raceRequest, RACE } from "./ext-probe.mjs";
 
       const stage = document.getElementById("stage");
       const status = document.getElementById("status");
@@ -88,8 +88,12 @@
       const persist = persistRequest(location.search);
       // ?ext=probe&base=<an extension's origin>: what a web page can't do to an extension.
       const probe = probeRequest(location.search);
+      // ?ext=race&base=<origin>: iframes and window.open at the panel while the app opens it.
+      const race = raceRequest(location.search);
       if (probe) {
         void runProbe(probe.base);
+      } else if (race) {
+        runRace(race.base);
       } else if (persist) {
         show(
           persist.mode === "set"
@@ -98,6 +102,28 @@
         );
       } else {
         startCodecAndViewportReports();
+      }
+
+      function runRace(base) {
+        show("LJ-EXTRACE running");
+        const target = `${base}/index.html`;
+        const started = Date.now();
+        let frame = null;
+        let opened = 0;
+        const timer = setInterval(() => {
+          if (Date.now() - started > RACE.durationMs) {
+            clearInterval(timer);
+            show(`LJ-EXTRACE done opened=${opened}`);
+            return;
+          }
+          frame?.remove();
+          frame = document.createElement("iframe");
+          frame.src = target;
+          document.body.append(frame);
+          if (Math.random() < 0.1) {
+            opened += window.open(target) ? 1 : 0;
+          }
+        }, RACE.everyMs);
       }
 
       async function runProbe(base) {

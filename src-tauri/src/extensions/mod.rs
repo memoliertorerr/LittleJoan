@@ -19,6 +19,7 @@ pub mod clipboard;
 pub mod csp;
 pub mod list;
 pub mod manifest;
+pub mod nonce;
 pub mod paths;
 pub mod protocol;
 pub mod registry;

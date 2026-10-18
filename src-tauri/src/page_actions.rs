@@ -34,11 +34,13 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
             PageAction::Reload => {
                 // A reload is a visit that adds nothing to frecency (history.rs).
                 history_store::set_next_kind(&app, VisitKind::Reload);
-                // Reloading a panel is the app's own navigation (the guard expects it).
-                if let Some(current) = bar::page_url(&app) {
-                    extensions::session::expect_reload(&current);
+                // A panel the page committed is opened again by the app (a new nonce), never
+                // reloaded from its old address; anything else reloads as before.
+                if extensions::session::reopen(&app) {
+                    Ok(())
+                } else {
+                    page.reload()
                 }
-                page.reload()
             }
             PageAction::Back => page.eval("history.back()"),
             PageAction::Forward => page.eval("history.forward()"),

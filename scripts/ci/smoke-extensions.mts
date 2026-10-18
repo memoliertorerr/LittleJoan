@@ -96,7 +96,9 @@ export function extensionFailures(events: LogEvent[], store: HelloStore | undefi
     failures.push("extensions: the smoke page's probe never loaded");
     return failures;
   }
-  const after = events.slice(probeAt);
+  // The probe's stretch: until the race (below) starts, where the app opens hello again.
+  const raceAt = events.findIndex((e, i) => i > probeAt && e.event === "page-loaded" && e.detail.includes("ext=race"));
+  const after = events.slice(probeAt, raceAt < 0 ? undefined : raceAt);
   for (const call of after.filter((e) => e.event === "ext-api" && e.detail.endsWith(" ok"))) {
     failures.push(`extensions: an API call succeeded after the probe page loaded: ${call.detail}`);
   }
@@ -119,6 +121,67 @@ export function extensionFailures(events: LogEvent[], store: HelloStore | undefi
     if (store.keys.includes("smoke-probe")) {
       failures.push("extensions: the probe page wrote into hello's storage");
     }
+  }
+  return failures;
+}
+
+/** Whether `url` is hello's panel as the app opens it: with its single-use nonce. */
+function isOpenedPanel(url: string): boolean {
+  return isExtUrl(url) && url.includes("hello") && /[?&]lj-open=[0-9a-f]{32}(?:$|&)/.test(url);
+}
+
+/**
+ * The race (the security review's case): while the smoke page keeps putting hello's panel URL —
+ * without the app's nonce — into iframes and window.open, `--extension hello` must still open the
+ * panel (it reports again), every extension URL that loads in the page must carry the nonce, at
+ * least one of the page's attempts must have been refused (the guard on macOS / Linux, the
+ * handler on Windows, where the guard doesn't see frames), and the toolbar may name hello only
+ * right after hello's own panel loaded — never while a web page is shown.
+ */
+export function raceFailures(events: LogEvent[]): string[] {
+  const failures: string[] = [];
+  const raceAt = events.findIndex((e) => e.event === "page-loaded" && e.detail.includes("ext=race"));
+  if (raceAt < 0) {
+    return ["race: the smoke page's race never loaded"];
+  }
+  const after = events.slice(raceAt);
+  if (!after.some((e) => e.event === "title" && e.detail === HELLO_TITLE)) {
+    failures.push("race: --extension hello didn't open the panel while the page raced it");
+  }
+  for (const load of events.filter((e) => (e.event === "page-loaded" || e.event === "page-started") && isExtUrl(e.detail))) {
+    if (!isOpenedPanel(load.detail)) {
+      failures.push(`race: an extension URL without the app's nonce loaded in the page: ${load.detail}`);
+    }
+  }
+  const refusedRacer = after.some(
+    (e) =>
+      (e.event === "navigation-refused" || e.event === "ljext-refused") &&
+      e.detail.includes("hello.localhost/index.html") &&
+      !e.detail.includes("lj-open="),
+  );
+  if (!refusedRacer) {
+    failures.push("race: none of the page's iframe attempts reached the guard or the handler to be refused");
+  }
+  failures.push(...labelFailures(events));
+  return failures;
+}
+
+/** The toolbar names an extension only right after that extension's panel (with its nonce) loaded. */
+export function labelFailures(events: LogEvent[]): string[] {
+  const failures: string[] = [];
+  let lastPage = "";
+  for (const e of events) {
+    if (e.event === "page-started" || e.event === "page-loaded") {
+      lastPage = e.detail;
+    } else if (e.event === "toolbar-label" && e.detail !== "none") {
+      const itsOwn = lastPage.includes(`//${e.detail}.localhost/`) || lastPage.includes(`//ljext.${e.detail}.localhost/`);
+      if (!isOpenedPanel(lastPage) || !itsOwn) {
+        failures.push(`the toolbar named ${e.detail} while the page was ${JSON.stringify(lastPage || "nothing")}`);
+      }
+    }
+  }
+  if (!events.some((e) => e.event === "toolbar-label" && e.detail === "hello")) {
+    failures.push("the toolbar never named hello on its panel");
   }
   return failures;
 }

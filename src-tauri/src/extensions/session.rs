@@ -1,21 +1,27 @@
 //! The extension open in the page window, and the navigation guard that keeps `ljext:` pages to
 //! the ones the app opens.
 //!
-//! Opening an extension (the command line's `--extension`, from LJ30 the command bar) closes the
-//! command bar and navigates the page webview to the panel's URL — after telling the guard to
-//! expect exactly that URL (`NavGate`). The guard admits an extension URL only when it is the
-//! expected one, once, within a few seconds; a web page (or a panel) can never navigate the page
-//! webview to an extension URL itself, in any form (`urls::is_ext_like`). While a panel is shown
+//! Opening an extension (the command line's `--extension`, the command bar) closes the command
+//! bar and navigates the page webview to the panel's URL — after telling the guard to expect
+//! exactly that URL (`NavGate`). That URL carries a fresh single-use nonce (`?lj-open=<128 random
+//! bits>`, nonce.rs) that only the app knows, so no document can claim the expectation first: the
+//! guard admits an extension URL only when it is the expected one, nonce included, once, within a
+//! few seconds. A web page (or a panel) therefore can't navigate the page webview — or, on macOS
+//! and Linux where the guard also sees frames, a frame — to an extension URL, in any form
+//! (`urls::is_ext_like`). While a panel is shown
 //! it can't turn into a `blob:` or `data:` document either (one would keep its origin outside
 //! the files the policy allows). The bar's toolbar shows the extension's name and icon instead of
 //! a domain. All of it is per window: a new window starts with nothing opened.
 //!
-//! **Which extension the page shows** is decided here too, by the guard (`NavGate::showing`): an
-//! admitted extension URL makes it that extension, any other navigation the guard lets through
-//! makes it none. Every navigation of the page webview passes the guard first, in order — the
-//! app's own, links, reloads, back / forward — while load events can arrive late: on Windows CI
-//! saw the start page's `Finished` land after the app had started opening a panel, and a page
-//! check based on the page's address refused the panel's own document. api.rs checks this.
+//! **Which extension the page shows** has two answers. For serving files and the API (api.rs)
+//! it is what the guard admitted (`NavGate::showing`): an admitted extension URL makes it that
+//! extension, any other navigation the guard lets through makes it none — every navigation passes
+//! the guard first and in order, while load events can arrive late (on Windows CI saw the start
+//! page's `Finished` land after the app had started opening a panel). For what the user sees —
+//! the toolbar's extension name and icon, and Reload — it is what a load event of the page then
+//! **committed** (`NavGate::committed`): the admitted extension's URL arriving in the page's own
+//! `Started` / `Finished`. A navigation that was refused or cancelled never commits, so the toolbar
+//! keeps showing the real page.
 
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -24,6 +30,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 use url::Url;
 
+use super::nonce;
 use super::registry;
 use super::urls;
 use crate::bar;
@@ -34,12 +41,13 @@ use crate::smoke;
 /// How long an expected extension URL stays expected.
 pub const EXPECT_FOR: Duration = Duration::from_secs(5);
 
-/// The app's "this extension URL is mine" flag, and which extension the page shows (pure,
-/// tested).
+/// The app's "this extension URL is mine" flag, and which extension the page shows: as admitted
+/// by the guard, and as committed by a load event (pure, tested).
 #[derive(Debug, Default)]
 pub struct NavGate {
     expected: Option<(String, Instant)>,
     showing: Option<String>,
+    committed: Option<String>,
 }
 
 impl NavGate {
@@ -47,6 +55,7 @@ impl NavGate {
         NavGate {
             expected: None,
             showing: None,
+            committed: None,
         }
     }
 
@@ -54,6 +63,23 @@ impl NavGate {
     /// go anywhere else.
     pub fn showing(&self) -> Option<&str> {
         self.showing.as_deref()
+    }
+
+    /// The extension whose panel a load event of the page committed (see `commit`).
+    pub fn committed(&self) -> Option<&str> {
+        self.committed.as_deref()
+    }
+
+    /// A load event (`Started` / `Finished`) of the page's main frame at `url`: the page shows the
+    /// admitted extension once its URL arrives that way; any other URL means no extension.
+    /// Returns whether that changed.
+    pub fn commit(&mut self, url: &Url, platform: Platform) -> bool {
+        let id = urls::parse(url, platform)
+            .map(|ext| ext.id)
+            .filter(|id| self.showing.as_deref() == Some(id.as_str()));
+        let changed = self.committed != id;
+        self.committed = id;
+        changed
     }
 
     /// The app is about to navigate the page to `url`.
@@ -110,6 +136,8 @@ pub struct PageInfo {
 #[derive(Debug, Clone)]
 struct Session {
     id: String,
+    /// What was opened, so Reload can open it again (with a new nonce).
+    target: Target,
     page: Option<PageInfo>,
     /// The web page that was open when the panel opened: `close` goes back to it.
     before: Option<Url>,
@@ -151,6 +179,22 @@ pub fn showing() -> Option<String> {
         .unwrap_or_else(PoisonError::into_inner)
         .showing()
         .map(str::to_owned)
+}
+
+/// The extension whose panel a load event committed (`NavGate::committed`): what the toolbar
+/// shows.
+pub fn committed() -> Option<String> {
+    GATE.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .committed()
+        .map(str::to_owned)
+}
+
+/// A load event of the page webview (bar.rs: `Started` and `Finished` of the main frame).
+pub fn page_event(url: &Url) {
+    GATE.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .commit(url, Platform::current());
 }
 
 /// The extension the app opened last in this window.
@@ -195,13 +239,14 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<
     };
     let contribution =
         contribution.ok_or_else(|| format!("the extension `{id}` has no such command"))?;
-    let url = urls::file_url(id, contribution.panel.as_str(), Platform::current())
+    let url = panel_url(id, contribution.panel.as_str(), &nonce::random_hex())
         .ok_or_else(|| "no URL for the panel".to_owned())?;
     let before = bar::page_url(app).filter(|current| {
         navigation::is_external_openable(current) && !keys::is_app_url(&keys::app_origin(), current)
     });
     *session() = Some(Session {
         id: id.to_owned(),
+        target,
         page,
         before,
     });
@@ -209,28 +254,44 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<
         .unwrap_or_else(PoisonError::into_inner)
         .expect(&url, Instant::now());
     smoke::log("extension-opened", id);
-    bar::navigate(app, url).map_err(|err| err.to_string())
+    // The page's address and the toolbar change when the panel's own load events arrive.
+    bar::navigate_pending(app, url).map_err(|err| err.to_string())
 }
 
-/// The Reload page action on a panel: the reload is the app's own navigation.
-pub fn expect_reload(current: &Url) {
-    if urls::parse(current, Platform::current()).is_some() {
-        GATE.lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .expect(current, Instant::now());
+/// The URL the app opens a panel at: the panel file in this platform's form, with the
+/// single-use nonce (`?lj-open=<hex>`) the guard will expect.
+pub fn panel_url(id: &str, panel: &str, nonce: &str) -> Option<Url> {
+    let mut url = urls::file_url(id, panel, Platform::current())?;
+    url.set_query(Some(&format!("lj-open={nonce}")));
+    Some(url)
+}
+
+/// The Reload page action: on a panel that a load event committed, the app opens the same thing
+/// again — a new nonce, never the old address. Returns whether it did (otherwise the page reloads
+/// as a web page would; a panel that never committed isn't reloaded at all, the guard refuses it).
+pub fn reopen<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let Some(committed) = committed() else {
+        return false;
+    };
+    let Some(open_again) = session().as_ref().filter(|s| s.id == committed).cloned() else {
+        return false;
+    };
+    if let Err(err) = open(app, &open_again.id, open_again.target) {
+        eprintln!("little-joan: could not open the extension again: {err}");
     }
+    true
 }
 
 /// littleJoan.close(): back to the web page the panel was opened from, or to the command bar.
 pub fn close<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let before = session().take().and_then(|s| s.before);
     match before {
-        Some(url) => bar::navigate(app, url).map_err(|err| err.to_string()),
+        Some(url) => bar::navigate_pending(app, url).map_err(|err| err.to_string()),
         None => {
             let start = keys::app_origin()
                 .join("index.html")
                 .map_err(|err| err.to_string())?;
-            bar::navigate(app, start).map_err(|err| err.to_string())?;
+            bar::navigate_pending(app, start).map_err(|err| err.to_string())?;
             bar::focus_bar(app);
             Ok(())
         }
@@ -244,12 +305,11 @@ struct Label {
     icon: Option<String>,
 }
 
-/// Tells the bar which extension the page shows (`None`: a web page or nothing), when that
-/// changed — or always, with `force` (the bar's script just started).
-pub fn publish_label<R: Runtime>(app: &AppHandle<R>, page: Option<&Url>, force: bool) {
-    let id = page
-        .and_then(|page| urls::parse(page, Platform::current()))
-        .map(|ext| ext.id);
+/// Tells the bar which extension the page shows — only once a load event committed it
+/// (`committed`; `None`: a web page or nothing) — when that changed, or always with `force` (the
+/// bar's script just started).
+pub fn publish_label<R: Runtime>(app: &AppHandle<R>, force: bool) {
+    let id = committed();
     {
         let mut shown = LABEL_SHOWN.lock().unwrap_or_else(PoisonError::into_inner);
         if !force && shown.as_ref() == Some(&id) {
@@ -257,6 +317,7 @@ pub fn publish_label<R: Runtime>(app: &AppHandle<R>, page: Option<&Url>, force: 
         }
         *shown = Some(id.clone());
     }
+    smoke::log("toolbar-label", id.as_deref().unwrap_or("none"));
     let label = id
         .and_then(|id| registry::current(app).get(&id))
         .map(|extension| Label {
@@ -280,6 +341,82 @@ mod tests {
 
     fn url(s: &str) -> Url {
         Url::parse(s).expect("valid")
+    }
+
+    #[test]
+    fn a_racing_document_cant_claim_the_expected_panel() {
+        // The reviewer's case: while the app opens hello, a web page loops iframes (or a panel
+        // navigates and stops) at hello's panel URL. Without the nonce, none is admitted, the
+        // expectation survives, and the app's own navigation still is.
+        let now = Instant::now();
+        let mut gate = NavGate::new();
+        let mine =
+            url("ljext://hello.localhost/index.html?lj-open=0123456789abcdef0123456789abcdef");
+        gate.expect(&mine, now);
+        for racer in [
+            "ljext://hello.localhost/index.html",
+            "ljext://hello.localhost/index.html?lj-open=",
+            "ljext://hello.localhost/index.html?lj-open=0123456789abcdef0123456789abcdee",
+            "ljext://hello.localhost/index.html?lj-open=0123456789abcdef0123456789abcdef&x=1",
+            "ljext://hello.localhost/index.html#lj-open=0123456789abcdef0123456789abcdef",
+        ] {
+            assert!(
+                !page_may_navigate(&url(racer), &mut gate, now, Platform::MacOs),
+                "{racer}"
+            );
+            assert_eq!(gate.showing(), None, "{racer}");
+        }
+        assert!(page_may_navigate(&mine, &mut gate, now, Platform::MacOs));
+        assert_eq!(gate.showing(), Some("hello"));
+        // Used up: the same URL again (a reload, a back) isn't admitted.
+        assert!(!page_may_navigate(&mine, &mut gate, now, Platform::MacOs));
+    }
+
+    #[test]
+    fn the_toolbar_follows_what_a_load_event_committed() {
+        let now = Instant::now();
+        let mut gate = NavGate::new();
+        let panel = url("ljext://hello.localhost/index.html?lj-open=00");
+        // Load events of a page that is not the admitted panel commit nothing.
+        assert!(!gate.commit(&url("https://example.com/"), Platform::MacOs));
+        assert!(
+            !gate.commit(&panel, Platform::MacOs),
+            "not admitted: no extension"
+        );
+        assert_eq!(gate.committed(), None);
+        gate.expect(&panel, now);
+        assert!(page_may_navigate(&panel, &mut gate, now, Platform::MacOs));
+        assert_eq!(gate.committed(), None, "admitted is not committed");
+        // A late event of the page before (the race CI saw) doesn't commit the panel either.
+        assert!(!gate.commit(&url("tauri://localhost/index.html"), Platform::MacOs));
+        assert!(gate.commit(&panel, Platform::MacOs));
+        assert_eq!(gate.committed(), Some("hello"));
+        // Leaving: the guard clears what it admitted, and the next load event clears the toolbar.
+        assert!(page_may_navigate(
+            &url("https://example.com/"),
+            &mut gate,
+            now,
+            Platform::MacOs
+        ));
+        assert!(gate.commit(&url("https://example.com/"), Platform::MacOs));
+        assert_eq!(gate.committed(), None);
+        // Another extension's URL never commits as the admitted one.
+        gate.expect(&panel, now);
+        assert!(page_may_navigate(&panel, &mut gate, now, Platform::MacOs));
+        assert!(!gate.commit(&url("ljext://other.localhost/index.html"), Platform::MacOs));
+        assert_eq!(gate.committed(), None);
+    }
+
+    #[test]
+    fn panel_urls_carry_the_nonce() {
+        let panel = panel_url("hello", "index.html", "abc").expect("a URL");
+        assert!(panel.as_str().ends_with("/index.html?lj-open=abc"));
+        assert_eq!(
+            urls::parse(&panel, Platform::current())
+                .map(|e| e.path)
+                .as_deref(),
+            Some("/index.html")
+        );
     }
 
     #[test]

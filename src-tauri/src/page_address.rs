@@ -71,6 +71,14 @@ impl PageAddress {
         self.event(url, Load::Loading);
     }
 
+    /// The app started a navigation whose URL isn't the address until the page's own events say
+    /// so (an extension's panel, a page an extension opens): the address stays, and the engine
+    /// isn't asked until a load finished.
+    pub fn pending(&mut self) {
+        self.load = Load::Loading;
+        self.seq = self.seq.wrapping_add(1);
+    }
+
     /// The page's address, or `None` before anything loaded.
     pub fn current(&self) -> Option<&Url> {
         self.url.as_ref()
@@ -173,5 +181,23 @@ mod tests {
         address.finished(url("https://example.com/next"));
         assert!(!address.observed(token, url("https://example.com/a")));
         assert_eq!(address.current(), Some(&url("https://example.com/next")));
+    }
+
+    #[test]
+    fn a_pending_navigation_keeps_the_address_until_its_events_arrive() {
+        let mut page = PageAddress::new();
+        page.finished(url("https://a.test/"));
+        page.pending();
+        assert_eq!(page.current(), Some(&url("https://a.test/")));
+        assert_eq!(
+            page.read_token(),
+            None,
+            "the engine isn't asked mid-navigation"
+        );
+        page.started(url("ljext://hello.localhost/index.html?lj-open=1"));
+        assert_eq!(
+            page.current().map(Url::as_str),
+            Some("ljext://hello.localhost/index.html?lj-open=1")
+        );
     }
 }

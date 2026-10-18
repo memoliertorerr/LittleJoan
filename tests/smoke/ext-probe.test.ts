@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { probeApi, probeFile, probeRequest, probeTitle } from "./ext-probe.mjs";
+import { probeApi, probeFile, probeRequest, probeTitle, raceRequest } from "./ext-probe.mjs";
 
 describe("the extension probe", () => {
   it("takes an extension origin in either platform's form, nothing else", () => {
@@ -14,6 +14,12 @@ describe("the extension probe", () => {
     ]) {
       expect(probeRequest(search)).toBeUndefined();
     }
+  });
+
+  it("starts the race only for an extension origin", () => {
+    expect(raceRequest("?ext=race&base=ljext%3A%2F%2Fhello.localhost")).toEqual({ base: "ljext://hello.localhost" });
+    expect(raceRequest("?ext=race&base=https%3A%2F%2Fexample.com")).toBeUndefined();
+    expect(raceRequest("?ext=probe&base=ljext%3A%2F%2Fhello.localhost")).toBeUndefined();
   });
 
   it("calls the API twice — as the SDK does, and as a simple request — and is blocked only if both fail", async () => {

@@ -8,6 +8,21 @@
 const ORIGIN = /^(ljext:\/\/[a-z0-9][a-z0-9-]{1,31}\.localhost|http:\/\/ljext\.[a-z0-9][a-z0-9-]{1,31}\.localhost)$/;
 
 /**
+ * The race a page URL asks for: `?ext=race&base=<origin>` — the page keeps putting the panel's
+ * URL (without the app's nonce) into iframes and window.open while the app opens the extension.
+ * @param {string} search location.search
+ * @returns {{ base: string } | undefined}
+ */
+export function raceRequest(search) {
+  const params = new URLSearchParams(search);
+  const base = params.get("base") ?? "";
+  return params.get("ext") === "race" && ORIGIN.test(base) ? { base } : undefined;
+}
+
+/** How long the race page keeps trying, and how often. */
+export const RACE = { durationMs: 12_000, everyMs: 25 };
+
+/**
  * The probe a page URL asks for: `?ext=probe&base=<origin>`.
  * @param {string} search location.search
  * @returns {{ base: string } | undefined}
