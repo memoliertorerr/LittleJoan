@@ -3884,6 +3884,12 @@ honest attempts, then stop).
     `session/tests.rs`, and `openable` / `is_private_host` to `extensions/web_address.rs`
     (re-exported by api.rs). Test: `an_opening_waits_for_the_page_to_leave_its_web_page`; smoke:
     the race (now the app's opening must pass through the start page there, `raceFailures`).
+    CI 39100400716: all 10 green — but no popup happened to land during the opening there (the
+    race opened one on 10 % of its ticks).
+  - **Fix 8 (`lj-step-29-fix8`) — a race that always overlaps.** The race page now opens a popup
+    on every second tick (every 50 ms; `RACE.popupEvery`), so one lands while the app is leaving
+    the page on Windows and macOS (the leave takes ~40–80 ms there; ~5 ms on Linux), and fix 7 is
+    tested against the failure it fixes, not just run beside it.
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 

@@ -110,6 +110,7 @@
         const started = Date.now();
         let frame = null;
         let opened = 0;
+        let tick = 0;
         const timer = setInterval(() => {
           if (Date.now() - started > RACE.durationMs) {
             clearInterval(timer);
@@ -120,7 +121,8 @@
           frame = document.createElement("iframe");
           frame.src = target;
           document.body.append(frame);
-          if (Math.random() < 0.1) {
+          tick += 1;
+          if (tick % RACE.popupEvery === 0) {
             opened += window.open(target) ? 1 : 0;
           }
         }, RACE.everyMs);

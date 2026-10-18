@@ -19,8 +19,12 @@ export function raceRequest(search) {
   return params.get("ext") === "race" && ORIGIN.test(base) ? { base } : undefined;
 }
 
-/** How long the race page keeps trying, and how often. */
-export const RACE = { durationMs: 12_000, everyMs: 25 };
+/**
+ * How long the race page keeps trying, and how often: an iframe at hello's panel URL on every tick
+ * and a `window.open` of it on every `popupEvery`-th — often enough that one always lands while
+ * the app is opening the panel (in CI a popup in that moment once broke a WebView2 panel load).
+ */
+export const RACE = { durationMs: 12_000, everyMs: 25, popupEvery: 2 };
 
 /**
  * The probe a page URL asks for: `?ext=probe&base=<origin>`.
