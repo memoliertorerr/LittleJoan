@@ -52,7 +52,10 @@ pub fn webkit_fullscreen<R: Runtime>(
         }
         // The view's window now (wry reads `[webview window]` for this).
         let current = webview.ns_window() as usize;
-        let _ = sent.send((fullscreen_state(view), current == ours));
+        let state = fullscreen_state(view);
+        // The smoke log follows what this decision saw, before the caller acts on it.
+        note_state(state.unwrap_or(WebKitFullscreen::Not));
+        let _ = sent.send((state, current == ours));
     })
     .ok()?;
     // On the main thread with_webview has run already; elsewhere the main thread answers soon.
@@ -98,11 +101,7 @@ pub fn watch_webkit_fullscreen<R: Runtime>(app: &AppHandle<R>) {
                     if view.is_null() {
                         return;
                     }
-                    let state = fullscreen_state(view).unwrap_or(WebKitFullscreen::Not);
-                    let code = state as i8;
-                    if LOGGED.swap(code, Ordering::SeqCst) != code {
-                        smoke::log("wk-fullscreen", state.name());
-                    }
+                    note_state(fullscreen_state(view).unwrap_or(WebKitFullscreen::Not));
                 });
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -110,6 +109,19 @@ pub fn watch_webkit_fullscreen<R: Runtime>(app: &AppHandle<R>) {
         });
     if spawned.is_err() {
         WATCHING.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Smoke mode: logs `wk-fullscreen <state>` when it differs from the last line. Called on the main
+/// thread by the 100 ms poll and by every read of the guard (`webkit_fullscreen`), so a layout the
+/// guard allowed is logged after the state it saw — never before a lagging poll catches up.
+fn note_state(state: WebKitFullscreen) {
+    if !smoke::enabled() {
+        return;
+    }
+    let code = state as i8;
+    if LOGGED.swap(code, Ordering::SeqCst) != code {
+        smoke::log("wk-fullscreen", state.name());
     }
 }
 

@@ -5190,6 +5190,23 @@ a check.
 - `npm run verify`: 482 TS tests, 271 Rust tests, clippy clean. Disk: 13 GiB free at the start of
   the fix and after verify; `.cache/target` 1.4 GB.
 
+**CI for the fix (run 39149305504):** verify, package and smoke green on Windows and both Linux
+jobs; **macOS smoke red on one rule, a race in the instrumentation**: every element path now held
+until the page's own Exit (390 px: 3.6 s; 720 px: 3.7 s; the siteModes launch reported
+`ua=desktop` at 390 and its player took element fullscreen, 3.7 s), the layout during WebKit's
+entry was skipped (`layout-deferred`) and applied once it ended (`layout-resumed`) — but the
+resumed layout's `page-bounds` landed 4 ms before the 100 ms poll logged `wk-fullscreen not`,
+although the guard itself had read "not" (and the view back in its window) for that decision.
+**`lj-step-36-fix2`:** the guard's own read logs the state too (`note_state`, on the main thread,
+before the caller acts), so the log shows what each decision saw; the rule is unchanged.
+Also seen: **WebKit's element fullscreen puts the Little Joan window back to the size it was
+created at** — after a `--size 390x600` the window came back from fullscreen 480×640 (`resized
+480x640` during the entry, and the resumed layout at that size; the page then reported 480 px, and
+at 720 px phone mode rightly switched to the phone agent for the 480 px window). Whether a window
+resized by dragging does the same on a real Mac is the owner's check; recorded under Deferred
+follow-ups (not fixed here: it isn't the fullscreen bug, and restoring the size would be new
+behavior).
+
 ### LJ37 — Ctrl+H opens history on Windows and Linux; double-clicking the toolbar zooms the window · standard · auto
 
 **Verify:** `npm run verify` green, including `keys.rs` tests: Ctrl+H → `PageAction::History` on
@@ -6866,6 +6883,14 @@ and where, then stop.
   that m.youtube.com's player waits for iOS events that never fire on macOS, and that wry's
   `set_bounds` would resize the webview inside WebKit's fullscreen window. Planned as LJ36:
   reproduce in CI, guard WebKit's fullscreen, and youtube.com on the desktop agent on WebKit.*
+- **macOS: a video's fullscreen may put the window back to the size it opened at** (surfaced by
+  LJ36's CI). WebKit's element-fullscreen entry moves and resizes the Little Joan window (tao's
+  `Moved` / `Resized`), and in CI the window came back 480×640 — its size at creation — after a
+  `--size 390x600`. The guard keeps the page alone during the fullscreen and lays it out for the
+  restored size afterwards, but the user's size is lost. Unknown whether a window resized by
+  dragging (not `set_size`) does the same on a real Mac. Options, if it does: remember the window's
+  frame when WebKit's fullscreen starts and set it again when it ends (macOS only); or find what
+  AppKit restores (tao's `set_inner_size` uses `setContentSize:` asynchronously).
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -7111,9 +7136,10 @@ Populated from real friction, not speculation:
   window gets a narrow layout only from the page's own CSS; only Windows could emulate a mobile
   viewport (CDP `Emulation.setDeviceMetricsOverride`), and macOS has only private SPI. Phase 19
   doesn't emulate viewports.
-- *(LJ36, CI run 39147876852)* **macOS: tao reports the window moved and resized while WebKit
-  enters element fullscreen** — `Resized` with the size the window was created at (480×640 after a
-  `--size 390x600`), and `inner_size()` agrees for that moment. Anything that lays out the page or
+- *(LJ36, CI runs 39147876852, 39149305504)* **macOS: WebKit's element fullscreen moves and resizes
+  the Little Joan window** — tao reports `Moved` / `Resized` during the entry, to the size the
+  window was created at (480×640 after a `--size 390x600`), and the window keeps that size after
+  the fullscreen (Deferred follow-ups). Anything that lays out the page or
   switches phone mode on `Resized` then acts inside WebKit's fullscreen window: CI saw the page
   shrunk to 480×600 in a black fullscreen window, and at 720 px phone mode's reload ending the
   fullscreen. Lay out the page on macOS only through `bar::apply_layout`, which asks
