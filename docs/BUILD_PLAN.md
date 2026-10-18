@@ -82,7 +82,7 @@
 | LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ✅ done |
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
-| LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — waiting for the owner's checklist |
+| LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — the owner's checklist passed 2026-10-18 (one YouTube fullscreen bug, see notes); v0.2.0-beta.2 released |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
@@ -125,7 +125,10 @@ commit is green (run 39116954733). Phase 17 (LJ32 → LJ35: the
 bundled extensions — games, productivity, page actions and tools — then the docs and the owner's
 checklist) is PR #18 on `lj/p17-bundled-extensions`, merged by the agent once verify, package and
 smoke were green on every OS (the standing exception); LJ35 is a checkpoint: the owner's checklist
-is in PR #18, and `v0.2.0-beta.2` waits for the owner's word. Next after it: phases 7–10.**
+is in PR #18. **2026-10-18: the owner's checklist passed ("all works amazingly"; one YouTube
+fullscreen bug, see LJ35's notes), and on their word `v0.2.0-beta.2` was released as a pre-release.
+Next: the owner's new requests ("Requested for the next version" under LJ35) and phases 7–10 —
+nothing starts until the owner says yes.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -4529,6 +4532,35 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
 - `npm run verify`: 454 TS tests, 256 Rust tests, clippy clean. Disk: 14 GiB free at the start and
   after verify; `.cache/target` 1.3 GB.
 
+**The owner's checklist (2026-10-18), on their Mac with `main` at 5f3fa08:** "All works
+amazingly". Logins survive, themes are "really good", QR code → Back returned to the page. One bug:
+**YouTube's own fullscreen button** enters fullscreen and drops back to the normal size at once;
+pressing F (YouTube's key) fullscreens fine, and then the player's exit button does nothing (Esc
+exits). Recorded under Deferred follow-ups; nothing else failed. The owner then said to release
+the current state: `v0.2.0-beta.2` (pre-release, like beta.1), released from the commit `main`'s
+CI built.
+
+### Requested for the next version (2026-10-18) — NOT started; waits for the owner's yes
+
+The owner's list after the checklist (their words, condensed). The owner said explicitly not to
+start this work until they say yes; a proposal goes to them first, and it becomes plan steps only
+then.
+
+- Fix YouTube's fullscreen button on macOS (above).
+- An option to hide the tray / menu-bar icon (some people prefer no icon); the shortcut, the
+  command bar and a second launch still reach everything.
+- The shortcut recorder warns when a shortcut clashes with a system (or another app's) shortcut.
+- Change Little Joan's own keys too (Cmd/Ctrl+L and the rest), not just the global shortcut.
+- More command-bar commands for quick actions and settings (translate, theme, search engine, …).
+- Saved logins: credential storage, Apple Passwords / iCloud Keychain, and passkeys already on
+  the device, where each engine allows it (needs research per OS first).
+- A few more bundled extensions.
+- Windows (and Linux): the history key becomes **Ctrl+H** instead of Ctrl+Y (decided: "Ctrl+H is
+  better").
+- Decided: installer size growth from `panic = "unwind"` is fine ("installers can grow").
+- Still planned from round 1: phases 7–10 (Linux fullscreen, downloads + zoom, the Wayland
+  shortcut, macOS signing), then LJ19 (v0.2.0).
+
 ---
 
 ## Deferred follow-ups (cross-step, live tracker)
@@ -4589,12 +4621,13 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   (the engine keeps them). Options: read and set Windows' cookies through webview2-com
   (`ICoreWebView2CookieManager`) to keep the dot, or upstream a raw-domain accessor to
   `cookie` / wry.
-- **Release builds are bigger since `panic = "unwind"`** (surfaced by `lj-step-20-fix2`): CI's
+- ~~**Release builds are bigger since `panic = "unwind"`** (surfaced by `lj-step-20-fix2`): CI's
   installer artifacts grew from 3.56 to 4.48 MB (macOS), 1.31 to 1.78 MB (Windows), and the Linux
   bundle by about 1 MB. Only macOS needs unwinding (wry's Objective-C exception catch); a
   target-specific `-C panic=unwind` for macOS with `abort` elsewhere would win most of it back,
   at the cost of a second place that decides the panic strategy. The owner's call; the README's
-  sizes describe the v0.2.0-beta.1 downloads until the next release.
+  sizes describe the v0.2.0-beta.1 downloads until the next release.~~ → *The owner decided
+  2026-10-18: keep `unwind` everywhere ("installers can grow").*
 - **Double-click the toolbar to zoom the window on macOS** (surfaced by LJ24). Tauri's drag
   script turns a double click on a drag region into `internal_toggle_maximize`, which needs
   `core:window:allow-internal-toggle-maximize`; the bar has only `allow-start-dragging` (what
@@ -4606,7 +4639,8 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   is Ctrl+Y on Windows and Linux, caught natively before the page sees it; in WebView2 (as in
   Chromium) Ctrl+Y was also "redo" in text fields, so pages lose it there (Ctrl+Shift+Z still
   redoes). WebKitGTK has no Ctrl+Y binding. Option: Ctrl+H (Chrome's history key) on Windows and
-  Linux instead — the owner's call.
+  Linux instead — the owner's call. → *Decided 2026-10-18: Ctrl+H on Windows and Linux, in the
+  next version (see "Requested for the next version" under LJ35).*
 - **A custom theme may show the default theme for a frame** (surfaced by LJ27). The bar applies
   the theme when `start_info` answers, a moment after its page (with `theme-defaults.css`) first
   paints, so a summon can flash the default Mist colors before the user's. Not visible in CI's
@@ -4692,6 +4726,15 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   from the command bar (the window already open) isn't affected. Options: have the bar ask for its
   label and overlay state in one call when it loads (`start_info` already forces the label); or
   open the panel only after the bar reported `bar-loaded`.
+- **YouTube's fullscreen button on macOS** (the owner's checklist, 2026-10-18). The player's own
+  fullscreen button enters fullscreen and drops back to the normal size at once; YouTube's F key
+  fullscreens fine, and then the player's exit button does nothing (Esc exits). CI's smoke page
+  (a click on a big `requestFullscreen` button) passes on macOS, so something YouTube does
+  differs. Leads to check first: whether the window was under 600 px (phone mode gives an iPhone
+  agent, and YouTube then uses the iOS-style `video.webkitEnterFullscreen()` path, which WKWebView
+  on macOS handles differently), and whether a bounds or layout update reaches the page webview
+  during WebKit's fullscreen transition. Reproduce with a smoke page that calls both APIs from a
+  click before changing anything.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
