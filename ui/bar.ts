@@ -2,8 +2,8 @@
 // Little Arc-style toolbar — back, the site's icon and domain, "open in default browser" — for
 // the page's address (the app pushes changes with window.littleJoan.setUrl and setCanGoBack); in
 // the overlay view it is the command bar, covering the window: the field at the top with
-// suggestions under it (and the welcome on the first run), or the history view (Ctrl/Cmd+Y,
-// which Rust passes on as window.littleJoan.showHistory, or the command bar's "History" row; Esc
+// suggestions under it (and the welcome on the first run), or the history view (Ctrl+H, Cmd+Y on
+// macOS, which Rust passes on as window.littleJoan.showHistory, or the command bar's "History" row; Esc
 // returns to the command bar). Rust switches the view with window.littleJoan.setOverlay; every
 // summon, Ctrl/Cmd+L and a click on the domain open the overlay, opening a page closes it. The
 // theme comes with start_info as the bar loads, and window.littleJoan.setTheme changes it (after

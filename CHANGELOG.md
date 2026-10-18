@@ -6,6 +6,14 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **History is Ctrl+H on Windows and Linux** (Chrome's key), so Ctrl+Y is redo again in text
+  fields; macOS keeps Cmd+Y.
+
+### Added
+- **Double-click the toolbar to zoom the window** (and again to bring it back), on its empty
+  parts — on Windows and Linux too, like the title bar.
+
 ### Fixed
 - **YouTube's fullscreen button on macOS.** In a narrow window phone mode gave YouTube an iPhone
   agent, and its phone site's player waits for an iPhone's video fullscreen, which a Mac never

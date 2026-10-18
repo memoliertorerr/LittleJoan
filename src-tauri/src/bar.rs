@@ -271,7 +271,7 @@ pub fn focus_bar<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Opens the command bar's overlay in its history view, the keyboard in its search field
-/// (Ctrl/Cmd+Y: page keys and the macOS menu). Not during element fullscreen, which always wins.
+/// (Ctrl+H: page keys; Cmd+Y: the macOS menu). Not during element fullscreen, which always wins.
 pub fn show_history<R: Runtime>(app: &AppHandle<R>) {
     if element_fullscreen() || page_in_webkit_fullscreen(app) {
         return;

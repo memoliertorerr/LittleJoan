@@ -158,6 +158,53 @@ fn the_bar_and_settings_keep_their_own_capabilities() {
     );
 }
 
+/// The permission identifiers a capability lists (strings, or objects with an `identifier`).
+fn permissions(capability: &Value) -> Vec<&str> {
+    match capability.get("permissions") {
+        None => Vec::new(),
+        Some(Value::Array(list)) => list
+            .iter()
+            .map(|p| {
+                p.as_str()
+                    .or_else(|| p.get("identifier").and_then(Value::as_str))
+                    .expect("a permission is a string or has an identifier")
+            })
+            .collect(),
+        Some(other) => panic!("`permissions` must be a list, got {other}"),
+    }
+}
+
+#[test]
+fn only_the_bar_may_toggle_maximize() {
+    // A double click on the toolbar's drag region zooms the window (Tauri's drag script calls
+    // internal_toggle_maximize, LJ37). Only the bar gets it — it, or a default set that holds it.
+    let grants = |p: &str| {
+        matches!(
+            p,
+            "core:window:allow-internal-toggle-maximize" | "core:window:default" | "core:default"
+        )
+    };
+    let mut bar_has_it = false;
+    for (place, capability) in all_capabilities() {
+        if !permissions(&capability).into_iter().any(grants) {
+            continue;
+        }
+        let webviews = scopes(&capability, "webviews");
+        let only_the_bar = capability.get("identifier").and_then(Value::as_str) == Some("bar")
+            && webviews == [bar::BAR]
+            && scopes(&capability, "windows").is_empty();
+        assert!(
+            only_the_bar,
+            "{place}: only the bar's capability may toggle maximize"
+        );
+        bar_has_it = true;
+    }
+    assert!(
+        bar_has_it,
+        "the bar lost core:window:allow-internal-toggle-maximize"
+    );
+}
+
 #[test]
 fn no_capability_is_added_at_runtime() {
     // A capability added in code (Manager::add_capability) would escape the checks above.

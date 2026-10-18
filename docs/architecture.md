@@ -355,13 +355,13 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
-anywhere; the only core permission is the bar's `core:window:allow-start-dragging` (and the
-settings window's `core:window:allow-close`).
+anywhere; the only core permissions are the bar's `core:window:allow-start-dragging` and
+`core:window:allow-internal-toggle-maximize` (and the settings window's `core:window:allow-close`).
 
 | Command | Called by | Does |
 |---|---|---|
@@ -540,7 +540,7 @@ shows the error.
   | Reload | Ctrl+R / F5 (WebView2 built-in) | Ctrl+R / F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right (built-in) | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate page | Ctrl+Shift+T | Ctrl+Shift+T | Cmd+Shift+T |
-  | History view (the command bar's overlay) | Ctrl+Y | Ctrl+Y | Cmd+Y (View menu) |
+  | History view (the command bar's overlay) | Ctrl+H | Ctrl+H | Cmd+Y (View menu) |
   | Open page in default browser (then hibernate) | tray menu | tray menu | Cmd+Shift+O, tray menu |
   | Copy / paste / select all | built-in | built-in | Edit menu (needed by WKWebView) |
 
@@ -562,7 +562,7 @@ page; it is a separate webview with its own capability, and the page webview has
   page fills the window. Fullscreen always wins: starting it closes the overlay, and the overlay
   doesn't open meanwhile.
 - **When the overlay opens:** every summon (a new window is built with it, before it is shown),
-  Ctrl/Cmd+L (page keys and the macOS menu: the address is selected), Ctrl/Cmd+Y (in its history
+  Ctrl/Cmd+L (page keys and the macOS menu: the address is selected), Ctrl+H / Cmd+Y (in its history
   view, below), and a click on the
   toolbar's domain (`set_overlay(true)`, which goes through the same `focus_bar`). **When it
   closes:** whenever the app shows a page (`bar::navigate`: Enter in the command bar, `--show
@@ -594,7 +594,12 @@ page; it is a separate webview with its own capability, and the page webview has
   `open_in_browser` run the page actions Back and OpenInBrowser. The empty parts of the toolbar
   carry `data-tauri-drag-region`, and the bar's capability has
   `core:window:allow-start-dragging`, so they drag the window (Tauri's own drag script, injected
-  in every webview; the page webview's calls are denied).
+  in every webview; the page webview's calls are denied). A double click there zooms the window
+  and back: the drag script calls `internal_toggle_maximize`, which the bar's
+  `core:window:allow-internal-toggle-maximize` allows (LJ37). On Windows and Linux, where the
+  toolbar sits under the native title bar, it maximizes like the title bar does. It always zooms:
+  macOS's "Double-click a window's title bar to: Minimize" isn't followed (the plan's Deferred
+  follow-ups).
 - **macOS title bar:** the page window uses `TitleBarStyle::Overlay` with a hidden title, so the
   content view extends under a transparent title bar and the bar webview starts at y = 0 beneath
   the traffic lights (LJ10.1 had used `Transparent` to keep content *below* the title bar). The
@@ -651,7 +656,7 @@ page; it is a separate webview with its own capability, and the page webview has
   history…") and **Clear history…** at the top, then one row per page at its latest visit,
   grouped by local day — Today, Yesterday, then the date (with the year when it isn't this one) —
   each with the site's icon, "Title — site", the time and a × that removes the page. It opens
-  with Ctrl/Cmd+Y (the page action History: `bar::show_history` opens the overlay, then
+  with Ctrl+H (Cmd+Y on macOS; the page action History: `bar::show_history` opens the overlay, then
   `window.littleJoan.showHistory()`) or from the command bar's built-in **History** row (offered
   when what is typed starts the word, two letters or more, or contains it; built-in commands
   always find room among the 8 rows). It asks `history_list` and filters as you type (every word
@@ -878,7 +883,7 @@ settings.json at launch), `welcome` (the command
 bar was handed the first run), `quit` (Quit or `--quit` is about to exit),
 `session-cookies-kept <n>` / `session-cookies-restored <n>` (Windows: session cookies kept on
 close, set again in the new window; counts only), `history-visit <kind> <url>` (a visit was
-recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl/Cmd+Y opened
+recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl+H / Cmd+Y opened
 the history view), `history-list <pages>` (the history view asked for the pages; a count only),
 `theme <mode> colors=<n>` (the bar asked for its theme; never the colors), `theme-preview <mode>
 colors=<n> | ended` (Settings previewed a theme; the preview ended when it closed unsaved),
@@ -1003,8 +1008,9 @@ and pushes to `main`:
   false` before the smoke page reports ready; the starters first with no history; after the
   smoke page, a new window's empty command bar offers its site first, and typing `127` — xdotool
   on Linux, SendKeys on Windows, key events on macOS, best effort — finds it first; then
-  Ctrl+Y (Cmd+Y on macOS, best effort) must log `history-view` and a `history-list` with at
-  least one page; `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`,
+  Ctrl+H (Cmd+Y on macOS, best effort) must log `history-view` and a `history-list` with at
+  least one page, and on Windows and Linux, with the view closed again (Esc), Ctrl+Y must open
+  nothing within 2 s; `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`,
   `history.png`), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
   with the desktop agent** (it reports `innerWidth`, `innerHeight`, the agent kind and
   `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the

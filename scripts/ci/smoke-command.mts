@@ -1,7 +1,7 @@
 // Smoke-log rules for the app's own screens — the command bar, its history view, the settings
 // window (pure, unit-tested; scripts/ci/smoke.mts uses them). The app logs `suggestions <rows>
 // first=<site> typed=<characters>` for every suggest() call the bar makes, `history-view` when
-// Ctrl/Cmd+Y opens the history view, `history-list <rows>` when the view asks for the pages,
+// Ctrl+H (Cmd+Y on macOS) opens the history view, `history-list <rows>` when the view asks for the pages,
 // `settings-window <tab>` when Settings opens or switches tab and `settings-loaded` when its page
 // asks for the settings (src-tauri/src/commands.rs, bar.rs, settings_window.rs) — counts, a site
 // and tab names, never the typed text or an address.
@@ -91,8 +91,8 @@ export function parseHistoryList(event: LogEvent): number | undefined {
 }
 
 /**
- * Ctrl/Cmd+Y reached the app (`history-view`, the page action) and the bar's history view then
- * listed history with at least one page (`history-list <n>`, n ≥ 1).
+ * Ctrl+H (Cmd+Y on macOS) reached the app (`history-view`, the page action) and the bar's history
+ * view then listed history with at least one page (`history-list <n>`, n ≥ 1).
  */
 export function sawHistoryView(events: LogEvent[]): boolean {
   const opened = events.findIndex((e) => e.event === "history-view");
@@ -102,14 +102,26 @@ export function sawHistoryView(events: LogEvent[]): boolean {
 export interface HistoryViewCheck {
   /** The keys were driven (Linux, Windows; macOS is best effort). */
   driven: boolean;
+  /**
+   * Windows and Linux: what the log got in the 2 s after Ctrl+Y was pressed with the history view
+   * closed again — Ctrl+Y is redo now, never history (LJ37). Omitted: not checked.
+   */
+  afterCtrlY?: LogEvent[];
 }
 
-/** The history view opened with Ctrl/Cmd+Y and listed the smoke page's history. */
+/**
+ * The history view opened with Ctrl+H (Cmd+Y on macOS) and listed the smoke page's history; and
+ * Ctrl+Y, where it was pressed, opened nothing.
+ */
 export function historyViewFailures(events: LogEvent[], check: HistoryViewCheck): string[] {
-  if (!check.driven || sawHistoryView(events)) {
-    return [];
+  const failures: string[] = [];
+  if (check.driven && !sawHistoryView(events)) {
+    failures.push("Ctrl+H (Cmd+Y on macOS) never opened the history view with the smoke page's history in it");
   }
-  return ["Ctrl/Cmd+Y never opened the history view with the smoke page's history in it"];
+  if (check.afterCtrlY?.some((e) => e.event === "history-view")) {
+    failures.push("Ctrl+Y opened the history view (it is Ctrl+H now; Ctrl+Y belongs to the page)");
+  }
+  return failures;
 }
 
 /** The tabs Settings was opened or switched to (`settings-window <tab>`), in order. */

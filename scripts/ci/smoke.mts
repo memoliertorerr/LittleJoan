@@ -7,8 +7,8 @@
 // summon it with `--show` (single-instance forwarding; the command bar covers the window), load
 // the smoke page (the command bar closes: the 40 px bar above the page), click its big
 // fullscreen button, hibernate with `--hide`, summon and hibernate once more, summon again for
-// the command bar (the smoke page's site as a top site, then typing "127", then Ctrl/Cmd+Y for
-// the history view), turn start at login on and off (reading the OS's own login entry each
+// the command bar (the smoke page's site as a top site, then typing "127", then Ctrl+H — Cmd+Y on
+// macOS — for the history view, and Ctrl+Y opening nothing), turn start at login on and off (reading the OS's own login entry each
 // time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
 // then a relaunch on the same data folder), that history.json recorded the smoke page (and that
 // a run with history off records nothing; that run also opens Settings with `--settings` and
@@ -318,8 +318,8 @@ for token in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes of the keys `pressKeys` sends. */
-const MAC_NAMED_KEYS: Record<string, number> = { Left: 123, Right: 124, Down: 125, Up: 126, Return: 36 };
-const SEND_KEYS: Record<string, string> = { Left: "{LEFT}", Right: "{RIGHT}", Down: "{DOWN}", Up: "{UP}", Return: "{ENTER}" };
+const MAC_NAMED_KEYS: Record<string, number> = { Left: 123, Right: 124, Down: 125, Up: 126, Return: 36, Escape: 53 };
+const SEND_KEYS: Record<string, string> = { Left: "{LEFT}", Right: "{RIGHT}", Down: "{DOWN}", Up: "{UP}", Return: "{ENTER}", Escape: "{ESC}" };
 
 /** Presses named keys (arrows, Return) in the app's window, as typeText does (best effort on macOS). */
 function pressKeys(keys: string[], appPid: number, activate = true): void {
@@ -354,7 +354,9 @@ for code in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16, l: 37 };
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4 };
+/** The history view's key: Ctrl+H on Windows and Linux, Cmd+Y on macOS (LJ37). */
+const HISTORY_KEY = os === "darwin" ? "y" : "h";
 
 /**
  * Presses Ctrl+<letter> (Cmd+<letter> on macOS) in the app's window: xdotool on Linux, SendKeys
@@ -699,13 +701,25 @@ const typingDriven = os !== "darwin";
 await waitFor(`command bar: typing "${TYPED}" finds the smoke page`, (e) => sawTypedMatch(e.slice(commandFrom)), 15_000);
 await sleep(1000);
 screenshot("command-typing.png");
-// The history view (LJ25): Ctrl+Y (Cmd+Y on macOS, best effort) opens it over the command bar,
-// the smoke page under Today.
+// The history view (LJ25): Ctrl+H (Cmd+Y on macOS, best effort; LJ37) opens it over the command
+// bar, the smoke page under Today.
 const historyFrom = events().length;
-pressShortcut("y", pid);
-await waitFor("history view: Ctrl/Cmd+Y lists the history", (e) => sawHistoryView(e.slice(historyFrom)), 15_000);
+pressShortcut(HISTORY_KEY, pid);
+await waitFor("history view: Ctrl+H (Cmd+Y) lists the history", (e) => sawHistoryView(e.slice(historyFrom)), 15_000);
 await sleep(1000);
 screenshot("history.png");
+// Windows and Linux: with the view closed again (Esc: back to the command bar), Ctrl+Y must open
+// nothing within 2 s — it is the page's redo again.
+let afterCtrlY: LogEvent[] | undefined;
+if (typingDriven) {
+  pressKeys(["Escape"], pid, false);
+  await sleep(1000);
+  const ctrlYFrom = events().length;
+  pressShortcut("y", pid);
+  await sleep(2000);
+  afterCtrlY = events().slice(ctrlYFrom);
+  console.log(`after Ctrl+Y: ${afterCtrlY.map((e) => e.event).join(", ") || "nothing"}`);
+}
 await forward(["--hide"]);
 await waitFor("command bar: hibernated", (e) => count(e, "hibernated") > hibernatedBeforeCommand, 20_000);
 
@@ -848,7 +862,7 @@ console.log(`history: main ${historyMain === undefined ? "no file" : `${historyM
 /**
  * A theme run (LJ27): its own launch on a fresh data folder whose settings.json carries the
  * run's theme. The smoke page (the toolbar above it), a new window's command bar with the page's
- * site, the history view (Ctrl/Cmd+Y, best effort as in the main run) and Settings, each
+ * site, the history view (Ctrl+H / Cmd+Y, best effort as in the main run) and Settings, each
  * screenshotted into <out>/theme/ when the run names it.
  */
 async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
@@ -876,7 +890,7 @@ async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
   shot(run.shots.commandBar);
   if (run.shots.history) {
     const historyAt = events(logFile).length;
-    pressShortcut("y", runPid);
+    pressShortcut(HISTORY_KEY, runPid);
     await waitFor(`${run.name}: history view`, (e) => sawHistoryView(e.slice(historyAt)), 10_000, logFile);
     await sleep(1000);
     shot(run.shots.history);
@@ -1244,7 +1258,7 @@ const failures = evaluate(
   },
 )
   .concat(commandBarFailures(log, { typing: typingDriven }))
-  .concat(historyViewFailures(log, { driven: typingDriven }))
+  .concat(historyViewFailures(log, afterCtrlY ? { driven: typingDriven, afterCtrlY } : { driven: typingDriven }))
   .concat(persistFailures(log, persistCheck))
   .concat(historyFailures(historyCheck))
   .concat(settingsFailures(historyOffEvents))

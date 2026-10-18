@@ -11,9 +11,10 @@
 //! | Ctrl+R, F5              | native  | yes   | Reload        |
 //! | Alt+Left / Alt+Right    | native  | yes   | Back / Forward|
 //! | Ctrl+Shift+T            | yes     | yes   | Translate     |
-//! | Ctrl+Y                  | yes     | yes   | History view  |
+//! | Ctrl+H                  | yes     | yes   | History view  |
 //!
-//! "native" = WebView2 already handles it as a browser accelerator key.
+//! "native" = WebView2 already handles it as a browser accelerator key. Ctrl+Y is left to the page
+//! (redo in WebView2's text fields); macOS opens history with Cmd+Y, the View menu's item (menu.rs).
 
 use url::Url;
 
@@ -133,7 +134,7 @@ pub fn action_for(key: Key, mods: Mods, platform: Platform) -> Option<PageAction
         Key::Letter('w') if only_ctrl => Some(PageAction::Close),
         Key::Letter('l') if only_ctrl => Some(PageAction::OpenLocation),
         Key::Letter('t') if ctrl_shift => Some(PageAction::Translate),
-        Key::Letter('y') if only_ctrl => Some(PageAction::History),
+        Key::Letter('h') if only_ctrl => Some(PageAction::History),
         Key::Letter('r') if linux && only_ctrl => Some(PageAction::Reload),
         Key::F5 if linux && none => Some(PageAction::Reload),
         Key::Left if linux && only_alt => Some(PageAction::Back),
@@ -221,24 +222,37 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_y_opens_history_on_windows_and_linux() {
+    fn ctrl_h_opens_history_on_windows_and_linux() {
+        let h = Key::Letter('h');
         for platform in [Platform::Windows, Platform::Linux] {
-            assert_eq!(
-                action_for(Key::Letter('y'), CTRL, platform),
-                Some(PageAction::History)
-            );
+            assert_eq!(action_for(h, CTRL, platform), Some(PageAction::History));
             let ctrl_shift = Mods {
                 shift: true,
                 ..CTRL
             };
-            assert_eq!(action_for(Key::Letter('y'), ctrl_shift, platform), None);
-            assert_eq!(action_for(Key::Letter('y'), NONE, platform), None);
-            assert_eq!(action_for(Key::Letter('y'), ALT, platform), None);
+            assert_eq!(action_for(h, ctrl_shift, platform), None);
+            let altgr = Mods { alt: true, ..CTRL };
+            assert_eq!(action_for(h, altgr, platform), None, "AltGr is Ctrl+Alt");
+            assert_eq!(
+                action_for(h, NONE, platform),
+                None,
+                "plain H types a letter"
+            );
+            assert_eq!(action_for(h, ALT, platform), None);
+        }
+        assert_eq!(Key::from_windows_vk(0x48), Key::Letter('h'));
+        assert_eq!(Key::from_gdk_name("h"), Key::Letter('h'));
+        // macOS: Cmd+Y is the app menu's (menu.rs); this table gives it nothing.
+        assert_eq!(action_for(h, CTRL, Platform::MacOs), None);
+    }
+
+    #[test]
+    fn ctrl_y_is_left_to_the_page() {
+        // Redo in WebView2's text fields, as in Chromium.
+        for platform in [Platform::Windows, Platform::Linux, Platform::MacOs] {
+            assert_eq!(action_for(Key::Letter('y'), CTRL, platform), None);
         }
         assert_eq!(Key::from_windows_vk(0x59), Key::Letter('y'));
-        assert_eq!(Key::from_gdk_name("y"), Key::Letter('y'));
-        // macOS: Cmd+Y is the app menu's (menu.rs).
-        assert_eq!(action_for(Key::Letter('y'), CTRL, Platform::MacOs), None);
     }
 
     #[test]

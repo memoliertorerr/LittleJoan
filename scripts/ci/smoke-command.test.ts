@@ -87,17 +87,28 @@ describe("the history view check", () => {
     expect(other && parseHistoryList(other)).toBeUndefined();
   });
 
-  it("wants Ctrl/Cmd+Y to open the view and the view to list pages", () => {
+  it("wants Ctrl+H (Cmd+Y on macOS) to open the view and the view to list pages", () => {
     expect(sawHistoryView(parseLog(OPENED))).toBe(true);
     expect(historyViewFailures(parseLog(OPENED), { driven: true })).toEqual([]);
     const empty = parseLog(OPENED.replace("4 history-list 3", "4 history-list 0"));
     expect(sawHistoryView(empty)).toBe(false);
-    expect(historyViewFailures(empty, { driven: true })).toEqual([expect.stringContaining("Ctrl/Cmd+Y")]);
+    expect(historyViewFailures(empty, { driven: true })).toEqual([expect.stringContaining("Ctrl+H (Cmd+Y on macOS)")]);
     // A list from the command bar's History row alone isn't the key.
     const rowOnly = parseLog(OPENED.replace("3 history-view\n", ""));
     expect(sawHistoryView(rowOnly)).toBe(false);
     const before = parseLog("1 history-list 3\n2 history-view\n");
     expect(sawHistoryView(before)).toBe(false);
+  });
+
+  it("wants Ctrl+Y to open nothing once the view is closed again", () => {
+    const quiet = parseLog("10 suggestions 1 first=127.0.0.1:5000 typed=0\n");
+    expect(historyViewFailures(parseLog(OPENED), { driven: true, afterCtrlY: quiet })).toEqual([]);
+    const opened = parseLog("10 history-view\n11 history-list 3\n");
+    expect(historyViewFailures(parseLog(OPENED), { driven: true, afterCtrlY: opened })).toEqual([
+      "Ctrl+Y opened the history view (it is Ctrl+H now; Ctrl+Y belongs to the page)",
+    ]);
+    // macOS doesn't press it: nothing to check.
+    expect(historyViewFailures(parseLog(OPENED), { driven: false })).toEqual([]);
   });
 
   it("is best effort where the keys aren't driven", () => {

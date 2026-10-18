@@ -102,7 +102,7 @@
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — the owner's checklist passed 2026-10-18 (one YouTube fullscreen bug, see notes); v0.2.0-beta.2 released |
 | LJ36 | *(round 3)* YouTube's fullscreen on macOS (the phone site, confirmed by the owner): reproduce in CI; guard WebKit's fullscreen; youtube.com on the desktop agent on WebKit (a minimal per-site table) | strong | auto | ✅ done (reproduced, then lj-step-36-fix — see notes) |
-| LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ⬜ todo |
+| LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ✅ done |
 | LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ⬜ todo |
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ⬜ todo |
 | LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ⬜ todo |
@@ -5206,6 +5206,13 @@ at 720 px phone mode rightly switched to the phone agent for the 480 px window).
 resized by dragging does the same on a real Mac is the owner's check; recorded under Deferred
 follow-ups (not fixed here: it isn't the fullscreen bug, and restoring the size would be new
 behavior).
+**CI for fix2 (run 39150759131):** all ten jobs green. Every element-fullscreen path held until its
+own Exit on every OS (macOS 3.3 s at 390 and 720 px; Windows 3.3–5.5 s; Linux 2.1–2.6 s at scale 1
+and 2), the iOS route held too where it ran (macOS, Linux), the siteModes launch reported the
+desktop agent at 390 px with its player in element fullscreen everywhere, and no layout touched
+the page during WebKit's fullscreen. Screenshots: macOS `element-390.png` and `desktop-site-390.png`
+now show the element filling the whole screen (green, the Exit in the middle), as Windows and
+Linux do.
 
 ### LJ37 — Ctrl+H opens history on Windows and Linux; double-clicking the toolbar zooms the window · standard · auto
 
@@ -5257,6 +5264,30 @@ Windows and Linux; double-clicking the toolbar zooms the window". Push and watch
 package and smoke are green on all three OSes (Ground Rule 3). If it is still red after two honest
 fix attempts, stop and report. Never commit red; never weaken a check.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **The history key:** `keys.rs`'s `'y'` arm became `'h'` (Ctrl+H → History on Windows and
+  Linux); Ctrl+Y now reaches the page (redo in WebView2's text fields). Tests: Ctrl+H on both;
+  Ctrl+Shift+H, Ctrl+Alt+H (AltGr), Alt+H and a plain H nothing; `Key::from_windows_vk(0x48)` and
+  `Key::from_gdk_name("h")` → `Letter('h')`; Ctrl+Y nothing anywhere; macOS nothing from
+  `keys.rs` (Cmd+Y stays the View menu's item). `menu.rs` and `bar::show_history` unchanged; the
+  comments in `ui/bar.ts`, `ui/command/rows.ts`, `bar.rs`, the smoke scripts, the README and
+  architecture.md say "Ctrl+H (Cmd+Y on macOS)".
+- **Smoke:** the history key is Ctrl+H on Windows (SendKeys `^h`) and Linux (xdotool `ctrl+h`),
+  Cmd+Y on macOS (`HISTORY_KEY`; the theme runs too); then, Windows and Linux, Esc (back to the
+  command bar) and Ctrl+Y: the log of the next 2 s must hold no `history-view`
+  (`historyViewFailures`' `afterCtrlY`, with a test). `pressKeys` learned Escape.
+- **Double-click:** `capabilities/bar.json` gains exactly `core:window:allow-internal-toggle-maximize`
+  (its description says so); `capability_tests.rs`' `only_the_bar_may_toggle_maximize` fails if any
+  other capability grants it — or `core:window:default` / `core:default`, which hold it — and if the
+  bar loses it. Tauri's drag script was left alone, and so was the toolbar's markup. On Windows and
+  Linux the toolbar's empty parts are drag regions under the native title bar too, so a double
+  click there maximizes like the title bar does — kept, as the prompt says. It always zooms;
+  macOS's "Double-click a window's title bar to: Minimize" preference isn't read (Deferred
+  follow-ups). CI can't usefully double-click on its fixed screens: a human check.
+- `npm run verify`: 483 TS tests, 273 Rust tests, clippy clean. Disk: 13 GiB free at the start and
+  after verify.
 
 ### LJ38 — The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar · strong · auto
 
@@ -6770,19 +6801,26 @@ and where, then stop.
   at the cost of a second place that decides the panic strategy. The owner's call; the README's
   sizes describe the v0.2.0-beta.1 downloads until the next release.~~ → *The owner decided
   2026-10-18: keep `unwind` everywhere ("installers can grow").*
-- **Double-click the toolbar to zoom the window on macOS** (surfaced by LJ24). Tauri's drag
+- ~~**Double-click the toolbar to zoom the window on macOS**~~ (surfaced by LJ24). Tauri's drag
   script turns a double click on a drag region into `internal_toggle_maximize`, which needs
   `core:window:allow-internal-toggle-maximize`; the bar has only `allow-start-dragging` (what
-  LJ24 named), so a double click does nothing. → *Planned as LJ37 (round 3).*
+  LJ24 named), so a double click does nothing. → *Planned as LJ37 (round 3). Handled by LJ37: the
+  bar has the permission (and only the bar, a test says).*
+- **A double click on the toolbar always zooms** (surfaced by LJ37). Tauri's
+  `internal_toggle_maximize` maximizes or restores; macOS's "Double-click a window's title bar
+  to: Minimize" (System Settings → Desktop & Dock; `AppleActionOnDoubleClick`) isn't followed.
+  Option: read that preference (read-only, Ground Rule 21) and minimize instead — it would need
+  our own double-click handling in the bar instead of Tauri's drag script.
 - ~~**`history_top` / `history_search` have no caller**~~ since LJ23 (the command bar uses
   `suggest`). They stay in the bar's capability for the history view (LJ25) to use or remove. →
   *Removed by LJ25: the history view uses `history_list` and filters in TypeScript.*
-- **Ctrl+Y on a page is no longer redo on Windows** (surfaced by LJ25). The plan's history key
+- ~~**Ctrl+Y on a page is no longer redo on Windows**~~ (surfaced by LJ25). The plan's history key
   is Ctrl+Y on Windows and Linux, caught natively before the page sees it; in WebView2 (as in
   Chromium) Ctrl+Y was also "redo" in text fields, so pages lose it there (Ctrl+Shift+Z still
   redoes). WebKitGTK has no Ctrl+Y binding. Option: Ctrl+H (Chrome's history key) on Windows and
   Linux instead — the owner's call. → *Decided 2026-10-18: Ctrl+H on Windows and Linux, in the
-  next version (see "Requested for the next version" under LJ35). Planned as LJ37.*
+  next version (see "Requested for the next version" under LJ35). Planned as LJ37. Handled by LJ37:
+  Ctrl+H opens history, Ctrl+Y is the page's again (CI presses it and sees nothing open).*
 - **A custom theme may show the default theme for a frame** (surfaced by LJ27). The bar applies
   the theme when `start_info` answers, a moment after its page (with `theme-defaults.css`) first
   paints, so a summon can flash the default Mist colors before the user's. Not visible in CI's
@@ -6870,7 +6908,7 @@ and where, then stop.
   label and overlay state in one call when it loads (`start_info` already forces the label); or
   open the panel only after the bar reported `bar-loaded`. → *Planned as LJ38 (round 3): the
   second option, keyed on the bar's `start_info`.*
-- **YouTube's fullscreen button on macOS** (the owner's checklist, 2026-10-18). The player's own
+- ~~**YouTube's fullscreen button on macOS**~~ (the owner's checklist, 2026-10-18). The player's own
   fullscreen button enters fullscreen and drops back to the normal size at once; YouTube's F key
   fullscreens fine, and then the player's exit button does nothing (Esc exits). CI's smoke page
   (a click on a big `requestFullscreen` button) passes on macOS, so something YouTube does
@@ -6882,7 +6920,10 @@ and where, then stop.
   (m.youtube.com under the iPhone agent) failed; desktop YouTube works. The round-3 research adds
   that m.youtube.com's player waits for iOS events that never fire on macOS, and that wry's
   `set_bounds` would resize the webview inside WebKit's fullscreen window. Planned as LJ36:
-  reproduce in CI, guard WebKit's fullscreen, and youtube.com on the desktop agent on WebKit.*
+  reproduce in CI, guard WebKit's fullscreen, and youtube.com on the desktop agent on WebKit.
+  Handled by LJ36: CI reproduced it (our layout and phone mode acting inside WebKit's fullscreen
+  window) and, with the guard, every element path holds until its own exit on all four smoke jobs
+  (run 39150759131). The owner's eyes on real YouTube are phase 18's human check.*
 - **macOS: a video's fullscreen may put the window back to the size it opened at** (surfaced by
   LJ36's CI). WebKit's element-fullscreen entry moves and resizes the Little Joan window (tao's
   `Moved` / `Resized`), and in CI the window came back 480×640 — its size at creation — after a
