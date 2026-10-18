@@ -22,10 +22,10 @@ affiliated with or endorsed by The Browser Company.
 
 > **Status:** [v0.1.0](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0) is the
 > latest release; the
-> [v0.2.0-beta.2 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.2)
+> [v0.2.0-beta.3 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.3)
 > has everything v0.2 adds so far — start at login, a first-launch welcome, the Little Arc-style
-> command bar and toolbar, logins that survive closing, local history, themes, and extensions
-> (experimental) with twelve bundled ones. Every build is smoke-tested in CI on all three systems
+> command bar and toolbar, logins that survive closing, local history, themes, extensions
+> (experimental) with twelve bundled ones, smooth resizing, and phone or desktop per site. Every build is smoke-tested in CI on all three systems
 > (Linux on Ubuntu 24.04); none is code-signed yet. See the known issue under Fullscreen video.
 > The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
