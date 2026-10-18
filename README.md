@@ -77,6 +77,16 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   removes a page from your history, × or Esc closes the command bar. Typing "history" (or just
   "hi") offers **History**. The last row, **Settings & extensions**, opens Settings on its
   Extensions tab.
+- **Quick answers** come first in the command bar as you type; Enter copies the answer:
+  - calculator: `= 12*7`, `(1+2)^3`, `sqrt(2)`, `50% * 30`, `2pi`;
+  - units: `10 km in mi`, `72f to c`, `5 kg in lb`, `1 gallon to liters`, `100 km/h in mph`,
+    `1.5 GiB in MB`;
+  - time zones: `time in Tokyo`, `3pm london to new york`;
+  - random: `uuid`, `password 20`, `roll 2d6`, `flip a coin`, `random 1-100`;
+  - Unix timestamps: `1700000000`, `now unix`.
+
+  They are Little Joan's own code, run on your computer as you type; each can be switched off in
+  Settings → Extensions → Built-in.
 - **History:** press **Ctrl+Y** (Windows, Linux) or **Cmd+Y** (macOS) — or pick History in the
   command bar — to see the pages you opened, by day (Today, Yesterday, then dates), each with its
   time. Type to search them; click one (or ↑/↓ and Enter) to open it; × or Shift+Delete removes a
@@ -124,7 +134,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),
   `little-joan --start-at-login on|off`, `little-joan --settings [general|appearance|extensions|privacy|about]`
-  (open Settings on a tab), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
+  (open Settings on a tab), `little-joan --extension <id>` (open an extension, e.g. `hello`;
+  experimental), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
 - **Quit:** tray menu → **Quit Little Joan**, `little-joan --quit`, or Cmd+Q on macOS while
   it's in front.
@@ -161,7 +172,9 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
   **Grain**. Settings and the open Little Joan window change as you edit; **Save** keeps the
   theme, **Cancel** (or closing Settings) puts the saved one back. It's stored in `settings.json`
   as `"theme": { "mode", "colors", "intensity", "grain" }`.
-- **Extensions** — coming next.
+- **Extensions** — every extension with a switch to turn it off, its version, author and what it
+  may do in plain words; **Developer mode** (load your own unpacked extensions — only ones you
+  trust), **Open extensions folder** and **Reload extensions**. See below.
 - **Privacy** — **Remember history** (on by default; off, nothing new is recorded), **Clear
   history** (the last hour, 24 hours, 7 days, or everything — at once, after a question; it isn't
   undone by Cancel), and what Little Joan keeps where on your computer.
@@ -169,6 +182,19 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
 
 The default shortcut, Cmd/Ctrl+Shift+Space, can clash with app shortcuts (VS Code's parameter
 hints, Word's non-breaking space); change it here if it does.
+
+## Extensions (experimental)
+
+Extensions are small tools that open as a panel in the Little Joan window: type an extension's
+name (or what it does) in the command bar, or run `little-joan --extension <id>`. Page actions —
+extensions that work on the page you're looking at — show up in the command bar only while a web
+page is open. Each extension runs in a sandbox of its own: no access to Little Joan's internals or
+to the pages you open, its own storage, and network access only to the hosts it declares.
+**Hello** is the bundled example.
+
+You can write your own with plain HTML, CSS and JavaScript — see
+**[docs/extensions.md](docs/extensions.md)** (experimental: the API may still change). Turn on
+**Developer mode** in Settings → Extensions to load them from your extensions folder.
 
 ## Privacy
 
@@ -194,6 +220,10 @@ hints, Word's non-breaking space); change it here if it does.
 - Web pages get no access to Little Joan's internals: the web view that shows pages can't call
   into the app at all. Only Little Joan's own screens — the bar (address bar and command bar) and
   Settings, each in a web view of its own — can.
+- **Extensions** (experimental) run in that same web view, each on an origin of its own, and
+  can reach only what their manifest asks for through a small checked API; they can fetch from
+  the network only from the hosts they declare. What an extension stores stays in
+  `extension-data/<id>.json` next to `settings.json`.
 
 ## Build from source
 

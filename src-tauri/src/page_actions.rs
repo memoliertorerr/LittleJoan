@@ -4,6 +4,7 @@ use tauri::{AppHandle, Runtime};
 use url::Url;
 
 use crate::bar;
+use crate::extensions;
 use crate::history::VisitKind;
 use crate::history_store;
 use crate::joan;
@@ -33,7 +34,13 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
             PageAction::Reload => {
                 // A reload is a visit that adds nothing to frecency (history.rs).
                 history_store::set_next_kind(&app, VisitKind::Reload);
-                page.reload()
+                // A panel the page committed is opened again by the app (a new nonce), never
+                // reloaded from its old address; anything else reloads as before.
+                if extensions::session::reopen(&app) {
+                    Ok(())
+                } else {
+                    page.reload()
+                }
             }
             PageAction::Back => page.eval("history.back()"),
             PageAction::Forward => page.eval("history.forward()"),
@@ -54,7 +61,7 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
 /// The translated view of `current`, or `None` for the start page and for pages that can't or
 /// needn't be translated.
 pub fn translate_target(origin: &Url, current: &Url, lang: &str) -> Option<Url> {
-    if keys::is_app_url(origin, current) {
+    if keys::is_app_url(origin, current) || extensions::urls::is_ext_like(current) {
         return None;
     }
     translate::translate_url(current, lang)
@@ -109,6 +116,23 @@ mod tests {
                 translate_target(&url(origin), &url(start), "en"),
                 None,
                 "{start}"
+            );
+        }
+    }
+
+    #[test]
+    fn translate_target_skips_extension_panels() {
+        for (origin, panel) in [
+            ("tauri://localhost/", "ljext://hello.localhost/index.html"),
+            (
+                "http://tauri.localhost/",
+                "http://ljext.hello.localhost/index.html",
+            ),
+        ] {
+            assert_eq!(
+                translate_target(&url(origin), &url(panel), "en"),
+                None,
+                "{panel}"
             );
         }
     }

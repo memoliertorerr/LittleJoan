@@ -10,6 +10,8 @@
 //! - `--settings [tab]`  open (or focus) Settings on a tab: general, appearance, extensions,
 //!   privacy, about (General without one, or with a name it doesn't know); never touches the
 //!   page window
+//! - `--extension <id>`  open an extension's panel (opens the window if needed; an unknown id
+//!   does nothing)
 //! - `--quit`          quit Little Joan (the tray's Quit); wins over any window flag
 //!
 //! The last recognized window flag wins; unknown arguments are ignored (macOS can add `-psn_…`).
@@ -78,6 +80,12 @@ pub fn parse_args(args: &[String]) -> Args {
                     .and_then(|value| parse_size(value))
                 {
                     command = Some(Command::Resize { width, height });
+                }
+            }
+            "--extension" => {
+                // Checked against the registry when it opens (extensions::session::open).
+                if let Some(id) = rest.next_if(|next| !next.starts_with("--")) {
+                    command = Some(Command::Extension(id.clone()));
                 }
             }
             "--show" => {
@@ -337,6 +345,25 @@ mod tests {
         assert_eq!(parse_all(&["--toggle"]).settings, None);
         assert_eq!(
             parse_all(&["--settings", "about", "--quit"]).forwarded_command(),
+            None
+        );
+    }
+
+    #[test]
+    fn extension_takes_an_id() {
+        assert_eq!(
+            parse(&["--extension", "hello"]),
+            Some(Command::Extension("hello".into()))
+        );
+        // No id: no flag (a plain second launch shows the window).
+        assert_eq!(parse(&["--extension"]), None);
+        assert_eq!(parse(&["--extension", "--toggle"]), Some(Command::Toggle));
+        assert_eq!(
+            parse_all(&["--extension", "hello"]).forwarded_command(),
+            Some(Command::Extension("hello".into()))
+        );
+        assert_eq!(
+            parse_all(&["--extension", "hello", "--quit"]).forwarded_command(),
             None
         );
     }

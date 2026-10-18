@@ -12,7 +12,9 @@
 // time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
 // then a relaunch on the same data folder), that history.json recorded the smoke page (and that
 // a run with history off records nothing; that run also opens Settings with `--settings` and
-// `--settings privacy`), then the theme runs (each its own launch with a theme in settings.json:
+// `--settings privacy`), then the extension run (its own launch: `--extension hello`, then the
+// smoke page's probe of what a web page can't do to an extension), then the theme runs (each its
+// own launch with a theme in settings.json:
 // the page, the command bar, the history view and Settings in a two-color theme, light and dark,
 // and the default theme in dark; screenshots in <out>/theme/), then check the logs
 // (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper
@@ -61,6 +63,16 @@ import {
   TYPED,
 } from "./smoke-command.mts";
 import { THEME_RUNS, parseTheme, themeFailures, type ThemeRun } from "./smoke-theme.mts";
+import {
+  BROKEN_EXTENSION,
+  DEV_EXTENSION,
+  commandHelloFailures,
+  extensionFailures,
+  helloOrigin,
+  raceFailures,
+  parseStore,
+  settingsExtensionsFailures,
+} from "./smoke-extensions.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -111,6 +123,24 @@ function dataDir(name: string, settings: boolean, overrides: Record<string, unkn
     writeFileSync(join(dir, "settings.json"), `${JSON.stringify(defaults, null, 2)}\n`);
   }
   return dir;
+}
+
+/**
+ * Puts two developer extensions into `dir`'s extensions folder: a copy of the bundled hello under
+ * the id `dev-hello`, which must load, and one with a bad manifest, which must be skipped.
+ */
+function writeDeveloperExtensions(dir: string): void {
+  const hello = join(root, "extensions", "hello");
+  const copy = join(dir, "extensions", DEV_EXTENSION);
+  mkdirSync(copy, { recursive: true });
+  for (const name of readdirSync(hello)) {
+    writeFileSync(join(copy, name), readFileSync(join(hello, name)));
+  }
+  const manifest = JSON.parse(readFileSync(join(hello, "extension.json"), "utf8")) as Record<string, unknown>;
+  writeFileSync(join(copy, "extension.json"), JSON.stringify({ ...manifest, id: DEV_EXTENSION, name: "Hello (unpacked)" }, null, 2));
+  const broken = join(dir, "extensions", BROKEN_EXTENSION);
+  mkdirSync(broken, { recursive: true });
+  writeFileSync(join(broken, "extension.json"), JSON.stringify({ id: BROKEN_EXTENSION, name: "Broken", version: "1", apiVersion: 2 }));
 }
 
 /** A file's text, or undefined when it doesn't exist (or can't be read). */
@@ -254,6 +284,42 @@ for ch in CommandLine.arguments[2] {
     run("xdotool", ["type", "--delay", "120", text]);
   }
   console.log(`typed ${JSON.stringify(text)}`);
+}
+
+/** macOS virtual key codes of the keys `pressKeys` sends. */
+const MAC_NAMED_KEYS: Record<string, number> = { Down: 125, Return: 36 };
+const SEND_KEYS: Record<string, string> = { Down: "{DOWN}", Return: "{ENTER}" };
+
+/** Presses named keys (Down, Return) in the app's window, as typeText does (best effort on macOS). */
+function pressKeys(keys: string[], appPid: number): void {
+  if (os === "win32") {
+    powershell(`$shell = New-Object -ComObject WScript.Shell
+$null = $shell.AppActivate(${appPid})
+Start-Sleep -Milliseconds 400
+Add-Type -AssemblyName System.Windows.Forms
+${keys.map((key) => `[System.Windows.Forms.SendKeys]::SendWait('${SEND_KEYS[key] ?? ""}'); Start-Sleep -Milliseconds 150`).join("\n")}`);
+  } else if (os === "darwin") {
+    const swift = join(out, "keys.swift");
+    writeFileSync(
+      swift,
+      `import AppKit
+let pid = pid_t(CommandLine.arguments[1]) ?? 0
+NSRunningApplication(processIdentifier: pid)?.activate(options: [])
+usleep(400000)
+for code in CommandLine.arguments.dropFirst(2) {
+  for down in [true, false] {
+    CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code) ?? 0, keyDown: down)?.post(tap: .cghidEventTap)
+    usleep(60000)
+  }
+  usleep(150000)
+}
+`,
+    );
+    run("swift", [swift, String(appPid), ...keys.map((key) => String(MAC_NAMED_KEYS[key] ?? 0))]);
+  } else {
+    run("xdotool", ["key", "--delay", "150", ...keys]);
+  }
+  console.log(`pressed ${keys.join(" ")}`);
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
@@ -696,7 +762,9 @@ if (!(await exited(afterQuitPid, 15_000))) {
 // "rememberHistory": false loads the page too and must record nothing.
 const smokePageUrl = `http://127.0.0.1:${port}/smoke.html`;
 const historyMain = readIfThere(join(env.LITTLEJOAN_DATA_DIR, "history.json"));
-const historyOffDir = dataDir("history-off", true, { rememberHistory: false });
+// Developer mode on, with two developer extensions, for Settings → Extensions (LJ30).
+const historyOffDir = dataDir("history-off", true, { rememberHistory: false, developerMode: true });
+writeDeveloperExtensions(historyOffDir);
 const historyOffLogPath = join(out, "smoke-history-off.log");
 rmSync(historyOffLogPath, { force: true });
 const historyOffEnv = { ...env, LITTLEJOAN_DATA_DIR: historyOffDir, LITTLEJOAN_SMOKE_LOG: historyOffLogPath };
@@ -725,6 +793,16 @@ await forward(["--settings", "appearance"], historyOffEnv);
 await waitFor("settings: Appearance", (e) => settingsTabs(e.slice(settingsFrom)).includes("appearance"), 15_000, historyOffLogPath);
 await sleep(1000);
 screenshot("settings-appearance.png");
+// The extensions (LJ30): Hello, the developer copy, and the broken one's reason.
+await forward(["--settings", "extensions"], historyOffEnv);
+await waitFor(
+  "settings: Extensions",
+  (e) => settingsTabs(e.slice(settingsFrom)).includes("extensions") && e.slice(settingsFrom).some((x) => x.event === "extensions-list"),
+  15_000,
+  historyOffLogPath,
+);
+await sleep(1000);
+screenshot("settings-extensions.png");
 await forward(["--quit"], historyOffEnv);
 if (!(await exited(historyOffPid, 15_000))) {
   await quit(historyOffChild, historyOffPid);
@@ -787,6 +865,129 @@ async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
   console.log(`${run.name}: themes handed to the bar ${JSON.stringify(runEvents.map(parseTheme).filter((t) => t !== undefined))}`);
   return runEvents;
 }
+
+/**
+ * The extension run (LJ29): its own launch on a fresh data folder. `--extension hello` opens the
+ * bundled example, which reports its checks in its title; then the smoke page's probe (a web
+ * page) tries hello's API, one of its files, and a navigation to its panel.
+ */
+/** The system clipboard's text, where the runner has a tool to read it (else null). */
+function readClipboard(): string | null {
+  if (os === "win32") {
+    return powershell("Get-Clipboard -Raw").replace(/\r?\n$/, "");
+  }
+  if (os === "darwin") {
+    return run("pbpaste", []);
+  }
+  for (const [tool, args] of [["xclip", ["-o", "-selection", "clipboard"]], ["xsel", ["--clipboard", "--output"]]] as const) {
+    if (run("which", [tool]).trim()) {
+      return run(tool, [...args]);
+    }
+  }
+  return null;
+}
+
+/** What Enter on the quick answer left on the clipboard (informational, see extensionRun). */
+let clipboard: string | null = null;
+
+async function extensionRun(): Promise<{ events: LogEvent[]; store: string | undefined }> {
+  const logFile = join(out, "smoke-extensions.log");
+  rmSync(logFile, { force: true });
+  const dir = dataDir("extensions", true);
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dir, LITTLEJOAN_SMOKE_LOG: logFile };
+  const runChild = launch(runEnv);
+  await waitFor("extensions: started", (e) => count(e, "started") > 0, 30_000, logFile);
+  await sleep(1500);
+  const runPid = appPid(runChild);
+  await forward(["--extension", "hello"], runEnv);
+  await waitFor("extensions: hello reported", (e) => lastTitle(e, "LJ-EXT hello") !== undefined, 30_000, logFile);
+  await sleep(1500);
+  screenshot("extension-hello.png");
+  // The command bar (LJ30): typing "hello" offers hello's command, "Say hello" (after the search
+  // row, with no history yet); ↓ ↓ Enter opens it again.
+  const hibernatedBefore = count(events(logFile), "hibernated");
+  await forward(["--hide"], runEnv);
+  await waitFor("extensions: hibernated", (e) => count(e, "hibernated") > hibernatedBefore, 20_000, logFile);
+  const commandFrom = events(logFile).length;
+  await forward(["--show"], runEnv);
+  await waitFor("extensions: command bar", (e) => e.slice(commandFrom).some((x) => x.event === "extensions-list"), 20_000, logFile);
+  await sleep(1500);
+  typeText("hello", runPid);
+  const typedHello = await waitFor(
+    "extensions: typed hello",
+    (e) => e.slice(commandFrom).some((x) => x.event === "suggestions" && x.detail.endsWith("typed=5")),
+    15_000,
+    logFile,
+  );
+  await sleep(1000);
+  screenshot("command-hello.png");
+  // Only when the typing arrived: otherwise ↓ ↓ Enter would open whatever the empty command bar
+  // offers (CI's macOS once opened a starter site that way).
+  if (typedHello) {
+    pressKeys(["Down", "Down", "Return"], runPid);
+    await waitFor(
+      "extensions: Say hello opened hello",
+      (e) => e.filter((x) => x.event === "extension-opened" && x.detail === "hello").length >= 2,
+      15_000,
+      logFile,
+    );
+  }
+  await sleep(1500);
+  // A quick answer (LJ31): "= 12*7" answers 84 in the command bar's first row; Enter copies it
+  // (read back from the system clipboard where the runner has a tool for it: informational).
+  const answerHibernated = count(events(logFile), "hibernated");
+  await forward(["--hide"], runEnv);
+  await waitFor("answers: hibernated", (e) => count(e, "hibernated") > answerHibernated, 20_000, logFile);
+  const answerFrom = events(logFile).length;
+  await forward(["--show"], runEnv);
+  await waitFor("answers: command bar", (e) => e.slice(answerFrom).some((x) => x.event === "extensions-list"), 20_000, logFile);
+  await sleep(1500);
+  typeText("= 12*7", runPid);
+  const typedAnswer = await waitFor(
+    "answers: typed",
+    (e) => e.slice(answerFrom).some((x) => x.event === "suggestions" && x.detail.endsWith("typed=6")),
+    15_000,
+    logFile,
+  );
+  await sleep(1000);
+  screenshot("answer.png");
+  if (typedAnswer) {
+    pressKeys(["Return"], runPid);
+    await sleep(1000);
+    clipboard = readClipboard();
+  }
+  console.log(`answers: the clipboard holds ${JSON.stringify(clipboard)}`);
+  const probeUrl = `${smokePageUrl}?ext=probe&base=${encodeURIComponent(helloOrigin(os))}`;
+  await forward(["--show", probeUrl], runEnv);
+  await waitFor("extensions: the probe reported", (e) => lastTitle(e, "LJ-EXTPROBE ljext-api") !== undefined, 40_000, logFile);
+  await sleep(500);
+  screenshot("extension-probe.png");
+  // The race (security review, M1): the page keeps putting hello's panel URL (without the app's
+  // nonce) into iframes and window.open while `--extension hello` opens it; the app's navigation
+  // must win, the racers be refused, and the toolbar never name hello over the web page.
+  const raceUrl = `${smokePageUrl}?ext=race&base=${encodeURIComponent(helloOrigin(os))}`;
+  await forward(["--show", raceUrl], runEnv);
+  await waitFor("extensions: the race runs", (e) => lastTitle(e, "LJ-EXTRACE running") !== undefined, 30_000, logFile);
+  await sleep(1500);
+  const reportsBefore = events(logFile).filter((e) => e.event === "title" && e.detail.startsWith("LJ-EXT hello")).length;
+  await forward(["--extension", "hello"], runEnv);
+  await waitFor(
+    "extensions: hello opened through the race",
+    (e) => e.filter((x) => x.event === "title" && x.detail.startsWith("LJ-EXT hello")).length > reportsBefore,
+    30_000,
+    logFile,
+  );
+  await sleep(1000);
+  screenshot("extension-race.png");
+  await forward(["--quit"], runEnv);
+  if (!(await exited(runPid, 15_000))) {
+    await quit(runChild, runPid);
+  }
+  return { events: events(logFile), store: readIfThere(join(dir, "extension-data", "hello.json")) };
+}
+
+const extensionCheck = await extensionRun();
+console.log(`extensions: hello ${lastTitle(extensionCheck.events, "LJ-EXT hello") ?? "no report"}; probe ${lastTitle(extensionCheck.events, "LJ-EXTPROBE") ?? "no report"}`);
 
 mkdirSync(join(out, "theme"), { recursive: true });
 const themeRuns: { run: ThemeRun; events: LogEvent[] }[] = [];
@@ -865,6 +1066,13 @@ const summary = {
     historyView: sawHistoryView(log),
   },
   settings: settingsTabs(historyOffEvents),
+  extensions: {
+    hello: lastTitle(extensionCheck.events, "LJ-EXT hello") ?? null,
+    probe: lastTitle(extensionCheck.events, "LJ-EXTPROBE") ?? null,
+    refused: extensionCheck.events.filter((e) => e.event === "ljext-refused" || e.event === "navigation-refused").map((e) => `${e.event} ${e.detail}`),
+    store: parseStore(extensionCheck.store) ?? null,
+    answerCopied: clipboard,
+  },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -900,12 +1108,17 @@ const failures = evaluate(
   .concat(persistFailures(log, persistCheck))
   .concat(historyFailures(historyCheck))
   .concat(settingsFailures(historyOffEvents))
+  .concat(extensionFailures(extensionCheck.events, parseStore(extensionCheck.store)))
+  .concat(raceFailures(extensionCheck.events))
+  .concat(commandHelloFailures(extensionCheck.events, { driven: typingDriven }))
+  .concat(settingsExtensionsFailures(historyOffEvents))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
   const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
-  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, ...themeLogs, firstLogPath, relaunchLogPath]) {
+  const extensionLog = join(out, "smoke-extensions.log");
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, ...themeLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

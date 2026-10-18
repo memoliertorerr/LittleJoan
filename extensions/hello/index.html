@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hello</title>
+    <link rel="stylesheet" href="hello.css" />
+    <!-- The SDK: Little Joan serves it to every extension at this path. -->
+    <script src="/__lj/sdk/v1.js"></script>
+    <script src="hello.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <img class="icon" src="icon.svg" alt="" width="48" height="48" />
+      <h1>Hello!</h1>
+      <p id="count">…</p>
+      <h2>What this extension can and can't do</h2>
+      <ul id="checks"></ul>
+      <button id="close" type="button">Close</button>
+    </main>
+  </body>
+</html>

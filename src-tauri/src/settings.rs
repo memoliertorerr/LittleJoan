@@ -45,6 +45,12 @@ pub struct Settings {
     pub remember_history: bool,
     /// The look: light / dark / system, 1–3 colors, intensity, grain (settings/theme.rs).
     pub theme: Theme,
+    /// Developer mode: unpacked extensions in `<config dir>/extensions/` load too (off by
+    /// default; extensions/registry.rs).
+    pub developer_mode: bool,
+    /// Extensions switched off in Settings → Extensions: extension ids, and `builtin:<name>`
+    /// for the built-in quick answers (`disabled_extensions`).
+    pub disabled_extensions: Vec<String>,
 }
 
 impl Default for Settings {
@@ -59,6 +65,8 @@ impl Default for Settings {
             mobile_sites: true,
             remember_history: true,
             theme: Theme::default(),
+            developer_mode: false,
+            disabled_extensions: Vec::new(),
         }
     }
 }
@@ -113,6 +121,10 @@ pub fn parse(json: &str) -> Settings {
         .and_then(Value::as_bool)
         .unwrap_or(defaults.remember_history);
     let theme = theme::parse(map.get("theme"));
+    let developer_mode = map
+        .get("developerMode")
+        .and_then(Value::as_bool)
+        .unwrap_or(defaults.developer_mode);
 
     Settings {
         version: SETTINGS_VERSION,
@@ -124,7 +136,31 @@ pub fn parse(json: &str) -> Settings {
         mobile_sites,
         remember_history,
         theme,
+        developer_mode,
+        disabled_extensions: disabled_extensions(map.get("disabledExtensions")),
     }
+}
+
+/// The most switched-off extensions kept.
+pub const MAX_DISABLED: usize = 256;
+
+/// `disabledExtensions`: a list of extension ids (`hello`) and built-ins (`builtin:calc`). Anything
+/// else is dropped on its own, as are repeats; a wrong type is an empty list.
+pub fn disabled_extensions(value: Option<&Value>) -> Vec<String> {
+    let mut kept: Vec<String> = Vec::new();
+    for item in value.and_then(Value::as_array).into_iter().flatten() {
+        let Some(id) = item.as_str().map(str::trim) else {
+            continue;
+        };
+        let name = id.strip_prefix("builtin:").unwrap_or(id);
+        if crate::extensions::manifest::is_valid_id(name)
+            && !kept.iter().any(|k| k == id)
+            && kept.len() < MAX_DISABLED
+        {
+            kept.push(id.to_owned());
+        }
+    }
+    kept
 }
 
 /// Loads `dir/settings.json`; a missing or unreadable file yields the defaults.
@@ -208,6 +244,8 @@ mod tests {
             window_height: 500,
             mobile_sites: false,
             remember_history: false,
+            developer_mode: true,
+            disabled_extensions: vec!["hello".into(), "builtin:calc".into()],
             theme: Theme {
                 mode: ThemeMode::Dark,
                 colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],
@@ -267,6 +305,42 @@ mod tests {
         let s = parse(r#"{"theme": "dark", "mobileSites": false}"#);
         assert_eq!(s.theme, Theme::default());
         assert!(!s.mobile_sites, "a bad theme leaves the rest alone");
+    }
+
+    #[test]
+    fn developer_mode_is_off_unless_switched_on() {
+        assert!(!Settings::default().developer_mode);
+        assert!(
+            !parse("{}").developer_mode,
+            "settings from before the option existed"
+        );
+        assert!(parse(r#"{"developerMode": true}"#).developer_mode);
+        assert!(
+            !parse(r#"{"developerMode": "yes"}"#).developer_mode,
+            "a wrong type falls back to off"
+        );
+        let json = serde_json::to_string(&Settings::default()).expect("json");
+        assert!(json.contains(r#""developerMode":false"#), "{json}");
+    }
+
+    #[test]
+    fn switched_off_extensions_are_read_one_by_one() {
+        assert!(Settings::default().disabled_extensions.is_empty());
+        assert!(parse("{}").disabled_extensions.is_empty());
+        assert_eq!(
+            parse(
+                r#"{"disabledExtensions": ["hello", " builtin:calc ", "hello", "Bad!", 3, "builtin:", "../x", "builtin:units"]}"#
+            )
+            .disabled_extensions,
+            vec!["hello", "builtin:calc", "builtin:units"]
+        );
+        assert!(
+            parse(r#"{"disabledExtensions": "hello"}"#)
+                .disabled_extensions
+                .is_empty()
+        );
+        let json = serde_json::to_string(&Settings::default()).expect("json");
+        assert!(json.contains(r#""disabledExtensions":[]"#), "{json}");
     }
 
     #[test]

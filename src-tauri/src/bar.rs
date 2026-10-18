@@ -12,9 +12,7 @@
 //! those events (page_address.rs); the engine is asked only by that check, after a finished load.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
-use std::time::Duration;
 
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{
@@ -24,13 +22,16 @@ use tauri::{
 use url::Url;
 
 mod view;
+mod watch;
 
 pub use view::{
     apply_layout, element_fullscreen, log_overlay, mode, overlay, set_element_fullscreen,
     set_overlay,
 };
+pub use watch::watch_url;
 
 use crate::back_stack::BackStack;
+use crate::extensions;
 use crate::history_store;
 use crate::keys;
 use crate::layout::{Mode, Rect, layout};
@@ -52,13 +53,14 @@ static ADDRESS: Mutex<PageAddress> = Mutex::new(PageAddress::new());
 static BACK: Mutex<BackStack> = Mutex::new(BackStack::new());
 /// What the bar was last told (`Some(None)` = the start page); reset with each new window.
 static LAST_SHOWN: Mutex<Option<Option<String>>> = Mutex::new(None);
-/// Bumped for every new window, so an old address watcher stops.
-static GENERATION: AtomicU64 = AtomicU64::new(0);
 
-/// What the bar shows for `url`: nothing for the app's own pages and `about:` pages, else the
-/// address itself.
+/// What the bar shows for `url`: nothing for the app's own pages, `about:` pages and extension
+/// panels (the toolbar shows the extension instead, extensions/session.rs), else the address.
 pub fn bar_text(url: &Url, app_origin: &Url) -> Option<String> {
-    if keys::is_app_url(app_origin, url) || url.scheme() == "about" {
+    if keys::is_app_url(app_origin, url)
+        || url.scheme() == "about"
+        || extensions::urls::is_ext_like(url)
+    {
         None
     } else {
         Some(url.as_str().to_owned())
@@ -90,9 +92,7 @@ pub fn add_webviews<R: Runtime>(
     let mut bar = WebviewBuilder::new(BAR, WebviewUrl::App("bar.html".into()))
         // The bar is ours and never leaves the app's origin (about:blank only to unload it when
         // the window closes on macOS, see joan::release_page).
-        .on_navigation(|url| {
-            keys::is_app_url(&keys::app_origin(), url) || url.as_str() == "about:blank"
-        })
+        .on_navigation(|url| navigation::is_allowed_bar_navigation(url, &keys::app_origin()))
         .on_new_window(|_, _| NewWindowResponse::Deny)
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished {
@@ -105,8 +105,9 @@ pub fn add_webviews<R: Runtime>(
             }
         });
     let mut page = WebviewBuilder::new(PAGE, WebviewUrl::App("index.html".into()))
-        // Web pages only: no file:, javascript:, or app-launching schemes (navigation.rs).
-        .on_navigation(navigation::is_allowed_navigation)
+        // Web pages only: no file:, javascript:, or app-launching schemes (navigation.rs); an
+        // extension's panel only when the app opened it (extensions/session.rs).
+        .on_navigation(extensions::session::allow_page_navigation)
         .on_document_title_changed(|webview, title| {
             let title = title.trim();
             let title = if title.is_empty() {
@@ -126,6 +127,10 @@ pub fn add_webviews<R: Runtime>(
             match payload.event() {
                 PageLoadEvent::Started => {
                     address().started(payload.url().clone());
+                    smoke::log("page-started", payload.url().as_str());
+                    // What the toolbar shows, and what the extension handler serves beyond a
+                    // panel's document: an extension only once its panel committed here.
+                    extensions::session::page_committed(webview.app_handle(), payload.url());
                 }
                 PageLoadEvent::Finished => {
                     address().finished(payload.url().clone());
@@ -149,9 +154,9 @@ pub fn add_webviews<R: Runtime>(
         })
         // target=_blank and window.open go to the default browser (web URLs only).
         .on_new_window(|url, _features| {
-            if navigation::is_external_openable(&url)
-                && let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>)
-            {
+            if !navigation::is_external_openable(&url) {
+                smoke::log("new-window-refused", url.as_str());
+            } else if let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>) {
                 eprintln!("little-joan: could not open the link in the default browser: {err}");
             }
             NewWindowResponse::Deny
@@ -203,6 +208,7 @@ pub fn tell_state<R: Runtime>(app: &AppHandle<R>) {
         view::tell_overlay(&bar, overlay());
         tell_back(&bar, can_go_back());
     }
+    extensions::session::publish_label(app, true);
 }
 
 fn tell_back<R: Runtime>(bar: &Webview<R>, on: bool) {
@@ -224,11 +230,13 @@ pub fn current_text<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
     bar_text(&page_url(app)?, &keys::app_origin())
 }
 
-/// Tells the bar the page's address if it changed since the last time.
+/// Tells the bar the page's address if it changed since the last time (and the extension the
+/// toolbar shows).
 pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
     let Some(url) = page_url(app) else {
         return;
     };
+    extensions::session::publish_label(app, false);
     let text = bar_text(&url, &keys::app_origin());
     {
         let mut last = LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner);
@@ -244,44 +252,6 @@ pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
         ));
     }
     smoke::log("bar-url", text.as_deref().unwrap_or("start"));
-}
-
-/// Checks the page's address once a second while this window exists, for in-page changes that
-/// raise no load or title event — the only place the engine's address is read, and only while
-/// the last load event was `Finished` (page_address.rs). Stops when the window goes or a newer
-/// one replaces it.
-pub fn watch_url<R: Runtime>(app: &AppHandle<R>) {
-    let generation = GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
-    let app = app.clone();
-    let spawned = std::thread::Builder::new()
-        .name("little-joan-url-watch".into())
-        .spawn(move || {
-            loop {
-                std::thread::sleep(Duration::from_secs(1));
-                if GENERATION.load(Ordering::Relaxed) != generation
-                    || app.get_window(crate::joan::LABEL).is_none()
-                {
-                    break;
-                }
-                let Some(token) = address().read_token() else {
-                    continue;
-                };
-                let Some(page) = app.get_webview(PAGE) else {
-                    break;
-                };
-                let Ok(url) = page.url() else {
-                    continue;
-                };
-                // The lock is released before publish_url takes it again.
-                let changed = address().observed(token, url);
-                if changed {
-                    publish_url(&app);
-                }
-            }
-        });
-    if let Err(err) = spawned {
-        eprintln!("little-joan: could not start the address watcher: {err}");
-    }
 }
 
 /// Opens the command bar and puts the keyboard in its field with the text selected
@@ -342,6 +312,23 @@ pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
         address().navigating(url.clone());
         page.navigate(url)?;
         publish_url(app);
+        if was_open {
+            focus_page(app);
+        }
+    }
+    Ok(())
+}
+
+/// Loads `url` in the page — an extension's panel, or a page an extension asks for — without
+/// taking it as the page's address yet: the address and the toolbar change when the page's own
+/// load events arrive, so a navigation the guard refuses (or the engine cancels) leaves the real
+/// page named. Closes the command bar like `navigate`.
+pub fn navigate_pending<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
+    if let Some(page) = app.get_webview(PAGE) {
+        let was_open = overlay();
+        set_overlay(app, false);
+        address().pending();
+        page.navigate(url)?;
         if was_open {
             focus_page(app);
         }

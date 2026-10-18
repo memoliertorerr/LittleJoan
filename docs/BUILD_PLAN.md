@@ -76,9 +76,9 @@
 | LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ✅ done |
 | LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ✅ done |
 | LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ✅ done |
-| LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ⬜ todo |
-| LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ⬜ todo |
-| LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ⬜ todo |
+| LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ✅ done |
+| LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ✅ done |
+| LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ✅ done |
 | LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ⬜ todo |
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ⬜ todo |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ⬜ todo |
@@ -114,7 +114,13 @@ on disk at once, the tabbed Settings window with `--settings [tab]`) is PR #15 o
 `lj/p14-history-settings`, merged. Phase 15 (LJ27 → LJ28: the theme engine — muted gradients from
 1–3 colors on every surface we draw — and the Appearance editor; it also fixed the bar missing a
 view change while its page loaded) is PR #16 on `lj/p15-themes`, merged once verify, package and
-smoke are green. Next: phase 16 (LJ29 → LJ31).**
+smoke are green. Phase 16 (LJ29 → LJ31: the extension platform — the `ljext` runtime with one
+origin per extension, a CSP from the manifest and a checked API, extensions in the command bar and
+Settings with developer mode and `docs/extensions.md`, and the built-in quick answers) is PR #17 on
+`lj/p16-extensions`. It is security-critical, so it is **not** merged by the agent. An
+independent security review (2026-10-18) found no Critical/High issues; its findings, and what the
+new request log showed while fixing them, are fixed in `lj-step-29-fix4` → `fix8` (LJ29's notes,
+"Security review"); the merge decision is the owner's. Next after it: phase 17 (LJ32 → LJ35).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -3588,6 +3594,340 @@ Push, open the phase-16 PR into main as a draft, and watch CI until every job is
 honest attempts, then stop).
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **Origins: one per extension on every OS** (the prompt's step 3). macOS / Linux:
+  `ljext://<id>.localhost/<path>` (origin `ljext://<id>.localhost`). Windows: WebView2 can't load
+  custom schemes, so wry serves every `http://ljext.*` request from the handler and turns
+  `http://ljext.` back into `ljext://` first (wry 0.57 `custom_protocol_workaround.rs`, filter
+  `http://ljext.*`); `ljext://<id>/` would have become `http://ljext.<id>/`, a public-looking
+  host — for ids like `app` or `dev` Chromium upgrades HSTS-preloaded TLDs to https, which misses
+  the handler and reaches the internet. So the host carries `.localhost` everywhere and Windows
+  uses `http://ljext.<id>.localhost` (never resolved, never upgraded, a secure context). The app
+  navigates to the Windows form itself (wry's `load_url` doesn't rewrite custom schemes). No
+  shared origin, so localStorage is per extension too; the docs still point authors at
+  `littleJoan.storage`. Recorded under Landmines.
+- **Modules** (`src-tauri/src/extensions/`): `manifest.rs` (strict: unknown fields refused;
+  texts limited, no control characters; permissions `storage`, `clipboard`, `pageInfo`,
+  `network:<host>` — lower-case DNS names, optional `*.`, two labels at least, no IPs, ports or
+  schemes; panels `.html` and icons `.svg` / `.png`, relative, plain), `paths.rs` (plain names
+  only — letters, digits, `. _ -`, no dotfiles, no trailing dot, no Windows device names, at most
+  8 deep, `__lj` reserved — so `..`, absolute paths, drive letters, backslashes and every
+  percent-encoding are refused without decoding anything; on disk the canonical path must stay
+  inside the folder's canonical path), `urls.rs`, `csp.rs`, `registry.rs` (bundled + developer
+  folders; folder name = id; every named file must exist; an unpacked extension can't take a
+  bundled id; at most 64; files ≤ 16 MB), `api.rs` (+ `api/tests.rs`), `protocol.rs`,
+  `storage.rs`, `theme.rs`, `clipboard.rs`, `session.rs`. Tests for manifest and registry live in
+  child `tests.rs` files (as history's do).
+- **Checks, in order** (`api::route`; the scheme is registered for every webview): the webview
+  is `joan-page`; the URL names an existing extension; files / SDK: `GET`, not for a frame
+  (`Sec-Fetch-Dest` iframe / frame / embed / object / fencedframe), the page shows that
+  extension, a plain path of a served type; API: `POST`, `X-LJ-Api: 1` exactly once, `Origin`
+  exactly the extension's origin (once; `null`, other extensions, the other OS's form refused),
+  `Sec-Fetch-Site: same-origin` when present, the page shows that extension **and the app opened
+  it** (the session's id), the method on the allowlist, the permission declared. Every check has
+  its own test with a request that passes all the others. **Additions beyond the prompt, the more
+  restrictive choices:** serving files only while the page shows that extension (otherwise a web
+  page could probe which developer extensions are installed with `<img>`), the frame and
+  same-site checks, `frame-ancestors 'none'`, `X-Frame-Options: DENY`,
+  `Cross-Origin-Resource-Policy: same-origin`, a `Permissions-Policy`, `no-store`,
+  `Referrer-Policy: same-origin` (first `no-referrer` — see the CI notes below),
+  and refusing `blob:` / `data:` documents while a panel is shown (they would keep its origin).
+  URL parsing resolves `.` / `..` (also as `%2e`) before any path is checked, and never above the
+  extension's root (tested).
+- **The guard** (`session::NavGate`): opening an extension sets the "expected URL" (exact string,
+  used once, fresh for 5 s) before `bar::navigate`; `allow_page_navigation` admits an extension
+  URL in any form (`ljext:`, `http(s)://ljext.*`) only then. The Reload page action re-arms it for
+  a panel. `navigation::is_allowed_navigation` refuses every extension-like URL (so on macOS and
+  Linux a real site named `ljext.<something>` can't be opened either — accepted), and
+  `is_external_openable`, history, the back trail and Translate ignore them. The bar's guard is
+  `navigation::is_allowed_bar_navigation` and the settings window's `settings_window::may_navigate`,
+  both tested against both forms. WebView2's `NavigationStarting` is main-frame only (frames are
+  not guarded there), which is why serving files needs the page to show the extension.
+- **The API's methods:** storage (`<config dir>/extension-data/<id>.json`, read per call, one
+  lock, atomic write, 1 MB of JSON, keys 1–128 characters, a refused write changes nothing),
+  `theme` (see below), `pageInfo` (null until LJ30's page actions), `openUrl` (absolute http(s),
+  never extension-like; `page` replaces the panel, `browser` hands it to the opener), `close`
+  (back to the web page the panel was opened from, else the start page with the command bar),
+  `clipboard.writeText` — **native** (NSPasteboard via objc2's `msg_send!`, GTK's clipboard, the
+  Win32 clipboard: two features added to the existing `windows` dependency,
+  `Win32_System_DataExchange` and `Win32_System_Memory`; no new crate), because a panel's own
+  `navigator.clipboard` needs a click and the bar can't write without one on WebKit.
+- **Theme tokens:** all theme math is TypeScript, so the bar reports the `--lj-*` variables it
+  painted with a new bar command, `set_theme_tokens` (bar capability only; checked: `--lj-*`
+  names, ≤ 40 of them, short values without `;{}<>\`), kept in memory while the window exists;
+  `theme` waits up to 3 s for the first report (a panel opened with the window can ask before the
+  bar loaded). `apply-theme.ts` gained an `onPaint` hook that only the bar passes.
+- **The toolbar** shows a panel's extension: `session::publish_label` sends
+  `window.littleJoan.setExtension({ name, icon })` (the icon as a base64 `data:` URI made in Rust
+  — the bar can't and mustn't load `ljext:`; a 20-line base64 encoder, tested), again with the
+  bar's `start_info`; `ui/toolbar/logic.ts` checks it (name ≤ 40 characters, icon only
+  `data:image/svg+xml|png;base64`), draws the name with `textContent`, and disables "open in
+  default browser".
+- **Bundled extensions** are embedded by `build.rs` (`$OUT_DIR/bundled_extensions.rs`,
+  `include_bytes!`, folders with an `extension.json`; dotfiles, symlinks and `*.test.*` left
+  out). `extensions/hello/` (manifest, `index.html`, `hello.js`, `hello.css`, `icon.svg`) counts
+  its openings in storage, applies the theme, calls `__TAURI_INTERNALS__.invoke("start_info")`
+  (must reject, 4 s timeout), fetches `https://example.com` with `no-cors` and reports
+  `net=blocked` only when the fetch failed **and** a `securitypolicyviolation` for connect-src
+  named that URL (a plain network failure would say `failed`). The SDK is `extensions/sdk/v1.js`
+  (a classic script defining a frozen global `littleJoan`) with types in `v1.d.ts`;
+  `extensions/` joined `tsconfig.json` (checkJs) and ESLint (with `no-undef` left to tsc for
+  those files, as for TS).
+- **`--extension <id>`** (`cli.rs`, `toggle.rs`: `Command::Extension` → `CreateExtension` /
+  `FocusAndExtension`): opens the extension's first command; an unknown id opens nothing (logged
+  `extension-missing`).
+- **Smoke** (`smoke-extensions.mts`, 5 tests; `tests/smoke/ext-probe.mjs`, 3 tests): its own
+  launch — `--extension hello` (title, `extension-opened`, the panel's `page-loaded`, storage and
+  theme calls `ok`, `extension-hello.png`), then the smoke page with `?ext=probe&base=<hello's
+  origin>`: the SDK-style API call and a simple text/plain POST (5 s timeout each), an `<img>`
+  of hello's icon, `location.href` to the panel; it must report `LJ-EXTPROBE ljext-api=blocked
+  ljext-file=blocked ljext-nav=refused`, with no `ext-api … ok`, no extension `page-loaded` and a
+  `navigation-refused` after it, and hello's `extension-data/hello.json` holding its count and no
+  `smoke-probe` key (`extension-probe.png`). New log events: `extension-opened`,
+  `extension-missing`, `extension-skipped`, `ext-api`, `ljext-refused`, `navigation-refused`.
+- **Files beyond the prompt:** `commands.rs`, `lib.rs`, `capabilities/bar.json`
+  (`set_theme_tokens`), `settings.rs` (`developerMode`), `toggle.rs`, `joan.rs`, `page_actions.rs`,
+  `history.rs`, `back_stack.rs`, `settings_window.rs`, `platform/*.rs` (clipboard), `bar/watch.rs`
+  (the address watcher moved out of `bar.rs` to keep it under 400 lines), `ui/bar.ts`,
+  `ui/toolbar/*`, `ui/lib/apply-theme.ts`, `tsconfig.json`, `eslint.config.mjs`, README (the
+  flag, privacy), SECURITY.md.
+- `npm run verify`: 230 TS tests, 230 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.3 GB.
+- **CI (run 39089886960): verify ×3 and package ×3 green — the Win32 / GTK / AppKit clipboard code
+  compiled on its first try — and `smoke (windows)` green; `smoke (macos)`, `smoke (linux)` and
+  `smoke (linux-scale-2)` red on one thing:** hello reported `storage=error-origin
+  theme=error-origin ipc=denied net=blocked` — every API call of the panel's own was refused by
+  the Origin check (`ljext-refused origin joan-page ljext://hello.localhost/__lj/api/v1/…`).
+  Cause: the responses said `Referrer-Policy: no-referrer`, and under that policy a same-origin
+  (non-CORS) POST carries `Origin: null` (the Fetch standard's "serializing a request origin";
+  WebKit follows it, Chromium evidently didn't). Everything else held on all four jobs: `ipc=denied`,
+  `net=blocked` (a real connect-src violation), and the probe — `ljext-api=blocked
+  ljext-file=blocked ljext-nav=refused`, with the log showing **why**: the web page's SDK-style POST
+  reached the handler on WebKit **without a CORS preflight** (custom schemes skip it there) and was
+  refused for its Origin, its simple POST for the missing `X-LJ-Api`, its `<img>` for the page
+  check, and `location.href` by the guard (`navigation-refused`). So the Origin check is what
+  stops a web page's request on WebKit, not the preflight. **Fix 1 (`lj-step-29-fix`), on a wrong
+  guess:** `Referrer-Policy: same-origin` (nothing goes to other origins, so no more leaks than
+  before; kept), the SDK's own fetch sets `referrerPolicy: "same-origin"` too, and an Origin
+  refusal logs what the engine sent. Run 39090864816 (verify, package, Windows smoke green again;
+  the three WebKit smoke jobs red the same way) showed `origin=-`: **WebKit sends no Origin at all**
+  with a same-origin POST to a custom scheme (it adds one only on the CORS path; the web page's
+  cross-origin POST had `origin=http://127.0.0.1:…`), not `null`. **Fix 2 (`lj-step-29-fix2`):**
+  `api::origin_ok` — an Origin that is sent must be exactly the extension's (once; `null` and an
+  empty one refused); Windows must send one (WebView2 always does); on macOS and Linux a missing
+  Origin is the extension's own request, unless a Referer from another origin comes with it.
+  Every cross-origin request carries an Origin on WebKit (spec, and the probe), so a web page's
+  call is still refused by it, and the page, webview and header checks are unchanged. Tests:
+  `webkit_sends_no_origin_from_the_extension_itself` (accepted on macOS / Linux, refused on
+  Windows, foreign Referer refused, empty Origin refused, other checks still apply); the refusal
+  log now carries the Referer too.
+- **CI after fix 2 (run 39091695597, with LJ30): LJ29's checks green on all four smoke jobs** —
+  hello `storage=ok theme=ok ipc=denied net=blocked`, the probe refused (WebKit: the web page's POST
+  by its `Origin: http://127.0.0.1:…`, its simple POST by the header, its `<img>` by the page check;
+  Windows: the preflight by `http-method`, then the same), the guard's `navigation-refused` — but
+  **the Windows log showed a race the rules didn't catch:** `--extension hello` while hibernating
+  logged `extension-opened`, then the start page's late `page-loaded http://tauri.localhost/`, then
+  `ljext-refused page … hello.localhost/index.html` — the panel's own document refused, its title
+  the refusal's (`extension-hello.png` showed the JSON). The start page's `Finished` (WebView2's
+  NavigationCompleted, delivered after the app had begun opening the panel) overwrote the page's
+  address, which the page check read; on WebView2 `Started` comes only at ContentLoading, after the
+  handler answered. The title the rule wanted came later from the command bar's second open.
+  **Fix 3 (`lj-step-29-fix3`):** which extension the page shows is now decided by the navigation
+  guard itself (`NavGate::showing`: an admitted panel URL sets it, any other navigation the guard
+  allows clears it, refused ones change nothing) — every navigation passes the guard first and in
+  order, while load events can come late. `api::Context` takes `showing` instead of the address
+  (tests unchanged in substance: the helper derives what the guard would show from the page URL),
+  `session::tests::the_guard_decides_which_extension_the_page_shows` is new, and the smoke rule now
+  wants `--extension hello`'s own panel to report before anything opens it again, with none of
+  hello's requests refused meanwhile (2 more test cases, one replaying CI's log). The blob / data
+  rule uses the same state.
+- **Security review (2026-10-18), an independent read-only review of PR #17 at `cdc3225`: no
+  Critical or High findings; one must-fix and a list of cheaper ones, fixed on the branch:**
+  - **M1 — the expected URL was predictable (`lj-step-29-fix4`).** On WebKit the guard is asked
+    for frames too, so a web page looping `<iframe src="ljext://<id>.localhost/<panel>">` (or a
+    malicious panel navigating and stopping) could consume the app's expectation in the moment
+    between `expect` and the app's own navigation: the app's navigation was then refused while
+    `navigating()` had already set the address, and the toolbar showed the extension's name and
+    icon over the web page; Reload re-armed the gate from that stale address. **Fix:** the URL the
+    app opens carries a fresh single-use 128-bit nonce, `?lj-open=<hex>` (`extensions/nonce.rs`:
+    `/dev/urandom`, `BCryptGenRandom` — one feature added to the existing `windows` crate, no new
+    crate — and a keyed-hash fallback that logs), and the guard wants that exact URL; the panel's
+    own later navigations inside its extension stay refused (it is one page), so nothing ever
+    re-arms the gate for another document. What the user sees now follows what a load event
+    **committed** (`NavGate::commit`: the admitted panel's URL arriving in the page's own load
+    event — since fix 6 only `Started`, the engines' commit callback, not `Finished`; since
+    fix 10 exactly the admitted URL, nonce included), not the guard's admission; the app's extension navigations — opening,
+    closing, `openUrl` to the page (also review item I5) — go through `bar::navigate_pending`, which
+    leaves the page's address alone until those events arrive (`PageAddress::pending`). Reload on a
+    committed panel opens the same thing again with a new nonce (`session::reopen`), never from
+    the old address; on an uncommitted one the guard refuses it. Tests:
+    `a_racing_document_cant_claim_the_expected_panel` (no-nonce, empty, wrong, extended and
+    fragment forms all refused, the expectation survives, the app's URL is admitted, once),
+    `the_toolbar_follows_what_a_load_event_committed`, `panel_urls_carry_the_nonce`,
+    `a_pending_navigation_keeps_the_address_until_its_events_arrive`, nonce tests (1,000 distinct
+    128-bit values, the OS source works, constant-time compare). Smoke: the race above
+    (`raceFailures`, `labelFailures`; 3 test cases), with new log events `page-started`,
+    `toolbar-label`, `new-window-refused`. Docs no longer say "web pages can't, in any form":
+    architecture.md and extensions.md describe the nonce, the frames each engine shows the guard,
+    and the commit rule.
+  - **The cheaper findings (`lj-step-29-fix5`):**
+    - **L4 (Windows) service / shared workers:** a worker would serve the extension's documents
+      without the handler's policy or checks and outlive the panel. `api::embedding` refuses
+      `Sec-Fetch-Dest: serviceworker` / `sharedworker` and any `Service-Worker` header, for every
+      request (`Refusal::Worker`). Test: `service_and_shared_workers_get_nothing` (a dedicated
+      `worker` stays allowed).
+    - **I4 duplicated headers:** a `Sec-Fetch-Dest` sent twice is now a refusal (`X-LJ-Api` and
+      `Origin` already were: `Incoming::header` treats a repeat as missing, and missing is refused).
+      Tests in `files_are_get_only_…` (two values, and the same value twice).
+    - **L1 `openUrl`:** to the default browser it needs a new manifest permission, `openBrowser`
+      ("Open web addresses in your default browser" in Settings), and runs at most once every 2 s
+      per extension (429 `busy`); both targets refuse this computer and the local network
+      (`api::is_private_host`: 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, 0/8, `::1`, `::`,
+      fc00::/7, fe80::/10, IPv4-mapped forms, `localhost`, `*.localhost`, `*.local`; the URL parser
+      already turns `2130706433` and `0x7f000001` into 127.0.0.1). No bundled extension used it.
+      Tests: `extensions_open_web_addresses_only` (21 private forms, 5 public),
+      `open_browser_is_a_permission_of_its_own`, `a_rate_limit_counts_per_key_within_its_window`.
+    - **L3 names:** manifest texts (name, description, author, titles, keywords) refuse Unicode
+      format characters (Cf, incl. the bidi controls and U+200B–U+200F, U+FEFF, tags) as well as
+      controls (`manifest::is_hidden_char`, a table of the Unicode 15 Cf ranges — std has no
+      categories); a name that reads as a web address (a URL, `www.…`, a host name with an
+      alphabetic TLD, an IP address) is refused (`looks_like_address`; "Node.js"-style names go
+      too — restrictive by choice); the toolbar shows an **"Extension"** badge next to an
+      extension's name (`toolbarView().badge`). Tests: `texts_refuse_invisible_and_bidi_characters`,
+      `names_never_read_as_web_addresses`, toolbar `logic.test.ts`.
+    - **L2 `network:` isn't a confidentiality boundary:** `X-DNS-Prefetch-Control: off` on every
+      response (csp test), and docs/extensions.md now says plainly what the CSP doesn't cover
+      (WebRTC, DNS prefetch, preconnect) and that extensions are local tools, not a sandbox for
+      hostile code. Removing the WebRTC constructors is a Deferred follow-up (reason there).
+    - **L5 resources:** `theme` no longer blocks a thread for up to 3 s — until the bar reports
+      it answers at once with the default theme's light variables, parsed from the generated
+      `ui/lib/theme-defaults.css` (test `the_default_theme_answers_at_once_until_the_bar_reports`);
+      at most 8 API calls in flight per extension (`limits::Call`, released on drop; 429),
+      `storage.set` at most 20 a second (429); a body whose `Content-Length` is over the limit is
+      refused before parsing. What wry already did by then: every engine's handler gets the
+      **whole body in memory** (WebView2 reads the request stream to the end, WebKitGTK reads
+      `http_body`, WKWebView takes `HTTPBody` or drains `HTTPBodyStream`), so an oversized body is
+      refused after it was buffered, never parsed. Tests: `limits::tests` (3).
+    - **I2 `pageInfo`:** checked again inside the call — the opening's extension must be the
+      caller — not only at routing.
+    - **I3 ids:** `is_valid_id` refuses Windows device names (`con`, `nul`, `aux`, `prn`,
+      `com1`–`com9`, `lpt1`–`lpt9`; `paths::DEVICES`), which would name a device as the storage
+      file. Test: `ids_are_never_windows_device_names`.
+    - **I1 a session token:** each opening gets a second 128-bit secret; the handler writes it into
+      the SDK it serves to that panel (`__LJ_SESSION_TOKEN__`), and the API wants it as `X-LJ-Api`,
+      compared in constant time (`nonce::same_secret`), instead of the fixed `1`. The WebKit
+      missing-Origin acceptance no longer rests on the engine's behaviour alone: a request also
+      needs a secret only the panel's own SDK has. Tests: `the_api_needs_its_header_exactly_once`
+      (the old `1`, near misses, a prefix, padding, upper case, twice, no opening at all).
+    - **What the handler receives, per OS:** the smoke log now records each `ljext` request's
+      header names and the values the checks read (`ljext-headers … dest= site= mode= origin=
+      service-worker=`; never the token or a Referer), to answer the reviewer's open question
+      whether WebKit sends `Sec-Fetch-*` on custom-scheme requests. **CI run 39097343759: no
+      engine does.** WebView2 passes `Accept`, `Referer` (on everything but the app's own
+      navigation), `User-Agent`, `sec-ch-ua*`, `Upgrade-Insecure-Requests` on documents, `Origin`
+      + `Content-Type` + `X-LJ-Api` on API POSTs — and `Sec-Fetch-Mode: cors` only on a CORS
+      preflight; WebKit (macOS, Linux alike) passes `Accept`, `User-Agent`, a `Referer` on POST
+      only, no `Origin` from the panel itself. So the `Sec-Fetch-Dest` / `-Site` checks never fire
+      on our engines (kept for one that sends them); whether WebKit honours `frame-ancestors` /
+      XFO for `ljext:` can't be watched from the log, since its guard refuses frame navigations
+      before any request. Landmines has it.
+  - **Fix 6 (`lj-step-29-fix6`) — what the header log showed on Windows.** In the race, three of
+    the page's iframe requests for hello's `index.html` arrived **between the guard admitting the
+    app's panel URL and the panel's commit** (~60 ms) and were **served** (status 200): the page
+    check passed (the guard already said "hello"), and with no `Sec-Fetch-Dest` there was nothing
+    to refuse a frame. `X-Frame-Options` / `frame-ancestors` and the API's Origin + token checks
+    kept them from doing anything (the web page couldn't script them or call the API), but files
+    — the SDK with the token too — could reach a web page in that moment. **Fix:** until a load
+    event committed the panel (`NavGate::committed`), only its document is served — the request
+    whose query is exactly `lj-open=<this opening's nonce>` (`session::nonce`, constant-time
+    compare); every other file, the SDK and the API are `Uncommitted` and the handler holds them
+    (10 ms polls, up to `api::COMMIT_WAIT` = 2 s) until the panel committed — by then the web page
+    and its frames are gone, so a racer that waited is answered into nothing — or refuses them.
+    And a Referer, when sent, must be a page of the extension's own origin (`api::referer_ok`;
+    twice: refused), which turns the Windows racers away at once. Only the page's `Started` event
+    commits now (the engines' commit callbacks), no longer `Finished`, which can arrive late and
+    on WebKit carries the URL of a navigation that is still provisional (WKWebView's `URL`,
+    WebKitGTK's `uri` change when a load starts). The panel's own subresources
+    came after its commit event in every CI log, by 1–50 ms, so the wait is a safety net, not the
+    usual path. The request log gained `status=` and `referer=own|other|-|twice`, and the race
+    rule `servedToOthers` fails on any `status=200 referer=other`. Tests:
+    `before_the_panel_commits_only_its_document_is_served` (all three platforms: the nonce
+    document served; no / empty / wrong / upper-case / extended / extra-parameter / fragment
+    nonces, other files, the SDK, the API all `Uncommitted`, then served once committed; no
+    opening, no nonce; a web page shown → `page`), `a_referer_must_be_the_extensions_own` (12
+    foreign forms incl. look-alike hosts and the other platform's form, on files, the SDK, the API
+    and the nonce document; twice), smoke `servedToOthers` (vitest). Also seen: fix4's CI run had
+    one Windows smoke failure in the race — hello's document loaded but none of its
+    subresources (unstyled, no script, broken icon; no refusal logged — fix4 logged refusals
+    only, so whether they reached the handler is unknown) while a racer's `window.open` landed in
+    the same moment; fix5's run was green.
+  - **Fix 7 (`lj-step-29-fix7`) — opening from a web page leaves it first.** Fix 6's CI run
+    (39098950325) failed the Windows race again, with the full request log this time: the app's
+    document request was answered 200, the racers were refused (`referer`), yet the page committed
+    **WebView2's own "HTTP ERROR 404" page** for the panel's nonce URL — a response the handler
+    never sent — and no subresource request followed. In both failing runs (fix4, fix6) the race
+    page's `window.open` landed between `extension-opened` and the panel's commit (16 and 91 ms
+    after); in the passing run (fix5) none did. So a web page's popup request while the panel
+    loads breaks that load in WebView2 (the engine's own behaviour; the mechanism isn't visible
+    from here — wry answers `NewWindowRequested` through a deferral). **Fix:** when the page
+    shows a web page, `session::open` navigates it to the app's start page first (what it shows
+    when nothing is open, whose load events CI has seen on every engine — not so for
+    `about:blank` on WebView2) and opens the panel (expect + navigate) only when that page
+    committed (`session::page_committed`, from a thread of its own, not inside the engine's
+    event) or after `LEAVE_FOR` = 1 s — so normally no web page, nor its frames, subresources or
+    popups, is alive while a panel loads. The detour is **best effort, for availability**: after
+    1 s the panel opens anyway, and another navigation can supersede the detour. Security rests
+    on the nonce and the commit rule (fixes 4, 6, 10), not on it. `gate::Leaving` numbers each wait
+    so a stale timer can't open a later opening early; `close` and a new window drop a wait.
+    Reload on a panel keeps the web page Close returns to (it lost it since fix 4). Opening from
+    the start page, hibernation or another panel goes straight to the panel, as before. The start
+    page is no web page anywhere (the bar shows the start state, history and back skip it). To
+    keep files near 400 lines, the pure gate moved to `extensions/gate.rs` (`NavGate`,
+    `page_may_navigate`, `Leaving`; re-exported by session.rs) with session's tests in
+    `session/tests.rs`, and `openable` / `is_private_host` to `extensions/web_address.rs`
+    (re-exported by api.rs). Test: `an_opening_waits_for_the_page_to_leave_its_web_page`; smoke:
+    the race (now the app's opening must pass through the start page there, `raceFailures`).
+    CI 39100400716: all 10 green — but no popup happened to land during the opening there (the
+    race opened one on 10 % of its ticks).
+  - **Fix 8 (`lj-step-29-fix8`) — a race that always overlaps.** The race page now opens a popup
+    on every second tick (every 50 ms; `RACE.popupEvery`), so one lands while the app is leaving
+    the page on Windows and macOS (the leave takes ~40–80 ms there; ~5 ms on Linux), and fix 7 is
+    tested against the failure it fixes, not just run beside it. **CI 39101372328: all 10 green**;
+    on Windows two popups and on macOS one landed between `extension-opened` and the start
+    page's commit, and hello opened and reported each time; nothing was served to another page
+    (`servedToOthers`). On Linux the race's popups never reach the app at all (WebKitGTK blocks a
+    `window.open` without a user gesture; 0 `new-window-refused` in every run), so there the race
+    is its iframes only.
+  - **Fix 10 (`lj-step-29-fix10`) — the follow-up review of `aa14610` ("merge": M1 fixed, nothing
+    usable leaks) asked for four last changes.**
+    - **A new opening starts uncommitted.** When the guard admits a panel URL it now also clears
+      `committed` (`gate::page_may_navigate`), so Reload of the same extension — whose old panel
+      had committed — gets the "nonce document only" rule until its own commit too. And `commit`
+      now wants **exactly the admitted URL** (`NavGate::admitted`, nonce included), so a late
+      commit event of an earlier opening of the same extension can't commit the new one. Test:
+      `a_new_opening_is_uncommitted_until_its_own_commit`.
+    - **Service workers, end to end.** L4 rested on WebView2 passing `Service-Worker: script` to
+      the handler, which nothing tested. Hello now ships a real `sw.js` and calls
+      `navigator.serviceWorker.register("sw.js")` from its panel (`checkServiceWorker`), reporting
+      `sw=refused` (the registration failed — the handler refused the script, or the engine
+      couldn't fetch it), `sw=unsupported` (no `navigator.serviceWorker`, or a `SecurityError` /
+      `NotSupportedError`), or `sw=registered` (unregistered at once). The smoke requires
+      `refused` or `unsupported` on every OS (`isHelloReport`) and fails on any `200` for
+      `/sw.js` in the request log (`serviceWorkerFailures`), whatever the page reports; hello's
+      own expected `ljext-refused … /sw.js` doesn't count as a refused request of its panel. What
+      each engine did is in the CI notes of the PR and the report of this round. The backstop —
+      clearing `ljext` service-worker registrations on reload / switch-off — needs new crates, so
+      it is a Deferred follow-up.
+    - **Docs:** the start-page detour is described as best effort, for availability (the panel
+      opens after 1 s anyway; a navigation can supersede it) — security rests on the nonce and
+      the commit rule; this plan's M1 entry says commit is the `Started` event only (since fix 6)
+      and the exact admitted URL (since fix 10); the PR description gives the real body limit,
+      `MAX_BODY_BYTES` = the 1 MB storage quota + 64 KB.
+    - **Deferred follow-ups** gained: the private-host filter is best effort (`openBrowser` is the
+      real control), dot look-alikes in names (the badge covers them), no cap on concurrent file
+      GETs plus wry's body buffering, and the service-worker backstop.
+
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
 **Verify:** `npm run verify` green, including vitest tests:
@@ -3635,6 +3975,77 @@ Push and watch CI until every job is green (two honest attempts, then stop). Loo
 screenshots.
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **Commands:** `extensions_list()` (bar and settings) returns every loaded extension —
+  `{ id, name, version, description, author, kind, enabled, icon, permissions, commands,
+  pageActions }` — with `developerMode`, the folder and what was skipped (`extensions/list.rs`,
+  1 test); the bar keeps the switched-on ones. Beyond the prompt, because the command bar must
+  open what it lists and Settings needs its buttons: `open_extension(id, command, pageAction)`
+  (bar only; a page action needs an open web page, and its panel gets the page's address and
+  window title only when the manifest asks for `pageInfo`), `reload_extensions()` and
+  `open_extensions_folder()` (Settings only; the folder is created, then revealed with the
+  opener's `reveal_item_in_dir`). `session::open` takes a `Target` (first command, a command, a
+  page action with its page).
+- **Switched off** (`disabledExtensions`, settings.rs: valid ids and `builtin:<name>`, each once,
+  at most 256; 1 test): the registry marks them, `Registry::get` (opening, serving, the API)
+  never returns one, `find` / `all` (Settings) do (tests in registry and api). Saving settings
+  forgets the registry so the next use reads the new switches; closing Settings forgets it too
+  when no page window is open (nothing at rest). `save_settings` takes optional
+  `disabledExtensions` and `developerMode`.
+- **The command bar** (`ui/command/extensions.ts`, 6 tests): `extensions_list` once each time the
+  command bar opens; a command matches when every typed word starts a word of its title, its
+  keywords or its extension's name; rows show "Title — Extension" with the extension's icon (a
+  checked `data:image/…;base64` URI drawn over a four-tile symbol, `row-icon-extension`); page
+  actions only while the bar's address is http(s), as "Extension, for this page". The drawn-text
+  test renders a title with markup through `view.ts` into a stand-in document that refuses
+  `innerHTML`.
+- **Settings → Extensions** (`ui/settings/extensions-logic.ts`, 4 tests; `extensions.ts`,
+  `extensions.css`): "Experimental" badge and a link to the guide; groups Built-in (hidden until
+  LJ31 fills it), Bundled, Developer — icon, name, version · author, description, permissions in
+  plain words, a switch; Developer mode with its warning, the folder, the two buttons, a note when
+  the group is empty, and each skipped folder with its reason. Switches and Developer mode are a
+  draft that Save covers (`settings-logic.ts`: `toInput` gained an optional 7th argument and
+  `isChanged` compares the ids in any order; 1 test).
+- **Docs:** `docs/extensions.md` (experimental: what an extension is and isn't, quick start with
+  the folder per OS — the copy needs a new id, since unpacked extensions can't take a bundled
+  one's —, the manifest reference, permissions, the SDK with examples, panels and origins, files,
+  the CSP, storage, testing, the security model, getting a bundled extension in); README
+  "Extensions (experimental)"; `extensions/hello/README.md` (each file, as the template — it is
+  embedded and served as text like any `.md`).
+- **Smoke:** the history-off run turns Developer mode on with a copy of hello as `dev-hello` and a
+  manifest with `apiVersion: 2` in its extensions folder; `--settings extensions` must list two
+  and skip one (`extensions-list 2 skipped=1`, `extension-skipped broken …`) →
+  `settings-extensions.png`. The extension run, after `--extension hello`: hide, summon, type
+  `hello` → `command-hello.png`, then ↓ ↓ Enter must open hello a second time (Windows, Linux;
+  best effort on macOS) — a new `pressKeys` helper (xdotool, SendKeys, CGEvent key codes). Rules in
+  `smoke-extensions.mts` (`settingsExtensionsFailures`, `commandHelloFailures`; 3 more tests).
+- **LJ29's CI, observed on the fixed run, recorded for later:** on Windows a navigation the guard
+  cancelled still sent its request to the handler (`navigation-refused http://ljext.hello…` then
+  `ljext-refused page … index.html`) — the page check refused it — and the cancelled navigation
+  raised one more `Finished` for the page that stayed (a second `page-loaded` and history visit).
+  Landmines has both.
+- `npm run verify`: 244 TS tests, 234 Rust tests, clippy clean. Disk: 13 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
+- **CI (run 39091695597, LJ30 with `lj-step-29-fix2`): verify ×3 and package ×3 green; all four
+  smoke jobs red on one LJ30 rule**: "Settings → Extensions didn't list hello and dev-hello". The
+  app was right — `extensions-list 2 skipped=1` and `extension-skipped broken \`apiVersion\` must be 1`
+  were logged — but when the settings window first loaded (on General), since the tab asks once,
+  not when `--settings extensions` switched to it. **Fix (`lj-step-30-fix`):** the rule looks from
+  the settings window's first event on (a test reproduces CI's order; the command bar's own list
+  before Settings opened doesn't count). Everything else held: hello `storage=ok theme=ok
+  ipc=denied net=blocked` and the probe refused on all four; picking "Say hello" in the command
+  bar opened hello again on Windows and Linux (macOS's synthetic typing didn't arrive this run —
+  best effort, as before). Screenshots: `settings-extensions.png` — "Extensions" with the
+  Experimental badge, the link, Bundled: Hello (icon, "Version 1.0.0 · by Little Joan", its
+  description, "· Keep its own data on this computer (up to 1 MB)", switch on), Developer: the
+  switch on, the warning in italics, the run's folder, both buttons, then "Hello (unpacked)" under
+  the fold — alike on all four, crisp at scale 2; `command-hello.png` (Windows, Linux) — "hello"
+  typed, "Search Google for “hello”", then "Say hello — Hello" with hello's icon, then Settings;
+  on macOS the empty command bar (typing didn't arrive); `extension-hello.png` — the toolbar with
+  hello's icon and "Hello" (back and open-in-browser greyed), the themed panel listing ok / ok /
+  denied / blocked — except on Windows, see LJ29's notes (`lj-step-29-fix3`).
+
 ### LJ31 — Built-in quick answers · standard · auto
 
 **Verify:** `npm run verify` green, including vitest tests for `ui/answers/`:
@@ -3673,6 +4084,72 @@ This ends phase 16:
   each one is tested.
 - Merge into main once green (merge commit), then stop and report.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **`ui/answers/`** — each module a pure `answer(query, …) → { title, subtitle, copy } | null`
+  with its own tests (27 in all):
+  - `calc.ts`: a tokenizer and a precedence-climbing parser (never `eval` / `Function`): + − × ÷
+    (also `x`, `−`), `^` (right-associative, tighter than a unary minus: `-2^2 = -4`), `%` as a
+    percent after an operand (`50% * 30 = 15`) and modulo between two (`10 % 3 = 1`), parentheses,
+    implicit multiplication (`2(3+4)`, `2pi`), decimals and exponents, `pi`, `e`, `tau`, `sqrt`,
+    `cbrt`, `abs`, `sin`/`cos`/`tan` (and inverses), `log` (base 10), `ln`, `exp`,
+    `round`/`floor`/`ceil`. Division by zero, unknown names, unbalanced parentheses and
+    non-finite results have no answer. Results are written with 12 significant digits
+    (`0.1 + 0.2 = 0.3`), exponents past 1e15. `= …` always asks it; bare text only with a digit
+    and an operator or a function — not a lone number (timestamps), not `2024-10-18`, not an IP.
+  - `units.ts`: length, mass, temperature, volume (US cups / pints / quarts / gallons), speed,
+    data sizes (decimal kB… and binary KiB…; `b` is bytes, bits aren't converted), by symbol or
+    name, `in` / `to` / `as` / `into`, 10 significant digits.
+  - `time.ts` + `cities.ts` (203 names: ~170 cities, a few countries' capitals and zone
+    abbreviations → IANA; every zone checked against Intl in a test): `time in <city>` /
+    `<city> time` / `what time is it in …`, and `<3pm | 15:30 | noon | midnight> <city> to|in
+    <city>` (a bare `3` is too vague). Offsets come from `Intl.DateTimeFormat#formatToParts`
+    with a passed-in clock and locale; tested across the 2026 October week when Europe has left
+    summer time and the US hasn't. `Europe/Kiev`, not `Kyiv`, for older ICU data.
+  - `random.ts`: `uuid` (v4), `password [8–128]` (default 16; letters, digits, symbols, no
+    look-alikes, at least one of each kind, shuffled), `[roll] NdM` (≤ 20 dice), `flip a coin`,
+    `random [a-b]` (default 1–100). The randomness is passed in; in the bar it is
+    `crypto.getRandomValues` with rejection sampling (`cryptoInt`), never `Math.random`.
+  - `timestamp.ts`: 10 digits = seconds, 13 = milliseconds → UTC time and ISO 8601 (copied);
+    `now unix` / `unix now` / `timestamp` / `epoch`.
+  - `index.ts`: `BUILT_INS` (ids `builtin:calc`, `builtin:units`, `builtin:time`,
+    `builtin:random`, `builtin:timestamp`), asked in that order; the first answer becomes the row.
+- **The command bar:** the quick-answer hook from LJ23 is filled (`command.ts`), the answer row
+  comes first **and is selected** (`rows.ts` `initialSelection`, tested), so Enter copies it;
+  a click copies too. `copy.ts` uses `navigator.clipboard.writeText` in the trusted bar on that
+  keypress, falling back to a hidden textarea and `execCommand("copy")`, then gives the field the
+  keyboard back; the row's subtitle says "Copied" (or "Couldn't copy") for 1.2 s, as text. An
+  equals-sign symbol (`row-icon-answer`).
+- **Switching off:** Settings → Extensions → Built-in lists the five with their examples and a
+  switch each (the `disabledExtensions` draft from LJ30); `extensions_list` now also returns
+  `disabledBuiltIns` (the `builtin:` entries), which the command bar skips.
+- **Smoke:** in the extension run, after the command-bar hello, a third window: type `= 12*7` →
+  `answer.png`, Enter, and the system clipboard is read back (`Get-Clipboard`, `pbpaste`, `xclip`
+  / `xsel` if the runner has one) into `summary.json` — informational, not a pass/fail rule.
+- Files beyond the prompt: `ui/command/copy.ts`, `ui/command/command.ts`, `ui/command/extensions.ts`
+  (the view's type), `ui/settings.ts`, `ui/style.css`, `src-tauri/src/extensions/list.rs`,
+  `src-tauri/src/commands.rs`, docs/architecture.md.
+- `npm run verify`: 272 TS tests, 235 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.3 GB.
+- **CI (run 39092961418: LJ31 with `lj-step-30-fix` and `lj-step-29-fix3`): every job green** —
+  verify ×3, package ×3, smoke on Windows, macOS, Linux and Linux at scale 2. `--extension hello`
+  from hibernation now reports on its own on every OS with none of its requests refused (Windows
+  too: only WebView2's own `favicon.ico` request is answered 404); the probe is refused as before;
+  "Say hello" picked in the command bar opened hello again on Windows and Linux; Enter on the
+  quick answer put **`84` on the Windows clipboard** (read back with `Get-Clipboard`; the Linux
+  runners have no clipboard tool; macOS's typing didn't arrive). Screenshots: `answer.png`
+  (Windows, Linux, scale 2) — "= 12*7" typed, the first row selected (accent fill, white text):
+  an equals sign, "84 — = 12*7", then "Search Google for “= 12*7”" and Settings; on macOS the
+  command bar without the typing — and, a finding, with "YouTube — m.youtube.com" as a top site:
+  the earlier ↓ ↓ Enter had arrived although the typing hadn't, and opened a starter. **Fix
+  (`lj-step-31-fix`):** the smoke presses keys only after its typing showed up in the log.
+  `settings-extensions.png` (all four) now starts with **Built-in**: Calculator, Unit conversion,
+  Time zones, Random, Unix timestamps, each "Built in" with its examples and a switch — but with an
+  empty white tile where an icon goes; the same fix gives icon-less rows a symbol ("=" for the
+  built-ins, the four tiles for an extension without an icon). `extension-hello.png` on Windows:
+  the themed Hello panel (the race is gone). `command-hello.png`, `extension-probe.png`: as in
+  LJ30's notes.
 
 ### LJ32 — Bundled games: Snake and 2048 · standard · auto
 
@@ -3870,6 +4347,58 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   paints, so a summon can flash the default Mist colors before the user's. Not visible in CI's
   screenshots. Option: also hand the bar the theme in an initialization script (as the settings
   window gets its tab), applied before the first paint.
+- **A panel can leave for any web address** (surfaced by LJ29). `network:` limits what a panel
+  can fetch (CSP `connect-src`), not where it can go: `location.href`, a link, `openUrl` or
+  `window.open` (→ the default browser) can carry data in a URL to any site — visible to the
+  user, since the page changes. Options: a `navigation` permission (or a confirmation) for
+  leaving the panel; CSP's `navigate-to` was never shipped by any engine.
+- **The page webview can load any of the app's own pages** (surfaced by LJ29):
+  `is_allowed_navigation` admits the whole app origin (`tauri://localhost/…`, Windows'
+  `http://tauri.localhost/…`), so a page or panel can navigate it to `bar.html`. Harmless today
+  (`joan-page` has no capability at all), but the page webview only needs `index.html`. Option:
+  admit only the start page there.
+- **A theme change doesn't reach an open panel** (surfaced by LJ29): `littleJoan.theme.get()` is
+  a snapshot; a panel learns of a new theme (Save, a preview, the system switching) only when it
+  asks again. Option: the bar's report also evals a `littleJoan` event into the open panel (Rust,
+  not the panel, decides when).
+- **A cancelled navigation counts as a second visit on Windows** (surfaced by LJ29's probe):
+  WebView2 raises one more `Finished` load event for the page that stays when `NavigationStarting`
+  cancels a navigation, so history records that page twice. Option: ignore a `Finished` whose URL
+  equals the last finished one within a short time (history_store), or track cancellations.
+- **WebRTC is open to extension panels** (security review, L2). The CSP doesn't cover
+  `RTCPeerConnection`, so a panel can reach a STUN/TURN server it doesn't declare (and learn local
+  addresses where the engine exposes them). Not fixed in phase 16: removing the constructors needs
+  a script injected before every panel's own (a user script per engine, or a wrapper the handler
+  adds to each served HTML file — which the panel's own code could still undo before it runs),
+  and WebKitGTK's `enable-webrtc` setting would also turn it off for web pages. Options: wry/Tauri
+  per-webview WebRTC switches if they appear; an injected freeze of `RTCPeerConnection` for
+  `ljext:` documents; a `webrtc` permission. Documented as a limit (docs/extensions.md).
+- **`openUrl`'s private-host filter is best effort** (follow-up review). It looks at the URL
+  only: a DNS name that resolves to a private address, single-label hosts (`http://router/`),
+  `.lan` / `.internal` / `.home.arpa`, carrier-grade NAT 100.64/10 and benchmarking 198.18/15
+  all pass. For the page it's the same reach any web page has; for the default browser the
+  **`openBrowser` permission is the real control** (the user sees it in Settings before turning
+  an extension on), the filter and the 2 s limit only narrow it. Options: add those suffixes and
+  ranges; resolve the host first (and accept the race with DNS); ask before a browser open.
+- **Dot look-alikes pass the name check** (follow-up review): `looks_like_address` splits on the
+  ASCII dot only, so `paypal․com` (U+2024 ONE DOT LEADER), `paypal．com` (U+FF0E) or `paypal。com`
+  (U+3002) is a valid name. The toolbar's "Extension" badge next to every extension name is what
+  covers it. Options: normalize those to `.` before the check (or refuse them in names).
+- **File requests have no concurrency cap, and wry buffers every body** (follow-up review): the
+  8-calls-in-flight limit covers the API only; a panel can fire any number of file GETs (each a
+  blocking-pool task that reads a file of at most 16 MB). And wry reads a whole request body into
+  memory before the handler runs, on every engine, so `MAX_BODY_BYTES` refuses an oversized body
+  only after it was buffered. Options: a per-extension cap on concurrent file reads; a streaming
+  body in wry (upstream).
+- **Service-worker registrations of `ljext` origins aren't cleared** (follow-up review, L4
+  backstop). The handler refuses a service worker's script (and the smoke checks it on every OS),
+  so none should exist; clearing them anyway when extensions are reloaded or switched off needs
+  per-origin website-data removal, which the app's dependencies don't expose: WebView2's
+  `Storage.clearDataForOrigin` (DevTools protocol) needs `webview2-com` as a direct dependency,
+  WKWebView's `WKWebsiteDataStore.removeData` needs `objc2-web-kit`, WebKitGTK's
+  `WebsiteDataManager` needs `webkit2gtk` — new crates — and Tauri's `clear_all_browsing_data`
+  would wipe the user's cookies and sites too. Options: those calls behind a small platform
+  module once a step allows the crates.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -4016,7 +4545,61 @@ Populated from real friction, not speculation:
 - *(LJ20, macOS)* **After `process::exit` with a page open, the next launch's WebKit may load
   nothing** (both webviews stayed blank in CI). Quit closes the window through `destroy` first.
 - *(round 2 planning)* **`navigation.rs` refuses `ljext:`** on macOS and Linux, frames included,
-  while Windows' `http://ljext.localhost` form passes as plain `http`. LJ29 must handle both.
+  while Windows' `http://ljext.localhost` form passes as plain `http`. LJ29 must handle both. →
+  *LJ29: every `http(s)://ljext.*` URL counts as an extension URL on every OS
+  (`extensions::urls::is_ext_like`).*
+- *(LJ29)* **WebView2's custom-scheme workaround is a plain prefix match.** wry 0.57 intercepts
+  every `http://ljext.*` request (`AddWebResourceRequestedFilter("http://ljext.*")`, all request
+  kinds, frames included) and rewrites `http://ljext.` to `ljext://` (every occurrence in the
+  URI) before the handler sees it, so a web page's `http://ljext.evil.com/` request reaches our
+  handler as `ljext://evil.com/`. `Webview::navigate` / wry's `load_url` does **not** apply the
+  workaround: navigate to the `http://ljext.…` form yourself on Windows. A host outside
+  `.localhost` could be upgraded to https by Chromium (HSTS-preloaded TLDs such as `.app`,
+  `.dev`), miss the filter and go to the network, hence `http://ljext.<id>.localhost`.
+- *(LJ29)* **WebView2's `NavigationStarting` is main-frame only** — wry doesn't hook
+  `FrameNavigationStarting`, so on Windows `on_navigation` never sees a frame's navigation (on
+  macOS and Linux it sees frames too). Don't rely on the navigation guard for frames: the `ljext`
+  handler itself refuses files unless the page shows that extension, plus `frame-ancestors`.
+- *(LJ29)* **Custom schemes are registered for every webview** (`register_*_uri_scheme_protocol`
+  in tauri 2.12 adds the handler to each webview the app builds), so the handler must check
+  `UriSchemeContext::webview_label()` — the bar and Settings can request `ljext:` URLs too.
+- *(LJ29)* **WebKit sends no `Origin` with a same-origin POST to a custom scheme** (macOS,
+  Linux): only its CORS path adds the header, so a panel's own fetch to `/__lj/api/v1/…` arrived
+  without one (`origin=-` in CI's log; not `null`, which was the first guess). Every cross-origin
+  request does carry one. WebView2 sends it always. `api::origin_ok` encodes that per platform.
+  And **WebKit sends cross-origin requests to a custom scheme without a CORS preflight**, custom
+  header and all: a web page's POST to `ljext:` reaches the handler, and only the handler's checks
+  (Origin, page) refuse it.
+- *(LJ29, Windows)* **Load events can arrive after the app started the next navigation**:
+  WebView2's `Finished` (NavigationCompleted) of the start page landed after `--extension hello`
+  had begun navigating to the panel, and `Started` only comes at ContentLoading, after the request
+  was answered. Anything that must know "what document is this request for" can't read the page's
+  address from load events; the extension page check follows the navigation guard instead.
+- *(LJ29, Windows)* **A navigation cancelled in `NavigationStarting` may still request its URL**:
+  CI's probe saw the guard refuse `http://ljext.hello.localhost/index.html` and then that very GET
+  reach the `ljext` handler (refused there by the page check). The cancelled navigation also raised
+  one more `Finished` load event for the page that stayed (a second history visit). Never rely on
+  the navigation guard alone for what a URL serves.
+- *(LJ29, security review)* **No engine passes `Sec-Fetch-*` to a custom-scheme handler** (CI's
+  `ljext-headers` log, all four smoke jobs): WebView2 gives the handler `Accept`, `Referer`,
+  `User-Agent`, `sec-ch-ua*`, `Origin` on POST and `Sec-Fetch-Mode` only on a CORS preflight;
+  WebKit gives `Accept`, `User-Agent` and a `Referer` on POST only. Checks keyed on
+  `Sec-Fetch-Dest` / `-Site` never fire on our engines; a frame's request on Windows looks like
+  any other GET except for its Referer. Don't build a defence on them.
+- *(LJ29, Windows)* **A web page still runs between the guard admitting a navigation and its
+  commit**, and its frames' requests reach the `ljext` handler in that moment (~60 ms in CI). The
+  guard's "showing" is therefore not enough to serve files: only the nonce document is served
+  before the commit (fix 6).
+- *(LJ29, Windows)* **A web page's `window.open` while the page webview loads another document
+  can break that load**: twice in CI a racing page's popup request landed between the app's
+  navigation to a panel and its commit, and the panel came up once without any subresource
+  (unstyled, no script, broken icon) and once as WebView2's own "HTTP ERROR 404" page for the
+  panel's URL — though the handler had answered the document 200. Don't load something important
+  while a hostile page is still alive: the app leaves the web page for its start page first
+  (fix 7). If the race step flakes on Windows, look here first.
+- *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
+  `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
+  that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.
 
 ---
 

@@ -17,6 +17,30 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Quick answers in the command bar:** type `= 12*7`, `10 km in mi`, `72f to c`, `time in
+  Tokyo`, `3pm london to new york`, `uuid`, `password 20`, `roll 2d6`, `flip a coin`,
+  `random 1-100`, `1700000000` or `now unix`, and the answer is the first row — Enter copies it.
+  The calculator is a real parser (never `eval`); time zones follow daylight saving time; random
+  values come from the system's secure randomness. Each can be switched off in Settings →
+  Extensions → Built-in.
+- **Extensions in the command bar and Settings (experimental):** type an extension's name (or
+  what it does) in the command bar to open it; page actions — extensions for the page you're on —
+  show only while a web page is open. **Settings → Extensions** lists every extension with a
+  switch to turn it off, its version, author and what it may do in plain words, plus **Developer
+  mode** (load your own unpacked extensions from the extensions folder), **Open extensions
+  folder** and **Reload extensions**, and what couldn't be loaded and why. How to write one:
+  [docs/extensions.md](docs/extensions.md).
+- **Extensions (experimental), the runtime:** an extension is a folder with an `extension.json`
+  and plain web files that opens as a panel in the Little Joan window. Each runs on an origin of
+  its own with a strict Content-Security-Policy (its own files only; network only to the https
+  hosts its manifest declares), in the web view that has no access to the app, and reaches Little
+  Joan only through a small checked API: storage (1 MB), the current theme's colors, the page it
+  was opened for, opening a public web address (in the default browser only with the `openBrowser`
+  permission), the clipboard, and closing itself; it can't install service workers. Web pages
+  can't call that API, load an extension's files, or open an extension; the toolbar marks an open
+  extension with an **Extension** badge. `little-joan --extension <id>` opens one; **Hello**, the
+  bundled example, shows what an extension can and can't do. With Developer mode on, unpacked
+  extensions in the `extensions` folder next to settings.json load too.
 - **Themes:** one to three colors, an intensity and a grain become a muted gradient on the
   toolbar, the command bar, the history view and Settings, in light, dark or following the
   system (and switching with it). Picks are kept pale in light mode and deep in dark mode, so any

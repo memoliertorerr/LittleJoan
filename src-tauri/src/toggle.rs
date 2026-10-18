@@ -5,6 +5,9 @@
 //! | Hibernating                | Create    | Create     | Create(u)            | Nothing |
 //! | Open, focused              | Destroy   | Focus      | FocusAndNavigate(u)  | Destroy |
 //! | Open, not focused          | Focus     | Focus      | FocusAndNavigate(u)  | Destroy |
+//!
+//! `Extension(id)` (`--extension <id>`) opens that extension's panel: `CreateExtension(id)`
+//! while hibernating, `FocusAndExtension(id)` with a window open.
 
 use url::Url;
 
@@ -27,6 +30,8 @@ pub enum Command {
     Hide,
     /// `--size <width>x<height>`: resize the open window (logical pixels).
     Resize { width: u32, height: u32 },
+    /// `--extension <id>`: open an extension's panel (its first command).
+    Extension(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +40,9 @@ pub enum Action {
     Create(Option<Url>),
     Focus,
     FocusAndNavigate(Url),
+    /// Create the window, then open the extension's panel.
+    CreateExtension(String),
+    FocusAndExtension(String),
     /// Close and destroy the window: back to hibernation.
     Destroy,
     Resize {
@@ -58,6 +66,8 @@ pub fn decide(state: WindowState, command: Command) -> Action {
             Action::Resize { width, height }
         }
         (WindowState::Hibernating, Command::Resize { .. }) => Action::Nothing,
+        (WindowState::Hibernating, Command::Extension(id)) => Action::CreateExtension(id),
+        (WindowState::Open { .. }, Command::Extension(id)) => Action::FocusAndExtension(id),
     }
 }
 
@@ -116,6 +126,21 @@ mod tests {
                     width: 390,
                     height: 600
                 }
+            );
+        }
+    }
+
+    #[test]
+    fn extension_opens_the_window_if_needed() {
+        let open = || Command::Extension("hello".into());
+        assert_eq!(
+            decide(HIBERNATING, open()),
+            Action::CreateExtension("hello".into())
+        );
+        for state in [FOCUSED, BACKGROUND] {
+            assert_eq!(
+                decide(state, open()),
+                Action::FocusAndExtension("hello".into())
             );
         }
     }

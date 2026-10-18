@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="./style.css" />
     <link rel="stylesheet" href="./settings.css" />
     <link rel="stylesheet" href="./settings/appearance.css" />
+    <link rel="stylesheet" href="./settings/extensions.css" />
     <script type="module" src="./settings.ts"></script>
   </head>
   <!-- The settings window: tabs in a sidebar on the left, the chosen tab on the right, and
@@ -134,11 +135,39 @@
         </section>
 
         <section id="panel-extensions" class="tab-panel" role="tabpanel" aria-labelledby="tab-extensions" hidden>
-          <h1>Extensions</h1>
-          <p class="placeholder">
-            Extensions are coming: small tools, games and page actions that open from the command bar,
-            and a way to write your own.
+          <h1>Extensions <span class="experimental">Experimental</span></h1>
+          <p class="setting-note">
+            Small tools that open from the command bar, each in its own sandbox.
+            <a href="https://github.com/memoliertorerr/LittleJoan/blob/main/docs/extensions.md" target="_blank" rel="noreferrer">Write your own</a>
           </p>
+          <div id="ext-builtin-group" class="ext-group" hidden>
+            <h2>Built-in</h2>
+            <ul id="ext-builtin" class="ext-list"></ul>
+          </div>
+          <div class="ext-group">
+            <h2>Bundled</h2>
+            <ul id="ext-bundled" class="ext-list"></ul>
+          </div>
+          <div class="ext-group">
+            <h2>Developer</h2>
+            <label class="setting" for="dev-mode">
+              <span class="setting-label">Developer mode</span>
+              <input id="dev-mode" type="checkbox" />
+            </label>
+            <p class="setting-note ext-warning">
+              Loads unpacked extensions from the folder below. Turn it on only for extensions you trust:
+              each one gets what its manifest asks for.
+            </p>
+            <p id="ext-folder" class="setting-note ext-folder"></p>
+            <div class="ext-actions">
+              <button id="ext-open-folder" type="button">Open extensions folder</button>
+              <button id="ext-reload" type="button">Reload extensions</button>
+            </div>
+            <p id="ext-developer-note" class="setting-note"></p>
+            <ul id="ext-developer" class="ext-list"></ul>
+            <ul id="ext-skipped" class="ext-skipped" aria-label="Not loaded"></ul>
+          </div>
+          <p id="ext-error" class="error" role="alert" hidden></p>
         </section>
 
         <section id="panel-privacy" class="tab-panel" role="tabpanel" aria-labelledby="tab-privacy" hidden>

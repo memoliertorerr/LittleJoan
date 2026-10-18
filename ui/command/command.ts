@@ -1,6 +1,8 @@
 // The command bar's list (DOM glue): asks Rust for suggestions as you type (60 ms debounce, only
-// the latest answer counts), builds the rows (rows.ts), draws them as text (view.ts), and
-// handles the inline autofill, the keys and the mouse.
+// the latest answer counts), builds the rows (rows.ts; a quick answer from ui/answers/, our own
+// code; extension commands from extensions.ts, read once each time the command bar opens), draws
+// them as text (view.ts), and handles the inline autofill, the keys and the mouse. Enter (or a
+// click) on a quick answer copies it and says "Copied".
 import { invoke } from "@tauri-apps/api/core";
 import {
   buildRows,
@@ -13,6 +15,9 @@ import {
   type Suggestion,
 } from "./rows.ts";
 import { renderRows } from "./view.ts";
+import { commandRows, isWebPage, type ExtensionInfo, type ExtensionsView } from "./extensions.ts";
+import { quickAnswer } from "../answers/index.ts";
+import { copyText } from "./copy.ts";
 
 /** How long typing must pause before Rust is asked. */
 export const DEBOUNCE_MS = 60;
@@ -45,6 +50,21 @@ export function commandBar(
   let keep: number | null | undefined;
   let latest = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** The extensions (their commands and page actions), as of the command bar's opening. */
+  let extensions: ExtensionInfo[] = [];
+  /** The built-in quick answers switched off in Settings. */
+  let disabledBuiltIns: string[] = [];
+
+  const loadExtensions = (): void => {
+    invoke<ExtensionsView>("extensions_list")
+      .then((view) => {
+        extensions = view.extensions;
+        disabledBuiltIns = view.disabledBuiltIns;
+      })
+      .catch(() => {
+        extensions = [];
+      });
+  };
 
   const draw = (): void => {
     list.replaceChildren(...renderRows<HTMLElement>(document, rows.rows, selected));
@@ -82,13 +102,14 @@ export function commandBar(
   };
 
   const show = (query: string, suggestions: Suggestion[]): void => {
-    rows = buildRows(query, suggestions);
-    if (applyAutofill()) {
-      selected = initialSelection(rows);
-    } else {
+    rows = buildRows(query, suggestions, {
+      quickAnswer: (typedText) => quickAnswer(typedText, { now: Date.now(), disabled: disabledBuiltIns }),
+      commands: (typedText) => commandRows(typedText, extensions, isWebPage(shown())),
+    });
+    if (!applyAutofill()) {
       rows = { ...rows, autofill: null };
-      selected = null;
     }
+    selected = initialSelection(rows);
     if (keep !== undefined) {
       selected = keep === null ? null : Math.min(keep, rows.rows.length - 1);
       keep = undefined;
@@ -119,6 +140,21 @@ export function commandBar(
     }
   };
 
+  /** Says, in the quick answer's row for a moment, whether the copy worked (as text). */
+  const flash = (message: string): void => {
+    const domain = list.querySelector<HTMLElement>('.row-answer .row-domain');
+    if (!domain) {
+      return;
+    }
+    const before = domain.textContent;
+    domain.textContent = ` — ${message}`;
+    setTimeout(() => {
+      if (domain.isConnected) {
+        domain.textContent = before;
+      }
+    }, 1200);
+  };
+
   const act = (action: Action): void => {
     switch (action.kind) {
       case "open":
@@ -136,8 +172,14 @@ export function commandBar(
         showHistory();
         break;
       case "command":
+        void invoke("open_extension", {
+          id: action.extension,
+          command: action.command,
+          pageAction: action.pageAction,
+        });
+        break;
       case "copy":
-        // Extension commands (LJ30) and quick answers (LJ31) come later.
+        void copyText(action.text, field).then((copied) => flash(copied ? "Copied" : "Couldn't copy"));
         break;
     }
   };
@@ -177,6 +219,7 @@ export function commandBar(
       selected = null;
       document.body.classList.remove("typing");
       if (open) {
+        loadExtensions();
         ask("");
       } else {
         latest++;

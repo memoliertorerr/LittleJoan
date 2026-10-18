@@ -1,0 +1,121 @@
+/* Settings → Extensions (settings.html): the groups, one row per extension with its icon, name,
+   details, description, permissions and a switch; Developer mode with its warning and folder. */
+
+.experimental {
+  margin-left: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 3px;
+  color: var(--lj-fg-muted);
+  background: var(--lj-field);
+  border-radius: 999px;
+}
+
+.ext-group h2 {
+  margin-top: 14px;
+}
+
+.ext-list,
+.ext-skipped,
+.ext-permissions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ext-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--lj-field);
+  border-radius: 8px;
+}
+
+.ext-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  background: var(--lj-tile);
+  border-radius: 6px;
+}
+
+.ext-icon-builtin::before,
+.ext-icon-none::before {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 4px;
+  content: "";
+  background-color: var(--lj-fg-muted);
+  -webkit-mask: var(--icon) center / 16px no-repeat;
+  mask: var(--icon) center / 16px no-repeat;
+}
+
+.ext-icon-builtin {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M3.5 6h9M3.5 10h9'/%3E%3C/svg%3E");
+}
+
+.ext-icon-none {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5'%3E%3Crect x='2.2' y='2.2' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='9' y='2.2' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='2.2' y='9' width='4.8' height='4.8' rx='1.2'/%3E%3Crect x='9' y='9' width='4.8' height='4.8' rx='2.4'/%3E%3C/svg%3E");
+}
+
+.ext-icon img {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+.ext-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ext-name {
+  font-weight: 600;
+}
+
+.ext-details,
+.ext-description,
+.ext-permissions {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--lj-fg-muted);
+}
+
+.ext-description {
+  margin-top: 2px;
+}
+
+.ext-permissions li::before {
+  content: "· ";
+}
+
+.settings-body input.ext-switch {
+  flex: none;
+  margin-top: 4px;
+}
+
+.ext-warning {
+  font-style: italic;
+}
+
+.ext-folder {
+  overflow-wrap: anywhere;
+}
+
+.ext-actions {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.ext-skipped li {
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--lj-fg-muted);
+  overflow-wrap: anywhere;
+}

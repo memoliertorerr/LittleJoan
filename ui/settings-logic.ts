@@ -20,6 +20,10 @@ export interface Settings {
   rememberHistory: boolean;
   /** The look (ui/lib/theme.ts); settings.rs checks every field. */
   theme: Theme;
+  /** Load unpacked extensions from the extensions folder (Settings → Extensions). */
+  developerMode: boolean;
+  /** Switched-off extensions (`hello`) and built-ins (`builtin:calc`). */
+  disabledExtensions: string[];
 }
 
 /** Where Little Joan keeps things (Rust's get_settings), for the Privacy tab. */
@@ -49,6 +53,15 @@ export interface SettingsInput {
   rememberHistory: boolean;
   /** The Appearance tab's theme; left out, Rust keeps the saved one. */
   theme?: Theme;
+  /** The Extensions tab's switches; left out, Rust keeps the saved ones. */
+  disabledExtensions?: string[];
+  developerMode?: boolean;
+}
+
+/** The Extensions tab's part of Save (settings/extensions-logic.ts's draft). */
+export interface ExtensionsInput {
+  disabledExtensions: string[];
+  developerMode: boolean;
 }
 
 /** The tabs, in the sidebar's order. */
@@ -93,8 +106,15 @@ export function toInput(
   mobileSites: boolean,
   rememberHistory: boolean,
   theme?: Theme,
+  extensions?: ExtensionsInput,
 ): SettingsInput {
-  return { shortcut, searchEngine, translateTo, mobileSites, rememberHistory, ...(theme ? { theme } : {}) };
+  return { shortcut, searchEngine, translateTo, mobileSites, rememberHistory, ...(theme ? { theme } : {}), ...(extensions ?? {}) };
+}
+
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.length === right.length && left.every((id, i) => id === right[i]);
 }
 
 /** Whether anything differs from the saved settings (Save is disabled otherwise). */
@@ -105,7 +125,9 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     saved.translateTo !== input.translateTo ||
     saved.mobileSites !== input.mobileSites ||
     saved.rememberHistory !== input.rememberHistory ||
-    (input.theme !== undefined && !sameTheme(saved.theme, input.theme))
+    (input.theme !== undefined && !sameTheme(saved.theme, input.theme)) ||
+    (input.developerMode !== undefined && input.developerMode !== saved.developerMode) ||
+    (input.disabledExtensions !== undefined && !sameIds(saved.disabledExtensions, input.disabledExtensions))
   );
 }
 

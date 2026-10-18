@@ -7,7 +7,8 @@
 // returns to the command bar). Rust switches the view with window.littleJoan.setOverlay; every
 // summon, Ctrl/Cmd+L and a click on the domain open the overlay, opening a page closes it. The
 // theme comes with start_info as the bar loads, and window.littleJoan.setTheme changes it (after
-// Settings saves one).
+// Settings saves one); the bar reports the colors it painted (set_theme_tokens) for extension
+// panels. window.littleJoan.setExtension names the extension whose panel the page shows.
 import { invoke } from "@tauri-apps/api/core";
 import { mayReplace, textFor } from "./bar-logic.ts";
 import { commandBar } from "./command/command.ts";
@@ -16,7 +17,8 @@ import type { StartInfo } from "./command/welcome.ts";
 import { applyTheme } from "./lib/apply-theme.ts";
 import { initialState, onCloseButton, onKey, withOverlay, withShown, type KeyOutcome } from "./command/view-state.ts";
 import { historyView } from "./history/history.ts";
-import { isMac } from "./toolbar/logic.ts";
+import { extensionLabel, isMac, type ExtensionLabel } from "./toolbar/logic.ts";
+import type { ThemeTokens } from "./lib/theme.ts";
 import { toolbar } from "./toolbar/toolbar.ts";
 
 declare global {
@@ -28,6 +30,7 @@ declare global {
       focusField(): void;
       showHistory(): void;
       setTheme(theme: unknown): void;
+      setExtension(label: unknown): void;
     };
   }
 }
@@ -44,6 +47,8 @@ document.documentElement.classList.toggle("os-macos", isMac(navigator.userAgent)
 if (field && rowList && toolbarRoot && historyRoot) {
   let state = initialState();
   let canGoBack = false;
+  /** The extension whose panel the page shows (the toolbar shows it instead of a domain). */
+  let extension: ExtensionLabel | null = null;
   /** What the overlay shows: the command bar, or the history view. */
   let panel: "command" | "history" = "command";
 
@@ -87,7 +92,14 @@ if (field && rowList && toolbarRoot && historyRoot) {
       field.value = next;
     }
     state = withShown(state, next);
-    tools.update(next, canGoBack);
+    tools.update(next, canGoBack, extension);
+  };
+
+  /** Extension panels match the bar: Rust keeps the variables it painted (littleJoan.theme). */
+  const reportTheme = (tokens: ThemeTokens): void => {
+    invoke("set_theme_tokens", { tokens }).catch(() => {
+      // Panels then wait for the next report; the bar itself is unaffected.
+    });
   };
 
   const act = (outcome: KeyOutcome, event: KeyboardEvent): void => {
@@ -143,7 +155,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
     },
     setCanGoBack(on: boolean) {
       canGoBack = on;
-      tools.update(state.shown, canGoBack);
+      tools.update(state.shown, canGoBack, extension);
     },
     focusField() {
       field.focus();
@@ -151,7 +163,11 @@ if (field && rowList && toolbarRoot && historyRoot) {
     },
     showHistory,
     setTheme(theme: unknown) {
-      applyTheme(theme);
+      applyTheme(theme, reportTheme);
+    },
+    setExtension(label: unknown) {
+      extension = extensionLabel(label);
+      tools.update(state.shown, canGoBack, extension);
     },
   };
 
@@ -199,10 +215,10 @@ if (field && rowList && toolbarRoot && historyRoot) {
   });
 
   render();
-  tools.update(state.shown, canGoBack);
+  tools.update(state.shown, canGoBack, extension);
   invoke<StartInfo>("start_info")
     .then((info) => {
-      applyTheme(info.theme);
+      applyTheme(info.theme, reportTheme);
       fillPanel(info);
     })
     .catch(() => {

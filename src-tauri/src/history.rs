@@ -4,7 +4,8 @@
 //! One record per URL (the fragment dropped, the query kept): its title, host (`www.` stripped,
 //! lower case, with a non-default port), all-time visit count, and its last 20 visits (time +
 //! kind). At most 5,000 URLs; the least frecent go first. Never recorded: anything but
-//! http(s), the app's own pages, Tauri's custom-scheme hosts on Windows (`ljext`, `ipc`).
+//! http(s), the app's own pages, Tauri's custom-scheme hosts on Windows (`ipc`), and extension
+//! panels in any form (`ljext:`, WebView2's `http://ljext.<id>.localhost`).
 //! The history view's list and "Clear history" are in history/manage.rs.
 
 use std::cmp::Ordering;
@@ -29,8 +30,9 @@ pub const HALF_LIFE_DAYS: f64 = 14.0;
 pub const MAX_TITLE_CHARS: usize = 300;
 /// Longer URLs (data stuffed into the query) aren't recorded.
 pub const MAX_URL_BYTES: usize = 4096;
-/// On Windows, Tauri serves custom schemes as `http://<scheme>.localhost`.
-const SCHEME_HOSTS: [&str; 3] = ["tauri.localhost", "ipc.localhost", "ljext.localhost"];
+/// On Windows, Tauri serves custom schemes as `http://<scheme>.localhost` (extensions as
+/// `http://ljext.<id>.localhost`: extensions::urls::is_ext_like).
+const SCHEME_HOSTS: [&str; 2] = ["tauri.localhost", "ipc.localhost"];
 const DAY_MS: f64 = 86_400_000.0;
 
 /// How a visit started. `Typed`: the user typed or picked it (open_input, also for a picked
@@ -98,6 +100,7 @@ pub fn recordable(url: &Url, app_origin: &Url) -> Option<Url> {
     if !matches!(url.scheme(), "http" | "https")
         || keys::is_app_url(app_origin, url)
         || SCHEME_HOSTS.contains(&host.as_str())
+        || crate::extensions::urls::is_ext_like(url)
         || url.as_str().len() > MAX_URL_BYTES
     {
         return None;
