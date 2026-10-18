@@ -255,15 +255,16 @@ for t in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
 
 /**
  * Types `text` into the focused window: xdotool on Linux, SendKeys on Windows (after bringing the
- * app's window to the front), key events from a small Swift script on macOS (best effort: the
- * runner may not let them through).
+ * app's window to the front — unless `activate` is false: activating a window that is already in
+ * front can hand the keyboard back to the page webview after the app moved it to the bar), key
+ * events from a small Swift script on macOS (best effort: the runner may not let them through).
  */
-function typeText(text: string, appPid: number): void {
+function typeText(text: string, appPid: number, activate = true): void {
   if (os === "win32") {
     powershell(`Add-Type -AssemblyName System.Windows.Forms
-$shell = New-Object -ComObject WScript.Shell
+${activate ? `$shell = New-Object -ComObject WScript.Shell
 $null = $shell.AppActivate(${appPid})
-Start-Sleep -Milliseconds 400
+Start-Sleep -Milliseconds 400` : "Start-Sleep -Milliseconds 100"}
 [System.Windows.Forms.SendKeys]::SendWait('${text}')`);
   } else if (os === "darwin") {
     // Real key codes (US layout) where there is one — events that only carry a Unicode string
@@ -306,11 +307,11 @@ const MAC_NAMED_KEYS: Record<string, number> = { Left: 123, Right: 124, Down: 12
 const SEND_KEYS: Record<string, string> = { Left: "{LEFT}", Right: "{RIGHT}", Down: "{DOWN}", Up: "{UP}", Return: "{ENTER}" };
 
 /** Presses named keys (arrows, Return) in the app's window, as typeText does (best effort on macOS). */
-function pressKeys(keys: string[], appPid: number): void {
+function pressKeys(keys: string[], appPid: number, activate = true): void {
   if (os === "win32") {
-    powershell(`$shell = New-Object -ComObject WScript.Shell
+    powershell(`${activate ? `$shell = New-Object -ComObject WScript.Shell
 $null = $shell.AppActivate(${appPid})
-Start-Sleep -Milliseconds 400
+Start-Sleep -Milliseconds 400` : "Start-Sleep -Milliseconds 100"}
 Add-Type -AssemblyName System.Windows.Forms
 ${keys.map((key) => `[System.Windows.Forms.SendKeys]::SendWait('${SEND_KEYS[key] ?? ""}'); Start-Sleep -Milliseconds 150`).join("\n")}`);
   } else if (os === "darwin") {
@@ -1054,7 +1055,8 @@ async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, 
     pressShortcut("l", runPid);
     await waitFor(`page action ${action.id}: the command bar`, (e) => count(e.slice(barFrom), "overlay", "true") > 0, 10_000, logFile);
     await sleep(500);
-    typeText(action.typed, runPid);
+    // The window is in front already (Ctrl/Cmd+L went to it): no second activation.
+    typeText(action.typed, runPid, false);
     const typed = await waitFor(
       `page action ${action.id}: typed`,
       (e) => e.slice(barFrom).some((x) => x.event === "suggestions" && x.detail.endsWith(`typed=${action.typed.length}`)),
@@ -1063,7 +1065,7 @@ async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, 
     );
     if (typed) {
       await sleep(800);
-      pressKeys(["Down", "Down", "Return"], runPid);
+      pressKeys(["Down", "Down", "Return"], runPid, false);
       await waitFor(`page action ${action.id}: up`, (e) => panelUp(e.slice(barFrom), action.id), 20_000, logFile);
     }
     await sleep(1500);

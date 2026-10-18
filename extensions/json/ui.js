@@ -155,6 +155,7 @@ async function start() {
   }
   update();
   input.focus();
+  input.setSelectionRange(0, 0);
 }
 
 void start();

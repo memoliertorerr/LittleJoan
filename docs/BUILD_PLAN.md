@@ -4454,6 +4454,24 @@ commit: "lj-step-34: bundled page actions and tools". Push and watch CI until ev
   architecture.md, extensions.md.
 - `npm run verify`: 454 TS tests, 256 Rust tests, clippy clean. Disk: 14 GiB free at the start and
   after verify; `.cache/target` 1.3 GB.
+- **CI (run 39123351961): verify ×3, package ×3 and smoke on macOS, Linux and Linux at scale 2
+  green; `smoke (windows)` red on the new page-action rule** — "picking qr in the command bar never
+  opened it": Ctrl+L opened the command bar over the smoke page (`overlay true`, its suggestions),
+  but the typed "qr" never arrived. The smoke's typing activates the app's window first
+  (`AppActivate`), and activating a window already in front evidently gave the keyboard back to
+  the page webview the app had just moved it away from (typing into a command bar opened by Ctrl+L
+  over a page hadn't been tried on Windows before; the other typing follows a fresh window). On
+  both Linux jobs the QR code opened for the smoke page (`qr.png`: its title from `pageInfo`, the
+  code, "Version 3 · 33 of 213 bytes"); on macOS the typing didn't arrive (best effort — though the
+  main run's "127" did, with the new key-code typing). Every command panel came up on all four
+  jobs, and the arrows reached 2048 everywhere, macOS included this time. Screenshots: `json.png`
+  — the sample formatted with highlighted keys, "Valid JSON · 2 objects, 1 array, 9 values, 2
+  levels deep", but the input showing the far end of its one long minified line; `text-tools.png`
+  — the sample with "86 characters · 16 words · 2 lines · 86 bytes · 1 min read" and the three
+  tool groups; `color.png` — #e0675a as HEX / RGB / HSL / OKLCH, 3.35:1 on white (AA large only),
+  6.25:1 on black (AA), the sample text. **Fix (`lj-step-34-fix`):** the page-action flow types
+  and presses keys without activating the window again (`typeText` / `pressKeys` take
+  `activate`); JSON's input wraps long lines and starts at the top.
 
 ### LJ35 — Docs, screenshots, the user's checklist · standard · checkpoint
 
@@ -4623,6 +4641,11 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   `WebsiteDataManager` needs `webkit2gtk` — new crates — and Tauri's `clear_all_browsing_data`
   would wipe the user's cookies and sites too. Options: those calls behind a small platform
   module once a step allows the crates.
+- **`--extension <id>` can't open a page action** (surfaced by LJ34): it opens an extension's
+  first *command*, and the four bundled page actions have none, so `little-joan --extension qr`
+  only logs `extension-missing` (a key binding for "QR code of this page" isn't possible yet).
+  Options: fall back to the first page action for the open web page (as the command bar's
+  `open_extension` builds its `pageInfo`), or a `--page-action <id>` flag.
 - **Back after a panel opens a page meets the panel's own history entry** (surfaced by LJ34, from
   reading the code — not seen in CI). A panel's `openUrl(…, { where: "page" })` (Wayback Machine,
   Clean link's "Open it here") and a link followed from a panel navigate the page webview from

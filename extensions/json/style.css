@@ -195,9 +195,11 @@ h1 {
   font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   tab-size: 4;
 }
+/* Long lines (minified JSON) wrap, so all of it is in sight. */
 .input {
   resize: none;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .status {
   margin: 0;
