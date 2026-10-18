@@ -85,10 +85,14 @@ describe("the extension run", () => {
 });
 
 describe("Settings → Extensions in the developer run", () => {
-  const GOOD_SETTINGS = `1 settings-window appearance
-2 settings-window extensions
+  // As CI logs it: the window lists the extensions as it loads (on General), before the switch.
+  const GOOD_SETTINGS = `1 extensions-list 1 skipped=0
+2 settings-window general
 3 extension-skipped broken \`apiVersion\` must be 1
 4 extensions-list 2 skipped=1
+5 settings-window privacy
+6 settings-window appearance
+7 settings-window extensions
 `;
 
   it("passes when the tab listed hello and the developer copy, the broken one skipped", () => {
@@ -97,6 +101,9 @@ describe("Settings → Extensions in the developer run", () => {
 
   it("fails without the tab, the right counts or the skipped reason", () => {
     expect(settingsExtensionsFailures(parseLog("1 settings-window appearance\n")).join()).toMatch(/never switched/);
+    // The command bar's list before Settings opened doesn't count.
+    const beforeSettings = "1 extensions-list 2 skipped=1\n2 settings-window general\n3 settings-window extensions\n";
+    expect(settingsExtensionsFailures(parseLog(beforeSettings)).join()).toMatch(/didn't list/);
     expect(settingsExtensionsFailures(parseLog(GOOD_SETTINGS.replace("2 skipped=1", "1 skipped=0"))).join()).toMatch(/didn't list/);
     expect(settingsExtensionsFailures(parseLog(GOOD_SETTINGS.replace("3 extension-skipped broken", "3 extension-skipped other"))).join()).toMatch(
       /wasn't reported/,

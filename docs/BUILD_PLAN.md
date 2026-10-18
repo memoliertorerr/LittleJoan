@@ -3816,6 +3816,24 @@ screenshots.
   Landmines has both.
 - `npm run verify`: 244 TS tests, 234 Rust tests, clippy clean. Disk: 13 GiB free at the start and
   after verify; `.cache/target` 1.3 GB.
+- **CI (run 39091695597, LJ30 with `lj-step-29-fix2`): verify ×3 and package ×3 green; all four
+  smoke jobs red on one LJ30 rule**: "Settings → Extensions didn't list hello and dev-hello". The
+  app was right — `extensions-list 2 skipped=1` and `extension-skipped broken \`apiVersion\` must be 1`
+  were logged — but when the settings window first loaded (on General), since the tab asks once,
+  not when `--settings extensions` switched to it. **Fix (`lj-step-30-fix`):** the rule looks from
+  the settings window's first event on (a test reproduces CI's order; the command bar's own list
+  before Settings opened doesn't count). Everything else held: hello `storage=ok theme=ok
+  ipc=denied net=blocked` and the probe refused on all four; picking "Say hello" in the command
+  bar opened hello again on Windows and Linux (macOS's synthetic typing didn't arrive this run —
+  best effort, as before). Screenshots: `settings-extensions.png` — "Extensions" with the
+  Experimental badge, the link, Bundled: Hello (icon, "Version 1.0.0 · by Little Joan", its
+  description, "· Keep its own data on this computer (up to 1 MB)", switch on), Developer: the
+  switch on, the warning in italics, the run's folder, both buttons, then "Hello (unpacked)" under
+  the fold — alike on all four, crisp at scale 2; `command-hello.png` (Windows, Linux) — "hello"
+  typed, "Search Google for “hello”", then "Say hello — Hello" with hello's icon, then Settings;
+  on macOS the empty command bar (typing didn't arrive); `extension-hello.png` — the toolbar with
+  hello's icon and "Hello" (back and open-in-browser greyed), the themed panel listing ok / ok /
+  denied / blocked — except on Windows, see LJ29's notes (`lj-step-29-fix3`).
 
 ### LJ31 — Built-in quick answers · standard · auto
 

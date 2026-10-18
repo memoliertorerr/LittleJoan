@@ -113,18 +113,19 @@ export const DEV_EXTENSION = "dev-hello";
 export const BROKEN_EXTENSION = "broken";
 
 /**
- * Settings → Extensions (the run with Developer mode on): `--settings extensions` opened the tab
- * after Appearance, it listed hello and the developer copy with the broken one skipped
- * (`extensions-list 2 skipped=1`), and the broken one's reason was logged.
+ * Settings → Extensions (the run with Developer mode on): `--settings extensions` switched Settings
+ * to the tab, the settings window listed hello and the developer copy with the broken one skipped
+ * (`extensions-list 2 skipped=1` — the tab asks once, when the window loads, whichever tab it
+ * opens on), and the broken one's reason was logged.
  */
 export function settingsExtensionsFailures(events: LogEvent[]): string[] {
   const failures: string[] = [];
-  const at = events.findIndex((e) => e.event === "settings-window" && e.detail === "extensions");
-  if (at < 0) {
+  if (!events.some((e) => e.event === "settings-window" && e.detail === "extensions")) {
     failures.push("--settings extensions never switched Settings to Extensions");
     return failures;
   }
-  const listed = events.slice(at).filter((e) => e.event === "extensions-list");
+  const opened = events.findIndex((e) => e.event === "settings-window");
+  const listed = events.slice(opened).filter((e) => e.event === "extensions-list");
   if (!listed.some((e) => e.detail === "2 skipped=1")) {
     failures.push(
       `Settings → Extensions didn't list hello and ${DEV_EXTENSION} with ${BROKEN_EXTENSION} skipped (${JSON.stringify(listed.map((e) => e.detail))})`,
