@@ -82,7 +82,7 @@
 | LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ✅ done |
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
-| LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ⬜ todo |
+| LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — waiting for the owner's checklist |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
@@ -123,7 +123,9 @@ new request log showed while fixing them, are fixed in `lj-step-29-fix4` → `fi
 "Security review"); the merge decision is the owner's; it was merged on 2026-10-18, and `main`'s CI for the merge
 commit is green (run 39116954733). Phase 17 (LJ32 → LJ35: the
 bundled extensions — games, productivity, page actions and tools — then the docs and the owner's
-checklist) is in progress on `lj/p17-bundled-extensions`.**
+checklist) is PR #18 on `lj/p17-bundled-extensions`, merged by the agent once verify, package and
+smoke were green on every OS (the standing exception); LJ35 is a checkpoint: the owner's checklist
+is in PR #18, and `v0.2.0-beta.2` waits for the owner's word. Next after it: phases 7–10.**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -4505,6 +4507,27 @@ pre-release happens only on the user's word, the same way as beta.1: bump the ve
 a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
 `gh release create v0.2.0-beta.2 --prerelease --latest=false --target <main commit>`.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- **README:** the status line says what `main` adds since beta.1; "Using it" gained an Extensions
+  bullet (how to open one, the twelve bundled, the badge, Esc); the command-line bullet says
+  `--extension` opens a first command and page actions open from the command bar; the Extensions
+  section lists every bundled extension and page action and says none reaches the network.
+  **Screenshots** (`docs/images/`, 424 KB): six cropped from CI's macOS smoke run 39124661621 —
+  the smoke test's page and its sample data only, nothing personal — `command-bar.png`,
+  `snake.png` (under the intro), `appearance.png` and `theme-dark.png` (Settings → Appearance),
+  `notes.png` and `focus.png` (Extensions). Cropped with ImageMagick (the window's bounding box,
+  rounded transparent corners) and quantized to 256 colors with dithering (the grain makes
+  full-color PNGs ~390 KB each).
+- **The other docs:** CHANGELOG `[Unreleased]` already lists every round-2 change (command bar,
+  toolbar, logins, history, themes, Appearance, Settings tabs, the extension runtime, the command
+  bar's extensions, quick answers, and LJ32–LJ34's bundled extensions); architecture.md has the
+  bundled extensions, the smoke's bundled run and `docs/images/`; extensions.md points at the
+  bundled ones as worked examples; CONTRIBUTING.md says how a bundled extension is laid out and
+  checked. SECURITY.md needed nothing new (no new permission or API).
+- `npm run verify`: 454 TS tests, 256 Rust tests, clippy clean. Disk: 14 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
 
 ---
 

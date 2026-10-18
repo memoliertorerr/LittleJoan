@@ -30,7 +30,11 @@ one and drives the installed app (`scripts/ci/smoke.mts`). A pull request needs 
   capability or inject scripts into web pages.
 - **Nothing runs at rest.** No window or webview may exist while Little Joan hibernates.
 - Keep decisions in small, tested, pure modules (`src-tauri/src/*.rs` without Tauri types,
-  `ui/*-logic.ts`); keep the native glue thin.
+  `ui/*-logic.ts`, an extension's `logic.js`); keep the native glue thin.
+- **Extensions** are plain JavaScript with no build step: a bundled one lives in
+  `extensions/<id>/` with its manifest, a pure `logic.js` and its `logic.test.ts`, asks for the
+  fewest permissions it needs, and fetches nothing it doesn't declare. The guide is
+  [docs/extensions.md](docs/extensions.md); `extensions/bundled.test.ts` checks every bundled one.
 - TypeScript in `strict` mode; Rust with clippy warnings as errors. Match the style of the code
   around your change.
 - Update `README.md`, `docs/architecture.md`, and `CHANGELOG.md` when behavior changes.

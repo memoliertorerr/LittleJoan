@@ -133,6 +133,8 @@ ui/settings/extensions.ts          the Extensions tab's list, switches, Develope
                                    and reload buttons; DOM glue only
 ui/settings/extensions.css         the Extensions tab's styles
 docs/extensions.md                 the extension authors' guide (experimental)
+docs/images/                       the README's screenshots, cropped from CI's macOS smoke run (its
+                                   test page and sample data only — nothing personal)
 ui/settings.css                    the settings window's styles (style.css has the shared tokens)
 ui/style.css                       shared styles, all colors from the theme's --lj-* variables;
                                    `.themed` = the gradient with the grain on top
@@ -707,7 +709,10 @@ open as **panels** in the page window. Bundled ones live in the repository's `ex
 and are embedded into the binary at build time (`build.rs` → `$OUT_DIR/bundled_extensions.rs`,
 `include_bytes!`); with **Developer mode** on (`developerMode` in settings.json, off by default)
 unpacked folders in `<config dir>/extensions/<id>/` load too. `little-joan --extension <id>`
-opens one (its first command). The registry is read when first needed and forgotten when the
+opens one (its first command). Besides hello, twelve are bundled (LJ32–LJ34): Snake, 2048, Notes,
+Focus timer, World clock, JSON, Text tools and Color tools (commands), and QR code, Clean link,
+Wayback Machine and Copy as Markdown link (page actions) — none declares a network host or asks to
+open the default browser (a Rust test checks it), and their pure logic is unit-tested in TypeScript. The registry is read when first needed and forgotten when the
 window closes. The authors' guide is LJ30's `docs/extensions.md`.
 
 ```
