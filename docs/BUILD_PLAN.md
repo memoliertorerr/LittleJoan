@@ -3373,6 +3373,33 @@ attempts, then stop). Look at the screenshots in light and dark.
   current compared bytes, and Windows' checkout had turned its line endings into CRLF.
   **Fix (`lj-step-27-fix`):** the test compares with line endings normalized (they mean nothing
   in CSS).
+- **CI (run 39082804310, with that fix): every job green** — verify ×3, package ×3, smoke on
+  Windows, macOS, Linux and Linux at scale 2; every theme run logged its own `theme <mode>
+  colors=<n>`. Screenshots: **the default theme** (main run, light) — `command-bar.png` /
+  `page.png` as before but on a faint cool blue-grey gradient: the frosted card is near-white, the
+  toolbar strip a pale slate; `theme/command-bar-default-dark.png` — a deep slate gradient, the
+  card a darker frosted slate, text near-white. **The two-color theme, light**
+  (`theme/command-bar.png`, `page.png`, `history.png`, `settings.png`): lavender at the top left
+  blending into peach at the top right and lavender-pink below, a 12 px frame of it around the
+  card (on macOS also the 40 px strip with the traffic lights), the card faintly pink-white; the
+  toolbar strip lavender → peach with the domain and buttons in near-black; the history view and
+  Settings' sidebar the same gradient, the selected tab a muted violet with white text. Enlarged
+  crops: fine grain (visible up close, not at a glance), no banding, text crisp. **Dark**
+  (`command-bar-dark.png`, `page-dark.png`, `settings-dark.png`): deep plum to aubergine with
+  grain, the card a darker frosted plum, near-white text and muted grey domains; on Linux the GTK
+  lists turn dark with `color-scheme`; on macOS the settings window's title bar turns dark too.
+  All four OSes alike; Windows and Linux keep their native (light) title bars. **One finding:**
+  macOS `theme/page.png` and Linux scale-2 `theme/page-dark.png` showed the 40 px bar still in
+  the command-bar view (an empty strip on macOS, the card's squeezed outline at scale 2) above the
+  page — the run opened the page with `--show <url>` while hibernating, and the bar's log shows
+  it asking for suggestions after `overlay false`. Cause: the re-tell of the view when the bar's
+  page finishes loading can come before the bar's script runs (the bar's `start_info` came 90 ms
+  after `bar-loaded` on macOS, and never within 0.9 s in the history-off run), so
+  `window.littleJoan` didn't exist yet and the change was lost. A pre-existing race that the
+  main run never showed (it opens the page into an already-loaded bar). **Fix
+  (`lj-step-27-fix2`):** `start_info` — which the bar's script calls once it runs — also tells
+  the bar its view and back state (`bar::tell_state`, through the same ordered eval channel, so a
+  later change still wins).
 
 ### LJ28 — Appearance editor · standard · auto
 

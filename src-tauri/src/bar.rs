@@ -98,6 +98,8 @@ pub fn add_webviews<R: Runtime>(
             if payload.event() == PageLoadEvent::Finished {
                 smoke::log("bar-loaded", "");
                 // The bar may have missed a change while it loaded: tell it the current state.
+                // (Its script may not be running yet — WKWebView can report the load before it
+                // ran — so `start_info`, which the script calls, tells it again: tell_state.)
                 view::tell_overlay(&webview, overlay());
                 tell_back(&webview, can_go_back());
             }
@@ -189,6 +191,18 @@ fn back() -> std::sync::MutexGuard<'static, BackStack> {
 /// button).
 pub fn can_go_back() -> bool {
     back().can_go_back()
+}
+
+/// Tells the bar its current view (toolbar or command bar) and whether the page can go back.
+/// `start_info` calls it: the bar asks for that only once its script runs, so this reaches it even
+/// when the load event's re-tell came too early (CI saw the macOS bar stay in the command-bar view
+/// above a page that `--show <url>` opened while hibernating). Evals reach the bar in order, so a
+/// later change still wins.
+pub fn tell_state<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(bar) = app.get_webview(BAR) {
+        view::tell_overlay(&bar, overlay());
+        tell_back(&bar, can_go_back());
+    }
 }
 
 fn tell_back<R: Runtime>(bar: &Webview<R>, on: bool) {

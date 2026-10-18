@@ -123,6 +123,8 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
         smoke::log("welcome", "");
     }
     smoke::log("theme", &theme_summary(&theme));
+    // The bar's script is running now: make sure it knows its view (bar::tell_state).
+    bar::tell_state(&app);
     StartInfo {
         shortcut,
         platform: std::env::consts::OS,
