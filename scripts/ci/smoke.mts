@@ -255,7 +255,9 @@ let f = NSScreen.main!.frame
 let args = CommandLine.arguments.dropFirst().compactMap { Double($0) }
 let p = args.count == 2 ? CGPoint(x: args[0], y: args[1]) : CGPoint(x: f.midX, y: f.midY)
 for t in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
-  CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+  let event = CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)
+  event?.flags = []
+  event?.post(tap: .cghidEventTap)
   usleep(80000)
 }
 `,
@@ -304,10 +306,13 @@ for token in CommandLine.arguments.dropFirst(2) {
   for down in [true, false] {
     if kind == "k" {
       let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(rest.filter { $0.isNumber }) ?? 0, keyDown: down)
-      if rest.hasSuffix("s") { event?.flags = .maskShift }
+      // Explicit flags: an event made from no source takes the session's, and a Command left
+      // down by a synthetic Cmd+L turned a typed "q" into Cmd+Q (LJ40's CI).
+      event?.flags = rest.hasSuffix("s") ? .maskShift : []
       event?.post(tap: .cghidEventTap)
     } else {
       let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+      event?.flags = []
       var units = Array(rest.utf16)
       event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
       event?.post(tap: .cghidEventTap)
@@ -346,7 +351,9 @@ NSRunningApplication(processIdentifier: pid)?.activate(options: [])
 usleep(400000)
 for code in CommandLine.arguments.dropFirst(2) {
   for down in [true, false] {
-    CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code) ?? 0, keyDown: down)?.post(tap: .cghidEventTap)
+    let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code) ?? 0, keyDown: down)
+    event?.flags = []
+    event?.post(tap: .cghidEventTap)
     usleep(60000)
   }
   usleep(150000)
@@ -392,6 +399,11 @@ for down in [true, false] {
   event?.post(tap: .cghidEventTap)
   usleep(60000)
 }
+// Command up (kVK_Command), so the session doesn't keep it down for the next synthetic keys.
+let release = CGEvent(keyboardEventSource: nil, virtualKey: 55, keyDown: false)
+release?.flags = []
+release?.post(tap: .cghidEventTap)
+usleep(60000)
 `,
     );
     run("swift", [swift, String(appPid), String(MAC_KEYS[letter] ?? 0)]);

@@ -5775,6 +5775,38 @@ exactly what to check and where, then STOP — don't start phase 20 until the ow
   smoke page's `uamobile=`): as the architecture's CI section says.
 - `npm run verify`: 535 TS tests, 311 Rust tests, clippy clean. Disk: 11 GiB free at the start of
   the step and after verify; `.cache/target` 1.4 GB.
+- **CI (run 39162372528): all ten jobs green.** **The DevTools protocol works in release builds**
+  (wry calls `SetAreDevToolsEnabled(false)`; `CallDevToolsProtocolMethod` still answers) **and the
+  override holds across navigations** (it is set on the start page when the window is built, and
+  the smoke page's first request — a navigation later — carried it). Windows: the phone agent's
+  request `Mozilla/5.0 (Linux; Android 10; K) … Chrome/154.0.0.0 Mobile Safari/537.36`,
+  `Sec-CH-UA-Mobile: ?1`, `Sec-CH-UA-Platform: "Android"`, `Sec-CH-UA: "Chromium";v="154",
+  "Google Chrome";v="154", "Not_A Brand";v="99"`, the page `uamobile=true`; after "Request desktop
+  site" (`{ "userAgent": "" }` cleared it) WebView2's own `… Edg/154.0.0.0`, `?0`, `"Windows"`,
+  `"Microsoft Edge";v="154", "Not A(Brand";v="99", "Microsoft Edge WebView2";v="154",
+  "Chromium";v="154"`, `uamobile=false`; "Automatic for this site" back to `?1` / `"Android"`. No
+  `ua-override fallback` anywhere. `?fits=1` going to 390 px: `layout-metrics content=390
+  viewport=390`, `ua-reload skipped fits`, no reload; the resize run's narrowing steps
+  (`content=600 viewport=380`, the smoke page's desktop minimum width) reloaded as LJ39 requires.
+  Windows, Linux and Linux at scale 2: "Request desktop site" logged `site-mode 127.0.0.1
+  desktop`, settings.json held `"127.0.0.1": "desktop"`, one reload, `390x560 ua=desktop`;
+  "Automatic for this site" `site-mode 127.0.0.1 auto`, the entry gone, one reload, `ua=phone`.
+  Linux: no client hints at all (WebKit), `uamobile=undefined`; `?fits=1` reloaded. The resize and
+  fullscreen runs' rules pass everywhere. **Screenshots:** `phone-pill.png` — the toolbar's
+  "Phone" pill between the site and "open in default browser" on Windows, macOS (traffic lights
+  inside the toolbar) and Linux; `settings-site-modes.png` — Windows: General lists "127.0.0.1 —
+  Desktop" with Remove (the pill behind it now says "Desktop"); Linux: that and "youtube.com —
+  Desktop, built in on macOS and Linux" with Remove (the tab now scrolls a little at the bottom).
+- **macOS's run went wrong in the harness, not the app: `lj-step-40-fix`.** Cmd+L opened the
+  command bar, then the typed `request desktop` quit the app (`quit` in the log right after
+  `overlay true`): the synthetic key events, made from no event source, took the session's
+  modifiers, and the synthetic Cmd+L had left Command down, so "q" was Cmd+Q — and with the app
+  gone, the rest of the run's keys went to Finder (`settings-site-modes.png` caught Spotlight and a
+  Finder window). The bundled run's `qr` page action has quit the app the same way on macOS (its
+  log: `quit` after the typing), unnoticed because that step is best effort there. The fix: every
+  synthetic key and mouse event on macOS carries explicit flags, and the shortcut script posts a
+  Command key-up after Cmd+<letter>. The rules stayed informational on macOS (typing is best
+  effort there), so the run was green; the fix's run shows whether macOS now types.
 
 ### LJ41 — Hide the tray / menu-bar icon (safely); Settings and Quit in the command bar · standard · auto
 
