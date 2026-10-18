@@ -200,7 +200,22 @@ Bundled with Little Joan (type the name in the command bar, or use `little-joan 
 | **Notes** (`notes`) | Quick notes that save as you type: several notes, search (`/`), copy one to the clipboard. N writes a new one. |
 | **Focus timer** (`focus`) | 25-minute focus sessions with 5-minute breaks and a 15-minute one after four; Space starts and pauses. It keeps the end time, so a reopened panel shows the time left — but it chimes only while its panel is open (Little Joan has no background alarms). |
 | **World clock** (`clock`) | Your time and the cities you add (about 180 to pick from): how far ahead or behind, and which day it is there, right across daylight saving time. |
+| **JSON** (`json`) | Format (2 or 4 spaces, tabs), minify, sort keys and check JSON — an error comes with its line and column; numbers and strings are never changed. |
+| **Text tools** (`text-tools`) | Counts (characters, words, lines, bytes, reading time); UPPER / lower / Title / Sentence case, camelCase, snake_case, kebab-case; Base64 and URL encode / decode; sort, reverse, de-duplicate and tidy lines — on the selection or all of the text. |
+| **Color tools** (`color`) | A color in any CSS form as hex, RGB, HSL and OKLCH, and its contrast as text on white, black or a color of yours, with the WCAG levels it passes. |
 | **Hello** (`hello`) | The example extension: it shows what an extension can and can't do. |
+
+Page actions — in the command bar only while a web page is open, for that page:
+
+| Page action | What it does |
+|---|---|
+| **QR code** (`qr`) | The page's address as a QR code to scan with your phone (made right here; edit the text to encode something else). |
+| **Clean link** (`clean-link`) | Copies the address without tracking parameters (`utm_…`, `fbclid`, share ids…) and out of redirect wrappers, keeping what makes the link work; Enter copies. |
+| **Wayback Machine** (`wayback`) | Opens the Internet Archive's snapshots of the page — every copy, or the newest — in the window. |
+| **Copy as Markdown link** (`markdown-link`) | Copies `[Title](address)` — or HTML, plain text, Org mode — with the title yours to edit. |
+
+None of the bundled extensions reaches the network: everything happens on your computer (the
+Wayback Machine only opens web.archive.org when you pick it).
 
 You can write your own with plain HTML, CSS and JavaScript — see
 **[docs/extensions.md](docs/extensions.md)** (experimental: the API may still change). Turn on

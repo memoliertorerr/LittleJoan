@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Color tools</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>Color tools</h1>
+      </header>
+      <div class="pick">
+        <div id="swatch" class="swatch" aria-hidden="true"></div>
+        <div class="inputs">
+          <label class="label" for="color">Color</label>
+          <div class="row">
+            <input id="color" class="field mono" type="text" autocomplete="off" spellcheck="false" placeholder="#485b7d, rgb(…), hsl(…), oklch(…)" />
+            <input id="picker" class="picker" type="color" aria-label="Pick a color" />
+          </div>
+          <div id="theme" class="chips" aria-label="Little Joan's colors"></div>
+        </div>
+      </div>
+      <section id="formats" class="card formats" aria-label="Conversions"></section>
+      <section class="card contrast" aria-label="Contrast">
+        <div class="contrast-head">
+          <span class="label">Contrast as text</span>
+          <label class="against">on <input id="against" class="field mono small" type="text" autocomplete="off" spellcheck="false" aria-label="A second color" /></label>
+        </div>
+        <div id="checks" class="checks"></div>
+        <p id="sample" class="sample">Little Joan — the quick brown fox</p>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p class="hint"><span>Any CSS color: hex, rgb(), hsl(), oklch(), names</span><span><kbd>Esc</kbd> close</span></p>
+    </main>
+  </body>
+</html>

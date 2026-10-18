@@ -17,6 +17,15 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Page actions and tools,** bundled: **QR code** (the page's address as a QR code, made locally —
+  byte mode, versions 1–10), **Clean link** (copies the address without tracking parameters and
+  out of redirect wrappers; Little Joan's own rules, keeping the parameters that make a link work),
+  **Wayback Machine** (opens the Internet Archive's snapshots of the page), **Copy as Markdown
+  link** (also HTML, plain text or Org mode; the title is editable) — these four appear in the
+  command bar only while a web page is open —, and the tools **JSON** (format, minify, sort keys,
+  validate with the error's line and column, without changing a number or string), **Text tools**
+  (counts, case, Base64 / URL encoding, line sorting) and **Color tools** (hex / RGB / HSL / OKLCH,
+  WCAG contrast). None of them fetches anything from the network.
 - **Notes, Focus timer and World clock,** bundled productivity extensions. **Notes:** several
   notes that save as you type, search, copy a note, delete with Undo; N for a new note, `/` to
   search. **Focus timer:** 25-minute focus sessions, 5-minute breaks and a 15-minute break after

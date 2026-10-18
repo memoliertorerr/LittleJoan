@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { BUNDLED_PANELS, bundledFailures, isPanelOf, keysReached, panelUp, seedFile } from "./smoke-bundled.mts";
+import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, isPanelOf, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
 
 const NONCE = "0123456789abcdef0123456789abcdef";
 
@@ -81,6 +81,16 @@ describe("the bundled extensions run", () => {
     }
     const focus = BUNDLED_PANELS.find((p) => p.id === "focus")?.seed?.(now) as { timer: { endsAt: number } };
     expect(focus.timer.endsAt - now).toBe(17.5 * 60_000);
+  });
+
+  it("wants a page action opened from the command bar to come up with the page", () => {
+    const qr = `${opened("qr", 10).replace("ext-api qr storage.get ok", "ext-api qr pageInfo ok")}`;
+    expect(pageActionFailures(parseLog(qr), PAGE_ACTIONS, { driven: true })).toEqual([]);
+    expect(pageActionFailures(parseLog(qr.replace("pageInfo ok", "storage.get ok")), PAGE_ACTIONS, { driven: true }).join()).toMatch(/wasn't handed the page/);
+    expect(pageActionFailures(parseLog(qr.replace("ext-api qr pageInfo ok", "ext-api qr pageInfo permission")), PAGE_ACTIONS, { driven: true }).join()).toMatch(/API call failed/);
+    expect(pageActionFailures(parseLog("1 started"), PAGE_ACTIONS, { driven: true }).join()).toMatch(/never opened it/);
+    expect(pageActionFailures(parseLog("1 started"), PAGE_ACTIONS, { driven: false })).toEqual([]);
+    expect(PAGE_ACTIONS.map((p) => p.id)).toEqual(["qr"]);
   });
 
   it("sees keys arrive by the panel's own writes after it came up", () => {

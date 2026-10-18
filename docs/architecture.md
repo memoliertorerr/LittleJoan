@@ -52,6 +52,16 @@ extensions/notes/, extensions/focus/, extensions/clock/  the bundled productivit
                                    cycles from a stored end time; a Web Audio chime while open), World
                                    clock (cities.js: ~180 cities → IANA zones; Intl does daylight
                                    saving; add, remove, reorder)
+extensions/qr/, clean-link/, wayback/, markdown-link/  the bundled page actions (permission `pageInfo`;
+                                   Clean link and Markdown link also `clipboard`): a QR encoder (byte
+                                   mode, versions 1–10, level M; reference matrices in
+                                   reference.test-data.json), tracking-parameter rules and redirect
+                                   unwrapping written for Little Joan, the Wayback Machine's addresses,
+                                   Markdown / HTML / Org link escaping
+extensions/json/, text-tools/, color/  the bundled tools: a JSON parser with line / column errors and
+                                   printers that keep numbers and strings as written; counts, case,
+                                   Base64 / URL encoding, line operations; color parsing (hex, rgb(),
+                                   hsl(), oklch(), names), conversions and WCAG contrast
 extensions/bundled.test.ts         every bundled extension: folder = id, the SDK first and no inline
                                    script, no network API and no `network:` host, text drawn as text,
                                    a pure logic.js with tests
@@ -237,6 +247,8 @@ scripts/ci/smoke-command.mts       CI: the command bar's and history view's smok
                                    unit-tested
 scripts/ci/smoke-theme.mts         CI: the theme runs (themes, screenshots) and their rules,
                                    unit-tested
+scripts/ci/smoke-keys.mts          CI: typing on macOS runners — characters as real key codes (US
+                                   layout), a Unicode string only for the rest (unit-tested)
 scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which panels open, and when a
                                    panel counts as up (its URL with the nonce, its own theme call,
                                    the toolbar's label, none of its requests refused); unit-tested
@@ -994,10 +1006,14 @@ and pushes to `main`:
   run** (`smoke-bundled.mts`), its own launch on a data folder whose `extension-data/` already
   holds sample content (three notes, a focus session 7½ minutes in, four cities): the window first
   (`--show`; hello's run covers opening from hibernation), then `--extension <id>` for each
-  bundled panel in turn (Snake, 2048, Notes, Focus timer, World clock) — each must
+  bundled panel in turn (Snake, 2048, Notes, Focus timer, World clock, JSON, Text tools, Color
+  tools — the tools with sample drafts too) — each must
   come up (its URL with the app's nonce, its script's own `theme` call, the toolbar naming it, none
   of its requests refused, no failed call) and is screenshotted (`snake.png`, `2048.png`,
-  `notes.png`, `focus.png`, `clock.png`); the focus timer must show the session running from its
+  `notes.png`, `focus.png`, `clock.png`, `json.png`, `text-tools.png`, `color.png`); then the
+  **page actions** on the smoke page: Ctrl/Cmd+L, typing `qr`, ↓ ↓ Enter must open QR code for the
+  page (it must come up like any panel and have `pageInfo` answered; required on Windows and Linux,
+  best effort on macOS) → `qr.png`; the focus timer must show the session running from its
   stored end time (its title counts down, `1x:xx · Focus`); 2048 gets four arrow keys first
   (whether they reached it — its own save — goes into `summary.json`, informational) (log
   `smoke-bundled.log`). Then the **theme runs**

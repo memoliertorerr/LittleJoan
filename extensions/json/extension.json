@@ -1,0 +1,20 @@
+{
+  "id": "json",
+  "name": "JSON",
+  "version": "1.0.0",
+  "description": "Format, minify and check JSON: errors come with their line and column; numbers and strings are never changed. Copy the result.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage", "clipboard"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "JSON formatter",
+        "keywords": ["json", "format", "pretty", "minify", "validate", "beautify"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

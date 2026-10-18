@@ -1,4 +1,5 @@
 use super::*;
+use crate::extensions::manifest::Permission;
 
 const HELLO: &[u8] = br#"{ "id": "hello", "name": "Hello", "version": "1", "apiVersion": 1,
     "icon": "icon.svg",
@@ -47,9 +48,41 @@ fn the_shipped_extensions_are_all_valid() {
         }
         assert!(manifest.network_hosts().is_empty(), "{id} fetches nothing");
     }
-    for id in ["snake", "2048", "notes", "focus", "clock"] {
+    for id in [
+        "snake",
+        "2048",
+        "notes",
+        "focus",
+        "clock",
+        "qr",
+        "clean-link",
+        "wayback",
+        "markdown-link",
+        "json",
+        "text-tools",
+        "color",
+    ] {
         assert!(registry.get(id).is_some(), "{id} is bundled");
     }
+    // The page actions get the page; nothing bundled may hand an address to the default browser.
+    for id in ["qr", "clean-link", "wayback", "markdown-link"] {
+        let extension = registry.get(id).expect("bundled");
+        assert!(
+            !extension.manifest.page_actions.is_empty(),
+            "{id} is a page action"
+        );
+        assert!(
+            extension.manifest.has(&Permission::PageInfo),
+            "{id} reads the page"
+        );
+    }
+    assert!(
+        registry
+            .all()
+            .iter()
+            .all(|e| !e.manifest.has(&Permission::OpenBrowser)),
+        "no bundled extension opens the default browser"
+    );
 }
 
 #[test]

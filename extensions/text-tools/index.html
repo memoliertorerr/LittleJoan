@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Text tools</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>Text tools</h1>
+        <button id="undo" class="btn" type="button" disabled>Undo</button>
+        <button id="copy" class="btn primary" type="button">Copy</button>
+      </header>
+      <textarea id="text" class="field editor" placeholder="Paste or type text. The tools work on the selection, or on all of it." aria-label="Text"></textarea>
+      <p id="counts" class="counts" aria-live="polite"></p>
+      <div class="groups">
+        <section>
+          <h2>Case</h2>
+          <div class="tools">
+            <button class="btn" type="button" data-tool="case.upper">UPPER</button>
+            <button class="btn" type="button" data-tool="case.lower">lower</button>
+            <button class="btn" type="button" data-tool="case.title">Title Case</button>
+            <button class="btn" type="button" data-tool="case.sentence">Sentence case</button>
+            <button class="btn" type="button" data-tool="case.camel">camelCase</button>
+            <button class="btn" type="button" data-tool="case.pascal">PascalCase</button>
+            <button class="btn" type="button" data-tool="case.snake">snake_case</button>
+            <button class="btn" type="button" data-tool="case.kebab">kebab-case</button>
+            <button class="btn" type="button" data-tool="case.constant">CONSTANT</button>
+          </div>
+        </section>
+        <section>
+          <h2>Encode</h2>
+          <div class="tools">
+            <button class="btn" type="button" data-tool="base64.encode">Base64 encode</button>
+            <button class="btn" type="button" data-tool="base64.decode">Base64 decode</button>
+            <button class="btn" type="button" data-tool="url.encode">URL encode</button>
+            <button class="btn" type="button" data-tool="url.decode">URL decode</button>
+          </div>
+        </section>
+        <section>
+          <h2>Lines</h2>
+          <div class="tools">
+            <button class="btn" type="button" data-tool="lines.sort">Sort A → Z</button>
+            <button class="btn" type="button" data-tool="lines.reverseSort">Sort Z → A</button>
+            <button class="btn" type="button" data-tool="lines.reverse">Reverse</button>
+            <button class="btn" type="button" data-tool="lines.unique">Remove duplicates</button>
+            <button class="btn" type="button" data-tool="lines.trim">Trim</button>
+            <button class="btn" type="button" data-tool="lines.removeEmpty">Remove empty</button>
+          </div>
+        </section>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p class="hint"><span><kbd>Tab</kbd> to the tools</span><span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undo a tool</span><span><kbd>Esc</kbd> close</span></p>
+    </main>
+  </body>
+</html>

@@ -48,7 +48,9 @@ function update(next) {
 function draw() {
   const now = Date.now();
   hereTime.textContent = clockText(here, now);
-  herePlace.textContent = `${zoneName(here)} · ${utcText(offsetMinutes(here, now))}`;
+  const name = zoneName(here);
+  const utc = utcText(offsetMinutes(here, now));
+  herePlace.textContent = name === utc ? name : `${name} · ${utc}`;
   hereDate.textContent = longDate.format(now);
   /** @type {HTMLElement[]} */
   const rows = [];

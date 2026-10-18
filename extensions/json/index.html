@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JSON</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>JSON</h1>
+        <select id="style" class="field select" aria-label="Layout">
+          <option value="two">2 spaces</option>
+          <option value="four">4 spaces</option>
+          <option value="tab">Tabs</option>
+          <option value="minify">Minified</option>
+        </select>
+        <button id="sort" class="btn toggle" type="button" aria-pressed="false">Sort keys</button>
+        <button id="copy" class="btn primary" type="button" disabled>Copy</button>
+      </header>
+      <div class="panes">
+        <textarea id="input" class="field code input" placeholder='Paste JSON here, e.g. {"name": "Little Joan", "tiny": true}' spellcheck="false" autocomplete="off" aria-label="JSON"></textarea>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <pre id="output" class="output code" tabindex="0" aria-label="Result"></pre>
+      </div>
+      <p class="hint">
+        <span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Enter</kbd> format in place</span>
+        <span><kbd>Esc</kbd> close</span>
+      </p>
+    </main>
+  </body>
+</html>

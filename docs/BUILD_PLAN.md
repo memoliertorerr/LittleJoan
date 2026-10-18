@@ -81,7 +81,7 @@
 | LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ✅ done |
 | LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ✅ done |
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
-| LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ⬜ todo |
+| LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ⬜ todo |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
@@ -4332,6 +4332,20 @@ until every job is green (two honest attempts, then stop). Look at the screensho
   architecture.md.
 - `npm run verify`: 370 TS tests, 256 Rust tests, clippy clean. Disk: 15 GiB free at the start and
   after verify; `.cache/target` 1.3 GB.
+- **CI (run 39121642833, with `lj-step-32-fix`): all 10 jobs green** — verify ×3, package ×3, smoke
+  on Windows, macOS, Linux and Linux at scale 2; the first window's suggestions now arrive before
+  the smoke page on every job. All five panels came up on all four smoke jobs (the focus timer's
+  title counted down from its stored end time: `17:2x · Focus`), and the arrow keys reached 2048 on
+  Windows and both Linux jobs (not on macOS — see Deferred follow-ups). Screenshots, alike on every
+  OS (crisp at scale 2): `snake.png` — the toolbar with Snake's icon, name and "Extension" badge
+  (on macOS beside the traffic lights now that the panel opens in a summoned window), the board,
+  the snake and the food, the start card above it; `2048.png` — after four moves on Windows and
+  Linux, the first two tiles on macOS; `notes.png` — the three sample notes (Groceries selected,
+  "4 min ago", "Yesterday", "Oct 9") with search and New note; `focus.png` — FOCUS, a ring a
+  third empty, 17:13, "Ends at 11:41 AM", round 2 of 4 with one dot done, Pause, the note about
+  background alarms; `clock.png` — your time (UTC on the runners, shown as "UTC · UTC", which
+  LJ34 tidies to "UTC"), London +1 h, New York −4 h, Tokyo +9 h, Sydney +11 h (all "Today"), suns
+  and a moon.
 
 ### LJ34 — Bundled page actions and tools · standard · auto
 
@@ -4362,6 +4376,84 @@ Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ34 to ✅,
 commit: "lj-step-34: bundled page actions and tools". Push and watch CI until every job is green
 (two honest attempts, then stop). Look at the screenshots.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- Seven bundled extensions in LJ32's layout. Page actions (`pageInfo`): **QR code** (`qr`),
+  **Clean link** (`clean-link`, + `clipboard`), **Wayback Machine** (`wayback`), **Copy as
+  Markdown link** (`markdown-link`, + `clipboard`); commands: **JSON** (`json`), **Text tools**
+  (`text-tools`), **Color tools** (`color`) — the three with `storage` (drafts, last colors) and
+  `clipboard`. None declares a `network:` host, and none asks for `openBrowser` (a Rust test checks
+  both, and that the four page actions are page actions with `pageInfo`); `extensions/bundled.test.ts`
+  finds no network API in any of them.
+- **QR code** (7 tests): an encoder written from the standard — byte mode (UTF-8), versions 1–10,
+  level M: the data codewords (mode, count, terminator, 0xEC / 0x11 padding), Reed–Solomon over
+  GF(256) (generator per block size), the block split and interleaving, finders, separators,
+  timing, alignment patterns, the dark module, format bits (BCH, XOR 0x5412) and version bits
+  (v7+), the zigzag placement, the eight masks and the standard's penalty (runs, 2 × 2 blocks,
+  finder-like patterns, dark balance). **Reference matrices:** 13 texts covering versions 1–10
+  (UTF-8 too) were encoded locally with macOS Core Image's `CIQRCodeGenerator` at level M — an
+  independent encoder — and stored as `reference.test-data.json` (not embedded: build.rs leaves
+  `*.test.*` out); 11 match ours module for module with the same mask, and the 2 where Core Image
+  picked another mask (penalty heuristics differ between encoders) match exactly with its mask.
+  Every code ours made for them also decoded with Core Image's `CIDetector` (a local, one-off
+  check with a small Swift tool kept out of the repository). Also tested: the standard's format
+  and version bit tables, alignment positions, capacities, and two Reed–Solomon worked examples.
+  The panel draws the code as one SVG path (black on white whatever the theme, so cameras read it),
+  shows version and size, and lets you edit what it encodes; over 213 bytes it says so.
+- **Clean link** (6 tests): rules written for Little Joan (not ClearURLs'): tracking names removed
+  everywhere (`utm_*`, `pk_*`, `mtm_*`, `fbclid`, `gclid`, `dclid`, `gbraid`, `wbraid`, `msclkid`,
+  `yclid`, `twclid`, `ttclid`, `mc_cid`, `mc_eid`, `_hsenc`, `mkt_tok`, `igshid`, `ref_src`, …) and
+  names that are tracking only on their own sites (YouTube `si` / `feature` / `pp`, Spotify `si`,
+  X `s` / `t`, Amazon `ref`, `pd_rd_*`, `pf_rd_*`, `tag`, `crid`, Google's `ved` / `ei` / `oq` /
+  `sxsrf` …, Bing's `form` / `cvid`, LinkedIn's `trk`, Reddit's `share_id`, TikTok's share
+  fields, eBay's `_trk*`, AliExpress's `spm` / `aff_*`, Etsy, Medium's `source`, NYT's `smid`);
+  Amazon's `/ref=…` path segment; redirect wrappers unwrapped (Google `/url`, `l.facebook.com`,
+  `l.instagram.com`, `out.reddit.com`, YouTube `/redirect`, Tumblr, Slack, Messenger, VK) — only
+  into http(s), never for look-alike hosts. What stays keeps its exact spelling and order (raw
+  pairs, not re-encoded); unknown parameters stay. The panel shows the clean link, what was
+  removed (struck-through chips) and the original; Enter copies and returns to the page.
+- **Wayback Machine** (4 tests): `https://web.archive.org/web/*/<url>` (every snapshot, the default)
+  or `…/web/<url>` (newest), without user info or fragment; ↑ ↓ and Enter; opened with
+  `littleJoan.openUrl` in the window — nothing is fetched before.
+- **Copy as Markdown link** (7 tests): `[text](url)` with backslashes, brackets, `*`, `_`,
+  backticks and angle brackets escaped in the text and spaces, parentheses and angle brackets
+  percent-encoded in the address; also HTML (escaped),
+  plain "Title — address" and Org mode; an editable title with an offer to drop a trailing site
+  name ("… - YouTube"); ↑ ↓ format, Enter copies and returns to the page.
+- **JSON** (9 tests): its own parser (RFC 8259, BOM allowed, depth ≤ 256) with messages and
+  line / column that are the same on every engine (trailing commas, single quotes, unclosed
+  strings, bad escapes, leading zeros, extra text…), a caret excerpt, and printers (2 / 4 spaces,
+  tabs, minified; sort keys) that keep every number and string exactly as written (no rounding of
+  `12345678901234567890`); highlighting with text nodes only; Ctrl/Cmd+Enter formats in place.
+- **Text tools** (6 tests): counts (code points, words in any script, lines, UTF-8 bytes,
+  sentences, reading time), nine cases (Title Case keeps small words lower inside), Base64 (UTF-8,
+  URL-safe and unpadded input accepted, invalid input and non-UTF-8 bytes refused) and URL
+  encoding, six line operations (natural sort with Intl.Collator); tools act on the selection or
+  everything, with an Undo (also Ctrl/Cmd+Z right after a tool).
+- **Color tools** (7 tests): hex (3/4/6/8), `rgb()` / `rgba()`, `hsl()` / `hsla()` (deg, turn,
+  rad, grad), `oklch()` (percent forms; out-of-gamut colors lose chroma until they fit) and 23
+  names; hex / RGB / HSL / OKLCH with a Copy each (OKLab with Björn Ottosson's matrices, checked
+  against his reference values); WCAG contrast (see-through colors composited), the AA / AA large /
+  AAA levels, ratios rounded down so 4.499 never reads as 4.5; the theme's colors as chips.
+- **Smoke** (`smoke-bundled.mts`, 8 tests): JSON, Text tools and Color tools open after the
+  productivity panels with sample drafts (`json.png`, `text-tools.png`, `color.png`); then the smoke
+  page and, from the command bar, Ctrl/Cmd+L, `qr`, ↓ ↓ Enter → the QR code page action must come
+  up and have `pageInfo` answered (`pageActionFailures`; required on Windows and Linux, best effort
+  on macOS) → `qr.png`. `pressShortcut` learned L. **Typing on macOS** now posts real key codes
+  (US layout; `scripts/ci/smoke-keys.mts`, 2 tests) instead of key events that carry only a
+  Unicode string — those never reached the app on CI's macOS runners, while ↓ ↓ Enter, sent as
+  key codes, did (LJ31's notes); the macOS rules stay best effort.
+- Found while building, not fixed (Deferred follow-ups): Back after a panel opened a page (Wayback,
+  Clean link's "Open it here") meets the panel's own entry in the engine's history. Also: the World
+  clock's "your time" no longer says "UTC · UTC" when the zone is UTC itself (seen in LJ33's CI).
+- Checked locally in a plain browser with a stand-in SDK (not committed): every panel at 480 × 600,
+  the QR code against Core Image's decoder (above).
+- Files beyond the prompt: `extensions/bundled.test.ts`, `scripts/ci/smoke-bundled.mts` (+ test),
+  `scripts/ci/smoke.mts`, `src-tauri/src/extensions/registry/tests.rs`, README, CHANGELOG,
+  architecture.md, extensions.md.
+- `npm run verify`: 454 TS tests, 256 Rust tests, clippy clean. Disk: 14 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
 
 ### LJ35 — Docs, screenshots, the user's checklist · standard · checkpoint
 
@@ -4531,6 +4623,20 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   `WebsiteDataManager` needs `webkit2gtk` — new crates — and Tauri's `clear_all_browsing_data`
   would wipe the user's cookies and sites too. Options: those calls behind a small platform
   module once a step allows the crates.
+- **Back after a panel opens a page meets the panel's own history entry** (surfaced by LJ34, from
+  reading the code — not seen in CI). A panel's `openUrl(…, { where: "page" })` (Wayback Machine,
+  Clean link's "Open it here") and a link followed from a panel navigate the page webview from
+  the panel, so the engine's history holds the panel (and, when it was opened from a web page, the
+  start page of the detour) before the new page. The toolbar's Back (`history.back()`) then goes to
+  the panel's URL, which the guard refuses (its nonce was used), so Back seems to do nothing; the
+  command bar still opens anything. Options: Back goes `history.go(-n)` past extension and start-page
+  entries (`back_stack` would count them), or the app navigates to the previous web page itself.
+- **macOS CI: synthetic arrow keys never reached a panel** (surfaced by LJ32 / LJ33's CI): 2048
+  got its four arrows on Windows and both Linux jobs but not on macOS, twice (in a window opened
+  from hibernation and in a summoned one), while key codes sent to the command bar do arrive there.
+  Possibly a CI-only matter (the page webview's first responder on an unattended runner), possibly
+  real; the owner's checklist asks whether the games take the keys without a click. Option, if
+  real: make the page webview first responder when a panel commits (`focus_page`).
 - **macOS: a panel opened from hibernation can leave the toolbar unpainted** (surfaced by LJ32's
   CI). With `--extension <id>` while hibernating, the window is built with the command bar and the
   panel's commit can arrive before the bar's own page has loaded; on macOS the toolbar then showed

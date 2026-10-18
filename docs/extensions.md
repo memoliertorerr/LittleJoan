@@ -237,6 +237,10 @@ are atomic. Each extension sees only its own store.
 - **See what Little Joan decided:** start it with the environment variable
   `LITTLEJOAN_SMOKE_LOG=<file>` and it writes events there — `extension-opened <id>`,
   `ext-api <id> <method> ok|<error>`, `ljext-refused <reason> …` and `navigation-refused <url>`.
+- The bundled extensions are worked examples of the rest: `extensions/qr/` is a page action
+  (`pageInfo`), `extensions/clean-link/` a page action that copies (`clipboard`),
+  `extensions/notes/` a command that keeps data (`storage`) and saves as you type, and
+  `extensions/snake/` a canvas game.
 - `extensions/hello/` is the reference: CI opens it on Windows, macOS and Linux and checks that
   storage and the theme work, that Little Joan's IPC is refused, that the CSP blocks a fetch it
   didn't declare, and that registering a service worker fails.

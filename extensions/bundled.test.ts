@@ -27,7 +27,9 @@ function files(dir: string, prefix = ""): string[] {
 
 describe("bundled extensions", () => {
   it("are all here", () => {
-    expect(bundled).toEqual(expect.arrayContaining(["hello", "snake", "2048", "notes", "focus", "clock"]));
+    expect(bundled).toEqual(
+      expect.arrayContaining(["hello", "snake", "2048", "notes", "focus", "clock", "qr", "clean-link", "wayback", "markdown-link", "json", "text-tools", "color"]),
+    );
   });
 
   for (const id of bundled) {
@@ -87,7 +89,7 @@ describe("bundled extensions", () => {
         expect(existsSync(join(dir, "logic.js"))).toBe(true);
         expect(existsSync(join(dir, "logic.test.ts"))).toBe(true);
         const logic = readFileSync(join(dir, "logic.js"), "utf8");
-        expect(logic).not.toMatch(/\b(document|window|littleJoan|localStorage|navigator)\./);
+        expect(logic).not.toMatch(/\b(document|window|littleJoan|localStorage|navigator)\.[A-Za-z_$]/);
       });
     });
   }

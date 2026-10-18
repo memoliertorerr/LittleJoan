@@ -64,6 +64,7 @@ import {
   TYPED,
 } from "./smoke-command.mts";
 import { THEME_RUNS, parseTheme, themeFailures, type ThemeRun } from "./smoke-theme.mts";
+import { macKeyToken } from "./smoke-keys.mts";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
@@ -74,7 +75,7 @@ import {
   parseStore,
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
-import { BUNDLED_PANELS, bundledFailures, keysReached, panelUp, seedFile } from "./smoke-bundled.mts";
+import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -265,6 +266,8 @@ $null = $shell.AppActivate(${appPid})
 Start-Sleep -Milliseconds 400
 [System.Windows.Forms.SendKeys]::SendWait('${text}')`);
   } else if (os === "darwin") {
+    // Real key codes (US layout) where there is one — events that only carry a Unicode string
+    // never reached the app on CI's macOS runners —, the Unicode string otherwise.
     const swift = join(out, "type.swift");
     writeFileSync(
       swift,
@@ -272,18 +275,26 @@ Start-Sleep -Milliseconds 400
 let pid = pid_t(CommandLine.arguments[1]) ?? 0
 NSRunningApplication(processIdentifier: pid)?.activate(options: [])
 usleep(400000)
-for ch in CommandLine.arguments[2] {
+for token in CommandLine.arguments.dropFirst(2) {
+  let kind = token.first
+  let rest = String(token.dropFirst())
   for down in [true, false] {
-    let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
-    var units = Array(String(ch).utf16)
-    event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
-    event?.post(tap: .cghidEventTap)
+    if kind == "k" {
+      let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(rest.filter { $0.isNumber }) ?? 0, keyDown: down)
+      if rest.hasSuffix("s") { event?.flags = .maskShift }
+      event?.post(tap: .cghidEventTap)
+    } else {
+      let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+      var units = Array(rest.utf16)
+      event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+      event?.post(tap: .cghidEventTap)
+    }
     usleep(60000)
   }
 }
 `,
     );
-    run("swift", [swift, String(appPid), text]);
+    run("swift", [swift, String(appPid), ...[...text].map(macKeyToken)]);
   } else {
     run("xdotool", ["type", "--delay", "120", text]);
   }
@@ -327,7 +338,7 @@ for code in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16 };
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37 };
 
 /**
  * Presses Ctrl+<letter> (Cmd+<letter> on macOS) in the app's window: xdotool on Linux, SendKeys
@@ -1032,6 +1043,32 @@ async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, 
     }
     screenshot(panel.shot);
   }
+  // Page actions (LJ34) on the smoke page, from the command bar: Ctrl/Cmd+L, type, ↓ ↓ Enter
+  // (search row first, then the page action; best effort on macOS).
+  for (const action of PAGE_ACTIONS) {
+    const pageFrom = events(logFile).length;
+    await forward(["--show", smokePageUrl], runEnv);
+    await waitFor(`page action ${action.id}: the smoke page`, (e) => e.slice(pageFrom).some((x) => x.event === "title" && x.detail.startsWith("LJ-SMOKE ready")), 30_000, logFile);
+    await sleep(1000);
+    const barFrom = events(logFile).length;
+    pressShortcut("l", runPid);
+    await waitFor(`page action ${action.id}: the command bar`, (e) => count(e.slice(barFrom), "overlay", "true") > 0, 10_000, logFile);
+    await sleep(500);
+    typeText(action.typed, runPid);
+    const typed = await waitFor(
+      `page action ${action.id}: typed`,
+      (e) => e.slice(barFrom).some((x) => x.event === "suggestions" && x.detail.endsWith(`typed=${action.typed.length}`)),
+      15_000,
+      logFile,
+    );
+    if (typed) {
+      await sleep(800);
+      pressKeys(["Down", "Down", "Return"], runPid);
+      await waitFor(`page action ${action.id}: up`, (e) => panelUp(e.slice(barFrom), action.id), 20_000, logFile);
+    }
+    await sleep(1500);
+    screenshot(action.shot);
+  }
   await forward(["--quit"], runEnv);
   if (!(await exited(runPid, 15_000))) {
     await quit(runChild, runPid);
@@ -1128,7 +1165,7 @@ const summary = {
   },
   bundled: {
     count: bundledCount,
-    up: BUNDLED_PANELS.filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
+    up: [...BUNDLED_PANELS, ...PAGE_ACTIONS].filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
     keysReached: bundledCheck.keys,
   },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
@@ -1171,6 +1208,7 @@ const failures = evaluate(
   .concat(commandHelloFailures(extensionCheck.events, { driven: typingDriven }))
   .concat(settingsExtensionsFailures(historyOffEvents, bundledCount))
   .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
+  .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {

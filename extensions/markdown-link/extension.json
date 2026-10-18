@@ -1,0 +1,20 @@
+{
+  "id": "markdown-link",
+  "name": "Copy as Markdown link",
+  "version": "1.0.0",
+  "description": "Copies the page as a link — [Title](address) in Markdown, or HTML, plain text or Org mode — with the title yours to edit.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["pageInfo", "clipboard"],
+  "contributes": {
+    "pageActions": [
+      {
+        "id": "copy",
+        "title": "Copy as Markdown link",
+        "keywords": ["markdown", "link", "copy", "title", "html", "md"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}
