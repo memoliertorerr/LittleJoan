@@ -29,6 +29,7 @@
     "ui",
     "scripts",
     "tests",
+    "extensions",
     "*.mts"
   ]
 }

@@ -73,6 +73,12 @@ fn only_web_pages_are_recorded() {
             "http://ljext.localhost/snake/index.html",
             "http://tauri.localhost/",
         ),
+        // Extension panels, one origin each.
+        ("ljext://snake.localhost/index.html", "tauri://localhost/"),
+        (
+            "http://ljext.snake.localhost/index.html",
+            "http://tauri.localhost/",
+        ),
         ("http://ipc.localhost/open_input", "http://tauri.localhost/"),
         ("http://localhost:1420/index.html", "http://localhost:1420/"),
     ] {

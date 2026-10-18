@@ -14,6 +14,7 @@ use url::Url;
 
 use crate::bar;
 use crate::cookies::{self, SessionCookies};
+use crate::extensions;
 use crate::history_store;
 use crate::phone_mode;
 use crate::placement;
@@ -47,6 +48,17 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
         Action::Create(url) => create(app, url),
         Action::Focus => focus(app),
         Action::FocusAndNavigate(url) => focus(app).and_then(|()| bar::navigate(app, url)),
+        Action::CreateExtension(id) => {
+            if extensions::registry::current(app).get(&id).is_some() {
+                create(app, None).and_then(|()| open_extension(app, &id))
+            } else {
+                // An unknown extension opens nothing (and nothing is kept while hibernating).
+                extensions::registry::forget();
+                missing_extension(&id);
+                Ok(())
+            }
+        }
+        Action::FocusAndExtension(id) => focus(app).and_then(|()| open_extension(app, &id)),
         Action::Destroy => destroy(app),
         Action::Resize { width, height } => resize(app, width, height),
         Action::Nothing => Ok(()),
@@ -98,6 +110,19 @@ pub fn quit<R: Runtime>(app: &AppHandle<R>) {
     app.exit(0);
 }
 
+/// Opens the extension `id`'s first command in the open window (`--extension`).
+fn open_extension<R: Runtime>(app: &AppHandle<R>, id: &str) -> tauri::Result<()> {
+    if let Err(err) = extensions::session::open(app, id, None, None) {
+        eprintln!("little-joan: could not open the extension: {err}");
+        missing_extension(id);
+    }
+    Ok(())
+}
+
+fn missing_extension(id: &str) {
+    smoke::log("extension-missing", id);
+}
+
 fn window_state<R: Runtime>(app: &AppHandle<R>) -> WindowState {
     match app.get_window(LABEL) {
         None => WindowState::Hibernating,
@@ -123,6 +148,8 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
         .visible(false)
         .build()?;
     WAS_FULLSCREEN.store(false, Ordering::Relaxed);
+    // A new window has no extension open yet.
+    extensions::session::reset();
     // Element fullscreen (video): WebView2 needs platform::install_page's handler; WKWebView
     // (wry enables elementFullscreenEnabled) and WebKitGTK (fullscreens the toplevel by
     // default) handle it themselves. See fullscreen.rs; the bar hides meanwhile (bar.rs).
@@ -215,7 +242,9 @@ fn destroy<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             history_store::close(app);
             keep_session_cookies(app);
             release_page(app, &window);
-            window.destroy()
+            let destroyed = window.destroy();
+            extensions::forget_window();
+            destroyed
         }
         None => Ok(()),
     }

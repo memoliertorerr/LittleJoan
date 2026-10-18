@@ -45,6 +45,9 @@ pub struct Settings {
     pub remember_history: bool,
     /// The look: light / dark / system, 1–3 colors, intensity, grain (settings/theme.rs).
     pub theme: Theme,
+    /// Developer mode: unpacked extensions in `<config dir>/extensions/` load too (off by
+    /// default; extensions/registry.rs).
+    pub developer_mode: bool,
 }
 
 impl Default for Settings {
@@ -59,6 +62,7 @@ impl Default for Settings {
             mobile_sites: true,
             remember_history: true,
             theme: Theme::default(),
+            developer_mode: false,
         }
     }
 }
@@ -113,6 +117,10 @@ pub fn parse(json: &str) -> Settings {
         .and_then(Value::as_bool)
         .unwrap_or(defaults.remember_history);
     let theme = theme::parse(map.get("theme"));
+    let developer_mode = map
+        .get("developerMode")
+        .and_then(Value::as_bool)
+        .unwrap_or(defaults.developer_mode);
 
     Settings {
         version: SETTINGS_VERSION,
@@ -124,6 +132,7 @@ pub fn parse(json: &str) -> Settings {
         mobile_sites,
         remember_history,
         theme,
+        developer_mode,
     }
 }
 
@@ -208,6 +217,7 @@ mod tests {
             window_height: 500,
             mobile_sites: false,
             remember_history: false,
+            developer_mode: true,
             theme: Theme {
                 mode: ThemeMode::Dark,
                 colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],
@@ -267,6 +277,22 @@ mod tests {
         let s = parse(r#"{"theme": "dark", "mobileSites": false}"#);
         assert_eq!(s.theme, Theme::default());
         assert!(!s.mobile_sites, "a bad theme leaves the rest alone");
+    }
+
+    #[test]
+    fn developer_mode_is_off_unless_switched_on() {
+        assert!(!Settings::default().developer_mode);
+        assert!(
+            !parse("{}").developer_mode,
+            "settings from before the option existed"
+        );
+        assert!(parse(r#"{"developerMode": true}"#).developer_mode);
+        assert!(
+            !parse(r#"{"developerMode": "yes"}"#).developer_mode,
+            "a wrong type falls back to off"
+        );
+        let json = serde_json::to_string(&Settings::default()).expect("json");
+        assert!(json.contains(r#""developerMode":false"#), "{json}");
     }
 
     #[test]

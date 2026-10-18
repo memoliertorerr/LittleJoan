@@ -299,6 +299,17 @@ pub async fn preview_theme<R: Runtime>(app: AppHandle<R>, theme: Option<Value>) 
     bar::set_theme(&app, &shown);
 }
 
+/// The bar applied a theme: `{ scheme, vars }`, the `--lj-*` variables it computed
+/// (ui/lib/theme.ts). Kept in memory for extension panels (littleJoan.theme); a report that
+/// fails the checks is dropped (extensions/theme.rs).
+#[tauri::command]
+pub async fn set_theme_tokens(tokens: Value) {
+    match crate::extensions::theme::parse(&tokens) {
+        Some(tokens) => crate::extensions::theme::store(tokens),
+        None => eprintln!("little-joan: the bar's theme report didn't pass the checks"),
+    }
+}
+
 /// Every page in history, latest visit first: `[{ url, title, host, lastVisit, visitCount }]`
 /// (the history view; it groups, searches and draws them as text). Empty while no window is
 /// open — only the bar, which lives in that window, asks.

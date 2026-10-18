@@ -1,7 +1,9 @@
-//! macOS: WKWebView's `customUserAgent` (nil = the engine's own user agent).
+//! macOS: WKWebView's `customUserAgent` (nil = the engine's own user agent), and the general
+//! pasteboard (extensions' clipboard.writeText).
 
 use objc2::msg_send;
-use objc2::runtime::AnyObject;
+use objc2::rc::Retained;
+use objc2::runtime::{AnyClass, AnyObject};
 use objc2_foundation::NSString;
 use tauri::{Runtime, Webview};
 
@@ -24,5 +26,26 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     });
     if let Err(err) = result {
         eprintln!("little-joan: could not change the user agent: {err}");
+    }
+}
+
+/// Puts `text` on the general pasteboard as plain text. Main thread only (AppKit).
+pub fn write_clipboard(text: &str) -> Result<(), String> {
+    let class = AnyClass::get(c"NSPasteboard").ok_or_else(|| "no NSPasteboard".to_owned())?;
+    let text = NSString::from_str(text);
+    // NSPasteboardTypeString's value.
+    let kind = NSString::from_str("public.utf8-plain-text");
+    // SAFETY: +generalPasteboard returns the shared pasteboard; -clearContents takes nothing and
+    // -setString:forType: two NSStrings; AppKit is linked (tao) and this runs on the main thread.
+    unsafe {
+        let board: Option<Retained<AnyObject>> = msg_send![class, generalPasteboard];
+        let board = board.ok_or_else(|| "no pasteboard".to_owned())?;
+        let _: isize = msg_send![&*board, clearContents];
+        let written: bool = msg_send![&*board, setString: &*text, forType: &*kind];
+        if written {
+            Ok(())
+        } else {
+            Err("the pasteboard refused the text".to_owned())
+        }
     }
 }

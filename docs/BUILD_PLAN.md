@@ -76,7 +76,7 @@
 | LJ26 | *(v0.2, round 2)* Settings window with tabs (General, Appearance, Extensions, Privacy, About), reached from the command bar | standard | auto | ✅ done |
 | LJ27 | *(v0.2, round 2)* Theme engine: 1–3 colors, intensity, grain, light/dark/system → muted gradients everywhere we draw | strong | auto | ✅ done |
 | LJ28 | *(v0.2, round 2)* Appearance editor: color pads, presets, live preview | standard | auto | ✅ done |
-| LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ⬜ todo |
+| LJ29 | *(v0.2, round 2)* Extension runtime: manifest, registry, `ljext` protocol with per-extension CSP, the narrow API, `--extension <id>` | strong | auto | ✅ done |
 | LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ⬜ todo |
 | LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ⬜ todo |
 | LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ⬜ todo |
@@ -3588,6 +3588,106 @@ Push, open the phase-16 PR into main as a draft, and watch CI until every job is
 honest attempts, then stop).
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **Origins: one per extension on every OS** (the prompt's step 3). macOS / Linux:
+  `ljext://<id>.localhost/<path>` (origin `ljext://<id>.localhost`). Windows: WebView2 can't load
+  custom schemes, so wry serves every `http://ljext.*` request from the handler and turns
+  `http://ljext.` back into `ljext://` first (wry 0.57 `custom_protocol_workaround.rs`, filter
+  `http://ljext.*`); `ljext://<id>/` would have become `http://ljext.<id>/`, a public-looking
+  host — for ids like `app` or `dev` Chromium upgrades HSTS-preloaded TLDs to https, which misses
+  the handler and reaches the internet. So the host carries `.localhost` everywhere and Windows
+  uses `http://ljext.<id>.localhost` (never resolved, never upgraded, a secure context). The app
+  navigates to the Windows form itself (wry's `load_url` doesn't rewrite custom schemes). No
+  shared origin, so localStorage is per extension too; the docs still point authors at
+  `littleJoan.storage`. Recorded under Landmines.
+- **Modules** (`src-tauri/src/extensions/`): `manifest.rs` (strict: unknown fields refused;
+  texts limited, no control characters; permissions `storage`, `clipboard`, `pageInfo`,
+  `network:<host>` — lower-case DNS names, optional `*.`, two labels at least, no IPs, ports or
+  schemes; panels `.html` and icons `.svg` / `.png`, relative, plain), `paths.rs` (plain names
+  only — letters, digits, `. _ -`, no dotfiles, no trailing dot, no Windows device names, at most
+  8 deep, `__lj` reserved — so `..`, absolute paths, drive letters, backslashes and every
+  percent-encoding are refused without decoding anything; on disk the canonical path must stay
+  inside the folder's canonical path), `urls.rs`, `csp.rs`, `registry.rs` (bundled + developer
+  folders; folder name = id; every named file must exist; an unpacked extension can't take a
+  bundled id; at most 64; files ≤ 16 MB), `api.rs` (+ `api/tests.rs`), `protocol.rs`,
+  `storage.rs`, `theme.rs`, `clipboard.rs`, `session.rs`. Tests for manifest and registry live in
+  child `tests.rs` files (as history's do).
+- **Checks, in order** (`api::route`; the scheme is registered for every webview): the webview
+  is `joan-page`; the URL names an existing extension; files / SDK: `GET`, not for a frame
+  (`Sec-Fetch-Dest` iframe / frame / embed / object / fencedframe), the page shows that
+  extension, a plain path of a served type; API: `POST`, `X-LJ-Api: 1` exactly once, `Origin`
+  exactly the extension's origin (once; `null`, other extensions, the other OS's form refused),
+  `Sec-Fetch-Site: same-origin` when present, the page shows that extension **and the app opened
+  it** (the session's id), the method on the allowlist, the permission declared. Every check has
+  its own test with a request that passes all the others. **Additions beyond the prompt, the more
+  restrictive choices:** serving files only while the page shows that extension (otherwise a web
+  page could probe which developer extensions are installed with `<img>`), the frame and
+  same-site checks, `frame-ancestors 'none'`, `X-Frame-Options: DENY`,
+  `Cross-Origin-Resource-Policy: same-origin`, a `Permissions-Policy`, `no-store`, `no-referrer`,
+  and refusing `blob:` / `data:` documents while a panel is shown (they would keep its origin).
+  URL parsing resolves `.` / `..` (also as `%2e`) before any path is checked, and never above the
+  extension's root (tested).
+- **The guard** (`session::NavGate`): opening an extension sets the "expected URL" (exact string,
+  used once, fresh for 5 s) before `bar::navigate`; `allow_page_navigation` admits an extension
+  URL in any form (`ljext:`, `http(s)://ljext.*`) only then. The Reload page action re-arms it for
+  a panel. `navigation::is_allowed_navigation` refuses every extension-like URL (so on macOS and
+  Linux a real site named `ljext.<something>` can't be opened either — accepted), and
+  `is_external_openable`, history, the back trail and Translate ignore them. The bar's guard is
+  `navigation::is_allowed_bar_navigation` and the settings window's `settings_window::may_navigate`,
+  both tested against both forms. WebView2's `NavigationStarting` is main-frame only (frames are
+  not guarded there), which is why serving files needs the page to show the extension.
+- **The API's methods:** storage (`<config dir>/extension-data/<id>.json`, read per call, one
+  lock, atomic write, 1 MB of JSON, keys 1–128 characters, a refused write changes nothing),
+  `theme` (see below), `pageInfo` (null until LJ30's page actions), `openUrl` (absolute http(s),
+  never extension-like; `page` replaces the panel, `browser` hands it to the opener), `close`
+  (back to the web page the panel was opened from, else the start page with the command bar),
+  `clipboard.writeText` — **native** (NSPasteboard via objc2's `msg_send!`, GTK's clipboard, the
+  Win32 clipboard: two features added to the existing `windows` dependency,
+  `Win32_System_DataExchange` and `Win32_System_Memory`; no new crate), because a panel's own
+  `navigator.clipboard` needs a click and the bar can't write without one on WebKit.
+- **Theme tokens:** all theme math is TypeScript, so the bar reports the `--lj-*` variables it
+  painted with a new bar command, `set_theme_tokens` (bar capability only; checked: `--lj-*`
+  names, ≤ 40 of them, short values without `;{}<>\`), kept in memory while the window exists;
+  `theme` waits up to 3 s for the first report (a panel opened with the window can ask before the
+  bar loaded). `apply-theme.ts` gained an `onPaint` hook that only the bar passes.
+- **The toolbar** shows a panel's extension: `session::publish_label` sends
+  `window.littleJoan.setExtension({ name, icon })` (the icon as a base64 `data:` URI made in Rust
+  — the bar can't and mustn't load `ljext:`; a 20-line base64 encoder, tested), again with the
+  bar's `start_info`; `ui/toolbar/logic.ts` checks it (name ≤ 40 characters, icon only
+  `data:image/svg+xml|png;base64`), draws the name with `textContent`, and disables "open in
+  default browser".
+- **Bundled extensions** are embedded by `build.rs` (`$OUT_DIR/bundled_extensions.rs`,
+  `include_bytes!`, folders with an `extension.json`; dotfiles, symlinks and `*.test.*` left
+  out). `extensions/hello/` (manifest, `index.html`, `hello.js`, `hello.css`, `icon.svg`) counts
+  its openings in storage, applies the theme, calls `__TAURI_INTERNALS__.invoke("start_info")`
+  (must reject, 4 s timeout), fetches `https://example.com` with `no-cors` and reports
+  `net=blocked` only when the fetch failed **and** a `securitypolicyviolation` for connect-src
+  named that URL (a plain network failure would say `failed`). The SDK is `extensions/sdk/v1.js`
+  (a classic script defining a frozen global `littleJoan`) with types in `v1.d.ts`;
+  `extensions/` joined `tsconfig.json` (checkJs) and ESLint (with `no-undef` left to tsc for
+  those files, as for TS).
+- **`--extension <id>`** (`cli.rs`, `toggle.rs`: `Command::Extension` → `CreateExtension` /
+  `FocusAndExtension`): opens the extension's first command; an unknown id opens nothing (logged
+  `extension-missing`).
+- **Smoke** (`smoke-extensions.mts`, 5 tests; `tests/smoke/ext-probe.mjs`, 3 tests): its own
+  launch — `--extension hello` (title, `extension-opened`, the panel's `page-loaded`, storage and
+  theme calls `ok`, `extension-hello.png`), then the smoke page with `?ext=probe&base=<hello's
+  origin>`: the SDK-style API call and a simple text/plain POST (5 s timeout each), an `<img>`
+  of hello's icon, `location.href` to the panel; it must report `LJ-EXTPROBE ljext-api=blocked
+  ljext-file=blocked ljext-nav=refused`, with no `ext-api … ok`, no extension `page-loaded` and a
+  `navigation-refused` after it, and hello's `extension-data/hello.json` holding its count and no
+  `smoke-probe` key (`extension-probe.png`). New log events: `extension-opened`,
+  `extension-missing`, `extension-skipped`, `ext-api`, `ljext-refused`, `navigation-refused`.
+- **Files beyond the prompt:** `commands.rs`, `lib.rs`, `capabilities/bar.json`
+  (`set_theme_tokens`), `settings.rs` (`developerMode`), `toggle.rs`, `joan.rs`, `page_actions.rs`,
+  `history.rs`, `back_stack.rs`, `settings_window.rs`, `platform/*.rs` (clipboard), `bar/watch.rs`
+  (the address watcher moved out of `bar.rs` to keep it under 400 lines), `ui/bar.ts`,
+  `ui/toolbar/*`, `ui/lib/apply-theme.ts`, `tsconfig.json`, `eslint.config.mjs`, README (the
+  flag, privacy), SECURITY.md.
+- `npm run verify`: 230 TS tests, 230 Rust tests, clippy clean. Disk: 13 GiB free at the start
+  and after verify; `.cache/target` 1.3 GB.
+
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
 **Verify:** `npm run verify` green, including vitest tests:
@@ -3870,6 +3970,20 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   paints, so a summon can flash the default Mist colors before the user's. Not visible in CI's
   screenshots. Option: also hand the bar the theme in an initialization script (as the settings
   window gets its tab), applied before the first paint.
+- **A panel can leave for any web address** (surfaced by LJ29). `network:` limits what a panel
+  can fetch (CSP `connect-src`), not where it can go: `location.href`, a link, `openUrl` or
+  `window.open` (→ the default browser) can carry data in a URL to any site — visible to the
+  user, since the page changes. Options: a `navigation` permission (or a confirmation) for
+  leaving the panel; CSP's `navigate-to` was never shipped by any engine.
+- **The page webview can load any of the app's own pages** (surfaced by LJ29):
+  `is_allowed_navigation` admits the whole app origin (`tauri://localhost/…`, Windows'
+  `http://tauri.localhost/…`), so a page or panel can navigate it to `bar.html`. Harmless today
+  (`joan-page` has no capability at all), but the page webview only needs `index.html`. Option:
+  admit only the start page there.
+- **A theme change doesn't reach an open panel** (surfaced by LJ29): `littleJoan.theme.get()` is
+  a snapshot; a panel learns of a new theme (Save, a preview, the system switching) only when it
+  asks again. Option: the bar's report also evals a `littleJoan` event into the open panel (Rust,
+  not the panel, decides when).
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -4016,7 +4130,27 @@ Populated from real friction, not speculation:
 - *(LJ20, macOS)* **After `process::exit` with a page open, the next launch's WebKit may load
   nothing** (both webviews stayed blank in CI). Quit closes the window through `destroy` first.
 - *(round 2 planning)* **`navigation.rs` refuses `ljext:`** on macOS and Linux, frames included,
-  while Windows' `http://ljext.localhost` form passes as plain `http`. LJ29 must handle both.
+  while Windows' `http://ljext.localhost` form passes as plain `http`. LJ29 must handle both. →
+  *LJ29: every `http(s)://ljext.*` URL counts as an extension URL on every OS
+  (`extensions::urls::is_ext_like`).*
+- *(LJ29)* **WebView2's custom-scheme workaround is a plain prefix match.** wry 0.57 intercepts
+  every `http://ljext.*` request (`AddWebResourceRequestedFilter("http://ljext.*")`, all request
+  kinds, frames included) and rewrites `http://ljext.` to `ljext://` (every occurrence in the
+  URI) before the handler sees it, so a web page's `http://ljext.evil.com/` request reaches our
+  handler as `ljext://evil.com/`. `Webview::navigate` / wry's `load_url` does **not** apply the
+  workaround: navigate to the `http://ljext.…` form yourself on Windows. A host outside
+  `.localhost` could be upgraded to https by Chromium (HSTS-preloaded TLDs such as `.app`,
+  `.dev`), miss the filter and go to the network, hence `http://ljext.<id>.localhost`.
+- *(LJ29)* **WebView2's `NavigationStarting` is main-frame only** — wry doesn't hook
+  `FrameNavigationStarting`, so on Windows `on_navigation` never sees a frame's navigation (on
+  macOS and Linux it sees frames too). Don't rely on the navigation guard for frames: the `ljext`
+  handler itself refuses files unless the page shows that extension, plus `frame-ancestors`.
+- *(LJ29)* **Custom schemes are registered for every webview** (`register_*_uri_scheme_protocol`
+  in tauri 2.12 adds the handler to each webview the app builds), so the handler must check
+  `UriSchemeContext::webview_label()` — the bar and Settings can request `ljext:` URLs too.
+- *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
+  `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
+  that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.
 
 ---
 

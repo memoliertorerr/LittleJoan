@@ -85,3 +85,21 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     mac::set_mobile(page, mobile);
 }
+
+/// Puts `text` on the system clipboard (littleJoan.clipboard.writeText). Main thread only.
+#[cfg(windows)]
+pub fn write_clipboard(text: &str) -> Result<(), String> {
+    win::write_clipboard(text)
+}
+
+/// Puts `text` on the system clipboard (littleJoan.clipboard.writeText). Main thread only.
+#[cfg(target_os = "linux")]
+pub fn write_clipboard(text: &str) -> Result<(), String> {
+    linux::write_clipboard(text)
+}
+
+/// Puts `text` on the system clipboard (littleJoan.clipboard.writeText). Main thread only.
+#[cfg(target_os = "macos")]
+pub fn write_clipboard(text: &str) -> Result<(), String> {
+    mac::write_clipboard(text)
+}

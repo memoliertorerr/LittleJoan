@@ -12,7 +12,9 @@
 // time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
 // then a relaunch on the same data folder), that history.json recorded the smoke page (and that
 // a run with history off records nothing; that run also opens Settings with `--settings` and
-// `--settings privacy`), then the theme runs (each its own launch with a theme in settings.json:
+// `--settings privacy`), then the extension run (its own launch: `--extension hello`, then the
+// smoke page's probe of what a web page can't do to an extension), then the theme runs (each its
+// own launch with a theme in settings.json:
 // the page, the command bar, the history view and Settings in a two-color theme, light and dark,
 // and the default theme in dark; screenshots in <out>/theme/), then check the logs
 // (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper
@@ -61,6 +63,7 @@ import {
   TYPED,
 } from "./smoke-command.mts";
 import { THEME_RUNS, parseTheme, themeFailures, type ThemeRun } from "./smoke-theme.mts";
+import { extensionFailures, helloOrigin, parseStore } from "./smoke-extensions.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -788,6 +791,39 @@ async function themeRun(run: ThemeRun): Promise<LogEvent[]> {
   return runEvents;
 }
 
+/**
+ * The extension run (LJ29): its own launch on a fresh data folder. `--extension hello` opens the
+ * bundled example, which reports its checks in its title; then the smoke page's probe (a web
+ * page) tries hello's API, one of its files, and a navigation to its panel.
+ */
+async function extensionRun(): Promise<{ events: LogEvent[]; store: string | undefined }> {
+  const logFile = join(out, "smoke-extensions.log");
+  rmSync(logFile, { force: true });
+  const dir = dataDir("extensions", true);
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dir, LITTLEJOAN_SMOKE_LOG: logFile };
+  const runChild = launch(runEnv);
+  await waitFor("extensions: started", (e) => count(e, "started") > 0, 30_000, logFile);
+  await sleep(1500);
+  const runPid = appPid(runChild);
+  await forward(["--extension", "hello"], runEnv);
+  await waitFor("extensions: hello reported", (e) => lastTitle(e, "LJ-EXT hello") !== undefined, 30_000, logFile);
+  await sleep(1500);
+  screenshot("extension-hello.png");
+  const probeUrl = `${smokePageUrl}?ext=probe&base=${encodeURIComponent(helloOrigin(os))}`;
+  await forward(["--show", probeUrl], runEnv);
+  await waitFor("extensions: the probe reported", (e) => lastTitle(e, "LJ-EXTPROBE ljext-api") !== undefined, 40_000, logFile);
+  await sleep(500);
+  screenshot("extension-probe.png");
+  await forward(["--quit"], runEnv);
+  if (!(await exited(runPid, 15_000))) {
+    await quit(runChild, runPid);
+  }
+  return { events: events(logFile), store: readIfThere(join(dir, "extension-data", "hello.json")) };
+}
+
+const extensionCheck = await extensionRun();
+console.log(`extensions: hello ${lastTitle(extensionCheck.events, "LJ-EXT hello") ?? "no report"}; probe ${lastTitle(extensionCheck.events, "LJ-EXTPROBE") ?? "no report"}`);
+
 mkdirSync(join(out, "theme"), { recursive: true });
 const themeRuns: { run: ThemeRun; events: LogEvent[] }[] = [];
 for (const run of THEME_RUNS) {
@@ -865,6 +901,12 @@ const summary = {
     historyView: sawHistoryView(log),
   },
   settings: settingsTabs(historyOffEvents),
+  extensions: {
+    hello: lastTitle(extensionCheck.events, "LJ-EXT hello") ?? null,
+    probe: lastTitle(extensionCheck.events, "LJ-EXTPROBE") ?? null,
+    refused: extensionCheck.events.filter((e) => e.event === "ljext-refused" || e.event === "navigation-refused").map((e) => `${e.event} ${e.detail}`),
+    store: parseStore(extensionCheck.store) ?? null,
+  },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -900,12 +942,14 @@ const failures = evaluate(
   .concat(persistFailures(log, persistCheck))
   .concat(historyFailures(historyCheck))
   .concat(settingsFailures(historyOffEvents))
+  .concat(extensionFailures(extensionCheck.events, parseStore(extensionCheck.store)))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
   const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
-  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, ...themeLogs, firstLogPath, relaunchLogPath]) {
+  const extensionLog = join(out, "smoke-extensions.log");
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, ...themeLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

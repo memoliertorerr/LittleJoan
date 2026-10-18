@@ -189,3 +189,12 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
         eprintln!("little-joan: could not change the user agent: {err}");
     }
 }
+
+/// Puts `text` on the clipboard (and asks GTK to keep it after Little Joan quits). Main thread
+/// only.
+pub fn write_clipboard(text: &str) -> Result<(), String> {
+    let clipboard = gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD);
+    clipboard.set_text(text);
+    clipboard.store();
+    Ok(())
+}

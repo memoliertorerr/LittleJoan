@@ -19,3 +19,9 @@ fix is ready, the advisory can be published with credit to you if you'd like.
 Things that matter most here: anything that lets a web page call into Little Joan (pages are
 meant to get no IPC at all), open non-web URLs or local files, or keep running after the window
 is closed.
+
+Extensions (experimental) have their own model — one origin each, a strict Content-Security-Policy,
+no IPC, and a small API that checks every request (see `docs/architecture.md`, "Extensions"). Also
+report anything that lets a web page call an extension's API, load its files or open it; lets an
+extension reach another extension's data, Little Joan's own screens or commands, files outside its
+folder, or the network beyond the hosts its manifest declares.

@@ -1,0 +1,66 @@
+/* Colors come from Little Joan's theme (littleJoan.theme.apply() sets the --lj-* variables);
+   the fallbacks show before it answers. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--lj-bg-0, Canvas);
+  background-image: var(--lj-gradient, none);
+  color: var(--lj-fg, CanvasText);
+}
+main {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 32px 20px;
+  text-align: center;
+}
+.icon {
+  border-radius: 12px;
+}
+h1 {
+  margin: 12px 0 4px;
+  font-size: 28px;
+}
+h2 {
+  margin: 28px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lj-fg-muted, GrayText);
+}
+#count {
+  color: var(--lj-fg-muted, GrayText);
+}
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  background: var(--lj-panel, transparent);
+  border-radius: 12px;
+}
+li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.2));
+}
+li:last-child {
+  border-bottom: 0;
+}
+li .result {
+  font-weight: 600;
+}
+button {
+  margin-top: 24px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--lj-accent, AccentColor);
+  color: var(--lj-on-selected, #ffffff);
+  font: inherit;
+  cursor: pointer;
+}

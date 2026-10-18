@@ -124,7 +124,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),
   `little-joan --start-at-login on|off`, `little-joan --settings [general|appearance|extensions|privacy|about]`
-  (open Settings on a tab), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
+  (open Settings on a tab), `little-joan --extension <id>` (open an extension, e.g. `hello`;
+  experimental), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
 - **Quit:** tray menu → **Quit Little Joan**, `little-joan --quit`, or Cmd+Q on macOS while
   it's in front.
@@ -194,6 +195,10 @@ hints, Word's non-breaking space); change it here if it does.
 - Web pages get no access to Little Joan's internals: the web view that shows pages can't call
   into the app at all. Only Little Joan's own screens — the bar (address bar and command bar) and
   Settings, each in a web view of its own — can.
+- **Extensions** (experimental) run in that same web view, each on an origin of its own, and
+  can reach only what their manifest asks for through a small checked API; they can fetch from
+  the network only from the hosts they declare. What an extension stores stays in
+  `extension-data/<id>.json` next to `settings.json`.
 
 ## Build from source
 

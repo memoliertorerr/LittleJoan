@@ -1,0 +1,20 @@
+{
+  "id": "hello",
+  "name": "Hello",
+  "version": "1.0.0",
+  "description": "The example extension: it says hello, counts how often it was opened, and shows what an extension can and can't do.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "Say hello",
+        "keywords": ["hello", "example", "extension"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

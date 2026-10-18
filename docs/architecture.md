@@ -36,6 +36,11 @@ scripts/icon-geometry.mts          the original icon artwork as pure shape funct
 scripts/make-icons.mts             renders the app icon and the macOS tray template
 scripts/theme-css.mts              writes ui/lib/theme-defaults.css (`npm run theme:css`)
 scripts/copy-icons.mts             copies the desktop icon set from `tauri icon` output
+extensions/<id>/                   bundled extensions (embedded at build time by build.rs): an
+                                   extension.json and plain web files; hello/ is the example and
+                                   the smoke test's target
+extensions/sdk/v1.js, v1.d.ts      the extension SDK (served to panels at /__lj/sdk/v1.js) and its
+                                   types
 ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above the page, or the
                                    command bar over the whole window; DOM glue only
 ui/bar-logic.ts                    the address field: never clobber an edit (unit-tested)
@@ -57,8 +62,9 @@ ui/history/view.ts                 draws the history list by day, as text only (
 ui/history/history.ts              the history view in the overlay: history_list, search, keys,
                                    mouse, remove, clear; DOM glue only
 ui/history/history.css             the history view's styles (linked by bar.html)
-ui/toolbar/logic.ts                the toolbar: the domain shown, back / open-in-browser enabled,
-                                   macOS from the user agent (pure, unit-tested)
+ui/toolbar/logic.ts                the toolbar: the domain shown (or an extension's name and
+                                   icon), back / open-in-browser enabled, macOS from the user
+                                   agent (pure, unit-tested)
 ui/toolbar/toolbar.ts              the toolbar's buttons and site; DOM glue only
 ui/index.html                      the page webview's first page: a plain background, no script
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
@@ -87,11 +93,12 @@ ui/settings.css                    the settings window's styles (style.css has t
 ui/style.css                       shared styles, all colors from the theme's --lj-* variables;
                                    `.themed` = the gradient with the grain on top
 src-tauri/Cargo.toml               crate little-joan (lib little_joan_lib + bin)
-src-tauri/build.rs                 tauri-build + the app manifest (which commands exist)
+src-tauri/build.rs                 tauri-build + the app manifest (which commands exist); embeds
+                                   extensions/<id>/ ($OUT_DIR/bundled_extensions.rs)
 src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_page, set_overlay,
                                    go_back, open_in_browser, hibernate, history_list, suggest,
                                    history_remove, history_clear, open_settings, start_info,
-                                   set_start_at_login; drag the window
+                                   set_start_at_login, set_theme_tokens; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, clear history, preview a theme, close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
@@ -119,6 +126,16 @@ src-tauri/src/bar.rs               its two webviews (bar + page): build, pushing
                                    address to the bar, focus, navigation
 src-tauri/src/bar/view.rs          the view state: toolbar / overlay / element fullscreen,
                                    applied to the webviews (layout, show / hide, Linux packing)
+src-tauri/src/bar/watch.rs         the once-a-second check of the page's address
+src-tauri/src/extensions/          extensions (experimental; below): mod.rs (the model),
+                                   manifest.rs (extension.json, strict), paths.rs (plain paths,
+                                   no traversal, no symlink out), urls.rs (one origin per
+                                   extension, per OS), csp.rs (the policy and headers),
+                                   registry.rs (bundled + developer folders), api.rs (every
+                                   request check; tests in api/tests.rs), protocol.rs (the
+                                   `ljext` handler), storage.rs, theme.rs, clipboard.rs,
+                                   session.rs (the open panel, the navigation gate, the toolbar
+                                   label) — pure parts unit-tested
 src-tauri/src/page_address.rs      the page's address from its load events; when the engine may
                                    be asked for it (pure, tested)
 src-tauri/src/back_stack.rs        whether the toolbar's back button has somewhere to go: this
@@ -134,7 +151,8 @@ src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fal
                                    with rollback (Registrar trait), suspend while recording
 src-tauri/src/commands.rs          bar: open_input, page_url, focus_page, set_overlay, go_back,
                                    open_in_browser, hibernate, start_info, history_list, suggest,
-                                   history_remove, open_settings; settings: get_settings,
+                                   history_remove, open_settings, set_theme_tokens; settings:
+                                   get_settings,
                                    save_settings, suspend_shortcut; set_start_at_login and
                                    history_clear (both)
 src-tauri/src/autostart.rs         start at login: tauri-plugin-autostart (Rust API only), the
@@ -161,14 +179,16 @@ src-tauri/permissions/autogenerated/  per-command permissions written by tauri-b
 src-tauri/src/tray.rs              tray icon + menu (Open, Translate Page, Open Page in Browser,
                                    Settings…, Quit); page items enabled only while a page is open
 src-tauri/src/input.rs             start-field input → http(s) URL or a search (SearchEngine)
-src-tauri/src/navigation.rs        which URLs the page may navigate to / hand to the OS browser
+src-tauri/src/navigation.rs        which URLs the page and the bar may navigate to / hand to the
+                                   OS browser (never an extension URL)
 src-tauri/src/translate.rs         Google Translate proxy URL, language codes, LANGUAGES list
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/settings/theme.rs    the `theme` field: mode, 1–3 colors, intensity, grain (tolerant
                                    parse, tested; the default matches ui/lib/presets.ts)
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
-                                   --start-at-login on|off / --settings [tab] / --quit parsing
+                                   --start-at-login on|off / --settings [tab] / --extension <id> /
+                                   --quit parsing
 scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide, start at
                                    login on/off, cookies and storage across close and quit),
                                    reads the OS login entry, screenshots
@@ -177,9 +197,13 @@ scripts/ci/smoke-command.mts       CI: the command bar's and history view's smok
                                    unit-tested
 scripts/ci/smoke-theme.mts         CI: the theme runs (themes, screenshots) and their rules,
                                    unit-tested
+scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report, the probe),
+                                   unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
                                    with ?persist=set|check, the cookie and localStorage check
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
+tests/smoke/ext-probe.mjs          the smoke page's ?ext=probe: a web page trying an extension's
+                                   API, files and panel (unit-tested)
 .github/workflows/ci.yml           verify on ubuntu-24.04, windows-latest, macos-latest; package; smoke
 ```
 
@@ -260,7 +284,7 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `core:window:allow-start-dragging` (the toolbar's drag regions) |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
@@ -287,6 +311,7 @@ settings window's `core:window:allow-close`).
 | `history_remove(url)` | the command bar (Shift+Delete on a history row), the history view (× or Shift+Delete) | forget that record and rewrite `history.json` at once; returns whether there was one |
 | `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
 | `preview_theme(theme?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` (checked like a saved one, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
+| `set_theme_tokens(tokens)` | the bar, each time it paints a theme (`apply-theme.ts`'s `onPaint`) | keep `{ scheme, vars }` — the `--lj-*` variables it computed — in memory for extension panels (`littleJoan.theme`); checked first (names `--lj-*`, short CSS values without `;{}<>\`), a bad report is dropped; forgotten when the window closes |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
@@ -326,6 +351,7 @@ sources):
 |---|---|---|---|
 | `settings.json` | `%APPDATA%\io.github.memoliertorerr.littlejoan\` | `~/Library/Application Support/io.github.memoliertorerr.littlejoan/` | `~/.config/io.github.memoliertorerr.littlejoan/` |
 | Cookies and site data | `%LOCALAPPDATA%\io.github.memoliertorerr.littlejoan\` (the WebView2 user data folder, `EBWebView\` inside): Tauri forces `app_local_data_dir` when the app sets no `data_directory` | WebKit's `defaultDataStore`, keyed by the bundle id (under `~/Library/WebKit/` and `~/Library/HTTPStorages/`); `data_directory` does nothing there | `~/.local/share/io.github.memoliertorerr.littlejoan/` (Tauri forces `app_local_data_dir`); cookies are a text file, `cookies`, there |
+| Extension storage, developer extensions | `extension-data\<id>.json`, `extensions\<id>\` next to `settings.json` | the same, next to `settings.json` | the same, next to `settings.json` |
 | With `LITTLEJOAN_DATA_DIR` (dev builds, CI) | `<dir>\settings.json`, `<dir>\webview\` | `<dir>/settings.json`; site data stays in WebKit's default store | `<dir>/settings.json`, `<dir>/webview/` |
 
 Switching between a dev build and the installed app therefore looks like a logout on Windows and
@@ -422,8 +448,9 @@ shows the error.
 
 ## The page
 
-- **Navigation guard** (`on_navigation` → `navigation::is_allowed_navigation`): web schemes,
-  engine-internal schemes, and the app origin only.
+- **Navigation guard** (`on_navigation` → `extensions::session::allow_page_navigation`): web
+  schemes, engine-internal schemes, and the app origin (`navigation::is_allowed_navigation`); an
+  extension URL only when the app opened it (above). Refusals are logged.
 - **Title:** the window title follows the page title (`on_document_title_changed`).
 - **New windows** (`target=_blank`, `window.open`): denied inside Little Joan; web URLs are
   handed to the OS default browser (`tauri_plugin_opener::open_url`, used as a plain function —
@@ -601,6 +628,69 @@ WebKitGTK differ in CSS color-4 support, so no stylesheet uses `oklch()` or `col
   Sand, Sage, Lagoon, Dusk, Ember, Orchid, Glacier, Meadow, Berry, Graphite); a preset sets the
   colors, intensity and grain, never the mode.
 
+## Extensions (experimental)
+
+Extensions are small web apps — an `extension.json` and plain HTML, CSS and JavaScript — that
+open as **panels** in the page window. Bundled ones live in the repository's `extensions/<id>/`
+and are embedded into the binary at build time (`build.rs` → `$OUT_DIR/bundled_extensions.rs`,
+`include_bytes!`); with **Developer mode** on (`developerMode` in settings.json, off by default)
+unpacked folders in `<config dir>/extensions/<id>/` load too. `little-joan --extension <id>`
+opens one (its first command). The registry is read when first needed and forgotten when the
+window closes. The authors' guide is LJ30's `docs/extensions.md`.
+
+```
+ page window "joan"
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │ joan-bar  (trusted: ui/bar.html, the app's origin, capabilities/bar.json)    │
+ │   toolbar · command bar · history view — extension names / icons as TEXT    │
+ │   reports the theme's colors ──set_theme_tokens──┐                           │
+ ├──────────────────────────────────────────────────┼───────────────────────────┤
+ │ joan-page  (NO capability at all: capability_tests.rs)                        │
+ │   web pages ── http(s) ──► the web                 │                          │
+ │   panels: top-level ljext://<id>.localhost/…       │  (http://ljext.<id>.     │
+ │           (one origin per extension; CSP)          │   localhost on Windows)  │
+ │      │ fetch /__lj/api/v1/<method> (POST, X-LJ-Api: 1, same origin)          │
+ └──────┼───────────────────────────────────────────┼───────────────────────────┘
+        ▼                                            ▼
+  Rust `ljext` handler (extensions/protocol.rs) ── checks (api.rs) ── methods: storage
+  (extension-data/<id>.json), theme (the bar's colors), pageInfo, openUrl, clipboard, close
+```
+
+**What each layer enforces**
+
+| Check | Where | Tests |
+|---|---|---|
+| The page webview has no IPC; no capability names `joan-page`, its window, or remote URLs | `capabilities/*.json` | `capability_tests.rs` |
+| Extension code never runs in the bar or Settings: their navigation guards refuse extension URLs in every form; the handler refuses every webview but `joan-page` | `navigation::is_allowed_bar_navigation`, `settings_window::may_navigate`, `api::route` | `navigation::tests::the_bar_stays_on_the_app_and_never_opens_an_extension`, `settings_window::tests::settings_stays_on_the_app_and_never_opens_an_extension`, `api::tests::only_the_page_webview_may_ask` |
+| One origin per extension: `ljext://<id>.localhost` (macOS, Linux), `http://ljext.<id>.localhost` (Windows — wry serves every `http://ljext.*` request from the handler; `.localhost` keeps it off the network and HSTS upgrades) | `urls.rs` | `urls::tests::*` |
+| `ljext:` and every `http(s)://ljext.*` URL are never plain web: not allowed by the web rules, not recorded in history, not counted by back, not handed to the default browser, not translated | `urls::is_ext_like`, `navigation.rs`, `history.rs`, `back_stack.rs`, `page_actions.rs` | `navigation::tests::extension_urls_are_never_web_pages`, `history::tests::only_web_pages_are_recorded`, `back_stack::tests::extension_panels_are_not_pages_to_go_back_to`, `page_actions::tests::translate_target_skips_extension_panels` |
+| The page webview navigates to an extension URL only when the app opened exactly that URL (an "expected" flag, used once, fresh for 5 s); web pages can't, in any form; a shown panel can't turn into a `blob:` / `data:` document | `session::NavGate`, `session::page_may_navigate` | `session::tests::*`; smoke: the probe's `location.href` is refused |
+| Files and the SDK are served only to `joan-page`, only while it shows that extension (opened by the app), only for `GET`, never for a frame (`Sec-Fetch-Dest`), only plain paths of known types | `api::route` | `api::tests::*` (one test per check); smoke: the probe's `<img>` is blocked |
+| Paths: plain names only (letters, digits, `. _ -`), no `..`, no absolute paths or drive letters, no backslashes, no percent-encoding (so no encoded traversal), no dotfiles or Windows device names, `__lj/` reserved; on disk the real path (symlinks followed) must stay in the folder | `paths.rs` | `paths::tests::*`, `registry::tests::developer_files_never_come_from_outside_their_folder`, `api::tests::dot_segments_resolve_inside_the_extension` |
+| The CSP: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' <declared https hosts>; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, plus `nosniff`, `X-Frame-Options: DENY`, `Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: no-referrer`, a `Permissions-Policy` denying camera, microphone, geolocation, clipboard-read …, `Cache-Control: no-store`, never a CORS header | `csp.rs` | `csp::tests::*`; smoke: hello's fetch to example.com reports `net=blocked` (a CSP violation) |
+| The API: `POST`, `X-LJ-Api: 1` exactly once (which also forces a refused CORS preflight for a web page), `Origin` exactly the extension's origin (once), `Sec-Fetch-Site: same-origin` when sent, the page showing that extension, a method on the allowlist (`storage.get/set/remove/keys`, `theme`, `pageInfo`, `openUrl`, `clipboard.writeText`, `close`), and the method's manifest permission | `api::route` | `api::tests::*`; smoke: the probe's API calls are refused and nothing reaches hello's storage |
+| Storage: keys 1–128 characters, 1 MB of JSON per extension, a refused write changes nothing, one file per extension, atomic writes | `storage.rs` | `storage::tests::*` |
+| Manifests: strict (unknown fields refused), `id` `^[a-z0-9][a-z0-9-]{1,31}$`, `apiVersion` 1, permissions from `storage`, `clipboard`, `pageInfo`, `network:<host>` (lower-case DNS names, optional `*.`, at least two labels, no IPs or ports), panels `.html` inside the folder, an icon `.svg` / `.png` | `manifest.rs` | `manifest::tests::*`, `registry::tests::the_shipped_extensions_are_all_valid` |
+| What extensions supply is drawn as text: the toolbar's name through `textContent`, the icon only as a checked `data:image/(svg+xml|png);base64` URI in an `<img>` | `ui/toolbar/`, `session::publish_label` | `ui/toolbar/logic.test.ts` |
+
+**The API** (SDK: `extensions/sdk/v1.js`, a global `littleJoan`). Every call is a same-origin
+`POST /__lj/api/v1/<method>` with a JSON object body (at most 1 MB + 64 KB) and answers
+`{ "ok": true, "value": … }` or `{ "ok": false, "error": "<code>", "message": … }`:
+
+| Method | Permission | Does |
+|---|---|---|
+| `storage.get {key}` / `storage.set {key, value}` / `storage.remove {key}` / `storage.keys` | `storage` | the extension's own store, `<config dir>/extension-data/<id>.json`, read per call, written atomically; 1 MB, keys 1–128 characters |
+| `theme` | — | `{ scheme, vars }`: the `--lj-*` variables the bar painted last (`set_theme_tokens`); waits up to 3 s for the bar's first report |
+| `pageInfo` | `pageInfo` | the URL and title the panel was opened for (page actions, LJ30), or null |
+| `openUrl {url, where}` | — | an absolute http(s) URL (never an extension URL) in the page (`page`, the default; the panel goes away) or the default browser (`browser`) |
+| `clipboard.writeText {text}` | `clipboard` | the system clipboard, natively (NSPasteboard, GTK, Win32), at most 1 MB |
+| `close` | — | back to the web page the panel was opened from, or to the command bar |
+
+**Known limits** (documented, not enforced): `network:` limits what a panel can *fetch*, not where
+it can *go* — a panel can navigate the page to a web address (or `openUrl`), which the user sees.
+A panel can use the web's own clipboard API (after a click), like any page. Tauri's IPC object is
+visible in panels as in web pages, and every call is refused.
+
 ## Page size and phone mode
 
 - **The page always fills the window minus the bar, in logical pixels.** `bar::apply_layout`
@@ -675,7 +765,10 @@ close, set again in the new window; counts only), `history-visit <kind> <url>` (
 recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl/Cmd+Y opened
 the history view), `history-list <pages>` (the history view asked for the pages; a count only),
 `theme <mode> colors=<n>` (the bar asked for its theme; never the colors), `theme-preview <mode>
-colors=<n> | ended` (Settings previewed a theme; the preview ended when it closed unsaved).
+colors=<n> | ended` (Settings previewed a theme; the preview ended when it closed unsaved),
+`extension-opened <id>`, `extension-missing <id>`, `extension-skipped <folder> <reason>`,
+`ext-api <id> <method> <ok | error code>` (an answered API call), `ljext-refused <reason>
+<webview> <url>` (a refused `ljext` request), `navigation-refused <url>` (the page's guard).
 Without the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
@@ -806,7 +899,15 @@ and pushes to `main`:
   general`, `settings-loaded`; screenshot `settings-general.png`), `--settings privacy` must
   switch it to Privacy (`settings-privacy.png`, where Remember history is off), `--settings
   appearance` to the theme editor (`settings-appearance.png`), and the page window must not
-  open. Then the **theme runs** (`smoke-theme.mts`), each its own launch on a
+  open. Then the **extension run** (`smoke-extensions.mts`), its own launch: `--extension hello`
+  must load hello's panel and report `LJ-EXT hello storage=ok theme=ok ipc=denied net=blocked`
+  (screenshot `extension-hello.png`), with its storage file counting the visit; then the smoke page
+  with `?ext=probe&base=<hello's origin>` tries hello's API (as the SDK would, and as a simple
+  request), one of its files (as an image) and `location.href` to its panel, and must report
+  `LJ-EXTPROBE ljext-api=blocked ljext-file=blocked ljext-nav=refused`, with no API call
+  answered, no extension URL loaded, a `navigation-refused` in the log and nothing written to
+  hello's storage (log `smoke-extensions.log`, `extension-probe.png`). Then the **theme runs**
+  (`smoke-theme.mts`), each its own launch on a
   fresh data folder whose `settings.json` carries a theme (so the main run's memory numbers
   don't move): a two-color theme with grain 0.4 in light (`theme/page.png`,
   `theme/command-bar.png`, `theme/history.png`, `theme/settings.png` — Settings on Appearance)

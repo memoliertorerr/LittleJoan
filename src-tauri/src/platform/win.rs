@@ -3,6 +3,7 @@
 //! `ContainsFullScreenElementChanged`, which WebView2 leaves to the host app.
 
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::time::Duration;
 
 use tauri::{AppHandle, Manager, Runtime, Webview, Window};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -12,6 +13,11 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
 use webview2_com::{
     AcceleratorKeyPressedEventHandler, ContainsFullScreenElementChangedEventHandler,
 };
+use windows::Win32::Foundation::{GlobalFree, HANDLE};
+use windows::Win32::System::DataExchange::{
+    CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+};
+use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
@@ -178,5 +184,48 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     });
     if let Err(err) = result {
         eprintln!("little-joan: could not reach the webview: {err}");
+    }
+}
+
+/// The clipboard's Unicode text format (Win32's CF_UNICODETEXT, 13), without the Ole bindings.
+const CF_UNICODETEXT: u32 = 13;
+
+/// Puts `text` on the clipboard as Unicode text. Main thread only. The clipboard may be held by
+/// another program for a moment, so opening it is tried a few times.
+pub fn write_clipboard(text: &str) -> Result<(), String> {
+    let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: the clipboard is opened (with no owner window, as clipboard libraries do), filled
+    // with one movable global block holding the NUL-terminated UTF-16 text — which the system
+    // owns once SetClipboardData succeeds, and which is freed here when it fails — and closed
+    // again on every path.
+    unsafe {
+        let mut opened = OpenClipboard(None);
+        for _ in 0..5 {
+            if opened.is_ok() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+            opened = OpenClipboard(None);
+        }
+        opened.map_err(|err| format!("the clipboard is busy: {err}"))?;
+        let written = (|| -> windows::core::Result<()> {
+            EmptyClipboard()?;
+            let memory = GlobalAlloc(GMEM_MOVEABLE, wide.len() * std::mem::size_of::<u16>())?;
+            let target = GlobalLock(memory).cast::<u16>();
+            if target.is_null() {
+                let _ = GlobalFree(Some(memory));
+                return Err(windows::core::Error::from_thread());
+            }
+            std::ptr::copy_nonoverlapping(wide.as_ptr(), target, wide.len());
+            // Returns "failed" with no error once the block is unlocked; nothing to handle.
+            let _ = GlobalUnlock(memory);
+            if let Err(err) = SetClipboardData(CF_UNICODETEXT, Some(HANDLE(memory.0))) {
+                let _ = GlobalFree(Some(memory));
+                return Err(err);
+            }
+            Ok(())
+        })();
+        let _ = CloseClipboard();
+        written.map_err(|err| err.to_string())
     }
 }

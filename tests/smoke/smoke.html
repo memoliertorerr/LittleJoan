@@ -67,6 +67,7 @@
         requestFullscreen,
         viewportTitle,
       } from "./smoke-logic.mjs";
+      import { probeApi, probeFile, probeRequest, probeTitle } from "./ext-probe.mjs";
 
       const stage = document.getElementById("stage");
       const status = document.getElementById("status");
@@ -85,7 +86,11 @@
       // ?persist=set|check&t=<token>: the login-persistence check (cookies + localStorage). It
       // reports only that, so the title stays put for the smoke test to read.
       const persist = persistRequest(location.search);
-      if (persist) {
+      // ?ext=probe&base=<an extension's origin>: what a web page can't do to an extension.
+      const probe = probeRequest(location.search);
+      if (probe) {
+        void runProbe(probe.base);
+      } else if (persist) {
         show(
           persist.mode === "set"
             ? persistSet(document, localStorage, persist.token)
@@ -93,6 +98,37 @@
         );
       } else {
         startCodecAndViewportReports();
+      }
+
+      async function runProbe(base) {
+        show("LJ-EXTPROBE running");
+        const loadImage = (src) =>
+          new Promise((done) => {
+            const img = new Image();
+            const timer = setTimeout(() => done(false), 3000);
+            img.onload = () => {
+              clearTimeout(timer);
+              done(true);
+            };
+            img.onerror = () => {
+              clearTimeout(timer);
+              done(false);
+            };
+            img.src = src;
+          });
+        // A request that never settles didn't succeed either.
+        const fetchWithin = (url, init) =>
+          Promise.race([
+            fetch(url, init),
+            new Promise((_, fail) => setTimeout(() => fail(new Error("no answer")), 5000)),
+          ]);
+        const api = await probeApi(fetchWithin, base);
+        const file = await probeFile(loadImage, base);
+        // Last, try to take the page webview to the extension's panel: the app must refuse it
+        // (the page stays, and reports). If it went through, the panel's own title shows instead.
+        location.href = `${base}/index.html`;
+        await new Promise((done) => setTimeout(done, 2500));
+        show(probeTitle({ api, file, nav: "refused" }));
       }
 
       function startCodecAndViewportReports() {

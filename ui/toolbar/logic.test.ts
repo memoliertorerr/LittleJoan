@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_DOMAIN, displayDomain, isMac, middleEllipsis, siteFor, toolbarView } from "./logic.ts";
+import { MAX_DOMAIN, displayDomain, extensionLabel, isMac, middleEllipsis, siteFor, toolbarView } from "./logic.ts";
 
 describe("the domain shown", () => {
   it("strips www.", () => {
@@ -41,18 +41,48 @@ describe("the toolbar", () => {
   const page = "http://127.0.0.1:5000/smoke.html";
 
   it("has no domain and no working buttons without a page", () => {
-    expect(toolbarView("", true)).toEqual({ domain: "", site: "", back: false, openInBrowser: false });
+    expect(toolbarView("", true)).toEqual({ domain: "", site: "", icon: null, back: false, openInBrowser: false });
   });
 
   it("enables back only once the page navigated within this window", () => {
     // A new window: Rust's counter says there is nowhere to go back to yet.
-    expect(toolbarView(page, false)).toEqual({ domain: "127.0.0.1", site: "127.0.0.1:5000", back: false, openInBrowser: true });
+    expect(toolbarView(page, false)).toEqual({ domain: "127.0.0.1", site: "127.0.0.1:5000", icon: null, back: false, openInBrowser: true });
     // After a second page in the same window.
     expect(toolbarView("https://example.com/next", true).back).toBe(true);
   });
 
   it("never offers web actions for the app's own pages", () => {
-    expect(toolbarView("tauri://localhost/index.html", true)).toEqual({ domain: "", site: "", back: false, openInBrowser: false });
+    expect(toolbarView("tauri://localhost/index.html", true)).toEqual({ domain: "", site: "", icon: null, back: false, openInBrowser: false });
+  });
+});
+
+describe("an extension's panel", () => {
+  const icon = "data:image/svg+xml;base64,PHN2Zy8+";
+
+  it("shows the extension's name and icon, and never the default browser", () => {
+    const label = extensionLabel({ name: "Hello", icon });
+    expect(toolbarView("", false, label)).toEqual({ domain: "Hello", site: "", icon, back: false, openInBrowser: false });
+    expect(toolbarView("", true, label).back).toBe(true);
+  });
+
+  it("takes only a checked label from Rust", () => {
+    expect(extensionLabel(null)).toBeNull();
+    expect(extensionLabel({ name: "" })).toBeNull();
+    expect(extensionLabel({ name: "x".repeat(41) })).toBeNull();
+    expect(extensionLabel({ name: "  Notes  ", icon: null })).toEqual({ name: "Notes", icon: null });
+    // Markup in the name stays text (toolbar.ts draws it with textContent).
+    expect(extensionLabel({ name: "<img src=x onerror=alert(1)>" })?.name).toBe("<img src=x onerror=alert(1)>");
+    for (const bad of [
+      "https://example.com/icon.svg",
+      "ljext://hello.localhost/icon.svg",
+      "data:text/html;base64,PHNjcmlwdD4=",
+      "data:image/svg+xml,<svg onload=alert(1)>",
+      "javascript:alert(1)",
+      `${icon}"`,
+    ]) {
+      expect(extensionLabel({ name: "Hello", icon: bad })?.icon).toBeNull();
+    }
+    expect(extensionLabel({ name: "Hello", icon: "data:image/png;base64,iVBORw0KGgo=" })?.icon).toBe("data:image/png;base64,iVBORw0KGgo=");
   });
 });
 

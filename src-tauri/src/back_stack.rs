@@ -3,8 +3,9 @@
 //! Counted natively from this window's own page loads, since the page webview has no IPC and
 //! Tauri 2.12 has no "can go back" query: a trail of the web pages that finished loading. A load
 //! of the page just before the last one is a step back (the trail shrinks), a load of the last
-//! one again is a reload, anything else is a new page. The app's own pages and `about:` pages
-//! don't count, so going back to the start page never looks like somewhere to go.
+//! one again is a reload, anything else is a new page. The app's own pages, `about:` pages and
+//! extension panels don't count, so going back to the start page never looks like somewhere to
+//! go.
 
 use url::Url;
 
@@ -26,7 +27,10 @@ impl BackStack {
 
     /// The page finished loading `url`. Returns whether `can_go_back` changed.
     pub fn loaded(&mut self, url: &Url, app_origin: &Url) -> bool {
-        if !matches!(url.scheme(), "http" | "https") || keys::is_app_url(app_origin, url) {
+        if !matches!(url.scheme(), "http" | "https")
+            || keys::is_app_url(app_origin, url)
+            || crate::extensions::urls::is_ext_like(url)
+        {
             return false;
         }
         let mut page = url.clone();
@@ -72,6 +76,19 @@ mod tests {
         // The start page and the first web page: still nothing before it but the start page.
         assert!(!stack.loaded(&url("tauri://localhost/index.html"), &origin()));
         assert!(!stack.loaded(&url("https://a.test/"), &origin()));
+        assert!(!stack.can_go_back());
+    }
+
+    #[test]
+    fn extension_panels_are_not_pages_to_go_back_to() {
+        let mut stack = BackStack::new();
+        stack.loaded(&url("https://a.test/"), &origin());
+        for panel in [
+            "ljext://hello.localhost/index.html",
+            "http://ljext.hello.localhost/index.html",
+        ] {
+            assert!(!stack.loaded(&url(panel), &origin()), "{panel}");
+        }
         assert!(!stack.can_go_back());
     }
 

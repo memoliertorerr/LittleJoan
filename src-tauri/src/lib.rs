@@ -9,6 +9,7 @@ pub mod bar;
 pub mod cli;
 pub mod commands;
 pub mod cookies;
+pub mod extensions;
 pub mod fullscreen;
 pub mod history;
 pub mod history_store;
@@ -82,8 +83,16 @@ pub fn run() {
             commands::history_remove,
             commands::history_clear,
             commands::open_settings,
-            commands::preview_theme
+            commands::preview_theme,
+            commands::set_theme_tokens
         ])
+        // Extension panels and their API (extensions/protocol.rs). Registered for every
+        // webview; each request is checked (extensions/api.rs), and only the page webview's
+        // are ever answered.
+        .register_asynchronous_uri_scheme_protocol(
+            extensions::urls::SCHEME,
+            extensions::protocol::handle,
+        )
         .on_window_event(|window, event| {
             joan::on_window_event(window, event);
             settings_window::on_window_event(window, event);

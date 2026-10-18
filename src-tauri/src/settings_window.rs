@@ -94,7 +94,7 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
             ))
             // A trusted window stays on the app's own pages; links (About's repository link)
             // open in the default browser (web URLs only).
-            .on_navigation(|url| keys::is_app_url(&keys::app_origin(), url))
+            .on_navigation(|url| may_navigate(url, &keys::app_origin()))
             .on_new_window(|url, _features| {
                 if navigation::is_external_openable(&url)
                     && let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>)
@@ -143,9 +143,35 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     }
 }
 
+/// The settings window's navigation guard: the app's own pages only — never a web page, never an
+/// extension's panel in any form.
+fn may_navigate(url: &url::Url, app_origin: &url::Url) -> bool {
+    keys::is_app_url(app_origin, url) && !crate::extensions::urls::is_ext_like(url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_stays_on_the_app_and_never_opens_an_extension() {
+        let parse = |s: &str| url::Url::parse(s).expect("valid");
+        for origin in ["tauri://localhost/", "http://tauri.localhost/"] {
+            let origin = parse(origin);
+            assert!(may_navigate(
+                &origin.join("settings.html").expect("join"),
+                &origin
+            ));
+            for s in [
+                "ljext://hello.localhost/index.html",
+                "http://ljext.hello.localhost/index.html",
+                "https://github.com/memoliertorerr/LittleJoan",
+                "about:blank",
+            ] {
+                assert!(!may_navigate(&parse(s), &origin), "{s}");
+            }
+        }
+    }
 
     #[test]
     fn tabs_go_by_name_in_any_case() {
