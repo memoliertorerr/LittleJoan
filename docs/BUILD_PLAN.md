@@ -117,9 +117,10 @@ view change while its page loaded) is PR #16 on `lj/p15-themes`, merged once ver
 smoke are green. Phase 16 (LJ29 → LJ31: the extension platform — the `ljext` runtime with one
 origin per extension, a CSP from the manifest and a checked API, extensions in the command bar and
 Settings with developer mode and `docs/extensions.md`, and the built-in quick answers) is PR #17 on
-`lj/p16-extensions`. It is security-critical, so it is **not** merged by the agent: an
-independent security review comes first, then the merge decision. Next after it: phase 17
-(LJ32 → LJ35).**
+`lj/p16-extensions`. It is security-critical, so it is **not** merged by the agent. An
+independent security review (2026-10-18) found no Critical/High issues; its findings, and what the
+new request log showed while fixing them, are fixed in `lj-step-29-fix4` → `fix8` (LJ29's notes,
+"Security review"); the merge decision is the owner's. Next after it: phase 17 (LJ32 → LJ35).**
 
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
@@ -3889,7 +3890,12 @@ honest attempts, then stop).
   - **Fix 8 (`lj-step-29-fix8`) — a race that always overlaps.** The race page now opens a popup
     on every second tick (every 50 ms; `RACE.popupEvery`), so one lands while the app is leaving
     the page on Windows and macOS (the leave takes ~40–80 ms there; ~5 ms on Linux), and fix 7 is
-    tested against the failure it fixes, not just run beside it.
+    tested against the failure it fixes, not just run beside it. **CI 39101372328: all 10 green**;
+    on Windows two popups and on macOS one landed between `extension-opened` and the start
+    page's commit, and hello opened and reported each time; nothing was served to another page
+    (`servedToOthers`). On Linux the race's popups never reach the app at all (WebKitGTK blocks a
+    `window.open` without a user gesture; 0 `new-window-refused` in every run), so there the race
+    is its iframes only.
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
