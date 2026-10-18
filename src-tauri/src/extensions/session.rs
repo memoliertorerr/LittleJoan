@@ -236,8 +236,10 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<
     Ok(())
 }
 
-/// The longest a panel opened with a new window waits for the bar's script.
-pub const BAR_WAIT: Duration = Duration::from_secs(2);
+/// The longest a panel opened with a new window waits for the bar's script. Normally the bar runs
+/// well within a second; CI's macOS runner, launching WebKit cold, took up to 2.1 s from the
+/// window's creation (LJ38's notes), so the limit only bounds a bar that never runs.
+pub const BAR_WAIT: Duration = Duration::from_secs(5);
 
 /// Waits until `ready` (the bar's script runs) or `limit` passed, then calls `open` with whether
 /// the bar was ready. Blocks the calling thread: never the main thread, never an engine callback.

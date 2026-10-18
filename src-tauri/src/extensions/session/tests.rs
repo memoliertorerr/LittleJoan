@@ -305,7 +305,7 @@ fn an_opening_goes_on_without_the_bar_after_the_limit() {
     // It opens anyway, saying the bar wasn't ready (the glue logs `bar-ready timeout`).
     assert_eq!(opened, Some(false));
     assert!(started.elapsed() >= Duration::from_millis(80));
-    assert_eq!(BAR_WAIT, Duration::from_secs(2));
+    assert_eq!(BAR_WAIT, Duration::from_secs(5));
 }
 
 #[test]

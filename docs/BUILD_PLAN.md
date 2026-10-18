@@ -5417,7 +5417,8 @@ commit (`gh pr merge <n> --merge --repo memoliertorerr/LittleJoan`; never squash
   per window: reset in `add_webviews`), set by `start_info` through `bar::mark_ready`, which logs
   `bar-ready` once per window. `joan`'s `CreateExtension` builds the window, then
   `session::open_when_bar_ready` opens the panel from a thread of its own after `after_bar`
-  (waits at most `BAR_WAIT` = 2 s, then opens anyway and logs `bar-ready timeout`); a failed
+  (waits at most `BAR_WAIT`, then opens anyway and logs `bar-ready timeout`; 2 s as the prompt
+  said, raised to 5 s by `lj-step-38-fix`, below); a failed
   thread spawn opens at once, as before. `FocusAndExtension` and the command bar's rows open at
   once. The nonce, the commit rule and the detour are untouched: the wait comes before `open`.
   Tests: an opening waits until the bar is ready (set 60 ms later), goes on after the limit
@@ -5436,6 +5437,15 @@ commit (`gh pr merge <n> --merge --repo memoliertorerr/LittleJoan`; never squash
   it — before LJ38 it was an empty field there), Windows, Linux and Linux at scale 2. The theme
   runs' screenshots look as before (macOS's dark command bar, Windows' light two-color toolbar
   above the smoke page).
+- **`lj-step-38-fix` — the wait is 5 s, not 2 s (a deviation from the prompt).** The docs commit's
+  CI (run 39154369426) went red on macOS only: `bar-ready timeout` in the extension run. That cold
+  launch needed 2.08 s from `window-created` to the bar's `start_info` (the page's start page took
+  1 s to commit, the bar's page 1.1 s to load, and its sync `start_info` 0.8 s more on the busy
+  main thread); LJ38's own run needed 1.61 s, and LJ36's fullscreen run, before LJ38, already
+  showed 1.3 s from the bar's load to `start_info` on macOS CI. The panel still committed after `bar-ready` there (both
+  were queued behind the same busy main thread), but that is luck. A real Mac runs the bar well
+  within a second; the limit only bounds a bar that never runs, so 5 s keeps the wait's purpose on
+  slow machines at no cost to fast ones. The smoke rule stays as strict (no timeout allowed).
 
 ### LJ39 — Live resize like Little Arc · strong · auto
 

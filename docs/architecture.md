@@ -745,7 +745,7 @@ and are embedded into the binary at build time (`build.rs` → `$OUT_DIR/bundled
 unpacked folders in `<config dir>/extensions/<id>/` load too. `little-joan --extension <id>`
 opens one (its first command); while hibernating, the window is built first and the panel opens
 once the bar's script runs (its first call, `start_info`, logs `bar-ready`) — on a thread of its
-own, at most 2 s, then anyway (`bar-ready timeout`) — so the toolbar is there to name it (LJ38;
+own, at most 5 s, then anyway (`bar-ready timeout`) — so the toolbar is there to name it (LJ38;
 on macOS a panel that committed first left the toolbar an empty field). Openings in a window whose
 bar already runs (the command bar, `--extension` with the window open) don't wait. Besides hello, twelve are bundled (LJ32–LJ34): Snake, 2048, Notes,
 Focus timer, World clock, JSON, Text tools and Color tools (commands), and QR code, Clean link,

@@ -235,7 +235,7 @@ describe("a panel opened from hibernation (LJ38)", () => {
       "extensions: hello's panel committed before the bar's script ran (no bar-ready before its page-started)",
     ]);
     expect(barReadyFailures(parseLog(`1 window-created\n2 bar-ready timeout\n3 ${panel}\n4 bar-ready\n`))).toEqual([
-      "extensions: the bar didn't run within 2 s of --extension hello (bar-ready timeout); the panel opened without it",
+      "extensions: the bar didn't run within 5 s of --extension hello (bar-ready timeout); the panel opened without it",
     ]);
     expect(barReadyFailures(parseLog("1 window-created\n2 bar-ready\n"))).toEqual(["extensions: hello's panel never committed (no page-started)"]);
   });
