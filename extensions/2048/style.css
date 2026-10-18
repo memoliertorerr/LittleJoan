@@ -21,19 +21,6 @@ body {
   background-image: var(--lj-grain, none), var(--lj-gradient, none);
   color: var(--lj-fg, CanvasText);
   -webkit-font-smoothing: antialiased;
-  opacity: 0;
-  /* Shown once the theme is on (ui.js), or after a moment whatever happens. */
-  animation: reveal 0s 700ms forwards;
-}
-html.ready body {
-  opacity: 1;
-  animation: none;
-  transition: opacity 120ms ease-out;
-}
-@keyframes reveal {
-  to {
-    opacity: 1;
-  }
 }
 :focus-visible {
   outline: 2px solid var(--lj-accent, Highlight);

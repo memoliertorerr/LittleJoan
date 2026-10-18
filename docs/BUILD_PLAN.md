@@ -4188,8 +4188,9 @@ screenshots.
   extensions.md): `index.html` loads the SDK (a classic script) and then `<script type="module"
   src="ui.js">`; `ui.js` is the DOM glue and imports `./logic.js`, the pure rules (an ES module,
   JSDoc-typed, `// @ts-check`), which `logic.test.ts` imports too; `style.css` paints with the
-  theme's `--lj-*` variables (fallbacks until `littleJoan.theme.apply()` answers; the body fades in
-  once it did, or after 700 ms whatever happens); `icon.svg` is original geometry. Module scripts
+  theme's `--lj-*` variables (system-color fallbacks until `littleJoan.theme.apply()` answers — at
+  first the body was hidden until then, which `lj-step-32-fix` undid); `icon.svg` is original
+  geometry. Module scripts
   over `ljext:` work on every engine the way the app's own Vite pages do over `tauri:` (same-origin
   CORS-mode fetches; WebKitGTK registers both schemes alike, as secure). vitest now includes
   `extensions/**/*.test.ts`. Esc closes a panel (`littleJoan.close()`) — in Snake it first pauses a
@@ -4238,6 +4239,26 @@ screenshots.
   stand-in SDK (a dev aid, not committed): both games at 480 × 600 and 360 × 560, light and dark.
 - `npm run verify`: 324 TS tests, 256 Rust tests, clippy clean. Disk: 15 GiB free at the start and
   after verify; `.cache/target` 1.3 GB.
+- **CI (run 39118669089): verify ×3, package ×3 and smoke on Windows, macOS and Linux green;
+  `smoke (linux-scale-2)` red on an older rule** — "the command bar never asked for suggestions
+  before the smoke page opened": that runner's first window took longer than the smoke's fixed
+  1.5 s to ask (later windows asked within ~220 ms). Both games came up on all four jobs, and the
+  arrow keys reached 2048 on Windows and both Linux jobs (its own save; not on macOS, where
+  synthetic keys are best effort). Screenshots: Windows and Linux — the themed panels with the
+  toolbar's icon, name and "Extension" badge; Snake's board with the snake, the food and the start
+  card; 2048 after four moves (score 12 / 8). But **Snake, the first panel of the run (opened from
+  hibernation), was a blank white page on macOS and Linux at scale 2** (its script had run: theme
+  and storage calls were answered), and on macOS the toolbar showed an empty field — hello's
+  screenshot in the extension run had that empty toolbar on macOS too. Two causes: (1) the panels
+  hid `<body>` (opacity 0) until the theme answered, and WebKit doesn't commit a first frame for a
+  page with nothing visible, so a page that becomes visible a moment later may stay unpainted;
+  (2) on macOS, when the panel commits before the bar's own page has loaded (the window built for
+  `--extension` from hibernation), the toolbar can stay unpainted — the app logged `toolbar-label`
+  for it twice, so it is the bar's view, not the label (Deferred follow-ups). **Fix
+  (`lj-step-32-fix`):** no more hidden body (the fallback colors show for at most a frame); the
+  smoke waits for the first window's suggestions instead of a fixed pause, and the bundled run
+  summons the window before opening panels (hello's run keeps covering hibernation), with 1.5 s
+  before each screenshot.
 
 ### LJ33 — Bundled productivity: Notes, Focus timer, World clock · standard · auto
 
@@ -4459,6 +4480,14 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   `WebsiteDataManager` needs `webkit2gtk` — new crates — and Tauri's `clear_all_browsing_data`
   would wipe the user's cookies and sites too. Options: those calls behind a small platform
   module once a step allows the crates.
+- **macOS: a panel opened from hibernation can leave the toolbar unpainted** (surfaced by LJ32's
+  CI). With `--extension <id>` while hibernating, the window is built with the command bar and the
+  panel's commit can arrive before the bar's own page has loaded; on macOS the toolbar then showed
+  an empty field instead of the extension's name (hello in run 39118669089; the label was sent
+  twice, once with `start_info`), while the same flow on `main` (bar loaded first) drew it. Opening
+  from the command bar (the window already open) isn't affected. Options: have the bar ask for its
+  label and overlay state in one call when it loads (`start_info` already forces the label); or
+  open the panel only after the bar reported `bar-loaded`.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -4657,6 +4686,10 @@ Populated from real friction, not speculation:
   panel's URL — though the handler had answered the document 200. Don't load something important
   while a hostile page is still alive: the app leaves the web page for its start page first
   (fix 7). If the race step flakes on Windows, look here first.
+- *(LJ32)* **WebKit may not paint a page that starts invisible.** A panel that hid `<body>` with
+  `opacity: 0` until its theme arrived stayed a blank white page in CI (macOS, Linux at scale 2)
+  although its script ran and showed it a moment later — WebKit waits for a visually non-empty
+  first layout before committing frames. Show content from the first frame (fallback colors).
 - *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
   `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
   that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.

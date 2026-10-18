@@ -580,6 +580,8 @@ await forward(["--show"]);
 await waitFor("window-created", (e) => count(e, "window-created") > 0, 20_000);
 await waitFor("command bar open (overlay true)", (e) => count(e, "overlay", "true") > 0, 20_000);
 await waitFor("start page title", (e) => count(e, "title", "Little Joan") > 0, 20_000);
+// The command bar's first suggestions (a slow runner's first window can take a moment).
+await waitFor("command bar: first suggestions", (e) => count(e, "suggestions") > 0, 15_000);
 await sleep(1500);
 // The command bar covers the whole window (the page behind it is hidden).
 screenshot("start.png");
@@ -1006,11 +1008,16 @@ async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, 
   await waitFor("bundled: started", (e) => count(e, "started") > 0, 30_000, logFile);
   await sleep(1500);
   const runPid = appPid(runChild);
+  // The window first (hello's run covers opening from hibernation): on macOS a panel that loads
+  // before the bar's own page can leave the toolbar unpainted (Deferred follow-ups).
+  await forward(["--show"], runEnv);
+  await waitFor("bundled: the window", (e) => count(e, "bar-loaded") > 0 && count(e, "suggestions") > 0, 20_000, logFile);
+  await sleep(500);
   const keys: Record<string, boolean> = {};
   for (const panel of BUNDLED_PANELS) {
     await forward(["--extension", panel.id], runEnv);
     await waitFor(`bundled: ${panel.id} is up`, (e) => panelUp(e, panel.id), 30_000, logFile);
-    await sleep(1200);
+    await sleep(1500);
     if (panel.keys) {
       pressKeys(panel.keys, runPid);
       await sleep(1200);

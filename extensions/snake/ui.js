@@ -271,7 +271,6 @@ async function start() {
   } catch {
     // The fallback colors in style.css stay.
   }
-  document.documentElement.classList.add("ready");
   readColors();
   try {
     savedBest = bestScore(await littleJoan.storage.get("best"), 0);

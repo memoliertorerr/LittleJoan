@@ -257,7 +257,6 @@ async function start() {
   } catch {
     // The fallback colors in style.css stay.
   }
-  document.documentElement.classList.add("ready");
   try {
     const [saved, stored] = await Promise.all([littleJoan.storage.get("game"), littleJoan.storage.get("best")]);
     savedBest = bestScore(stored, 0);

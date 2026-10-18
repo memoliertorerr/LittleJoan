@@ -985,7 +985,8 @@ and pushes to `main`:
   while `--extension hello` opens it — hello must report again, every extension URL that loads
   must carry the app's nonce, at least one racer must be refused, and the toolbar may name hello
   only right after hello's own panel loaded (`extension-race.png`). Then the **bundled extensions
-  run** (`smoke-bundled.mts`), its own launch: `--extension <id>` for each bundled panel in turn
+  run** (`smoke-bundled.mts`), its own launch: the window first (`--show`; hello's run covers
+  opening from hibernation), then `--extension <id>` for each bundled panel in turn
   (Snake, 2048) — each must come up (its URL with the app's nonce, its script's own `theme` call,
   the toolbar naming it, none of its requests refused) and is screenshotted (`snake.png`,
   `2048.png`); 2048 gets four arrow keys first (whether they reached it — its own save — goes into
