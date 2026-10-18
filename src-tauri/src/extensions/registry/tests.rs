@@ -47,7 +47,7 @@ fn the_shipped_extensions_are_all_valid() {
         }
         assert!(manifest.network_hosts().is_empty(), "{id} fetches nothing");
     }
-    for id in ["snake", "2048"] {
+    for id in ["snake", "2048", "notes", "focus", "clock"] {
         assert!(registry.get(id).is_some(), "{id} is bundled");
     }
 }

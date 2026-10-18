@@ -80,7 +80,7 @@
 | LJ30 | *(v0.2, round 2)* Extensions in the command bar and Settings; developer mode; `docs/extensions.md` (experimental) and a template | strong | auto | ✅ done |
 | LJ31 | *(v0.2, round 2)* Built-in quick answers: calculator, units, time zones, random / UUID / password, timestamps | standard | auto | ✅ done |
 | LJ32 | *(v0.2, round 2)* Bundled games: Snake and 2048 | standard | auto | ✅ done |
-| LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ⬜ todo |
+| LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ⬜ todo |
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ⬜ todo |
 
@@ -4258,7 +4258,9 @@ screenshots.
   (`lj-step-32-fix`):** no more hidden body (the fallback colors show for at most a frame); the
   smoke waits for the first window's suggestions instead of a fixed pause, and the bundled run
   summons the window before opening panels (hello's run keeps covering hibernation), with 1.5 s
-  before each screenshot.
+  before each screenshot. Its run (39120155218) had verify ×3 and package on macOS and Linux green,
+  but `package (windows)` hung in `actions/cache` restoring for more than 15 minutes (a GitHub
+  cache stall; the job has no timeout), so the LJ33 push superseded it — LJ33's run checks the fix.
 
 ### LJ33 — Bundled productivity: Notes, Focus timer, World clock · standard · auto
 
@@ -4281,6 +4283,55 @@ Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ33 to ✅,
 commit: "lj-step-33: bundled productivity — Notes, Focus timer, World clock". Push and watch CI
 until every job is green (two honest attempts, then stop). Look at the screenshots.
 ```
+
+**Implementation notes (2026-10-18):**
+
+- Same layout as LJ32 (`index.html`, `ui.js`, pure `logic.js` + `logic.test.ts`, `style.css`,
+  original `icon.svg`); each panel is keyboard-first, fits phone width and takes the theme.
+- **Notes** (`extensions/notes/`, permissions `storage`, `clipboard`; 10 tests): several notes
+  (`{ id, text, created, updated }`, newest edit first, at most 500, 200,000 characters each), a
+  title from the first line (Markdown `#` dropped) and a preview from the rest, search where every
+  word must appear (any order, case and accent: `fold`), autosave with a debounce
+  (`autosave(save, timers, 500 ms)`: one save per burst with the latest text, `flush()` on leaving
+  the editor, Esc, blur and `pagehide`, a failed save stays waiting — tested with fake timers),
+  copy through `littleJoan.clipboard.writeText`, delete with a 6-second Undo (also Ctrl/Cmd+Z), an
+  empty note isn't kept, a "Saved" / quota message, and how much of the 1 MB the notes use past
+  75 %. One pane at a time in a narrow window (list ↔ editor), side by side from 640 px. The list
+  takes the keys (N new, `/` search, ↑ ↓, Enter, Delete); what storage holds is checked from
+  scratch (`parseNotes`).
+- **Focus timer** (`extensions/focus/`, permission `storage`; 9 tests): focus 25, short break 5,
+  long break 15 after the fourth round; Space starts / pauses / resumes, R resets the phase, S skips
+  (a skipped focus session doesn't count). Storage keeps the **end time** of a running phase, so a
+  reopened panel shows the time left; a phase that ran out while the panel was closed is reported
+  ("Focus ended at 10:25, while this panel was closed.") and the next phase waits — only one phase
+  ends per tick, nothing runs on by itself (`restore`, `tick`). The panel says that Little Joan has
+  no background alarms and the chime plays only while it is open. The chime is Web Audio (a rising
+  triad after focus, a falling pair after a break; an `AudioContext` made on the first Start, since
+  engines allow audio only after a key press or click). A ring (SVG stroke) empties as the phase
+  runs; the window title counts down while it runs (`17:29 · Focus`).
+- **World clock** (`extensions/clock/`, permission `storage`; 10 tests): `cities.js`, 177 cities
+  (name, country, IANA zone — Little Joan's own list, the zones the quick answers use; every zone
+  checked against Intl in a test); your time (zone, UTC offset, date) and the cities you add —
+  each with its time in your locale's style, the difference ("+9 h", "−4 h", "+5 h 30 min"), the
+  day there (Today / Tomorrow / Yesterday) and a sun or moon. Intl does the daylight-saving work
+  (`formatToParts` with a passed-in instant): tests stand on both sides of 2026's European (25 Oct)
+  and US (1 Nov) changes, Sydney's start (4 Oct), half- and quarter-hour zones, the hour that
+  repeats in London, and a month's end. Add in the combobox (type, ↑ ↓, Enter), Delete removes a
+  city, Alt+↑ ↓ moves it; the first list (nothing saved yet) is London, New York, Tokyo, Sydney
+  minus your own zone.
+- **Smoke** (`smoke-bundled.mts`, 7 tests now): the bundled run's data folder starts with sample
+  content in `extension-data/` (three notes, a focus session 7½ minutes in, four cities —
+  `seedFile` writes Little Joan's own storage format), and opens Notes, Focus timer and World clock
+  after the games (`notes.png`, `focus.png`, `clock.png`); the focus timer must show the session
+  running from its stored end time — its title `1x:xx · Focus` (`title` rule).
+- Checked locally in a plain browser with a stand-in SDK (not committed): all three at 480 × 600
+  and Notes at 760 px (two panes), Notes' keys and search, the timer running and its "ended while
+  closed" message after a reload, adding a city with the keyboard.
+- Files beyond the prompt: `extensions/bundled.test.ts`, `scripts/ci/smoke-bundled.mts` (+ test),
+  `scripts/ci/smoke.mts`, `src-tauri/src/extensions/registry/tests.rs`, README, CHANGELOG,
+  architecture.md.
+- `npm run verify`: 370 TS tests, 256 Rust tests, clippy clean. Disk: 15 GiB free at the start and
+  after verify; `.cache/target` 1.3 GB.
 
 ### LJ34 — Bundled page actions and tools · standard · auto
 

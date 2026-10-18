@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { BUNDLED_PANELS, bundledFailures, isPanelOf, keysReached, panelUp } from "./smoke-bundled.mts";
+import { BUNDLED_PANELS, bundledFailures, isPanelOf, keysReached, panelUp, seedFile } from "./smoke-bundled.mts";
 
 const NONCE = "0123456789abcdef0123456789abcdef";
 
@@ -61,6 +61,26 @@ describe("the bundled extensions run", () => {
     expect(bundledFailures(failed, PANELS).join()).toMatch(/snake's API call failed: snake storage.set quota/);
     const skipped = parseLog(`1 extension-skipped snake \`apiVersion\` must be 1\n${opened("snake", 10)}\n${opened("2048", 20)}`);
     expect(bundledFailures(skipped, PANELS).join()).toMatch(/extension-skipped snake/);
+  });
+
+  it("wants a panel's title when it names one (the focus timer counting down from its stored end)", () => {
+    const panels = [{ id: "focus", shot: "focus.png", title: /^1[0-7]:\d\d · Focus$/ }];
+    expect(bundledFailures(parseLog(`${opened("focus", 10)}\n17 title 17:29 · Focus`), panels)).toEqual([]);
+    expect(bundledFailures(parseLog(`${opened("focus", 10)}\n17 title Focus timer`), panels).join()).toMatch(/never showed a title/);
+    const focus = BUNDLED_PANELS.find((p) => p.id === "focus");
+    expect(focus?.title?.test("17:29 · Focus")).toBe(true);
+    expect(focus?.title?.test("25:00 · Focus")).toBe(false);
+  });
+
+  it("seeds storage the way Little Joan writes it", () => {
+    const now = Date.UTC(2026, 9, 18, 12, 0);
+    for (const panel of BUNDLED_PANELS.filter((p) => p.seed)) {
+      const file = JSON.parse(seedFile(panel.seed?.(now) ?? {})) as { version: number; items: Record<string, unknown> };
+      expect(file.version).toBe(1);
+      expect(Object.keys(file.items).length).toBeGreaterThan(0);
+    }
+    const focus = BUNDLED_PANELS.find((p) => p.id === "focus")?.seed?.(now) as { timer: { endsAt: number } };
+    expect(focus.timer.endsAt - now).toBe(17.5 * 60_000);
   });
 
   it("sees keys arrive by the panel's own writes after it came up", () => {

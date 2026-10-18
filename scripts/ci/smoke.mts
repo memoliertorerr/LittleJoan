@@ -74,7 +74,7 @@ import {
   parseStore,
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
-import { BUNDLED_PANELS, bundledFailures, keysReached, panelUp } from "./smoke-bundled.mts";
+import { BUNDLED_PANELS, bundledFailures, keysReached, panelUp, seedFile } from "./smoke-bundled.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -1003,7 +1003,14 @@ console.log(`extensions: hello ${lastTitle(extensionCheck.events, "LJ-EXT hello"
 async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, boolean> }> {
   const logFile = join(out, "smoke-bundled.log");
   rmSync(logFile, { force: true });
-  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dataDir("bundled", true), LITTLEJOAN_SMOKE_LOG: logFile };
+  const dir = dataDir("bundled", true);
+  mkdirSync(join(dir, "extension-data"), { recursive: true });
+  for (const panel of BUNDLED_PANELS) {
+    if (panel.seed) {
+      writeFileSync(join(dir, "extension-data", `${panel.id}.json`), seedFile(panel.seed(Date.now())));
+    }
+  }
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dir, LITTLEJOAN_SMOKE_LOG: logFile };
   const runChild = launch(runEnv);
   await waitFor("bundled: started", (e) => count(e, "started") > 0, 30_000, logFile);
   await sleep(1500);

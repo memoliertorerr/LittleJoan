@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notes</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main id="app" class="app" data-view="list">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>Notes</h1>
+        <button id="new" class="btn primary" type="button" title="New note (N)">New note</button>
+      </header>
+      <div class="panes">
+        <section class="list-pane" aria-label="Your notes">
+          <input id="search" class="field" type="search" placeholder="Search notes" aria-label="Search notes" autocomplete="off" spellcheck="false" />
+          <ul id="list" class="list" role="listbox" aria-label="Notes" tabindex="0"></ul>
+          <p id="empty" class="empty muted" hidden></p>
+        </section>
+        <section class="editor-pane card" aria-label="Note">
+          <div class="editor-bar">
+            <button id="back" class="btn quiet back" type="button" aria-label="Back to your notes">‹ Notes</button>
+            <span id="status" class="status muted" aria-live="polite"></span>
+            <button id="copy" class="btn" type="button">Copy</button>
+            <button id="delete" class="btn quiet" type="button">Delete</button>
+          </div>
+          <textarea id="editor" class="editor" placeholder="Write something… The first line is the title." aria-label="Note text"></textarea>
+          <div class="editor-foot muted"><span id="counts"></span><span id="usage"></span></div>
+        </section>
+      </div>
+      <p class="hint">
+        <span><kbd>N</kbd> new</span>
+        <span><kbd>/</kbd> search</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> open</span>
+        <span><kbd>Esc</kbd> back · close</span>
+      </p>
+      <div id="toast" class="toast" role="status" hidden>
+        <span id="toast-text"></span>
+        <button id="toast-undo" class="btn" type="button">Undo</button>
+      </div>
+    </main>
+  </body>
+</html>

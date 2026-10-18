@@ -17,6 +17,15 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan; a test checks that no permission ever reaches it.
 
 ### Added
+- **Notes, Focus timer and World clock,** bundled productivity extensions. **Notes:** several
+  notes that save as you type, search, copy a note, delete with Undo; N for a new note, `/` to
+  search. **Focus timer:** 25-minute focus sessions, 5-minute breaks and a 15-minute break after
+  four, pause and resume, a soft chime when a phase ends while the panel is open; it keeps the end
+  time, so reopening the panel shows the time left (it says so when a session ended while it was
+  closed — there are no background alarms while Little Joan hibernates). **World clock:** your
+  time plus the cities you pick, with the difference and the day there, right across daylight
+  saving time; Delete removes a city, Alt+↑/↓ moves it. All three keep their data in the
+  extension's own storage on this computer.
 - **Snake and 2048,** bundled games: type "snake" or "2048" in the command bar (or run
   `little-joan --extension snake` / `--extension 2048`). Both are played with the keyboard (arrows
   or WASD; Snake pauses on Space; Esc closes), take the theme's colors, fit any window size down to

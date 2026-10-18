@@ -197,6 +197,9 @@ Bundled with Little Joan (type the name in the command bar, or use `little-joan 
 |---|---|
 | **Snake** (`snake`) | The classic, in your theme's colors: arrows or WASD steer, Space pauses, Esc closes; it speeds up as you eat. Keeps your best score. |
 | **2048** (`2048`) | Slide the tiles with the arrows or WASD; equal tiles merge. Your game in progress and your best score wait for you. |
+| **Notes** (`notes`) | Quick notes that save as you type: several notes, search (`/`), copy one to the clipboard. N writes a new one. |
+| **Focus timer** (`focus`) | 25-minute focus sessions with 5-minute breaks and a 15-minute one after four; Space starts and pauses. It keeps the end time, so a reopened panel shows the time left — but it chimes only while its panel is open (Little Joan has no background alarms). |
+| **World clock** (`clock`) | Your time and the cities you add (about 180 to pick from): how far ahead or behind, and which day it is there, right across daylight saving time. |
 | **Hello** (`hello`) | The example extension: it shows what an extension can and can't do. |
 
 You can write your own with plain HTML, CSS and JavaScript — see

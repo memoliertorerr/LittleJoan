@@ -12,12 +12,44 @@ export interface BundledPanel {
   shot: string;
   /** Keys pressed once it is up (Windows, Linux; best effort on macOS), for a livelier shot. */
   keys?: string[];
+  /**
+   * What its storage holds before the app starts (`extension-data/<id>.json`'s items), made at
+   * `now` (unix ms) — sample content for the screenshot, and a check that it reads storage.
+   */
+  seed?: (now: number) => Record<string, unknown>;
+  /** A page title the panel must show (its script read the seed and acted on it). */
+  title?: RegExp;
 }
+
+const MINUTE = 60_000;
 
 /** The bundled extensions opened with `--extension <id>`, in order. */
 export const BUNDLED_PANELS: BundledPanel[] = [
   { id: "snake", shot: "snake.png" },
   { id: "2048", shot: "2048.png", keys: ["Left", "Up", "Right", "Down"] },
+  {
+    id: "notes",
+    shot: "notes.png",
+    seed: (now) => ({
+      notes: {
+        version: 1,
+        notes: [
+          { id: "n1", text: "Groceries\nmilk, eggs, coffee beans\nbread", created: now - 90 * MINUTE, updated: now - 4 * MINUTE },
+          { id: "n2", text: "Ideas for the weekend\nhike up the hill\nthe new museum", created: now - 26 * 60 * MINUTE, updated: now - 25 * 60 * MINUTE },
+          { id: "n3", text: "Little Joan\nThe command bar opens on every summon; Esc goes back to the page.", created: now - 9 * 24 * 60 * MINUTE, updated: now - 9 * 24 * 60 * MINUTE },
+        ],
+      },
+    }),
+  },
+  {
+    id: "focus",
+    shot: "focus.png",
+    // A focus session that started 7½ minutes before the app did: the panel must show it running
+    // from its stored end time (the window title counts down).
+    seed: (now) => ({ timer: { phase: "focus", round: 2, endsAt: now + 17.5 * MINUTE, remaining: 25 * MINUTE, completed: 1 } }),
+    title: /^1[0-7]:\d\d · Focus$/,
+  },
+  { id: "clock", shot: "clock.png", seed: () => ({ cities: ["london", "new-york", "tokyo", "sydney"] }) },
 ];
 
 /** An extension URL in either form (`ljext://<id>.localhost/…`, WebView2's `http://ljext.<id>.localhost/…`). */
@@ -72,7 +104,19 @@ export function bundledFailures(events: LogEvent[], panels: readonly BundledPane
       failures.push(`bundled: ${id}'s API call failed: ${call.detail}`);
     }
   }
+  for (const { id, title } of panels) {
+    const own = stretch(events, id) ?? [];
+    if (title && !own.some((e) => e.event === "title" && title.test(e.detail))) {
+      const seen = own.filter((e) => e.event === "title").map((e) => e.detail);
+      failures.push(`bundled: ${id}'s panel never showed a title like ${String(title)} (${JSON.stringify(seen.slice(-3))})`);
+    }
+  }
   return failures;
+}
+
+/** The storage file a seed becomes (`extension-data/<id>.json`, as Little Joan writes it). */
+export function seedFile(items: Record<string, unknown>): string {
+  return `${JSON.stringify({ version: 1, items })}\n`;
 }
 
 /** Whether keys reached `id`'s panel: a storage write of its own after its theme call (2048 saves each move). */

@@ -27,7 +27,7 @@ function files(dir: string, prefix = ""): string[] {
 
 describe("bundled extensions", () => {
   it("are all here", () => {
-    expect(bundled).toEqual(expect.arrayContaining(["hello", "snake", "2048"]));
+    expect(bundled).toEqual(expect.arrayContaining(["hello", "snake", "2048", "notes", "focus", "clock"]));
   });
 
   for (const id of bundled) {

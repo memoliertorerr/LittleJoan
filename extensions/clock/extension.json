@@ -1,0 +1,20 @@
+{
+  "id": "clock",
+  "name": "World clock",
+  "version": "1.0.0",
+  "description": "The time in the cities you pick: how far ahead or behind they are, and which day it is there — right across daylight saving time.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "World clock",
+        "keywords": ["clock", "time", "zones", "timezone", "world", "cities"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}

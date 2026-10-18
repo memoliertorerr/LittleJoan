@@ -46,6 +46,12 @@ extensions/snake/, extensions/2048/  the bundled games: Snake (a canvas; grid, t
                                    reversal, growth, walls and self, speed-up, Space pauses) and 2048
                                    (DOM tiles keyed by id so they slide; one merge per tile per move;
                                    the game in progress is saved); best scores in littleJoan.storage
+extensions/notes/, extensions/focus/, extensions/clock/  the bundled productivity extensions: Notes
+                                   (list + editor, search, autosave with a debounce, copy with the
+                                   clipboard permission, delete with Undo), Focus timer (25 / 5 / 15
+                                   cycles from a stored end time; a Web Audio chime while open), World
+                                   clock (cities.js: ~180 cities → IANA zones; Intl does daylight
+                                   saving; add, remove, reorder)
 extensions/bundled.test.ts         every bundled extension: folder = id, the SDK first and no inline
                                    script, no network API and no `network:` host, text drawn as text,
                                    a pure logic.js with tests
@@ -985,12 +991,16 @@ and pushes to `main`:
   while `--extension hello` opens it — hello must report again, every extension URL that loads
   must carry the app's nonce, at least one racer must be refused, and the toolbar may name hello
   only right after hello's own panel loaded (`extension-race.png`). Then the **bundled extensions
-  run** (`smoke-bundled.mts`), its own launch: the window first (`--show`; hello's run covers
-  opening from hibernation), then `--extension <id>` for each bundled panel in turn
-  (Snake, 2048) — each must come up (its URL with the app's nonce, its script's own `theme` call,
-  the toolbar naming it, none of its requests refused) and is screenshotted (`snake.png`,
-  `2048.png`); 2048 gets four arrow keys first (whether they reached it — its own save — goes into
-  `summary.json`, informational) (log `smoke-bundled.log`). Then the **theme runs**
+  run** (`smoke-bundled.mts`), its own launch on a data folder whose `extension-data/` already
+  holds sample content (three notes, a focus session 7½ minutes in, four cities): the window first
+  (`--show`; hello's run covers opening from hibernation), then `--extension <id>` for each
+  bundled panel in turn (Snake, 2048, Notes, Focus timer, World clock) — each must
+  come up (its URL with the app's nonce, its script's own `theme` call, the toolbar naming it, none
+  of its requests refused, no failed call) and is screenshotted (`snake.png`, `2048.png`,
+  `notes.png`, `focus.png`, `clock.png`); the focus timer must show the session running from its
+  stored end time (its title counts down, `1x:xx · Focus`); 2048 gets four arrow keys first
+  (whether they reached it — its own save — goes into `summary.json`, informational) (log
+  `smoke-bundled.log`). Then the **theme runs**
   (`smoke-theme.mts`), each its own launch on a
   fresh data folder whose `settings.json` carries a theme (so the main run's memory numbers
   don't move): a two-color theme with grain 0.4 in light (`theme/page.png`,

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>World clock</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/__lj/sdk/v1.js"></script>
+    <script type="module" src="ui.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        <img class="logo" src="icon.svg" alt="" width="24" height="24" />
+        <h1>World clock</h1>
+      </header>
+      <section class="here card" aria-label="Your time">
+        <span class="label">Your time</span>
+        <span id="here-time" class="here-time">–:––</span>
+        <span id="here-place" class="here-place"></span>
+        <span id="here-date" class="here-date"></span>
+      </section>
+      <div class="adder">
+        <input
+          id="add"
+          class="field"
+          type="text"
+          placeholder="Add a city…"
+          aria-label="Add a city"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="suggestions"
+          aria-expanded="false"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <ul id="suggestions" class="suggestions card" role="listbox" aria-label="Cities" hidden></ul>
+      </div>
+      <ul id="cities" class="cities" aria-label="Cities"></ul>
+      <p id="empty" class="empty" hidden>No cities yet — type one above.</p>
+      <p class="hint">
+        <span><kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> add</span>
+        <span><kbd>Delete</kbd> remove</span>
+        <span><kbd>Alt</kbd>+<kbd>↑</kbd><kbd>↓</kbd> move</span>
+        <span><kbd>Esc</kbd> close</span>
+      </p>
+    </main>
+  </body>
+</html>

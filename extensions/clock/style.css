@@ -1,0 +1,334 @@
+/* Little Joan's colors come from littleJoan.theme.apply() (the --lj-* variables on <html>); the
+   fallbacks show only until it answers. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background-color: var(--lj-bg-0, Canvas);
+  background-image: var(--lj-grain, none), var(--lj-gradient, none);
+  color: var(--lj-fg, CanvasText);
+  -webkit-font-smoothing: antialiased;
+}
+[hidden] {
+  display: none !important;
+}
+:focus-visible {
+  outline: 2px solid var(--lj-accent, Highlight);
+  outline-offset: 2px;
+}
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  color: inherit;
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--lj-row-hover, rgba(127, 127, 127, 0.16));
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn.primary {
+  border-color: transparent;
+  background: var(--lj-row-selected, AccentColor);
+  color: var(--lj-on-selected, #ffffff);
+}
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+.btn.quiet {
+  border-color: transparent;
+  background: transparent;
+}
+.btn.quiet:hover {
+  background: var(--lj-row-hover, rgba(127, 127, 127, 0.16));
+}
+.field {
+  width: 100%;
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  color: inherit;
+  font: inherit;
+}
+.field::placeholder {
+  color: var(--lj-fg-muted, GrayText);
+}
+.field:focus {
+  outline: 2px solid var(--lj-accent, Highlight);
+  outline-offset: -1px;
+}
+.card {
+  background: var(--lj-panel, Canvas);
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-radius: 14px;
+  box-shadow: 0 12px 32px -16px var(--lj-shadow, rgba(0, 0, 0, 0.3));
+}
+.muted {
+  color: var(--lj-fg-muted, GrayText);
+}
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  margin: 0 1px;
+  padding: 1px 5px;
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.25));
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--lj-field, rgba(127, 127, 127, 0.1));
+  font: 600 11px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  text-align: center;
+}
+.hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  margin: 0;
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 12px;
+}
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 14px 16px 16px;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo {
+  flex: none;
+  border-radius: 7px;
+}
+h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 8px 10px 8px 14px;
+  transform: translateX(-50%);
+  border-radius: 10px;
+  background: var(--lj-row-selected, #333333);
+  color: var(--lj-on-selected, #ffffff);
+  box-shadow: 0 10px 30px -12px var(--lj-shadow, rgba(0, 0, 0, 0.4));
+}
+.toast .btn {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.18);
+  color: inherit;
+  padding: 3px 10px;
+}
+@media (max-width: 380px) {
+  .app {
+    padding: 10px 10px 12px;
+  }
+  .top {
+    gap: 6px;
+  }
+  h1 {
+    font-size: 16px;
+  }
+}
+
+/* The world clock. */
+.app {
+  max-width: 560px;
+}
+.here {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 14px 16px;
+}
+.here .label {
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.here-time {
+  grid-row: span 3;
+  align-self: center;
+  font-size: clamp(30px, 10vw, 44px);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.here-place {
+  font-weight: 600;
+}
+.here-date {
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 12.5px;
+}
+.adder {
+  position: relative;
+}
+.suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--lj-surface, Canvas);
+}
+.suggestions li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.suggestions li span {
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 12.5px;
+}
+.suggestions li[aria-selected="true"] {
+  background: var(--lj-row-selected, Highlight);
+  color: var(--lj-on-selected, HighlightText);
+}
+.suggestions li[aria-selected="true"] span {
+  color: inherit;
+  opacity: 0.85;
+}
+.cities {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  align-content: start;
+  min-height: 0;
+  margin: 0;
+  padding: 2px;
+  overflow-y: auto;
+  list-style: none;
+}
+.city {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px 10px 14px;
+  border: 1px solid var(--lj-hairline, rgba(127, 127, 127, 0.2));
+  border-radius: 12px;
+  background: var(--lj-panel, transparent);
+}
+.city:focus {
+  outline: 2px solid var(--lj-accent, Highlight);
+  outline-offset: 1px;
+}
+.place {
+  display: grid;
+  min-width: 0;
+}
+.place strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail {
+  overflow: hidden;
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.time {
+  display: grid;
+  justify-items: end;
+}
+.clock {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.day {
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 12px;
+}
+.remove {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--lj-fg-muted, GrayText);
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0;
+}
+.city:hover .remove,
+.city:focus-within .remove {
+  opacity: 1;
+}
+/* The sky: a sun by day, a moon at night (simple shapes). */
+.sky {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+.is-morning .sky,
+.is-day .sky {
+  background: #e8b33c;
+  box-shadow: 0 0 0 3px rgba(232, 179, 60, 0.25);
+}
+.is-evening .sky {
+  background: #e07b4f;
+  box-shadow: 0 0 0 3px rgba(224, 123, 79, 0.22);
+}
+.is-night .sky {
+  background: transparent;
+  box-shadow: inset -4px -2px 0 0 #9aa7c7;
+}
+.empty {
+  margin: 0;
+  color: var(--lj-fg-muted, GrayText);
+  text-align: center;
+}

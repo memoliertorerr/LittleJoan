@@ -1,0 +1,20 @@
+{
+  "id": "notes",
+  "name": "Notes",
+  "version": "1.0.0",
+  "description": "Quick notes that save as you type: several notes, search, and copy one to the clipboard. They stay on this computer.",
+  "author": "Little Joan",
+  "icon": "icon.svg",
+  "apiVersion": 1,
+  "permissions": ["storage", "clipboard"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "Notes",
+        "keywords": ["note", "notes", "write", "jot", "memo", "scratch"],
+        "panel": "index.html"
+      }
+    ]
+  }
+}
