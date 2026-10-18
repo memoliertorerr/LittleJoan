@@ -26,6 +26,7 @@ const saved: Settings = {
   theme: DEFAULT_THEME,
   developerMode: false,
   disabledExtensions: ["hello"],
+  siteModes: { "127.0.0.1": "desktop" },
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -55,6 +56,17 @@ describe("settings logic", () => {
     expect(isChanged({ ...saved, disabledExtensions: ["b", "a"] }, withExtensions(["a", "b"], false))).toBe(false);
     expect(withExtensions([], true)).toMatchObject({ disabledExtensions: [], developerMode: true });
     expect("developerMode" in same()).toBe(false);
+  });
+
+  it("counts the per-site list as a change only when it differs, and sends it only then", () => {
+    const withSites = (siteModes: Settings["siteModes"]) =>
+      toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory, undefined, undefined, siteModes);
+    expect(isChanged(saved, withSites({ "127.0.0.1": "desktop" }))).toBe(false);
+    expect(isChanged(saved, withSites({}))).toBe(true);
+    expect(isChanged(saved, withSites({ "127.0.0.1": "phone" }))).toBe(true);
+    expect(isChanged(saved, withSites({ "127.0.0.1": "desktop", "youtube.com": "auto" }))).toBe(true);
+    expect(withSites({}).siteModes).toEqual({});
+    expect("siteModes" in same()).toBe(false);
   });
 
   it("sends only the edited fields", () => {

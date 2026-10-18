@@ -44,6 +44,17 @@ pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: &Webview<R>, on: bool) {
 #[cfg(not(target_os = "linux"))]
 pub fn set_overlay<R: Runtime>(_bar: &Webview<R>, _page: &Webview<R>, _on: bool) {}
 
+/// macOS: the webview's autoresizing mask (`layout::mask_for`, for AppKit's unflipped
+/// coordinates), so AppKit resizes it in its own layout pass while the window is dragged.
+#[cfg(target_os = "macos")]
+pub fn set_autoresizing<R: Runtime>(webview: &Webview<R>, bits: usize) {
+    mac::set_autoresizing(webview, bits);
+}
+
+/// Windows and Linux: no autoresizing masks (Windows places by bounds, Linux packs a GtkBox).
+#[cfg(not(target_os = "macos"))]
+pub fn set_autoresizing<R: Runtime>(_webview: &Webview<R>, _bits: usize) {}
+
 /// macOS: the app menu's key equivalents handle page keys (menu.rs), and WebKit shows element
 /// fullscreen in its own window, so the bar needs no hiding.
 #[cfg(not(any(windows, target_os = "linux")))]
@@ -68,11 +79,36 @@ pub fn is_fullscreen<R: Runtime>(window: &Window<R>) -> bool {
 }
 
 /// Gives the page webview a phone user agent (`mobile`) or the engine's own one (phone.rs).
-/// Takes effect with the next request; phone_mode.rs reloads the page when it must.
+/// Takes effect with the next request; phone_mode.rs reloads the page when it must. Windows: with
+/// client hints, through the DevTools protocol (LJ40); it waits for the engine's answer.
 #[cfg(windows)]
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     win::set_mobile(page, mobile);
 }
+
+/// Windows: whether the page already fits its viewport (CDP's `Page.getLayoutMetrics`), so a
+/// reload for the phone agent can be skipped; `None` when the engine didn't say. Off the main
+/// thread only (it waits for the engine).
+#[cfg(windows)]
+pub fn page_fits<R: Runtime>(page: &Webview<R>) -> Option<bool> {
+    win::page_fits(page)
+}
+
+/// macOS and Linux: measuring the page would need a script in it (Ground Rule 10): never.
+#[cfg(not(windows))]
+pub fn page_fits<R: Runtime>(_page: &Webview<R>) -> Option<bool> {
+    None
+}
+
+/// Windows: remembers the main thread (setup), where nothing may wait for the engine's answers.
+#[cfg(windows)]
+pub fn note_main_thread() {
+    win::note_main_thread();
+}
+
+/// macOS and Linux: nothing waits for the engine that way.
+#[cfg(not(windows))]
+pub fn note_main_thread() {}
 
 /// Gives the page webview a phone user agent (`mobile`) or the engine's own one (phone.rs).
 #[cfg(target_os = "linux")]

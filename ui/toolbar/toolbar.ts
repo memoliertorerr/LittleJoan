@@ -1,15 +1,19 @@
 // The toolbar (DOM glue): back on the left, the site's icon and domain in the middle — for an
 // extension's panel its icon and name, as text — (a click opens the command bar with the address
-// selected), "open in default browser" on the right.
+// selected), "open in default browser" on the right, and before it the "Phone" / "Desktop" pill
+// (logic.ts says when; a click asks Rust for the other version for this site: set_site_mode).
 // The empty parts carry data-tauri-drag-region, so they drag the window. What it shows comes
 // from logic.ts.
 import { invoke } from "@tauri-apps/api/core";
 import { siteIcon } from "../command/view.ts";
-import { toolbarView, type ExtensionLabel } from "./logic.ts";
+import { toolbarView, type ExtensionLabel, type Pill, type SiteModeInfo } from "./logic.ts";
 
 export interface Toolbar {
-  /** The page's address changed ("" = none), whether it can go back, or the extension shown. */
-  update(address: string, canGoBack: boolean, extension: ExtensionLabel | null): void;
+  /**
+   * The page's address changed ("" = none), whether it can go back, the extension shown, or what
+   * its site is on.
+   */
+  update(address: string, canGoBack: boolean, extension: ExtensionLabel | null, info: SiteModeInfo | null): void;
 }
 
 export function toolbar(root: HTMLElement): Toolbar {
@@ -18,16 +22,31 @@ export function toolbar(root: HTMLElement): Toolbar {
   const domain = root.querySelector<HTMLElement>("#domain");
   const badge = root.querySelector<HTMLElement>("#site-badge");
   const openInBrowser = root.querySelector<HTMLButtonElement>("#open-browser");
+  const pill = root.querySelector<HTMLButtonElement>("#site-pill");
   /** What the icon shows now: a site, or `ext:<name>`. */
   let shownSite: string | null = null;
+  /** What the pill shows now (its click asks for `next`). */
+  let shownPill: Pill | null = null;
 
   back?.addEventListener("click", () => void invoke("go_back"));
   site?.addEventListener("click", () => void invoke("set_overlay", { on: true }));
   openInBrowser?.addEventListener("click", () => void invoke("open_in_browser"));
+  pill?.addEventListener("click", () => {
+    if (shownPill) {
+      void invoke("set_site_mode", { mode: shownPill.next });
+    }
+  });
 
   return {
-    update(address: string, canGoBack: boolean, extension: ExtensionLabel | null) {
-      const view = toolbarView(address, canGoBack, extension);
+    update(address: string, canGoBack: boolean, extension: ExtensionLabel | null, info: SiteModeInfo | null) {
+      const view = toolbarView(address, canGoBack, extension, info);
+      shownPill = view.pill;
+      if (pill) {
+        pill.hidden = view.pill === null;
+        pill.textContent = view.pill?.label ?? "";
+        pill.title = view.pill?.title ?? "";
+        pill.setAttribute("aria-label", view.pill?.title ?? "");
+      }
       if (domain) {
         domain.textContent = view.domain;
       }

@@ -17,6 +17,7 @@ import {
   readyTitle,
   requestFullscreen,
   viewportTitle,
+  desktopMinWidth,
 } from "./smoke-logic.mjs";
 
 describe("codecSupport", () => {
@@ -78,8 +79,15 @@ describe("viewport report", () => {
   });
 
   it("reports the CSS viewport, the agent kind, and the pixel ratio", () => {
-    expect(viewportTitle(390, 560, IPHONE, 2)).toBe("LJ-SMOKE viewport=390x560 ua=phone dpr=2");
-    expect(viewportTitle(900.4, 559.6, WEBVIEW2, 1)).toBe("LJ-SMOKE viewport=900x560 ua=desktop dpr=1");
+    expect(viewportTitle(390, 560, IPHONE, 2)).toBe("LJ-SMOKE viewport=390x560 ua=phone dpr=2 uamobile=undefined");
+    expect(viewportTitle(900.4, 559.6, WEBVIEW2, 1, false)).toBe("LJ-SMOKE viewport=900x560 ua=desktop dpr=1 uamobile=false");
+    expect(viewportTitle(390, 560, IPHONE, 1, true)).toBe("LJ-SMOKE viewport=390x560 ua=phone dpr=1 uamobile=true");
+  });
+
+  it("lays out like a desktop page with a minimum width under a desktop agent, unless ?fits=1", () => {
+    expect(desktopMinWidth(WEBVIEW2, "")).toBe(true);
+    expect(desktopMinWidth(WEBVIEW2, "?fits=1&t=x")).toBe(false);
+    expect(desktopMinWidth(IPHONE, "")).toBe(false);
   });
 });
 
@@ -89,6 +97,8 @@ describe("smoke.html", () => {
     expect(html).toContain('from "./smoke-logic.mjs"');
     expect(html).toContain("readyTitle(codecSupport(");
     expect(html).toContain("viewportTitle(window.innerWidth, window.innerHeight, navigator.userAgent");
+    expect(html).toContain("navigator.userAgentData?.mobile");
+    expect(html).toContain("desktopMinWidth(navigator.userAgent, location.search)");
     expect(html).toContain('id="go"');
   });
 

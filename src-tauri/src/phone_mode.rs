@@ -10,6 +10,13 @@
 //!   once more with it — never twice in a row for the same URL.
 //! - Going to the desktop agent on a known phone host (`m.youtube.com`) loads the desktop address
 //!   (`phone::desktop_url`) instead of reloading.
+//! - Per site from the bar (LJ40): `set_site_mode` keeps the open web page's site on `phone`,
+//!   `desktop` or `auto` (the host is Rust's, never the bar's), saves it and applies it at once;
+//!   `info` / `publish` tell the toolbar's pill and the command bar what the site is on.
+//! - Windows asks the engine whether the page already fits a narrower window before reloading it
+//!   for the phone agent (`platform::page_fits`, CDP's `Page.getLayoutMetrics`); a page that fits
+//!   stays as it is (`ua-reload skipped fits`). macOS and Linux would need a script in the page to
+//!   measure it, so they reload.
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Mutex, PoisonError};
@@ -24,9 +31,9 @@ use crate::history_store;
 use crate::joan;
 use crate::keys::{self, Platform};
 use crate::navigation;
-use crate::phone::{self, Debounce};
+use crate::phone::{self, Debounce, Reaction, Refusal, SiteInfo};
 use crate::platform;
-use crate::settings::SiteMode;
+use crate::settings::{self, SiteMode};
 use crate::smoke;
 use crate::state;
 
@@ -36,6 +43,8 @@ static DEBOUNCE: Mutex<Debounce> = Mutex::new(Debounce::new(phone::SETTLE));
 static WAITING: AtomicBool = AtomicBool::new(false);
 /// The page last loaded again because its agent changed on `Started` (never twice in a row).
 static RELOADED: Mutex<Option<Url>> = Mutex::new(None);
+/// What the bar was last told about the page's site (`setSiteMode`'s JSON); reset per window.
+static PUBLISHED: Mutex<Option<String>> = Mutex::new(None);
 
 fn applied() -> Option<bool> {
     match APPLIED.load(Ordering::Relaxed) {
@@ -49,6 +58,7 @@ fn applied() -> Option<bool> {
 pub fn reset() {
     APPLIED.store(0, Ordering::Relaxed);
     *RELOADED.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *PUBLISHED.lock().unwrap_or_else(PoisonError::into_inner) = None;
 }
 
 /// A web page's host, for its site mode (the app's own pages and extension panels have none).
@@ -88,27 +98,29 @@ fn switch_for<R: Runtime>(app: &AppHandle<R>, url: Option<&Url>) -> Option<(Webv
     };
     let width = size.to_logical::<f64>(scale).width;
     let enabled = state::with(app, |s| s.settings.mobile_sites);
-    let wanted = phone::wants_mobile(enabled, width, mode_for(app, url));
+    let wanted = phone::wants_mobile(enabled, width, mode_for(app, url), applied());
     let mobile = phone::switch(applied(), wanted)?;
     APPLIED.store(if mobile { 2 } else { 1 }, Ordering::Relaxed);
     platform::set_mobile(&page, mobile);
     smoke::log("user-agent", if mobile { "phone" } else { "desktop" });
+    publish(app);
     Some((page, mobile))
 }
 
 /// Loads the open web page again with its new agent — or, going to the desktop agent on a known
-/// phone host, its desktop address.
+/// phone host, its desktop address (`phone::reaction`).
 fn load_again<R: Runtime>(app: &AppHandle<R>, page: &Webview<R>, url: &Url, mobile: bool) {
-    match phone::desktop_url(url).filter(|_| !mobile) {
-        Some(desktop) => {
+    match phone::reaction(Some(mobile), url) {
+        Reaction::Load(desktop) => {
             if let Err(err) = bar::load(app, desktop) {
                 eprintln!("little-joan: could not open the desktop site: {err}");
             }
         }
-        None => {
+        Reaction::Reload => {
             history_store::set_next_kind(app, VisitKind::Reload);
             let _ = page.reload();
         }
+        Reaction::Stay => {}
     }
 }
 
@@ -125,8 +137,76 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, reload: bool) {
         && previous.is_some()
         && let Some(url) = url.filter(|url| web_host(url).is_some())
     {
+        // Narrower, and the page already fits (Windows can ask the engine): it stays as it is.
+        if mobile && platform::page_fits(&page) == Some(true) {
+            smoke::log("ua-reload", "skipped fits");
+            return;
+        }
         load_again(app, &page, &url, mobile);
     }
+}
+
+/// What the toolbar and the command bar are told about the open web page's site (`SiteInfo`), or
+/// `None` without one (the start page, an extension's panel).
+pub fn info<R: Runtime>(app: &AppHandle<R>) -> Option<SiteInfo> {
+    let url = bar::page_url(app)?;
+    let host = web_host(&url)?;
+    let mobile = applied() == Some(true);
+    state::with(app, |s| {
+        phone::site_info(host, Platform::current(), &s.settings.site_modes, mobile)
+    })
+}
+
+/// Tells the bar the site info when it changed (`window.littleJoan.setSiteMode(<info | null>)`):
+/// after an agent switch, and with every change of the page's address (bar::publish_url).
+pub fn publish<R: Runtime>(app: &AppHandle<R>) {
+    let json = serde_json::to_string(&info(app)).unwrap_or_else(|_| "null".to_owned());
+    {
+        let mut last = PUBLISHED.lock().unwrap_or_else(PoisonError::into_inner);
+        if last.as_deref() == Some(json.as_str()) {
+            return;
+        }
+        *last = Some(json.clone());
+    }
+    if let Some(bar) = app.get_webview(bar::BAR) {
+        let _ = bar.eval(format!(
+            "window.littleJoan && window.littleJoan.setSiteMode && window.littleJoan.setSiteMode({json})"
+        ));
+    }
+}
+
+/// The bar's script runs now (start_info): it is told again, whatever it was told before.
+pub fn republish<R: Runtime>(app: &AppHandle<R>) {
+    *PUBLISHED.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    publish(app);
+}
+
+/// The bar asked for `mode` on the open web page's site ("Request desktop site", the toolbar's
+/// pill): keeps it in `siteModes` for that site (phone::with_site_mode), saves the settings, and
+/// applies it at once — the agent changes, and the page loads again only when it really changed
+/// (its desktop address, going to desktop on a known phone host). Refused without a web page.
+pub fn set_site_mode<R: Runtime>(app: &AppHandle<R>, mode: SiteMode) -> Result<SiteInfo, String> {
+    let url = bar::page_url(app)
+        .filter(|url| web_host(url).is_some())
+        .ok_or_else(|| Refusal::NoSite.message().to_owned())?;
+    let host = web_host(&url).unwrap_or_default().to_owned();
+    let (dir, updated) = state::with(app, |s| {
+        let table =
+            phone::with_site_mode(&s.settings.site_modes, &host, mode, Platform::current())?;
+        s.settings.site_modes = table;
+        Ok::<_, Refusal>((s.data_dir.clone(), s.settings.clone()))
+    })
+    .map_err(|refusal| refusal.message().to_owned())?;
+    let site = phone::mode_site(&host).unwrap_or_default();
+    smoke::log("site-mode", &format!("{site} {}", mode.name()));
+    if let Some((page, mobile)) = switch_for(app, Some(&url)) {
+        load_again(app, &page, &url, mobile);
+    }
+    publish(app);
+    if let Err(err) = settings::save(&dir, &updated) {
+        return Err(format!("It works now, but couldn't be saved: {err}"));
+    }
+    info(app).ok_or_else(|| Refusal::NoSite.message().to_owned())
 }
 
 /// The app is about to load `url` in the page: the agent for its site first, so the request goes

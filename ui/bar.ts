@@ -8,9 +8,11 @@
 // summon, Ctrl/Cmd+L and a click on the domain open the overlay, opening a page closes it. The
 // theme comes with start_info as the bar loads, and window.littleJoan.setTheme changes it (after
 // Settings saves one); the bar reports the colors it painted (set_theme_tokens) for extension
-// panels. window.littleJoan.setExtension names the extension whose panel the page shows. Before all
-// of that, at the top: the theme Rust's initialization script left (bar-boot.ts), so the first
-// frame isn't the default theme.
+// panels. window.littleJoan.setExtension names the extension whose panel the page shows, and
+// window.littleJoan.setSiteMode what the open web page's site is on (the toolbar's "Phone" /
+// "Desktop" pill and the command bar's "Request desktop site" rows, LJ40). Before all of that, at
+// the top: the theme Rust's initialization script left (bar-boot.ts), so the first frame isn't the
+// default theme.
 import { invoke } from "@tauri-apps/api/core";
 import { bootTheme, needsTheme } from "./bar-boot.ts";
 import { mayReplace, textFor } from "./bar-logic.ts";
@@ -20,7 +22,7 @@ import type { StartInfo } from "./command/welcome.ts";
 import { applyTheme } from "./lib/apply-theme.ts";
 import { initialState, onCloseButton, onKey, withOverlay, withShown, type KeyOutcome } from "./command/view-state.ts";
 import { historyView } from "./history/history.ts";
-import { extensionLabel, isMac, type ExtensionLabel } from "./toolbar/logic.ts";
+import { extensionLabel, isMac, siteModeInfo, type ExtensionLabel, type SiteModeInfo } from "./toolbar/logic.ts";
 import type { ThemeTokens } from "./lib/theme.ts";
 import { toolbar } from "./toolbar/toolbar.ts";
 
@@ -34,6 +36,7 @@ declare global {
       showHistory(): void;
       setTheme(theme: unknown): void;
       setExtension(label: unknown): void;
+      setSiteMode(info: unknown): void;
     };
   }
 }
@@ -75,6 +78,8 @@ if (field && rowList && toolbarRoot && historyRoot) {
   let canGoBack = false;
   /** The extension whose panel the page shows (the toolbar shows it instead of a domain). */
   let extension: ExtensionLabel | null = null;
+  /** What the open web page's site is on (Rust's info; null without a web page). */
+  let siteInfo: SiteModeInfo | null = null;
   /** What the overlay shows: the command bar, or the history view. */
   let panel: "command" | "history" = "command";
 
@@ -108,7 +113,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
     field.select();
   };
 
-  const command = commandBar(field, rowList, () => state.shown, showHistory);
+  const command = commandBar(field, rowList, () => state.shown, showHistory, () => siteInfo);
   const historyPanel = historyView(historyRoot, showCommand);
   const tools = toolbar(toolbarRoot);
 
@@ -118,7 +123,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
       field.value = next;
     }
     state = withShown(state, next);
-    tools.update(next, canGoBack, extension);
+    tools.update(next, canGoBack, extension, siteInfo);
   };
 
   const act = (outcome: KeyOutcome, event: KeyboardEvent): void => {
@@ -174,7 +179,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
     },
     setCanGoBack(on: boolean) {
       canGoBack = on;
-      tools.update(state.shown, canGoBack, extension);
+      tools.update(state.shown, canGoBack, extension, siteInfo);
     },
     focusField() {
       field.focus();
@@ -186,7 +191,11 @@ if (field && rowList && toolbarRoot && historyRoot) {
     },
     setExtension(label: unknown) {
       extension = extensionLabel(label);
-      tools.update(state.shown, canGoBack, extension);
+      tools.update(state.shown, canGoBack, extension, siteInfo);
+    },
+    setSiteMode(info: unknown) {
+      siteInfo = siteModeInfo(info);
+      tools.update(state.shown, canGoBack, extension, siteInfo);
     },
   };
 
@@ -234,7 +243,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
   });
 
   render();
-  tools.update(state.shown, canGoBack, extension);
+  tools.update(state.shown, canGoBack, extension, siteInfo);
   // After the early theme's report (if any), so `theme-early` comes before start_info's `theme`.
   earlyReported
     .then(() => invoke<StartInfo>("start_info"))
@@ -252,5 +261,8 @@ if (field && rowList && toolbarRoot && historyRoot) {
     .then(setUrl)
     .catch(() => setUrl(null))
     .finally(() => command.reset(state.view === "overlay"));
+  invoke<unknown>("site_mode_info")
+    .then((info) => window.littleJoan?.setSiteMode(info))
+    .catch(() => undefined);
   field.focus();
 }

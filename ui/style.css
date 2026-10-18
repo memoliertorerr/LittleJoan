@@ -272,6 +272,31 @@ body {
   border-radius: 999px;
 }
 
+/* Phone or desktop for this site (LJ40): a small label before "open in default browser"; the
+   domain shortens first when the window is narrow. */
+.site-pill {
+  flex: none;
+  height: 22px;
+  padding: 0 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lj-fg);
+  background: var(--lj-field);
+  border: 1px solid var(--lj-hairline);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.site-pill:hover {
+  background: var(--lj-row-selected);
+  color: var(--lj-on-selected);
+}
+
+.site-pill[hidden] {
+  display: none;
+}
+
 /* Overlay view: the command bar, a frosted card over the theme's gradient. */
 .bar-body.overlay {
   padding: 12px;
@@ -476,13 +501,29 @@ body {
   --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M3.5 6h9M3.5 10h9'/%3E%3C/svg%3E");
 }
 
-/* The built-in rows' symbols (Settings, search, history.css's clock, extensions, answers) are
-   masks painted in the theme's muted text color, and in the selected row's text color when
-   selected. */
+/* Phone or desktop for this site (LJ40): a screen, a phone, and the two together (automatic). */
+.row-icon-desktop {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='1.8' y='2.8' width='12.4' height='8.4' rx='1.4'/%3E%3Cpath d='M5.5 13.6h5M8 11.2v2.4'/%3E%3C/svg%3E");
+}
+
+.row-icon-phone {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4.6' y='1.6' width='6.8' height='12.8' rx='1.6'/%3E%3Cpath d='M7.2 12.2h1.6'/%3E%3C/svg%3E");
+}
+
+.row-icon-auto {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='1.4' y='3' width='9' height='6.6' rx='1.2'/%3E%3Crect x='10.2' y='6' width='4.4' height='7.6' rx='1.1'/%3E%3Cpath d='M4 12.4h3.4'/%3E%3C/svg%3E");
+}
+
+/* The built-in rows' symbols (Settings, search, history.css's clock, extensions, answers, the
+   site modes) are masks painted in the theme's muted text color, and in the selected row's text
+   color when selected. */
 .row-icon-settings,
 .row-icon-search:empty,
 .row-icon-extension:empty,
 .row-icon-answer,
+.row-icon-desktop,
+.row-icon-phone,
+.row-icon-auto,
 .row-icon-clock {
   background-color: var(--lj-fg-muted);
   -webkit-mask: var(--icon) center / 16px no-repeat;
@@ -493,6 +534,9 @@ body {
 .row.selected .row-icon-search:empty,
 .row.selected .row-icon-extension:empty,
 .row.selected .row-icon-answer,
+.row.selected .row-icon-desktop,
+.row.selected .row-icon-phone,
+.row.selected .row-icon-auto,
 .row.selected .row-icon-clock {
   background-color: var(--lj-on-selected);
 }

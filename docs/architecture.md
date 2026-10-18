@@ -103,8 +103,9 @@ ui/history/history.ts              the history view in the overlay: history_list
                                    mouse, remove, clear; DOM glue only
 ui/history/history.css             the history view's styles (linked by bar.html)
 ui/toolbar/logic.ts                the toolbar: the domain shown (or an extension's name and
-                                   icon), back / open-in-browser enabled, macOS from the user
-                                   agent (pure, unit-tested)
+                                   icon), back / open-in-browser enabled, the Phone / Desktop pill
+                                   and Rust's site info, macOS from the user agent (pure,
+                                   unit-tested)
 ui/toolbar/toolbar.ts              the toolbar's buttons and site; DOM glue only
 ui/index.html                      the page webview's first page: a plain background, no script
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
@@ -135,6 +136,9 @@ ui/settings/extensions-logic.ts    the Extensions tab: groups (Built-in, Bundled
 ui/settings/extensions.ts          the Extensions tab's list, switches, Developer mode, folder
                                    and reload buttons; DOM glue only
 ui/settings/extensions.css         the Extensions tab's styles
+ui/settings/sites-logic.ts         General's "Phone or desktop per site": the user's entries and
+                                   the built-in ones, Remove / Reset, the draft (pure, unit-tested)
+ui/settings/sites.ts               that list in the General tab; DOM glue only
 docs/extensions.md                 the extension authors' guide (experimental)
 docs/images/                       the README's screenshots, cropped from CI's macOS smoke run (its
                                    test page and sample data only — nothing personal)
@@ -148,7 +152,7 @@ src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_
                                    go_back, open_in_browser, hibernate, history_list, suggest,
                                    history_remove, history_clear, open_settings, start_info,
                                    set_start_at_login, set_theme_tokens, extensions_list,
-                                   open_extension; drag the window
+                                   open_extension, site_mode_info, set_site_mode; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, clear history, preview a theme, list / reload
                                    extensions, show their folder, close
@@ -176,10 +180,13 @@ src-tauri/src/joan.rs              the page window: create / focus / destroy, wi
 src-tauri/src/bar.rs               its two webviews (bar + page): build, pushing the page's
                                    address to the bar, focus, navigation
 src-tauri/src/bar/view.rs          the view state: toolbar / overlay / element fullscreen,
-                                   applied to the webviews (layout, show / hide, Linux packing)
+                                   applied to the webviews — only what changed since the last
+                                   layout; macOS autoresizing masks per mode
 src-tauri/src/bar/watch.rs         the once-a-second check of the page's address
 src-tauri/src/bar/boot.rs          the bar's first paint: its theme script (checked, tested), the
                                    theme pushed to it, whether its script runs yet (`Ready`)
+src-tauri/src/bar/background.rs    the bar webview's own background: the theme's `--lj-bg-0` it
+                                   painted last, else white / near-black (pure part tested)
 src-tauri/src/extensions/          extensions (experimental; below): mod.rs (the model),
                                    manifest.rs (extension.json, strict), paths.rs (plain paths,
                                    no traversal, no symlink out), urls.rs (one origin per
@@ -199,14 +206,26 @@ src-tauri/src/back_stack.rs        whether the toolbar's back button has somewhe
                                    window's trail of loaded web pages (pure, tested)
 src-tauri/src/layout.rs            where the bar and the page go per mode (Toolbar, Overlay,
                                    Fullscreen), from physical size + scale (pure)
+src-tauri/src/layout/diff.rs       what a new layout changes (bounds, visibility) and macOS's
+                                   autoresizing masks per mode (pure, tested)
 src-tauri/src/capability_tests.rs  tests: no capability reaches the page webview, its window, or
                                    remote URLs (Ground Rule 18)
-src-tauri/src/phone.rs             phone mode decisions: 600 px threshold, user agents, debounce,
+src-tauri/src/phone.rs             phone mode decisions: below 600 px / from 640 px, user agents,
+                                   debounce (pure, tested)
+src-tauri/src/phone/sites.rs       per site: a site's mode (siteModes + the WebKit built-in list),
+                                   the key a site is kept under, changing a mode, the info for the
+                                   bar, what the page does after a switch (pure, tested)
+src-tauri/src/phone/agent.rs       Windows' phone agent with client hints: CDP
+                                   `Emulation.setUserAgentOverride` parameters, the layout-metrics
+                                   check (pure, tested; built on Windows and in tests)
+src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the built-in sites for
+                                   Settings
                                    a site's mode (siteModes + the WebKit built-in list), the
                                    desktop address of a known phone host (pure, tested)
 src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user agent for its width
                                    and site, before the app's navigations and on the page's own,
-                                   reload (or load the desktop address)
+                                   reload (or load the desktop address); a site's mode from the bar,
+                                   the info pushed to it
 src-tauri/src/placement.rs         where a new window opens (monitor under the cursor)
 src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
                                    with rollback (Registrar trait), suspend while recording
@@ -232,9 +251,11 @@ src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView
                                    Cmd+Q goes through joan::quit
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
 src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → keys.rs;
-                                   ContainsFullScreenElementChanged → window fullscreen
-src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode); WebKit's
-                                   fullscreenState (CI's `wk-fullscreen` log)
+                                   ContainsFullScreenElementChanged → window fullscreen; phone
+                                   mode's agent through the DevTools protocol (SetUserAgent as the
+                                   fallback), Page.getLayoutMetrics
+src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode), autoresizing
+                                   masks; WebKit's fullscreenState (CI's `wk-fullscreen` log)
 src-tauri/src/platform/linux.rs    Linux: GTK window key-press-event → keys.rs; the bar's packing
                                    in the window's GtkBox (toolbar / overlay); enter/leave-
                                    fullscreen → hide the bar
@@ -272,7 +293,14 @@ scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report
 scripts/ci/smoke-fullscreen.mts    CI: the fullscreen run (the smoke page's ?fs=both buttons,
                                    clicked where `page-screen` puts them) and its rules;
                                    unit-tested
-tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
+scripts/ci/smoke-resize.mts        CI: the resize run (bursts of `--size`, the phone-mode
+                                   hysteresis) and its rules; unit-tested
+scripts/ci/smoke-sitemode.mts      CI: the site-mode run (the command bar's site rows, Settings'
+                                   list, Windows' client hints from the server's header log) and its
+                                   rules; unit-tested
+tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
+                                   (under a desktop agent a 600 px minimum width, like most
+                                   desktop pages, unless ?fits=1; its report says `uamobile=`);
                                    with ?persist=set|check, the cookie and localStorage check;
                                    with ?fs=both, "Element fullscreen" and "Phone player"
 tests/smoke/fullscreen-logic.mjs   ?fs=both's logic: the buttons' places, the player's route by
@@ -360,7 +388,7 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
@@ -378,8 +406,8 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `open_in_browser()` | the toolbar's "open in default browser" | the page action OpenInBrowser: the page goes to the default browser, the window hibernates |
 | `hibernate()` | the bar, Esc with no page | close the window (same path as `--hide`) |
 | `start_info()` | the bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut, theme }`: the theme the bar applies, and the welcome's facts; `firstRun` is true once; logs `theme <mode> colors=<n>` |
-| `get_settings()` | settings window, on load | settings + engine and language lists + platform + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version`; logs `settings-loaded` |
-| `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` and optionally `theme` (checked field by field; left out, the saved one stays). A new theme goes at once to the open window's bar (`window.littleJoan.setTheme`) and to the settings window (`window.littleJoanSettings.setTheme`), both by `eval` |
+| `get_settings()` | settings window, on load | settings + engine and language lists + platform + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version` + `builtInSiteModes` (`[{ host, mode }]`: YouTube on desktop on macOS and Linux, none on Windows); logs `settings-loaded` |
+| `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` and optionally `theme` (checked field by field; left out, the saved one stays) and `siteModes` (General's list, only when it was edited — so a pill click while Settings is open isn't undone). A new theme goes at once to the open window's bar (`window.littleJoan.setTheme`) and to the settings window (`window.littleJoanSettings.setTheme`), both by `eval` |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 | `history_list()` | the history view, when it opens and after a change | every record, latest visit first: `[{ url, title, host, lastVisit, visitCount }]` (empty with no window); the view searches, groups and draws them; logs `history-list <n>` |
@@ -392,6 +420,8 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `open_extension(id, command, pageAction)` | the command bar, an extension's row | opens that command's panel — or, for a page action, its panel for the open web page (refused without one), handing it the page's address and title only when its manifest asks for `pageInfo`; never a switched-off extension (`session::open`) |
 | `reload_extensions()` | Settings → Extensions → Reload extensions | read the registry again; returns the new list |
 | `open_extensions_folder()` | Settings → Extensions → Open extensions folder | create `<config dir>/extensions/` if needed and show it in the file manager (`tauri_plugin_opener::reveal_item_in_dir`) |
+| `site_mode_info()` | the bar, on load (Rust also pushes it: `window.littleJoan.setSiteMode`, on every address change and agent switch) | `{ host, mode, builtIn, agent }` for the open web page's site — `host` the key a mode is kept under (`youtube.com` for `m.youtube.com`), `mode` `auto` \| `phone` \| `desktop`, `builtIn` whether the built-in list decides, `agent` `phone` \| `desktop`; `null` without a web page (the start page, a panel) |
+| `set_site_mode(mode)` | the toolbar's pill, the command bar's "Request desktop site" / "Request phone site" / "Automatic for this site" | keeps `mode` for the open web page's site in `siteModes` — the site is Rust's (`bar::page_url`), the bar sends only the mode; `auto` removes the entry, or keeps `"auto"` when a built-in or a parent's entry would still decide —, saves the settings and applies it at once: the agent switches and the page loads again only when it really changed (going to desktop on a known phone host: its desktop address). Refused without a web page, or with 500 sites already. Logs `site-mode <site> <mode>`; returns the new info |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
@@ -507,7 +537,7 @@ all fields, whichever tab they are on):
 
 | Tab | Holds |
 |---|---|
-| General | shortcut, search engine, translate language, mobile sites, start at login |
+| General | shortcut, search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
 | Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
 | Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
@@ -821,18 +851,53 @@ visible in panels as in web pages, and every call is refused.
   the same on a Retina screen as at scale 1. Linux sizes the views in a GtkBox, which is
   logical by nature. Unit tests cover scale 1, 1.5 and 2; the CI smoke test resizes the window
   with `--size` and checks the page's `innerWidth × innerHeight` (also at GDK scale 2 on Linux).
+- **Resizing is live, like Little Arc** (LJ39): pages reflow to the window as it is dragged — no
+  scaling, no zoom to fit, no viewport emulation (the desktop engines ignore `<meta
+  name="viewport">`). To keep that smooth:
+  - **Only what changed.** `bar/view.rs` keeps the layout it last applied (per window; forgotten
+    when WebKit's fullscreen had the page, and at another scale factor, since the engines turn
+    logical bounds into pixels at the scale of the moment) and `layout::changes` gives what
+    differs: a resize sets only the bounds that changed — at most the two webviews' — and shows
+    or hides nothing; a mode change shows or hides what it must. Before, every `Resized` set the
+    bounds of both webviews and showed both (on Windows `ShowWindow` + `SetIsVisible` twice per
+    event, on Linux `show_all()`). Smoke log: `bounds-set <n>` per layout. Linux's GtkBox packing
+    is GTK's layout and changes only with the mode, as before.
+  - **macOS: autoresizing masks per mode** (`layout::mask_for`, set by `platform/mac.rs` when a
+    mode is first laid out): Toolbar — the bar follows the width with a flexible bottom margin
+    (it keeps its 40 px at the top), the page follows width and height; Overlay — the bar follows
+    both, and so does the hidden page. AppKit then resizes the webviews in its own layout pass
+    while the window is dragged, where wry's fixed `NSViewMinYMargin` and tao's `Resized` (a frame
+    late, from a run-loop observer) left gaps at the edges. The layout `Resized` still triggers
+    sets the same frames AppKit already gave them (so a late or off-thread layout can never leave
+    a view stale). Nothing touches the page's mask or bounds while WebKit has it in its
+    fullscreen window; afterwards the layout and the masks are applied again in full.
+  - **The bar webview's background is the theme's** (`bar/background.rs`): the `--lj-bg-0` the bar
+    painted last (kept in `AppState` across windows, memory only; forgotten when Settings saves
+    or previews another theme), set when the window is built and again with
+    `Webview::set_background_color` whenever the bar paints a new theme; with nothing painted yet
+    (or painted in the other scheme), white or near-black — the start page's colors. It shows
+    before the bar paints and, on Windows, in the strip a fast drag uncovers before WebView2
+    repaints. **The page webview keeps the engine's white:** a page without a background of its
+    own is drawn over the webview's color on every engine (WebView2's `DefaultBackgroundColor`,
+    WebKitGTK's background color, WKWebView with `drawsBackground` off), so a theme color there
+    would turn plain pages dark on dark.
+  - Never Tauri's `auto_resize`: it scales child webviews proportionally, so the 40 px bar would
+    grow.
 - **Phone mode** (`phone.rs`, `phone_mode.rs`, setting `mobileSites`, on by default): many sites
   (Google, YouTube) choose their mobile version by **user agent**, not by viewport width, so a
   narrow window alone still gets a cropped desktop page. Below **600 logical px** of page width
-  the page webview gets a phone user agent: **iPhone Safari** on macOS and Linux (WebKit
+  the page webview gets a phone user agent, and the desktop one again only from **640 px**
+  (hysteresis: in between, the agent the page has stays; a new window decides by 600; no tablet
+  range): **iPhone Safari** on macOS and Linux (WebKit
   engines) and **Chrome on Android** on Windows (Chromium; the Chrome version is copied from
   WebView2's own agent), so the mobile pages that come back are built for the same engine.
   - Set per OS at runtime: WKWebView `customUserAgent` (`platform/mac.rs`), WebView2
     `ICoreWebView2Settings2::SetUserAgent` (`platform/win.rs`, the engine's own agent is read
     once to restore it), WebKitGTK's `user-agent` setting (`platform/linux.rs`).
-  - A new window gets the right agent before any web page loads. A resize that crosses the
-    threshold switches the agent once the resize has been still for 400 ms (`Debounce`), then
-    reloads the current web page (its URL is kept; the bar keeps working). Nothing switches
+  - A new window gets the right agent before any web page loads. A resize that crosses a
+    threshold (600 going narrower, 640 going wider) switches the agent once the resize has been
+    still for 400 ms (`Debounce`), then reloads the current web page once (its URL is kept; the
+    bar keeps working) — only when the agent really changes. Nothing switches
     during fullscreen — a fullscreen video makes the window wide, and a reload would end it
     (macOS: also while WebKit's own fullscreen window shows the page).
   - Changing the setting applies at once.
@@ -852,7 +917,39 @@ visible in panels as in web pages, and every call is refused.
     a reload). Going to the desktop agent on a known phone host loads its desktop address instead
     — `m.youtube.com` → `www.youtube.com`, `<lang>.m.wikipedia.org` → `<lang>.wikipedia.org`
     (`phone::desktop_url`) —, and the app's navigation to such an address for a site on `desktop`
-    goes to the desktop one directly. No UI yet (LJ40 adds it).
+    goes to the desktop one directly.
+  - **A site's phone address is the site** (LJ40, `phone::mode_site`): a mode is kept under the
+    desktop name — `m.youtube.com` → `youtube.com`, `en.m.wikipedia.org` → `en.wikipedia.org`,
+    and an `m.` / `mobile.` label in front of a name of two labels or more dropped
+    (`m.facebook.com` → `facebook.com`) — and a lookup asks the page's own host first, then that
+    site. Otherwise "Request desktop site" on a phone address would hold for that host alone, and
+    a site that sends a desktop agent from `m.` to `www.` (and a phone agent back) would bounce.
+  - **The UI** (LJ40): the toolbar's **pill** — "Phone" while the page has the phone agent, or
+    "Desktop" while its site has a mode of its own (a built-in one too); nothing for a desktop page
+    that follows the width (most of the time), the start page or a panel; it fits beside the site
+    at 320 px (the domain shortens first). A click asks `set_site_mode` for the other version. The
+    command bar's built-in rows "Request desktop site", "Request phone site", "Automatic for this
+    site" (while a web page is open; typed words must start the row's words: "desktop", "phone",
+    "mobile", "site", "request", "auto…"), the current one marked "current"; picking one calls
+    `set_site_mode` and closes the command bar. Settings → General's list (above). Rust pushes the
+    site info to the bar (`setSiteMode`) on every address change and agent switch.
+  - **Windows' phone agent with client hints** (LJ40, `platform/win.rs`, `phone::agent`): a bare
+    custom agent (`ICoreWebView2Settings2::SetUserAgent`) left Chromium's user-agent client hints
+    saying desktop (or nothing), so sites saw an Android agent with `Sec-CH-UA-Mobile: ?0`. The
+    phone agent now goes through WebView2's own DevTools protocol, called from Rust
+    (`ICoreWebView2::CallDevToolsProtocolMethod`, no script in any page; DevTools stay off for the
+    user): `Emulation.setUserAgentOverride` with the agent and its metadata — platform Android,
+    mobile, brands and full versions from WebView2's own version (`BrowserVersionString`) —, and
+    the desktop agent clears that override (`{ "userAgent": "" }`: WebView2's own agent and
+    metadata, exactly). The call waits (off the main thread, at most 2 s) for the engine, so the
+    reload right after goes out with the new agent; smoke log `ua-override <phone|desktop>`. If the
+    protocol refuses, `SetUserAgent` as before from then on (`ua-override fallback <reason>`).
+  - **Windows skips a reload for a page that already fits:** before reloading for the phone agent
+    (a resize going narrow), CDP's `Page.getLayoutMetrics` is asked; when the page's content
+    (`cssContentSize` width) is no wider than the viewport, it is responsive and stays as it is
+    (`ua-reload skipped fits`; `layout-metrics content=<w> viewport=<w>`). Only going narrow: a
+    phone page always "fits" a wider window, and going wide must bring the desktop version back.
+    macOS and Linux would need a script in the page to measure it (Ground Rule 10): they reload.
 
 ## Fullscreen video
 
@@ -922,7 +1019,13 @@ screen, physical pixels, for CI's clicks), and on macOS `wk-fullscreen <not|ente
 (WKWebView's `fullscreenState`, polled every 100 ms while a page window exists — smoke mode only),
 `wk-window <resized|focused|moved> <detail>` (the window's events while that isn't `not`), and
 `layout-deferred` / `layout-resumed` (macOS: a layout waited for WebKit's fullscreen to end),
-`user-agent <phone|desktop>` (phone mode switched the page's agent). Without the variable nothing
+`user-agent <phone|desktop>` (phone mode switched the page's agent), `bounds-set <n>` (every
+layout: how many webviews' bounds it set, LJ39), `autoresizing <webview> <mask> flipped=<bool>
+follows=<bool>` (macOS: a webview's autoresizing mask was set), `bar-background <light|dark>`
+(the bar's webview background followed a newly painted theme), `site-mode <site> <mode>`
+(`set_site_mode` kept a mode, LJ40), `ua-override <phone|desktop | fallback <reason> | no answer>`
+(Windows: the agent through the DevTools protocol), `layout-metrics content=<w> viewport=<w>` and
+`ua-reload skipped fits` (Windows: a page that fits wasn't reloaded for the phone agent). Without the variable nothing
 is logged.
 
 ## Pure core (no Tauri types, unit-tested)
@@ -1114,7 +1217,31 @@ and pushes to `main`:
   `smoke-fullscreen-site.log`). The rules: every element-fullscreen path enters, holds until the
   page's own exit and leaves when asked (required on Windows and Linux; on macOS whenever the
   click reached the page), the player's iOS route under an iPhone agent is informational, and on
-  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Then the
+  **resize run** (`smoke-resize.mts`, LJ39), its own launch in a dark two-color theme with the
+  window created 820×600 (so every width stays on the runner's screen): the smoke page, `--size
+  380x600`, a burst of 12 `--size` steps from 380 to 820 px wide sent through single-instance 30 ms
+  apart (`resize-820.png`), the same burst back (`resize-380.png`), then 620 px coming from phone,
+  660, and 620 coming from desktop. Per step the page must end with `innerWidth` = the window's
+  width and `innerHeight` = 560 and the right agent (phone at 380 and at 620 from phone, desktop at
+  820, 660 and 620 from desktop), with exactly one `user-agent` switch and one reload per crossing
+  (none for the two 620 steps), every `bounds-set` at most 2, and no `page-visible` line (a resize
+  shows or hides nothing); what each step saw goes into `summary.json`'s `resizeRun` (log
+  `smoke-resize.log`). Then the **site-mode run** (`smoke-sitemode.mts`, LJ40), its own launch: the
+  smoke page at 390 px on the phone agent (`phone-pill.png`: the toolbar's "Phone"); Ctrl/Cmd+L,
+  typing `request desktop`, ↓ ↓ Enter must log `site-mode 127.0.0.1 desktop`, leave
+  `"127.0.0.1": "desktop"` in settings.json and load the page exactly once more, now on the desktop
+  agent; `automatic` the same way must log `site-mode 127.0.0.1 auto`, remove the entry and bring
+  the phone agent back with one load (typed on Windows and Linux; best effort on macOS). The smoke
+  server writes every request's `User-Agent`, `Sec-CH-UA-Mobile`, `Sec-CH-UA-Platform` and
+  `Sec-CH-UA` to `agent-headers.jsonl`, and the smoke page's report says `uamobile=` (what
+  `navigator.userAgentData.mobile` says): on Windows the phone agent's request must carry Android,
+  `?1` and `"Android"` and the page `uamobile=true`, the desktop agent's `?0`, `"Windows"` and
+  `uamobile=false` — informational if the app logged `ua-override fallback`. Then, informational,
+  `?fits=1` (the smoke page without the 600 px minimum width it has under a desktop agent) at 720
+  and then 390 px: Windows skips the reload, macOS and Linux reload. Last, "Request desktop site"
+  once more and `--settings general` (`settings-site-modes.png`: the list). Log
+  `smoke-site-mode.log`, `summary.json`'s `siteModeRun`. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).

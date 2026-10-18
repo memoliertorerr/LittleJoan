@@ -19,7 +19,11 @@
 // the page, the command bar, the history view and Settings in a two-color theme, light and dark,
 // and the default theme in dark; screenshots in <out>/theme/), then the fullscreen run (its own
 // launch: the smoke page's ?fs=both buttons clicked at 390 and 720 px, screenshots in <out>/fs/;
-// smoke-fullscreen.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
+// smoke-fullscreen.mts), then the resize run (its own launch in a dark theme: bursts of `--size`
+// 380 ↔ 820 px 30 ms apart and the phone-mode hysteresis, screenshots resize-380.png and
+// resize-820.png; smoke-resize.mts), then the site-mode run (its own launch: the toolbar's phone
+// pill, the command bar's "Request desktop site" and "Automatic for this site", Settings' list,
+// Windows' client hints from the server's agent-headers.jsonl; smoke-sitemode.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
 // smoke-theme.mts) and the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
@@ -27,7 +31,7 @@
 // folder (it must hibernate). Screenshots and a summary land in <out>. Linux runs inside
 // xvfb-run + dbus-run-session with a window manager.
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir, tmpdir } from "node:os";
@@ -78,7 +82,9 @@ import {
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
-import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsApp, type FsDriver } from "./smoke-fullscreen.mts";
+import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } from "./smoke-fullscreen.mts";
+import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
+import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -249,7 +255,9 @@ let f = NSScreen.main!.frame
 let args = CommandLine.arguments.dropFirst().compactMap { Double($0) }
 let p = args.count == 2 ? CGPoint(x: args[0], y: args[1]) : CGPoint(x: f.midX, y: f.midY)
 for t in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
-  CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+  let event = CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)
+  event?.flags = []
+  event?.post(tap: .cghidEventTap)
   usleep(80000)
 }
 `,
@@ -298,10 +306,13 @@ for token in CommandLine.arguments.dropFirst(2) {
   for down in [true, false] {
     if kind == "k" {
       let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(rest.filter { $0.isNumber }) ?? 0, keyDown: down)
-      if rest.hasSuffix("s") { event?.flags = .maskShift }
+      // Explicit flags: an event made from no source takes the session's, and a Command left
+      // down by a synthetic Cmd+L turned a typed "q" into Cmd+Q (LJ40's CI).
+      event?.flags = rest.hasSuffix("s") ? .maskShift : []
       event?.post(tap: .cghidEventTap)
     } else {
       let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+      event?.flags = []
       var units = Array(rest.utf16)
       event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
       event?.post(tap: .cghidEventTap)
@@ -340,7 +351,9 @@ NSRunningApplication(processIdentifier: pid)?.activate(options: [])
 usleep(400000)
 for code in CommandLine.arguments.dropFirst(2) {
   for down in [true, false] {
-    CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code) ?? 0, keyDown: down)?.post(tap: .cghidEventTap)
+    let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code) ?? 0, keyDown: down)
+    event?.flags = []
+    event?.post(tap: .cghidEventTap)
     usleep(60000)
   }
   usleep(150000)
@@ -386,6 +399,11 @@ for down in [true, false] {
   event?.post(tap: .cghidEventTap)
   usleep(60000)
 }
+// Command up (kVK_Command), so the session doesn't keep it down for the next synthetic keys.
+let release = CGEvent(keyboardEventSource: nil, virtualKey: 55, keyDown: false)
+release?.flags = []
+release?.post(tap: .cghidEventTap)
+usleep(60000)
 `,
     );
     run("swift", [swift, String(appPid), String(MAC_KEYS[letter] ?? 0)]);
@@ -504,10 +522,30 @@ async function forward(args: string[], withEnv: NodeJS.ProcessEnv = env): Promis
   });
 }
 
+/** Each request's agent headers, one JSON line each (the site-mode run reads them, LJ40). */
+const agentLogPath = join(out, "agent-headers.jsonl");
+
 function serve(): Promise<Server> {
   const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".mjs": "text/javascript" };
+  rmSync(agentLogPath, { force: true });
   const server = createServer((req, res) => {
     const name = (req.url ?? "/").split("?")[0]?.replace(/^\//, "") ?? "";
+    const header = (key: string) => {
+      const value = req.headers[key];
+      return typeof value === "string" ? value : null;
+    };
+    appendFileSync(
+      agentLogPath,
+      `${JSON.stringify({
+        t: Date.now(),
+        path: name,
+        query: (req.url ?? "").includes("?") ? (req.url ?? "").slice((req.url ?? "").indexOf("?")) : "",
+        ua: header("user-agent") ?? "",
+        mobile: header("sec-ch-ua-mobile"),
+        platform: header("sec-ch-ua-platform"),
+        brands: header("sec-ch-ua"),
+      })}\n`,
+    );
     const file = join(pageDir, name);
     if (!/^[\w.-]+$/.test(name) || !types[extname(name)] || !existsSync(file)) {
       res.writeHead(404).end();
@@ -1121,12 +1159,15 @@ for (const run of THEME_RUNS) {
  * The fullscreen run (LJ36, smoke-fullscreen.mts): its own launches, driven through clicks only.
  * `name` names the data folder and the log (`smoke-<name>.log`).
  */
-function fullscreenLaunch(name: string, settings: Record<string, unknown>): Promise<FsApp> {
+function fullscreenLaunch(name: string, settings: Record<string, unknown>): Promise<SiteApp> {
   const logFile = join(out, `smoke-${name}.log`);
   rmSync(logFile, { force: true });
-  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dataDir(name, true, settings), LITTLEJOAN_SMOKE_LOG: logFile };
+  const runDir = dataDir(name, true, settings);
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
   const runChild = launch(runEnv);
   return Promise.resolve({
+    pid: () => appPid(runChild),
+    settings: () => readIfThere(join(runDir, "settings.json")),
     forward: (args) => forward(args, runEnv),
     events: () => events(logFile),
     waitFor: (what, test, timeoutMs) => waitFor(what, test, timeoutMs, logFile),
@@ -1143,6 +1184,23 @@ const fullscreenDriver: FsDriver = { os, pageUrl: smokePageUrl, launch: fullscre
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
 const fullscreenCheck = await fullscreenRun(fullscreenDriver, true);
+// The resize run (LJ39, smoke-resize.mts): its own launch, on the same driver.
+const resizeCheck = await resizeRun(fullscreenDriver);
+console.log(`resize: ${JSON.stringify(resizeSummary(resizeCheck.results))}`);
+// The site-mode run (LJ40, smoke-sitemode.mts): its own launch, typing like the extension run.
+const siteDriver: SiteDriver = {
+  os,
+  pageUrl: smokePageUrl,
+  launch: fullscreenLaunch,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  typeText,
+  pressKeys,
+  pressShortcut,
+  agentRequests: () => parseAgentLog(readIfThere(agentLogPath) ?? ""),
+};
+const siteModeCheck = await siteModeRun(siteDriver);
+console.log(`site mode: ${JSON.stringify(siteModeSummary(siteModeCheck, os))}`);
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -1228,6 +1286,8 @@ const summary = {
     keysReached: bundledCheck.keys,
   },
   fullscreenRun: fullscreenSummary(fullscreenCheck, os),
+  resizeRun: { steps: resizeSummary(resizeCheck.results), rules: resizeFailures(RESIZE_STEPS, resizeCheck.results) },
+  siteModeRun: siteModeSummary(siteModeCheck, os),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1272,13 +1332,15 @@ const failures = evaluate(
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(fullscreenFailures(fullscreenCheck, os))
+  .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
+  .concat(siteModeFailures(siteModeCheck, os))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
   const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
-  const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log")];
+  const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }

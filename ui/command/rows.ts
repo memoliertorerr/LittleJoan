@@ -1,6 +1,7 @@
 // The command bar's rows (pure, unit-tested): what to show for what is typed, in what order, the
 // inline autofill, and what the keys do. Rust's suggest() supplies the suggestions
 // (src-tauri/src/suggest.rs); view.ts draws the rows, as text only.
+import type { SiteModeInfo } from "../toolbar/logic.ts";
 
 /** One suggestion from Rust's `suggest(query)`. */
 export interface Suggestion {
@@ -28,7 +29,9 @@ export type Action =
   /** An extension's command, or a page action for the open web page (extensions.ts). */
   | { kind: "command"; extension: string; command: string; pageAction: boolean }
   /** A quick answer's text, to copy (LJ31). */
-  | { kind: "copy"; text: string };
+  | { kind: "copy"; text: string }
+  /** Phone or desktop for the open web page's site (LJ40: set_site_mode). */
+  | { kind: "siteMode"; mode: "auto" | "phone" | "desktop" };
 
 export interface Row {
   kind: RowKind;
@@ -47,10 +50,14 @@ export interface Row {
   removable?: string;
 }
 
-/** Hooks for rows that don't come from history: quick answers (LJ31), extension commands (LJ30). */
+/**
+ * Hooks for rows that don't come from history: quick answers (LJ31), extension commands (LJ30),
+ * and what the open web page's site is on (LJ40, for the site-mode rows).
+ */
 export interface Hooks {
   quickAnswer?: (query: string) => Row | null;
   commands?: (query: string) => Row[];
+  site?: SiteModeInfo | null;
 }
 
 /** The inline completion in the field: the full text it shows, and the row it belongs to. */
@@ -88,15 +95,46 @@ export const HISTORY_ROW: Row = {
 
 const HISTORY_WORD = "history";
 
+/** Says which of the site-mode rows is the site's mode now (in the row's muted part). */
+export const CURRENT_MODE = "current";
+
+/** The site-mode rows (LJ40), each with the words that find it. */
+const SITE_MODE_ROWS: readonly { mode: "auto" | "phone" | "desktop"; title: string; icon: string; words: readonly string[] }[] = [
+  { mode: "desktop", title: "Request desktop site", icon: "desktop", words: ["request", "desktop", "site"] },
+  { mode: "phone", title: "Request phone site", icon: "phone", words: ["request", "phone", "mobile", "site"] },
+  { mode: "auto", title: "Automatic for this site", icon: "auto", words: ["automatic", "auto", "site", "desktop", "phone", "mobile"] },
+];
+
+/**
+ * The site-mode rows for what is typed, while a web page is open (`site`, Rust's info): each row
+ * whose words start every typed word (two letters or more: "desk", "mobile", "request phone",
+ * "site"), in a fixed order; the site's mode now is marked.
+ */
+export function siteModeRows(query: string, site: SiteModeInfo | null): Row[] {
+  const typed = query.trim().toLowerCase().split(/\s+/).filter((word) => word !== "");
+  if (!site || typed.length === 0 || typed.some((word) => word.length < 2)) {
+    return [];
+  }
+  return SITE_MODE_ROWS.filter((row) => typed.every((word) => row.words.some((w) => w.startsWith(word)))).map((row) => ({
+    kind: "command",
+    title: row.title,
+    domain: row.mode === site.mode ? CURRENT_MODE : "",
+    host: "",
+    icon: row.icon,
+    action: { kind: "siteMode", mode: row.mode },
+  }));
+}
+
 /**
  * The built-in commands for what is typed: "History" when the text starts the word (two letters
- * or more: "hi", "hist") or contains it ("history", "clear history").
+ * or more: "hi", "hist") or contains it ("history", "clear history"); with a web page open, the
+ * site-mode rows (`siteModeRows`).
  */
-export function builtInCommands(query: string): Row[] {
+export function builtInCommands(query: string, site: SiteModeInfo | null = null): Row[] {
   const typed = query.trim().toLowerCase();
   const starts = typed.length >= 2 && HISTORY_WORD.startsWith(typed);
   const names = typed.split(/\s+/).includes(HISTORY_WORD);
-  return starts || names ? [HISTORY_ROW] : [];
+  return [...(starts || names ? [HISTORY_ROW] : []), ...siteModeRows(query, site)];
 }
 
 function rowFor(suggestion: Suggestion): Row {
@@ -179,7 +217,7 @@ export function buildRows(query: string, suggestions: readonly Suggestion[], hoo
     rows.push(rowFor(best));
   }
   rows.push(searchRow(typed, engine));
-  const builtIn = builtInCommands(typed);
+  const builtIn = builtInCommands(typed, hooks.site ?? null);
   rows.push(...more.slice(0, Math.max(0, MAX_SUGGESTIONS - rows.length - builtIn.length)).map(rowFor));
   rows.push(...builtIn);
   rows.push(...(hooks.commands?.(typed) ?? []));

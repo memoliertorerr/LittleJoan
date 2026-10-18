@@ -9,8 +9,26 @@ All notable changes to Little Joan are recorded here. The format follows
 ### Changed
 - **History is Ctrl+H on Windows and Linux** (Chrome's key), so Ctrl+Y is redo again in text
   fields; macOS keeps Cmd+Y.
+- **Smoother resizing.** Pages reflow live as you drag, as in Little Arc. A resize now moves only
+  what changed (before, every step of a drag also re-showed both views); on macOS the toolbar and
+  the page follow the window's edge in the same frame; the toolbar's own background is your
+  theme's, so a fast drag on Windows no longer shows a white strip beside a dark toolbar.
+- **Phone mode switches less:** below 600 px the phone version, and back to the desktop version
+  only from 640 px — a window dragged back and forth around 600 px no longer flips the page
+  between the two.
 
 ### Added
+- **Phone or desktop per site.** A small **Phone** / **Desktop** label in the toolbar (while a
+  page shows its phone version, or its site has a mode of its own) switches the site to the other
+  version and remembers it; the command bar has **Request desktop site**, **Request phone site**
+  and **Automatic for this site** (type "desktop", "phone" or "site"), the current one marked;
+  **Settings → General** lists the sites, with Remove (or Reset for YouTube's built-in desktop
+  site on macOS and Linux). The page reloads only when its agent really changes.
+- **Windows: the phone version with client hints.** The phone agent now comes with matching
+  client hints (`Sec-CH-UA-Mobile: ?1`, platform Android, `navigator.userAgentData.mobile`), set
+  through WebView2's own DevTools protocol from Little Joan itself — no script in the page,
+  DevTools stay off — so sites no longer see an Android agent that says desktop everywhere else;
+  and a page that already fits a narrower window isn't reloaded.
 - **Double-click the toolbar to zoom the window** (and again to bring it back), on its empty
   parts — on Windows and Linux too, like the title bar.
 

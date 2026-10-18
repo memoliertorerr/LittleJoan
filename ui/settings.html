@@ -74,7 +74,10 @@
             <span class="setting-label">Mobile sites in a narrow window</span>
             <input id="mobile" type="checkbox" />
           </label>
-          <p class="setting-note">Narrower than 600 px, pages get a phone browser's user agent.</p>
+          <p class="setting-note">Below 600 px, pages get a phone browser's agent (desktop again from 640 px).</p>
+          <h2 id="site-modes-label">Phone or desktop per site</h2>
+          <ul id="site-modes" class="site-modes" aria-labelledby="site-modes-label" hidden></ul>
+          <p id="site-modes-empty" class="setting-note"></p>
           <label class="setting" for="login">
             <span class="setting-label">Start Little Joan at login</span>
             <input id="login" type="checkbox" />

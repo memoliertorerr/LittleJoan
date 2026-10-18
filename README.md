@@ -121,17 +121,28 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   appear while a web page is open. The toolbar shows the extension's name with an "Extension"
   badge; Esc closes it, back to the page or the command bar. See
   [Extensions](#extensions-experimental) below.
-- **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
-  narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
-  macOS and Linux, Chrome on Android on Windows), so Google and others serve their mobile
-  versions; widen it past 600 px and the page reloads in its desktop version once you let go.
-  Switch it off in Settings ("Mobile sites in a narrow window"). **YouTube always gets its
-  desktop site on macOS and Linux** — its phone site's player expects an iPhone's video
-  fullscreen, so its fullscreen button didn't work there (`m.youtube.com` addresses open as
-  `www.youtube.com`). To choose per site yourself, add `"siteModes"` to `settings.json` (Settings →
-  Privacy shows its folder; quit Little Joan first), e.g. `"siteModes": { "youtube.com": "auto", "example.com":
-  "desktop" }` — `"phone"`, `"desktop"` or `"auto"` (the window's width decides) for a host and
-  its subdomains; an entry wins over the built-in YouTube one.
+- **Phone mode:** pages always fit the window and reflow live as you resize it, as in Little Arc
+  (no zooming to fit). When the window is narrower than 600 px, Little Joan also tells websites
+  it is a phone browser (iPhone Safari on macOS and Linux, Chrome on Android on Windows), so
+  Google and others serve their mobile versions; widen it to 640 px or more and the page reloads
+  in its desktop version once you let go (between 600 and 640 px it keeps the version it has, so
+  it doesn't flip back and forth).
+  Switch it off in Settings ("Mobile sites in a narrow window"). On Windows the phone agent comes
+  with matching client hints (sites see Android and mobile everywhere they look), and a page that
+  already fits the narrower window isn't reloaded.
+- **Phone or desktop per site:** while a page shows its phone version, or its site has a mode of
+  its own, the toolbar shows a small **Phone** / **Desktop** label — click it for the other
+  version of that site, kept from then on. In the command bar, type "desktop", "phone" or "site"
+  for **Request desktop site**, **Request phone site** and **Automatic for this site** (the
+  window's width decides again); the current one is marked. **Settings → General → Phone or
+  desktop per site** lists them, with Remove. **YouTube always gets its desktop site on macOS and
+  Linux** (built in) — its phone site's player expects an iPhone's video fullscreen, so its
+  fullscreen button didn't work there (`m.youtube.com` addresses open as `www.youtube.com`); the
+  pill, the command or Settings undo it. A site's phone address counts as the site
+  (`m.youtube.com` is `youtube.com`, `en.m.wikipedia.org` is `en.wikipedia.org`). Switching
+  reloads the page only when the agent really changes; you stay signed in (cookies don't depend on
+  the agent), though a few sites tie a session to it. In `settings.json` this is `"siteModes"`,
+  e.g. `{ "youtube.com": "auto", "example.com": "desktop" }`.
 - **Dismiss:** press the shortcut again, press Ctrl/Cmd+W, close the window, or press Esc in the
   empty command bar before opening anything. The page is discarded and Little Joan goes back to sleep. The window remembers its
   size.

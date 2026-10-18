@@ -234,3 +234,37 @@
   flex: 1;
   margin: 0;
 }
+
+/* General → "Phone or desktop per site" (LJ40): one line per site, its button at the end. */
+.site-modes {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--lj-hairline);
+  border-radius: 8px;
+}
+
+.site-mode {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 3px 6px 3px 10px;
+  font-size: 13px;
+}
+
+.site-mode + .site-mode {
+  border-top: 1px solid var(--lj-hairline);
+}
+
+.site-mode-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-body button.site-mode-button {
+  flex: none;
+  padding: 3px 10px;
+  font-size: 12px;
+}

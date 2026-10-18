@@ -69,15 +69,30 @@ export function isPhoneAgent(userAgent) {
 }
 
 /**
- * The title that reports what the page sees: its CSS viewport and the kind of user agent.
+ * The title that reports what the page sees: its CSS viewport, the kind of user agent, and what
+ * the client hints say (`navigator.userAgentData.mobile`: Chromium only, so `undefined` on
+ * WebKit — LJ40 checks Windows' phone agent says `true`).
  * @param {number} width window.innerWidth
  * @param {number} height window.innerHeight
  * @param {string} userAgent navigator.userAgent
  * @param {number} pixelRatio window.devicePixelRatio
+ * @param {boolean | undefined} [uaMobile] navigator.userAgentData?.mobile
  */
-export function viewportTitle(width, height, userAgent, pixelRatio) {
+export function viewportTitle(width, height, userAgent, pixelRatio, uaMobile) {
   const agent = isPhoneAgent(userAgent) ? "phone" : "desktop";
-  return `LJ-SMOKE viewport=${Math.round(width)}x${Math.round(height)} ua=${agent} dpr=${pixelRatio}`;
+  return `LJ-SMOKE viewport=${Math.round(width)}x${Math.round(height)} ua=${agent} dpr=${pixelRatio} uamobile=${String(uaMobile)}`;
+}
+
+/**
+ * Whether the page lays itself out like a desktop page with a minimum width (600 px) — under a
+ * desktop agent, unless `?fits=1` — so it doesn't fit a phone-width window. Windows skips a
+ * phone-mode reload for a page that already fits (CDP's layout metrics, LJ40); with this the
+ * smoke page reloads like most desktop sites do, and `?fits=1` shows the skip.
+ * @param {string} userAgent navigator.userAgent
+ * @param {string} search location.search
+ */
+export function desktopMinWidth(userAgent, search) {
+  return !isPhoneAgent(userAgent) && new URLSearchParams(search).get("fits") !== "1";
 }
 
 /** The localStorage key the persistence check writes and reads. */

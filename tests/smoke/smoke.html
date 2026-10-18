@@ -23,6 +23,11 @@
         gap: 16px;
         background: #1f2a44;
       }
+      /* A desktop page with a minimum width (LJ40): the body is in flow, so the document is
+         600 px wide in a narrower window; the fixed stage still covers the viewport. */
+      body.desktop-min {
+        min-width: 600px;
+      }
       #stage:fullscreen,
       #stage:-webkit-full-screen {
         background: #2e7d32;
@@ -173,6 +178,7 @@
         readyTitle,
         requestFullscreen,
         viewportTitle,
+        desktopMinWidth,
       } from "./smoke-logic.mjs";
       import { probeApi, probeFile, probeRequest, probeTitle, raceRequest, RACE } from "./ext-probe.mjs";
       import {
@@ -482,12 +488,14 @@
 
       function startCodecAndViewportReports() {
         show(readyTitle(codecSupport(document.getElementById("video"), globalThis.MediaSource)));
+        // Like a desktop page with a minimum width under a desktop agent (LJ40, smoke-logic.mjs).
+        document.body.classList.toggle("desktop-min", desktopMinWidth(navigator.userAgent, location.search));
 
         // What the page sees (CSS viewport, user agent), reported shortly after load and after
         // every resize has settled.
         let resizeTimer = 0;
         const reportViewport = () =>
-          show(viewportTitle(window.innerWidth, window.innerHeight, navigator.userAgent, window.devicePixelRatio));
+          show(viewportTitle(window.innerWidth, window.innerHeight, navigator.userAgent, window.devicePixelRatio, navigator.userAgentData?.mobile));
         setTimeout(reportViewport, 300);
         window.addEventListener("resize", () => {
           clearTimeout(resizeTimer);
