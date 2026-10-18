@@ -9,6 +9,13 @@ All notable changes to Little Joan are recorded here. The format follows
 ### Changed
 - **History is Ctrl+H on Windows and Linux** (Chrome's key), so Ctrl+Y is redo again in text
   fields; macOS keeps Cmd+Y.
+- **Smoother resizing.** Pages reflow live as you drag, as in Little Arc. A resize now moves only
+  what changed (before, every step of a drag also re-showed both views); on macOS the toolbar and
+  the page follow the window's edge in the same frame; the toolbar's own background is your
+  theme's, so a fast drag on Windows no longer shows a white strip beside a dark toolbar.
+- **Phone mode switches less:** below 600 px the phone version, and back to the desktop version
+  only from 640 px — a window dragged back and forth around 600 px no longer flips the page
+  between the two.
 
 ### Added
 - **Double-click the toolbar to zoom the window** (and again to bring it back), on its empty

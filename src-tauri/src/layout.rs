@@ -5,6 +5,13 @@
 //! - `Overlay`: the bar takes the whole window (the command bar) and the page is hidden;
 //! - `Fullscreen`: element fullscreen (a video's fullscreen button) — the bar is hidden and the
 //!   page fills the window. It always wins: starting it closes the overlay.
+//!
+//! `diff` says what a new layout must touch (only what changed) and holds macOS's autoresizing
+//! masks per mode (LJ39).
+
+mod diff;
+
+pub use diff::{Changes, Masks, ViewChange, changes, flipped, mask, mask_for};
 
 /// Height of the bar in Toolbar mode, in logical pixels.
 pub const BAR_HEIGHT: f64 = 40.0;

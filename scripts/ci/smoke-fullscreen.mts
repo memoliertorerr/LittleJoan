@@ -7,8 +7,9 @@
 // was about clicks. scripts/ci/smoke.mts supplies the driver; the parsing and the rules are pure
 // and unit-tested (smoke-fullscreen.test.ts). The page reports `LJ-FS …` titles
 // (tests/smoke/fullscreen-logic.mjs); the app logs `page-screen` (where the page is on the screen,
-// for the clicks), `page-bounds` / `page-visible` (every layout of the page) and on macOS
-// `wk-fullscreen <not|entering|in|exiting>` (WebKit's own fullscreen state).
+// for the clicks), `page-bounds` / `page-visible` (each change of the page's bounds or
+// visibility) and on macOS `wk-fullscreen <not|entering|in|exiting>` (WebKit's own fullscreen
+// state).
 import { FS_BUTTONS, centre } from "../../tests/smoke/fullscreen-logic.mjs";
 import type { LogEvent } from "./smoke-log.mts";
 

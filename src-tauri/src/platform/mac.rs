@@ -1,5 +1,6 @@
-//! macOS: WKWebView's `customUserAgent` (nil = the engine's own user agent), WebKit's element
-//! fullscreen (`fullscreenState`), and the general pasteboard (extensions' clipboard.writeText).
+//! macOS: WKWebView's `customUserAgent` (nil = the engine's own user agent), its autoresizing
+//! mask (LJ39), WebKit's element fullscreen (`fullscreenState`), and the general pasteboard
+//! (extensions' clipboard.writeText).
 
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
 use std::sync::mpsc;
@@ -14,6 +15,7 @@ use tauri::{AppHandle, Runtime, Webview};
 use crate::bar;
 use crate::fullscreen::WebKitFullscreen;
 use crate::keys::Platform;
+use crate::layout;
 use crate::phone;
 use crate::smoke;
 
@@ -33,6 +35,46 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     });
     if let Err(err) = result {
         eprintln!("little-joan: could not change the user agent: {err}");
+    }
+}
+
+/// Sets the WKWebView's autoresizing mask to `bits` (layout::mask_for, written for AppKit's
+/// default unflipped coordinates; swapped for a flipped superview), so AppKit resizes it in its
+/// own layout pass during a live resize — wry gives child webviews a fixed size
+/// (`NSViewMinYMargin`), and tao's `Resized` arrives a frame after the window changed. Smoke log:
+/// `autoresizing <webview> <mask> flipped=<bool> follows=<bool>` (whether the superview resizes
+/// its subviews at all).
+pub fn set_autoresizing<R: Runtime>(webview: &Webview<R>, bits: usize) {
+    let label = webview.label().to_owned();
+    let result = webview.with_webview(move |platform| {
+        let view = platform.inner().cast::<AnyObject>();
+        if view.is_null() {
+            return;
+        }
+        // SAFETY: `view` is the live WKWebView of this webview (with_webview runs on the main
+        // thread while it exists); -superview returns an NSView or nil, -isFlipped and
+        // -autoresizesSubviews a BOOL, and -setAutoresizingMask: takes an NSUInteger.
+        unsafe {
+            let view = &*view;
+            let superview: Option<Retained<AnyObject>> = msg_send![view, superview];
+            let (flipped, follows) = match superview.as_deref() {
+                Some(parent) => {
+                    let flipped: bool = msg_send![parent, isFlipped];
+                    let follows: bool = msg_send![parent, autoresizesSubviews];
+                    (flipped, follows)
+                }
+                None => (false, false),
+            };
+            let mask = if flipped { layout::flipped(bits) } else { bits };
+            let _: () = msg_send![view, setAutoresizingMask: mask];
+            smoke::log(
+                "autoresizing",
+                &format!("{label} {mask} flipped={flipped} follows={follows}"),
+            );
+        }
+    });
+    if let Err(err) = result {
+        eprintln!("little-joan: could not set the webview's autoresizing: {err}");
     }
 }
 

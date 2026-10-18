@@ -21,10 +21,12 @@ use tauri::{
 };
 use url::Url;
 
+mod background;
 mod boot;
 mod view;
 mod watch;
 
+pub use background::{forget_painted, painted};
 pub use boot::{BAR_READY, Ready, early_theme, mark_ready, set_theme, theme_script};
 pub use view::{
     after_webkit_fullscreen, apply_layout, element_fullscreen, log_overlay, mode, overlay,
@@ -99,8 +101,10 @@ pub fn add_webviews<R: Runtime>(
     let page_rect = layout(width, height, Mode::Toolbar).page.unwrap_or(whole);
 
     let mut bar = WebviewBuilder::new(BAR, WebviewUrl::App("bar.html".into()))
-        // Its theme before its first paint (the bar only: the page webview never gets a script).
+        // Its theme before its first paint (the bar only: the page webview never gets a script),
+        // and that theme's background under it (LJ39; the page keeps the engine's white).
         .initialization_script(theme_script(&theme))
+        .background_color(background::bar_background(window, &theme))
         // The bar is ours and never leaves the app's origin (about:blank only to unload it when
         // the window closes on macOS, see joan::release_page).
         .on_navigation(|url| navigation::is_allowed_bar_navigation(url, &keys::app_origin()))

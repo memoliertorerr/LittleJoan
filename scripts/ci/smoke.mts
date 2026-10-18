@@ -19,7 +19,9 @@
 // the page, the command bar, the history view and Settings in a two-color theme, light and dark,
 // and the default theme in dark; screenshots in <out>/theme/), then the fullscreen run (its own
 // launch: the smoke page's ?fs=both buttons clicked at 390 and 720 px, screenshots in <out>/fs/;
-// smoke-fullscreen.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
+// smoke-fullscreen.mts), then the resize run (its own launch in a dark theme: bursts of `--size`
+// 380 ↔ 820 px 30 ms apart and the phone-mode hysteresis, screenshots resize-380.png and
+// resize-820.png; smoke-resize.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
 // smoke-theme.mts) and the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
@@ -79,6 +81,7 @@ import {
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
 import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsApp, type FsDriver } from "./smoke-fullscreen.mts";
+import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -1143,6 +1146,9 @@ const fullscreenDriver: FsDriver = { os, pageUrl: smokePageUrl, launch: fullscre
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
 const fullscreenCheck = await fullscreenRun(fullscreenDriver, true);
+// The resize run (LJ39, smoke-resize.mts): its own launch, on the same driver.
+const resizeCheck = await resizeRun(fullscreenDriver);
+console.log(`resize: ${JSON.stringify(resizeSummary(resizeCheck.results))}`);
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -1228,6 +1234,7 @@ const summary = {
     keysReached: bundledCheck.keys,
   },
   fullscreenRun: fullscreenSummary(fullscreenCheck, os),
+  resizeRun: { steps: resizeSummary(resizeCheck.results), rules: resizeFailures(RESIZE_STEPS, resizeCheck.results) },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1272,13 +1279,14 @@ const failures = evaluate(
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(fullscreenFailures(fullscreenCheck, os))
+  .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
   const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
-  const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log")];
+  const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log")];
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }

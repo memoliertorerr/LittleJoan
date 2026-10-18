@@ -6,14 +6,23 @@
 //! is left alone — no bounds, no show or hide, no command bar: wry's `set_bounds` sets a
 //! WKWebView's frame in its current superview, which is then WebKit's fullscreen window, so the
 //! video would shrink (LJ36). A layout skipped meanwhile is applied once that fullscreen ends.
+//!
+//! Only what changed is applied (LJ39, `layout::changes`): a resize sets the bounds that changed
+//! and shows or hides nothing; a mode change shows or hides what it must. On macOS each mode also
+//! sets the webviews' autoresizing masks (`layout::mask_for`), so AppKit resizes them in its own
+//! layout pass while the window is dragged — tao's `Resized` comes a frame late; the layout it
+//! triggers then sets the same frames AppKit already gave them, so a late or off-thread layout
+//! can never leave a view stale. Never Tauri's `auto_resize`: it scales child webviews
+//! proportionally, so the 40 px bar would grow.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Runtime, Webview, Window};
 
 use super::{BAR, PAGE};
-use crate::layout::{self, Mode, Rect};
+use crate::layout::{self, Layout, Mode, Rect, ViewChange};
 use crate::platform;
 use crate::smoke;
 
@@ -24,11 +33,30 @@ static ELEMENT_FULLSCREEN: AtomicBool = AtomicBool::new(false);
 static OVERLAY: AtomicBool = AtomicBool::new(false);
 /// True while a layout skipped during WebKit's fullscreen waits for it to end (macOS).
 static WAITING_FOR_WEBKIT: AtomicBool = AtomicBool::new(false);
+/// What was last applied to this window's webviews, diffed against each new layout. `None`: a
+/// new window, or not known any more (WebKit's fullscreen had the page).
+static APPLIED: Mutex<Option<Applied>> = Mutex::new(None);
 
-/// A new window: no fullscreen, and the command bar open (every summon opens it).
+/// A layout as it was applied: at which scale (a scale change applies everything again — the
+/// engines turn logical bounds into pixels at the scale of the moment) and in which mode (a mode
+/// change sets the macOS masks again).
+#[derive(Debug, Clone, Copy)]
+struct Applied {
+    layout: Layout,
+    scale: f64,
+    mode: Mode,
+}
+
+fn applied() -> std::sync::MutexGuard<'static, Option<Applied>> {
+    APPLIED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// A new window: no fullscreen, and the command bar open (every summon opens it). Nothing is
+/// known about its webviews yet, so the first layout applies everything.
 pub(super) fn new_window() {
     ELEMENT_FULLSCREEN.store(false, Ordering::Relaxed);
     OVERLAY.store(true, Ordering::Relaxed);
+    *applied() = None;
 }
 
 /// What the window shows now: the toolbar, the overlay, or the page alone (element fullscreen,
@@ -45,7 +73,9 @@ pub fn overlay() -> bool {
     OVERLAY.load(Ordering::Relaxed)
 }
 
-/// Positions the bar and the page for the window's current size and mode.
+/// Positions the bar and the page for the window's current size and mode — only what changed
+/// since the last layout (`layout::changes`). The smoke log gets `bounds-set <n>`: how many
+/// webviews' bounds this layout set (CI: at most 2 per resize).
 pub fn apply_layout<R: Runtime>(window: &Window<R>) {
     let app = window.app_handle();
     let (Some(bar), Some(page)) = (app.get_webview(BAR), app.get_webview(PAGE)) else {
@@ -54,41 +84,66 @@ pub fn apply_layout<R: Runtime>(window: &Window<R>) {
     let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) else {
         return;
     };
+    let mode = mode();
     // inner_size is physical; the bounds below are logical (layout.rs).
-    let wanted = layout::for_physical_size(size.width, size.height, scale, mode());
-    place(&bar, wanted.bar);
+    let wanted = layout::for_physical_size(size.width, size.height, scale, mode);
+    // Read, then released before any engine call: the fullscreen check below may wait for the
+    // main thread, which may be in here too.
+    let previous = applied().filter(|known| known.scale == scale);
+    let change = layout::changes(previous.as_ref().map(|known| &known.layout), &wanted);
+    let masks = layout::mask_for(mode).filter(|_| previous.is_none_or(|known| known.mode != mode));
+    apply(&bar, change.bar);
+    if let Some(masks) = masks {
+        platform::set_autoresizing(&bar, masks.bar);
+    }
     if platform::page_in_webkit_fullscreen(&page) {
+        // WebKit has the page: it is left alone, and laid out again in full afterwards.
+        *applied() = None;
+        smoke::log(
+            "bounds-set",
+            &usize::from(change.bar.bounds.is_some()).to_string(),
+        );
         after_webkit_fullscreen(app);
         return;
     }
-    place(&page, wanted.page);
+    apply(&page, change.page);
+    if let Some(masks) = masks {
+        platform::set_autoresizing(&page, masks.page);
+    }
+    *applied() = Some(Applied {
+        layout: wanted,
+        scale,
+        mode,
+    });
+    smoke::log("bounds-set", &change.bounds_set().to_string());
     if let Some(rect) = wanted.page {
         log_page_screen(window, rect, scale);
     }
 }
 
-/// Shows `webview` at `rect`, or hides it. For the page the smoke log gets `page-bounds
-/// <x,y,w,h>` (logical, in the window) and `page-visible <bool>`: CI checks that nothing touches
-/// the page during WebKit's fullscreen on macOS (LJ36).
-fn place<R: Runtime>(webview: &Webview<R>, rect: Option<Rect>) {
+/// Applies one webview's part of a layout change: its new bounds, then showing or hiding it. For
+/// the page the smoke log gets `page-bounds <x,y,w,h>` (logical, in the window) and `page-visible
+/// <bool>` for each: CI checks that nothing touches the page during WebKit's fullscreen on macOS
+/// (LJ36), and that a resize shows nothing (LJ39).
+fn apply<R: Runtime>(webview: &Webview<R>, change: ViewChange) {
     let page = webview.label() == PAGE;
-    match rect {
-        Some(rect) => {
-            let _ = webview.set_bounds(to_tauri(rect));
-            let _ = webview.show();
-            if page {
-                smoke::log(
-                    "page-bounds",
-                    &format!("{},{},{},{}", rect.x, rect.y, rect.width, rect.height),
-                );
-                smoke::log("page-visible", "true");
-            }
+    if let Some(rect) = change.bounds {
+        let _ = webview.set_bounds(to_tauri(rect));
+        if page {
+            smoke::log(
+                "page-bounds",
+                &format!("{},{},{},{}", rect.x, rect.y, rect.width, rect.height),
+            );
         }
-        None => {
-            let _ = webview.hide();
-            if page {
-                smoke::log("page-visible", "false");
-            }
+    }
+    if let Some(visible) = change.visible {
+        let _ = if visible {
+            webview.show()
+        } else {
+            webview.hide()
+        };
+        if page {
+            smoke::log("page-visible", if visible { "true" } else { "false" });
         }
     }
 }
@@ -196,6 +251,8 @@ pub fn after_webkit_fullscreen<R: Runtime>(app: &AppHandle<R>) {
                 if !platform::page_in_webkit_fullscreen(&page) {
                     WAITING_FOR_WEBKIT.store(false, Ordering::SeqCst);
                     smoke::log("layout-resumed", "");
+                    // WebKit moved the page and gave it back: everything again, masks included.
+                    *applied() = None;
                     apply_layout(&window);
                     crate::phone_mode::apply(&app, true);
                     return;

@@ -44,6 +44,17 @@ pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: &Webview<R>, on: bool) {
 #[cfg(not(target_os = "linux"))]
 pub fn set_overlay<R: Runtime>(_bar: &Webview<R>, _page: &Webview<R>, _on: bool) {}
 
+/// macOS: the webview's autoresizing mask (`layout::mask_for`, for AppKit's unflipped
+/// coordinates), so AppKit resizes it in its own layout pass while the window is dragged.
+#[cfg(target_os = "macos")]
+pub fn set_autoresizing<R: Runtime>(webview: &Webview<R>, bits: usize) {
+    mac::set_autoresizing(webview, bits);
+}
+
+/// Windows and Linux: no autoresizing masks (Windows places by bounds, Linux packs a GtkBox).
+#[cfg(not(target_os = "macos"))]
+pub fn set_autoresizing<R: Runtime>(_webview: &Webview<R>, _bits: usize) {}
+
 /// macOS: the app menu's key equivalents handle page keys (menu.rs), and WebKit shows element
 /// fullscreen in its own window, so the bar needs no hiding.
 #[cfg(not(any(windows, target_os = "linux")))]

@@ -9,6 +9,8 @@
 //! - **whether the bar's script runs yet** (`start_info`, its first call, logs `bar-ready`): a panel
 //!   opened from hibernation waits for it (extensions/session.rs), so the toolbar is there to name
 //!   it (on macOS a panel committed before the bar's script ran left the toolbar unpainted).
+//!
+//! Its webview's own background is background.rs's.
 
 use std::sync::{Condvar, Mutex, PoisonError};
 use std::time::{Duration, Instant};

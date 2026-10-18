@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use crate::cli::Args;
 use crate::cookies::SessionCookies;
+use crate::extensions::theme::Tokens;
 use crate::history_store::OpenHistory;
 use crate::settings::{self, SETTINGS_FILE, Settings, Theme};
 
@@ -40,6 +41,10 @@ pub struct AppState {
     /// The theme Settings' Appearance tab is previewing (not saved), while that window is open:
     /// a page window summoned meanwhile shows it too. `None` = the saved theme.
     pub theme_preview: Option<Theme>,
+    /// The scheme and `--lj-bg-0` the bar painted last, kept across windows for the next bar's
+    /// webview background (bar/background.rs); `None` until a bar painted, or after the theme
+    /// changed.
+    pub painted_background: Option<Tokens>,
 }
 
 impl AppState {
@@ -76,6 +81,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         session_cookies: SessionCookies::default(),
         history: None,
         theme_preview: None,
+        painted_background: None,
     }));
     Ok(())
 }
@@ -131,6 +137,7 @@ mod tests {
             session_cookies: SessionCookies::default(),
             history: None,
             theme_preview: None,
+            painted_background: None,
         };
         assert_eq!(state.shown_theme(), Theme::default());
         let preview = Theme {

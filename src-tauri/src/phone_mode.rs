@@ -88,7 +88,7 @@ fn switch_for<R: Runtime>(app: &AppHandle<R>, url: Option<&Url>) -> Option<(Webv
     };
     let width = size.to_logical::<f64>(scale).width;
     let enabled = state::with(app, |s| s.settings.mobile_sites);
-    let wanted = phone::wants_mobile(enabled, width, mode_for(app, url));
+    let wanted = phone::wants_mobile(enabled, width, mode_for(app, url), applied());
     let mobile = phone::switch(applied(), wanted)?;
     APPLIED.store(if mobile { 2 } else { 1 }, Ordering::Relaxed);
     platform::set_mobile(&page, mobile);

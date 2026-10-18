@@ -104,7 +104,7 @@
 | LJ36 | *(round 3)* YouTube's fullscreen on macOS (the phone site, confirmed by the owner): reproduce in CI; guard WebKit's fullscreen; youtube.com on the desktop agent on WebKit (a minimal per-site table) | strong | auto | ✅ done (reproduced, then lj-step-36-fix — see notes) |
 | LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ✅ done |
 | LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ✅ done |
-| LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ⬜ todo |
+| LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ✅ done (the bar's background only — see notes) |
 | LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ⬜ todo |
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ⬜ todo |
@@ -5539,6 +5539,61 @@ open the phase-19 PR into main as a draft, and watch CI until every job is green
 honest fix attempts, then stop). Look at both screenshots on every OS.
 ```
 
+**Implementation notes (2026-10-18):**
+
+- **Only what changed** (`layout/diff.rs`, pure, tested at scale 1, 1.5 and 2 in every mode):
+  `changes(previous, next)` gives per webview the bounds to set (`None` when within 0.01 logical
+  px) and whether to show or hide it; a view shown again gets its bounds too; a new window gets
+  everything. `bar/view.rs` keeps the last applied layout per window (`Applied`: the layout, the
+  scale, the mode), forgets it on a new window, when WebKit's fullscreen had the page (macOS) and
+  at another scale factor (the engines turn logical bounds into pixels at the scale of the
+  moment), and logs `bounds-set <n>` for every layout. The cache is read and written around the
+  engine calls, never held across them (the macOS fullscreen check can wait for the main thread).
+  Linux: no `show_all` per event any more (wry's `set_visible(true)` is `show_all()`); the GtkBox
+  packing still changes only with the mode.
+- **macOS masks** (`layout::mask_for`, `layout::flipped` for a flipped superview — tao's content
+  view isn't flipped; `platform::set_autoresizing` → `mac::set_autoresizing`, objc2
+  `setAutoresizingMask:`): Toolbar — the bar `WidthSizable | MinYMargin`, the page `WidthSizable |
+  HeightSizable`; Overlay — both `WidthSizable | HeightSizable`; Fullscreen — nothing. Set when a
+  mode is first laid out (and again after WebKit's fullscreen), never on the page while WebKit has
+  it. Smoke log `autoresizing <webview> <mask> flipped= follows=` (whether the superview
+  autoresizes its subviews). **A deviation from "usually nothing":** `Resized` still sets both
+  frames on macOS — the same ones AppKit's masks already gave them — instead of modelling AppKit's
+  autoresizing to skip them: layouts also run off the main thread (posted, so they can land late),
+  and a model that believed AppKit had done it could leave a view stale with nothing to correct
+  it. The masks are what makes the edges follow in the same frame; the confirming `set_bounds` is
+  idempotent.
+- **Backgrounds** (`bar/background.rs`, pure part tested): `background_for(tokens, dark)` — the
+  `--lj-bg-0` the bar painted last (a checked `#rrggbb`) when it was painted in that scheme, else
+  `#ffffff` / `#1c1c1e` (the start page's `.blank`, a test reads `ui/style.css`); `dark` is the
+  theme's mode, or the system's (`Window::theme`) for `system`. `AppState::painted_background`
+  keeps the scheme and that one variable across windows (memory only), set by `set_theme_tokens`
+  (which now takes the app handle) and forgotten when Settings saves or previews another theme.
+  The bar is built with `WebviewBuilder::background_color` and gets `Webview::set_background_color`
+  whenever it paints another theme (tauri 2.12.4 has the runtime setter; smoke log
+  `bar-background <scheme>`). **A deviation: the page webview keeps the engine's white.** The
+  prompt's premise — the page's background "shows only before a page paints" — holds on no engine:
+  a page without a CSS background of its own is drawn over the webview's color (WebView2's
+  `DefaultBackgroundColor` docs say so; WebKitGTK's `webkit_web_view_set_background_color`; wry's
+  WKWebView turns `drawsBackground` off, so such a page would show the window's grey), so a dark
+  theme would have made plain pages — `text/plain`, Hacker News' margins, many simple sites —
+  dark on dark. The page webview is hidden behind the command bar until a page loads, and every
+  page paints its own background, so a theme color there would buy only a dark gutter beside a
+  white page. Recorded under Deferred follow-ups.
+- **Hysteresis** (`phone.rs`: `PHONE_BELOW` 600, `DESKTOP_FROM` 640; `wants_mobile(enabled, width,
+  mode, current)`; phone_mode.rs passes the agent the page has): tests for a new window (600
+  decides), the 600–640 band holding either agent, a 380 → 820 → 380 sweep at strides 1, 7 and 40
+  switching exactly twice, hovering around 600 never flipping, and the site modes still winning at
+  every width.
+- **Smoke** (`scripts/ci/smoke-resize.mts` + test, wired after the fullscreen run on its driver):
+  its own launch, a dark two-color theme, the window created 820×600 (the Windows runner's screen
+  is 1024 px wide and a `--size` keeps the top-left, so a window centred at 480 px would have put
+  820 px off the screen's edge); the steps and rules as the architecture's CI section says. A burst
+  sends its 12 `--size` 30 ms apart without waiting, then the last width once more (waited): the
+  second instances can land out of order.
+- `npm run verify`: 506 TS tests, 296 Rust tests, clippy clean. Disk: 12 GiB free at the start of
+  the phase, 11 GiB after verify; `.cache/target` 1.4 GB.
+
 ### LJ40 — Phone mode per site: a command, a toolbar pill, Windows' agent with client hints; the owner's check · strong · checkpoint
 
 > Phase 19, last step. A **checkpoint**: the resizing feel needs the owner's eyes (Ground Rule 24).
@@ -7003,6 +7058,14 @@ and where, then stop.
   dragging (not `set_size`) does the same on a real Mac. Options, if it does: remember the window's
   frame when WebKit's fullscreen starts and set it again when it ends (macOS only); or find what
   AppKit restores (tao's `set_inner_size` uses `setContentSize:` asynchronously).
+- **The page webview's background stays white** (surfaced by LJ39). The round-3 decision gave both
+  webviews the theme's background; LJ39 gave it only to the bar, because every engine draws a page
+  without a CSS background over the webview's color (a dark theme would make such pages dark on
+  dark). So on Windows a fast drag can still show a white strip at the edge of a *dark page* for a
+  frame. Options: the theme's color only while no web page is shown (set it back to white on the
+  first web page's `Started`) — which buys almost nothing, since the page webview is hidden behind
+  the command bar until a page loads; or the page's own background color, which only Windows could
+  read without a script (CDP `CSS`/`DOM`), not planned.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

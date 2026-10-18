@@ -176,10 +176,13 @@ src-tauri/src/joan.rs              the page window: create / focus / destroy, wi
 src-tauri/src/bar.rs               its two webviews (bar + page): build, pushing the page's
                                    address to the bar, focus, navigation
 src-tauri/src/bar/view.rs          the view state: toolbar / overlay / element fullscreen,
-                                   applied to the webviews (layout, show / hide, Linux packing)
+                                   applied to the webviews — only what changed since the last
+                                   layout; macOS autoresizing masks per mode
 src-tauri/src/bar/watch.rs         the once-a-second check of the page's address
 src-tauri/src/bar/boot.rs          the bar's first paint: its theme script (checked, tested), the
                                    theme pushed to it, whether its script runs yet (`Ready`)
+src-tauri/src/bar/background.rs    the bar webview's own background: the theme's `--lj-bg-0` it
+                                   painted last, else white / near-black (pure part tested)
 src-tauri/src/extensions/          extensions (experimental; below): mod.rs (the model),
                                    manifest.rs (extension.json, strict), paths.rs (plain paths,
                                    no traversal, no symlink out), urls.rs (one origin per
@@ -199,9 +202,12 @@ src-tauri/src/back_stack.rs        whether the toolbar's back button has somewhe
                                    window's trail of loaded web pages (pure, tested)
 src-tauri/src/layout.rs            where the bar and the page go per mode (Toolbar, Overlay,
                                    Fullscreen), from physical size + scale (pure)
+src-tauri/src/layout/diff.rs       what a new layout changes (bounds, visibility) and macOS's
+                                   autoresizing masks per mode (pure, tested)
 src-tauri/src/capability_tests.rs  tests: no capability reaches the page webview, its window, or
                                    remote URLs (Ground Rule 18)
-src-tauri/src/phone.rs             phone mode decisions: 600 px threshold, user agents, debounce,
+src-tauri/src/phone.rs             phone mode decisions: below 600 px / from 640 px, user agents,
+                                   debounce,
                                    a site's mode (siteModes + the WebKit built-in list), the
                                    desktop address of a known phone host (pure, tested)
 src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user agent for its width
@@ -233,8 +239,8 @@ src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
 src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → keys.rs;
                                    ContainsFullScreenElementChanged → window fullscreen
-src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode); WebKit's
-                                   fullscreenState (CI's `wk-fullscreen` log)
+src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode), autoresizing
+                                   masks; WebKit's fullscreenState (CI's `wk-fullscreen` log)
 src-tauri/src/platform/linux.rs    Linux: GTK window key-press-event → keys.rs; the bar's packing
                                    in the window's GtkBox (toolbar / overlay); enter/leave-
                                    fullscreen → hide the bar
@@ -272,6 +278,8 @@ scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report
 scripts/ci/smoke-fullscreen.mts    CI: the fullscreen run (the smoke page's ?fs=both buttons,
                                    clicked where `page-screen` puts them) and its rules;
                                    unit-tested
+scripts/ci/smoke-resize.mts        CI: the resize run (bursts of `--size`, the phone-mode
+                                   hysteresis) and its rules; unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
                                    with ?persist=set|check, the cookie and localStorage check;
                                    with ?fs=both, "Element fullscreen" and "Phone player"
@@ -821,18 +829,53 @@ visible in panels as in web pages, and every call is refused.
   the same on a Retina screen as at scale 1. Linux sizes the views in a GtkBox, which is
   logical by nature. Unit tests cover scale 1, 1.5 and 2; the CI smoke test resizes the window
   with `--size` and checks the page's `innerWidth × innerHeight` (also at GDK scale 2 on Linux).
+- **Resizing is live, like Little Arc** (LJ39): pages reflow to the window as it is dragged — no
+  scaling, no zoom to fit, no viewport emulation (the desktop engines ignore `<meta
+  name="viewport">`). To keep that smooth:
+  - **Only what changed.** `bar/view.rs` keeps the layout it last applied (per window; forgotten
+    when WebKit's fullscreen had the page, and at another scale factor, since the engines turn
+    logical bounds into pixels at the scale of the moment) and `layout::changes` gives what
+    differs: a resize sets only the bounds that changed — at most the two webviews' — and shows
+    or hides nothing; a mode change shows or hides what it must. Before, every `Resized` set the
+    bounds of both webviews and showed both (on Windows `ShowWindow` + `SetIsVisible` twice per
+    event, on Linux `show_all()`). Smoke log: `bounds-set <n>` per layout. Linux's GtkBox packing
+    is GTK's layout and changes only with the mode, as before.
+  - **macOS: autoresizing masks per mode** (`layout::mask_for`, set by `platform/mac.rs` when a
+    mode is first laid out): Toolbar — the bar follows the width with a flexible bottom margin
+    (it keeps its 40 px at the top), the page follows width and height; Overlay — the bar follows
+    both, and so does the hidden page. AppKit then resizes the webviews in its own layout pass
+    while the window is dragged, where wry's fixed `NSViewMinYMargin` and tao's `Resized` (a frame
+    late, from a run-loop observer) left gaps at the edges. The layout `Resized` still triggers
+    sets the same frames AppKit already gave them (so a late or off-thread layout can never leave
+    a view stale). Nothing touches the page's mask or bounds while WebKit has it in its
+    fullscreen window; afterwards the layout and the masks are applied again in full.
+  - **The bar webview's background is the theme's** (`bar/background.rs`): the `--lj-bg-0` the bar
+    painted last (kept in `AppState` across windows, memory only; forgotten when Settings saves
+    or previews another theme), set when the window is built and again with
+    `Webview::set_background_color` whenever the bar paints a new theme; with nothing painted yet
+    (or painted in the other scheme), white or near-black — the start page's colors. It shows
+    before the bar paints and, on Windows, in the strip a fast drag uncovers before WebView2
+    repaints. **The page webview keeps the engine's white:** a page without a background of its
+    own is drawn over the webview's color on every engine (WebView2's `DefaultBackgroundColor`,
+    WebKitGTK's background color, WKWebView with `drawsBackground` off), so a theme color there
+    would turn plain pages dark on dark.
+  - Never Tauri's `auto_resize`: it scales child webviews proportionally, so the 40 px bar would
+    grow.
 - **Phone mode** (`phone.rs`, `phone_mode.rs`, setting `mobileSites`, on by default): many sites
   (Google, YouTube) choose their mobile version by **user agent**, not by viewport width, so a
   narrow window alone still gets a cropped desktop page. Below **600 logical px** of page width
-  the page webview gets a phone user agent: **iPhone Safari** on macOS and Linux (WebKit
+  the page webview gets a phone user agent, and the desktop one again only from **640 px**
+  (hysteresis: in between, the agent the page has stays; a new window decides by 600; no tablet
+  range): **iPhone Safari** on macOS and Linux (WebKit
   engines) and **Chrome on Android** on Windows (Chromium; the Chrome version is copied from
   WebView2's own agent), so the mobile pages that come back are built for the same engine.
   - Set per OS at runtime: WKWebView `customUserAgent` (`platform/mac.rs`), WebView2
     `ICoreWebView2Settings2::SetUserAgent` (`platform/win.rs`, the engine's own agent is read
     once to restore it), WebKitGTK's `user-agent` setting (`platform/linux.rs`).
-  - A new window gets the right agent before any web page loads. A resize that crosses the
-    threshold switches the agent once the resize has been still for 400 ms (`Debounce`), then
-    reloads the current web page (its URL is kept; the bar keeps working). Nothing switches
+  - A new window gets the right agent before any web page loads. A resize that crosses a
+    threshold (600 going narrower, 640 going wider) switches the agent once the resize has been
+    still for 400 ms (`Debounce`), then reloads the current web page once (its URL is kept; the
+    bar keeps working) — only when the agent really changes. Nothing switches
     during fullscreen — a fullscreen video makes the window wide, and a reload would end it
     (macOS: also while WebKit's own fullscreen window shows the page).
   - Changing the setting applies at once.
@@ -922,7 +965,10 @@ screen, physical pixels, for CI's clicks), and on macOS `wk-fullscreen <not|ente
 (WKWebView's `fullscreenState`, polled every 100 ms while a page window exists — smoke mode only),
 `wk-window <resized|focused|moved> <detail>` (the window's events while that isn't `not`), and
 `layout-deferred` / `layout-resumed` (macOS: a layout waited for WebKit's fullscreen to end),
-`user-agent <phone|desktop>` (phone mode switched the page's agent). Without the variable nothing
+`user-agent <phone|desktop>` (phone mode switched the page's agent), `bounds-set <n>` (every
+layout: how many webviews' bounds it set, LJ39), `autoresizing <webview> <mask> flipped=<bool>
+follows=<bool>` (macOS: a webview's autoresizing mask was set), `bar-background <light|dark>`
+(the bar's webview background followed a newly painted theme). Without the variable nothing
 is logged.
 
 ## Pure core (no Tauri types, unit-tested)
@@ -1114,7 +1160,17 @@ and pushes to `main`:
   `smoke-fullscreen-site.log`). The rules: every element-fullscreen path enters, holds until the
   page's own exit and leaves when asked (required on Windows and Linux; on macOS whenever the
   click reached the page), the player's iOS route under an iPhone agent is informational, and on
-  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Then the
+  **resize run** (`smoke-resize.mts`, LJ39), its own launch in a dark two-color theme with the
+  window created 820×600 (so every width stays on the runner's screen): the smoke page, `--size
+  380x600`, a burst of 12 `--size` steps from 380 to 820 px wide sent through single-instance 30 ms
+  apart (`resize-820.png`), the same burst back (`resize-380.png`), then 620 px coming from phone,
+  660, and 620 coming from desktop. Per step the page must end with `innerWidth` = the window's
+  width and `innerHeight` = 560 and the right agent (phone at 380 and at 620 from phone, desktop at
+  820, 660 and 620 from desktop), with exactly one `user-agent` switch and one reload per crossing
+  (none for the two 620 steps), every `bounds-set` at most 2, and no `page-visible` line (a resize
+  shows or hides nothing); what each step saw goes into `summary.json`'s `resizeRun` (log
+  `smoke-resize.log`). Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).

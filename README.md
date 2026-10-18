@@ -121,10 +121,12 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   appear while a web page is open. The toolbar shows the extension's name with an "Extension"
   badge; Esc closes it, back to the page or the command bar. See
   [Extensions](#extensions-experimental) below.
-- **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
-  narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
-  macOS and Linux, Chrome on Android on Windows), so Google and others serve their mobile
-  versions; widen it past 600 px and the page reloads in its desktop version once you let go.
+- **Phone mode:** pages always fit the window and reflow live as you resize it, as in Little Arc
+  (no zooming to fit). When the window is narrower than 600 px, Little Joan also tells websites
+  it is a phone browser (iPhone Safari on macOS and Linux, Chrome on Android on Windows), so
+  Google and others serve their mobile versions; widen it to 640 px or more and the page reloads
+  in its desktop version once you let go (between 600 and 640 px it keeps the version it has, so
+  it doesn't flip back and forth).
   Switch it off in Settings ("Mobile sites in a narrow window"). **YouTube always gets its
   desktop site on macOS and Linux** — its phone site's player expects an iPhone's video
   fullscreen, so its fullscreen button didn't work there (`m.youtube.com` addresses open as

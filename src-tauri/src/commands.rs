@@ -269,7 +269,8 @@ pub async fn save_settings<R: Runtime>(
     let old = state::with(&app, |s| s.active_shortcut.clone());
     shortcut::swap(&PluginRegistrar(&app), old.as_deref(), &wanted)?;
     smoke::log("shortcut-registered", &wanted);
-    let (dir, updated) = state::with(&app, |s| {
+    let (dir, updated, theme_changed) = state::with(&app, |s| {
+        let before = s.shown_theme();
         s.active_shortcut = Some(wanted.clone());
         // Saved: the preview (if any) is the theme now.
         s.theme_preview = None;
@@ -290,8 +291,15 @@ pub async fn save_settings<R: Runtime>(
             developer_mode: settings.developer_mode.unwrap_or(s.settings.developer_mode),
             ..s.settings.clone()
         };
-        (s.data_dir.clone(), s.settings.clone())
+        (
+            s.data_dir.clone(),
+            s.settings.clone(),
+            s.shown_theme() != before,
+        )
     });
+    if theme_changed {
+        bar::forget_painted(&app);
+    }
     // Switched-off extensions and Developer mode take effect with the next read.
     extensions::registry::forget();
     // Phone mode on or off takes effect on the open page at once, and so does the theme.
@@ -311,6 +319,7 @@ pub async fn preview_theme<R: Runtime>(app: AppHandle<R>, theme: Option<Value>) 
         s.theme_preview = theme.as_ref().map(|v| settings::theme::parse(Some(v)));
         s.shown_theme()
     });
+    bar::forget_painted(&app);
     smoke::log("theme-preview", &theme_summary(&shown));
     bar::set_theme(&app, &shown);
 }
@@ -320,9 +329,11 @@ pub async fn preview_theme<R: Runtime>(app: AppHandle<R>, theme: Option<Value>) 
 /// fails the checks is dropped (extensions/theme.rs). `early`: the bar painted the theme of its
 /// initialization script, before start_info (LJ38) — the smoke log gets `theme-early`.
 #[tauri::command]
-pub async fn set_theme_tokens(tokens: Value, early: Option<bool>) {
+pub async fn set_theme_tokens<R: Runtime>(app: AppHandle<R>, tokens: Value, early: Option<bool>) {
     match crate::extensions::theme::parse(&tokens) {
         Some(tokens) => {
+            // The bar webview's own background follows (bar/background.rs, LJ39).
+            bar::painted(&app, &tokens);
             crate::extensions::theme::store(tokens);
             if early == Some(true)
                 && let Some(theme) = bar::early_theme()

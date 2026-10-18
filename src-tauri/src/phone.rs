@@ -6,6 +6,9 @@
 //!   600 is where "compact" width ends in Material Design and where Android itself stops
 //!   treating a screen as a phone, so anything narrower is clearly phone-sized, while Little
 //!   Joan's default 480 px window counts as a phone and a half-screen window does not.
+//! - **Hysteresis (LJ39):** the phone agent below 600 px, the desktop agent again only from 640 px;
+//!   in between the agent the page has stays (a new window decides by 600). A drag that hovers
+//!   around 600 px then never flips the page back and forth. No tablet range.
 //! - **Which phone:** the one whose browser shares the page's engine, so the mobile pages that
 //!   come back are the ones built for that engine. WKWebView (macOS) and WebKitGTK (Linux) are
 //!   WebKit → iPhone Safari. WebView2 (Windows) is Chromium → Chrome on Android, with the same
@@ -26,7 +29,10 @@ use crate::settings::SiteMode;
 use crate::settings::site_modes;
 
 /// Pages narrower than this many logical pixels get the phone user agent.
-pub const PHONE_WIDTH: f64 = 600.0;
+pub const PHONE_BELOW: f64 = 600.0;
+
+/// A page on the phone agent goes back to the desktop one only from this width (hysteresis).
+pub const DESKTOP_FROM: f64 = 640.0;
 
 /// How long a resize must have stopped before the user agent may switch (and the page reload).
 pub const SETTLE: Duration = Duration::from_millis(400);
@@ -66,13 +72,18 @@ pub fn site_mode(
 }
 
 /// Whether a page `width` logical pixels wide should look like a phone to websites: always for a
-/// site on `phone`, never for one on `desktop`; otherwise below `PHONE_WIDTH` when phone mode
-/// (`enabled`, the setting `mobileSites`) is on.
-pub fn wants_mobile(enabled: bool, width: f64, mode: SiteMode) -> bool {
+/// site on `phone`, never for one on `desktop`; otherwise, when phone mode (`enabled`, the
+/// setting `mobileSites`) is on, below `PHONE_BELOW`, not from `DESKTOP_FROM`, and in between
+/// whatever the page has now (`current`: `Some(true)` = the phone agent; `None`, a new window,
+/// decides by `PHONE_BELOW`).
+pub fn wants_mobile(enabled: bool, width: f64, mode: SiteMode, current: Option<bool>) -> bool {
     match mode {
         SiteMode::Phone => true,
         SiteMode::Desktop => false,
-        SiteMode::Auto => enabled && width.is_finite() && width < PHONE_WIDTH,
+        SiteMode::Auto if !enabled || !width.is_finite() => false,
+        SiteMode::Auto if width < PHONE_BELOW => true,
+        SiteMode::Auto if width >= DESKTOP_FROM => false,
+        SiteMode::Auto => current == Some(true),
     }
 }
 
@@ -170,26 +181,103 @@ mod tests {
     const AUTO: SiteMode = SiteMode::Auto;
 
     #[test]
-    fn narrow_pages_are_phones_wide_ones_are_not() {
-        assert!(wants_mobile(true, 390.0, AUTO));
-        assert!(wants_mobile(true, 480.0, AUTO));
-        assert!(wants_mobile(true, 599.9, AUTO));
-        assert!(!wants_mobile(true, 600.0, AUTO));
-        assert!(!wants_mobile(true, 1280.0, AUTO));
-        assert!(!wants_mobile(true, f64::NAN, AUTO));
+    fn a_new_window_decides_by_600() {
+        assert!(wants_mobile(true, 390.0, AUTO, None));
+        assert!(wants_mobile(true, 480.0, AUTO, None));
+        assert!(wants_mobile(true, 599.9, AUTO, None));
+        assert!(!wants_mobile(true, 600.0, AUTO, None));
+        assert!(!wants_mobile(true, 620.0, AUTO, None));
+        assert!(!wants_mobile(true, 1280.0, AUTO, None));
+        assert!(!wants_mobile(true, f64::NAN, AUTO, None));
+    }
+
+    #[test]
+    fn between_600_and_640_the_agent_the_page_has_stays() {
+        for current in [Some(true), Some(false), None] {
+            assert!(wants_mobile(true, 599.0, AUTO, current), "{current:?}");
+            assert!(!wants_mobile(true, 640.0, AUTO, current), "{current:?}");
+            assert!(!wants_mobile(true, 900.0, AUTO, current), "{current:?}");
+        }
+        for width in [600.0, 610.0, 620.0, 639.9] {
+            assert!(
+                wants_mobile(true, width, AUTO, Some(true)),
+                "{width}: phone stays"
+            );
+            assert!(
+                !wants_mobile(true, width, AUTO, Some(false)),
+                "{width}: desktop stays"
+            );
+        }
+    }
+
+    /// The agent after a resize to `width`, from `applied` (phone_mode.rs's switch).
+    fn step(applied: &mut Option<bool>, width: f64) -> bool {
+        let wanted = wants_mobile(true, width, AUTO, *applied);
+        let switched = switch(*applied, wanted);
+        if let Some(mobile) = switched {
+            *applied = Some(mobile);
+        }
+        switched.is_some()
+    }
+
+    #[test]
+    fn a_sweep_380_to_820_and_back_switches_exactly_twice() {
+        for stride in [1.0, 7.0, 40.0] {
+            let mut applied = Some(true);
+            let mut switches = 0;
+            let mut width: f64 = 380.0;
+            while width < 820.0 {
+                width = (width + stride).min(820.0);
+                switches += usize::from(step(&mut applied, width));
+            }
+            assert_eq!(applied, Some(false), "wide: desktop ({stride})");
+            while width > 380.0 {
+                width = (width - stride).max(380.0);
+                switches += usize::from(step(&mut applied, width));
+            }
+            assert_eq!(applied, Some(true), "narrow: phone again ({stride})");
+            assert_eq!(switches, 2, "stride {stride}");
+        }
+    }
+
+    #[test]
+    fn hovering_around_600_never_flips() {
+        let mut applied = Some(true);
+        let mut switches = 0;
+        for width in [598.0, 605.0, 599.0, 630.0, 601.0, 639.0, 610.0] {
+            switches += usize::from(step(&mut applied, width));
+        }
+        assert_eq!(
+            (switches, applied),
+            (0, Some(true)),
+            "phone holds below 640"
+        );
+        switches += usize::from(step(&mut applied, 660.0));
+        for width in [639.0, 600.0, 620.0, 601.0] {
+            switches += usize::from(step(&mut applied, width));
+        }
+        assert_eq!(
+            (switches, applied),
+            (1, Some(false)),
+            "desktop holds from 600"
+        );
     }
 
     #[test]
     fn the_setting_turns_phone_mode_off() {
-        assert!(!wants_mobile(false, 390.0, AUTO));
+        for current in [Some(true), Some(false), None] {
+            assert!(!wants_mobile(false, 390.0, AUTO, current));
+        }
     }
 
     #[test]
     fn a_sites_mode_holds_at_any_width() {
-        for width in [320.0, 390.0, 720.0, 1920.0] {
+        for width in [320.0, 390.0, 620.0, 720.0, 1920.0] {
             for enabled in [true, false] {
-                assert!(!wants_mobile(enabled, width, SiteMode::Desktop));
-                assert!(wants_mobile(enabled, width, SiteMode::Phone));
+                for current in [Some(true), Some(false), None] {
+                    assert!(!wants_mobile(enabled, width, SiteMode::Desktop, current));
+                    assert!(wants_mobile(enabled, width, SiteMode::Phone, current));
+                }
             }
         }
     }
