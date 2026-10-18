@@ -176,6 +176,8 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
         bar::navigate(app, url)?;
     }
     bar::watch_url(app);
+    // CI only (smoke log): WebKit's fullscreen state on macOS (LJ36).
+    platform::watch_webkit_fullscreen(app);
     Ok(())
 }
 
@@ -332,7 +334,8 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
             tray::set_page_items_enabled(window.app_handle(), false);
             smoke::log("hibernated", "");
         }
-        WindowEvent::Resized(_) => {
+        WindowEvent::Resized(size) => {
+            log_during_webkit_fullscreen("resized", || format!("{}x{}", size.width, size.height));
             bar::apply_layout(window);
             phone_mode::on_resized(window.app_handle());
             if smoke::enabled() {
@@ -343,7 +346,21 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
             }
         }
         WindowEvent::ScaleFactorChanged { .. } => bar::apply_layout(window),
+        WindowEvent::Focused(focused) => {
+            log_during_webkit_fullscreen("focused", || focused.to_string());
+        }
+        WindowEvent::Moved(position) => {
+            log_during_webkit_fullscreen("moved", || format!("{},{}", position.x, position.y));
+        }
         _ => {}
+    }
+}
+
+/// Smoke mode, macOS: what happens to the Little Joan window while WebKit shows the page in its
+/// own fullscreen window (`wk-window <event> <detail>`; CI reads it next to `wk-fullscreen`).
+fn log_during_webkit_fullscreen(event: &str, detail: impl FnOnce() -> String) {
+    if platform::webkit_fullscreen_logged() {
+        smoke::log("wk-window", &format!("{event} {}", detail()));
     }
 }
 

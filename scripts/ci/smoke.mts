@@ -17,9 +17,10 @@
 // run (its own launch: `--extension <id>` for each bundled panel, screenshots), then the theme runs (each its
 // own launch with a theme in settings.json:
 // the page, the command bar, the history view and Settings in a two-color theme, light and dark,
-// and the default theme in dark; screenshots in <out>/theme/), then check the logs
-// (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper
-// processes. The app runs on a fresh
+// and the default theme in dark; screenshots in <out>/theme/), then the fullscreen run (its own
+// launch: the smoke page's ?fs=both buttons clicked at 390 and 720 px, screenshots in <out>/fs/;
+// smoke-fullscreen.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
+// smoke-theme.mts) and the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
 // data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
@@ -76,6 +77,7 @@ import {
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
+import { fullscreenRun, fullscreenSummary, type FsApp, type FsDriver } from "./smoke-fullscreen.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -221,13 +223,18 @@ $bmp.Save('${file}', [System.Drawing.Imaging.ImageFormat]::Png)`);
   console.log(existsSync(file) ? `screenshot: ${name}` : `screenshot FAILED: ${name}`);
 }
 
-/** Clicks the centre of the primary screen, where the smoke page's big button sits. */
-function clickCentre(): void {
+/**
+ * Clicks a point on the screen — pixels on Windows (SetCursorPos) and Linux (xdotool), points on
+ * macOS (CGEvent) — or the centre of the primary screen ("centre": its work area on Windows).
+ */
+function clickAt(target: { x: number; y: number } | "centre"): void {
+  const point = target === "centre" ? undefined : target;
   if (os === "win32") {
+    const where = point ? `${point.x}, ${point.y}` : "$a.Left + [int]($a.Width / 2), $a.Top + [int]($a.Height / 2)";
     powershell(`Add-Type -AssemblyName System.Windows.Forms
 Add-Type -Namespace LJ -Name Mouse -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, System.UIntPtr e);'
 $a = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-[LJ.Mouse]::SetCursorPos($a.Left + [int]($a.Width / 2), $a.Top + [int]($a.Height / 2)) | Out-Null
+[LJ.Mouse]::SetCursorPos(${where}) | Out-Null
 Start-Sleep -Milliseconds 200
 [LJ.Mouse]::mouse_event(0x0002, 0, 0, 0, [System.UIntPtr]::Zero)
 Start-Sleep -Milliseconds 80
@@ -238,19 +245,27 @@ Start-Sleep -Milliseconds 80
       swift,
       `import AppKit
 let f = NSScreen.main!.frame
-let p = CGPoint(x: f.midX, y: f.midY)
+let args = CommandLine.arguments.dropFirst().compactMap { Double($0) }
+let p = args.count == 2 ? CGPoint(x: args[0], y: args[1]) : CGPoint(x: f.midX, y: f.midY)
 for t in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
   CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
   usleep(80000)
 }
 `,
     );
-    run("swift", [swift]);
+    run("swift", [swift, ...(point ? [String(point.x), String(point.y)] : [])]);
+  } else if (point) {
+    run("xdotool", ["mousemove", String(point.x), String(point.y), "click", "1"]);
   } else {
     const [width, height] = run("xdotool", ["getdisplaygeometry"]).trim().split(/\s+/).map(Number);
     run("xdotool", ["mousemove", String(Math.round((width ?? 1280) / 2)), String(Math.round((height ?? 800) / 2)), "click", "1"]);
   }
-  console.log("clicked the screen centre");
+  console.log(point ? `clicked ${point.x},${point.y}` : "clicked the screen centre");
+}
+
+/** Clicks the centre of the primary screen, where the smoke page's big button sits. */
+function clickCentre(): void {
+  clickAt("centre");
 }
 
 /**
@@ -1086,6 +1101,33 @@ const themeRuns: { run: ThemeRun; events: LogEvent[] }[] = [];
 for (const run of THEME_RUNS) {
   themeRuns.push({ run, events: await themeRun(run) });
 }
+
+/**
+ * The fullscreen run (LJ36, smoke-fullscreen.mts): its own launches, driven through clicks only.
+ * `name` names the data folder and the log (`smoke-<name>.log`).
+ */
+function fullscreenLaunch(name: string, settings: Record<string, unknown>): Promise<FsApp> {
+  const logFile = join(out, `smoke-${name}.log`);
+  rmSync(logFile, { force: true });
+  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: dataDir(name, true, settings), LITTLEJOAN_SMOKE_LOG: logFile };
+  const runChild = launch(runEnv);
+  return Promise.resolve({
+    forward: (args) => forward(args, runEnv),
+    events: () => events(logFile),
+    waitFor: (what, test, timeoutMs) => waitFor(what, test, timeoutMs, logFile),
+    quit: async () => {
+      const runPid = appPid(runChild);
+      await forward(["--quit"], runEnv);
+      if (!(await exited(runPid, 15_000))) {
+        await quit(runChild, runPid);
+      }
+    },
+  });
+}
+const fullscreenDriver: FsDriver = { os, pageUrl: smokePageUrl, launch: fullscreenLaunch, clickAt, screenshot, sleep: (ms) => sleep(ms).then(() => undefined) };
+mkdirSync(join(out, "fs"), { recursive: true });
+// Informational until LJ36's fix turns its rules on: what CI shows goes into summary.json.
+const fullscreenCheck = await fullscreenRun(fullscreenDriver, false);
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -1170,6 +1212,7 @@ const summary = {
     up: [...BUNDLED_PANELS, ...PAGE_ACTIONS].filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
     keysReached: bundledCheck.keys,
   },
+  fullscreenRun: fullscreenSummary(fullscreenCheck, os),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1218,7 +1261,8 @@ if (failures.length > 0) {
   const themeLogs = THEME_RUNS.map((run) => join(out, `smoke-${run.name}.log`));
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
-  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, firstLogPath, relaunchLogPath]) {
+  const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log")];
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

@@ -5086,6 +5086,44 @@ If it is still red after two honest fix attempts, stop and report. Never commit 
 a check.
 ```
 
+**Implementation notes (2026-10-18) — the reproduction (`lj-step-36`):**
+
+- **The smoke page's `?fs=both`** (`tests/smoke/smoke.html`, logic in `tests/smoke/fullscreen-logic.mjs`
+  + test): "Element fullscreen" (a container `requestFullscreen()`s itself, prefixed fallback) on
+  the top third, "Phone player" (a `<video>` playing a `canvas.captureStream(30)`) on the bottom
+  third, a gap around the middle; in fullscreen a big Exit in the middle of the screen (25–75 % ×
+  30–70 %). `playerPath(ua)`: an iPhone agent takes the iOS route (`webkitEnterFullscreen()`, a 1 s
+  wait for `webkitbeginfullscreen`, then `screen.orientation.lock("landscape")` in a try; a click on
+  the fullscreen video is the player's exit), anything else element fullscreen of the player. One
+  `FsAttempt` per click watches `fullscreenchange`, `webkitfullscreenchange`,
+  `webkitbeginfullscreen`, `webkitendfullscreen` and a 100 ms poll (`fullscreenElement` /
+  `webkitDisplayingFullscreen`), gives up 4 s after a click that never entered or 6 s after
+  entering (then leaves fullscreen itself, so the next attempt starts windowed), and reports
+  `LJ-FS <element|phone> width= ua= entered= held_ms= exited_by_page= events=<list>`; a player
+  without `captureStream` or metadata reports `unavailable=<why>`. Ready: `LJ-FS ready width= ua=`.
+- **Where to click:** the windows aren't centred after `--size` (the top-left stays), so the app
+  logs `page-screen <x>,<y>,<w>,<h> scale=<s>` (smoke mode, every layout: the window's inner
+  position + the page's bounds, physical pixels) and the run clicks each button's centre there
+  (points on macOS); exits are clicked at the screen's centre, which the fullscreen Exit covers.
+  `clickCentre` became `clickAt(point | "centre")` with the old behaviour for `"centre"`.
+- **The run** (`scripts/ci/smoke-fullscreen.mts` + test; `smoke.mts` passes a small driver):
+  its own launch after the theme runs; `--show smoke.html?fs=both`, then per size (`--size
+  390x600`, phone agent; `--size 720x600`, desktop agent) it waits for the page's ready title
+  after its last `page-started` (phone mode's reload) and steady for 1.5 s, clicks "Element
+  fullscreen", screenshots 1 s later (`fs/element-<w>.png`), clicks Exit 2 s after the click
+  (skipped when the attempt already reported), waits for the report; the same for "Phone player"
+  (`fs/phone-390.png`). `fullscreenFailures` (the rules) and `fullscreenSummary` exist; in this
+  commit the results only go to `summary.json` (`fullscreenRun`: the reports, WebKit's states,
+  the window's events during it, what the rules would say).
+- **macOS instrumentation** (smoke mode only): `platform/mac.rs` polls `fullscreenState`
+  (`respondsToSelector:` first) every 100 ms while a page window exists and logs `wk-fullscreen
+  <not|entering|in|exiting>` on each change (`fullscreen::WebKitFullscreen`, an unknown value
+  counts as `in`); `bar/view.rs`'s `place()` logs `page-bounds` / `page-visible` for the page on
+  every OS; `joan::on_window_event` logs `wk-window resized|focused|moved` while the last state
+  logged isn't `not`.
+- `npm run verify`: 482 TS tests, 257 Rust tests, clippy clean. Disk: 12 GiB free at the start of
+  the phase, 11 GiB after verify; `.cache/target` 1.4 GB.
+
 ### LJ37 — Ctrl+H opens history on Windows and Linux; double-clicking the toolbar zooms the window · standard · auto
 
 **Verify:** `npm run verify` green, including `keys.rs` tests: Ctrl+H → `PageAction::History` on

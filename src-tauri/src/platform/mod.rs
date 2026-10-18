@@ -7,7 +7,7 @@ mod mac;
 #[cfg(windows)]
 mod win;
 
-use tauri::{Runtime, Webview, Window};
+use tauri::{AppHandle, Runtime, Webview, Window};
 
 /// Windows: page keys on the bar's WebView2 controller.
 #[cfg(windows)]
@@ -84,6 +84,30 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
 #[cfg(target_os = "macos")]
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     mac::set_mobile(page, mobile);
+}
+
+/// macOS, smoke mode only (CI): logs WebKit's element-fullscreen state (`wk-fullscreen …`) while
+/// the page window exists. Nothing elsewhere: Windows and Linux report fullscreen through their
+/// hooks.
+#[cfg(target_os = "macos")]
+pub fn watch_webkit_fullscreen<R: Runtime>(app: &AppHandle<R>) {
+    mac::watch_webkit_fullscreen(app);
+}
+
+/// Windows and Linux: nothing to watch (their hooks report element fullscreen).
+#[cfg(not(target_os = "macos"))]
+pub fn watch_webkit_fullscreen<R: Runtime>(_app: &AppHandle<R>) {}
+
+/// macOS, smoke mode only: whether the last `wk-fullscreen` line logged wasn't `not`.
+#[cfg(target_os = "macos")]
+pub fn webkit_fullscreen_logged() -> bool {
+    mac::webkit_fullscreen_logged()
+}
+
+/// Windows and Linux: WebKit's fullscreen window doesn't exist there.
+#[cfg(not(target_os = "macos"))]
+pub fn webkit_fullscreen_logged() -> bool {
+    false
 }
 
 /// Puts `text` on the system clipboard (littleJoan.clipboard.writeText). Main thread only.

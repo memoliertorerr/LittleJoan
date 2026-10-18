@@ -50,19 +50,57 @@ pub fn apply_layout<R: Runtime>(window: &Window<R>) {
     let wanted = layout::for_physical_size(size.width, size.height, scale, mode());
     place(&bar, wanted.bar);
     place(&page, wanted.page);
+    if let Some(rect) = wanted.page {
+        log_page_screen(window, rect, scale);
+    }
 }
 
-/// Shows `webview` at `rect`, or hides it.
+/// Shows `webview` at `rect`, or hides it. For the page the smoke log gets `page-bounds
+/// <x,y,w,h>` (logical, in the window) and `page-visible <bool>`: CI checks that nothing touches
+/// the page during WebKit's fullscreen on macOS (LJ36).
 fn place<R: Runtime>(webview: &Webview<R>, rect: Option<Rect>) {
+    let page = webview.label() == PAGE;
     match rect {
         Some(rect) => {
             let _ = webview.set_bounds(to_tauri(rect));
             let _ = webview.show();
+            if page {
+                smoke::log(
+                    "page-bounds",
+                    &format!("{},{},{},{}", rect.x, rect.y, rect.width, rect.height),
+                );
+                smoke::log("page-visible", "true");
+            }
         }
         None => {
             let _ = webview.hide();
+            if page {
+                smoke::log("page-visible", "false");
+            }
         }
     }
+}
+
+/// Smoke mode only: where the page is on the screen — `page-screen <x>,<y>,<w>,<h> scale=<s>`,
+/// physical pixels from the window's inner position — so CI can click the smoke page's buttons.
+fn log_page_screen<R: Runtime>(window: &Window<R>, rect: Rect, scale: f64) {
+    if !smoke::enabled() {
+        return;
+    }
+    let Ok(origin) = window.inner_position() else {
+        return;
+    };
+    let physical = |logical: f64| (logical * scale).round();
+    smoke::log(
+        "page-screen",
+        &format!(
+            "{},{},{},{} scale={scale}",
+            f64::from(origin.x) + physical(rect.x),
+            f64::from(origin.y) + physical(rect.y),
+            physical(rect.width),
+            physical(rect.height),
+        ),
+    );
 }
 
 fn to_tauri(rect: Rect) -> tauri::Rect {

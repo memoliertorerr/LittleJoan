@@ -46,6 +46,101 @@
       video {
         display: none;
       }
+      /* ?fs=both (LJ36): the fullscreen run's buttons, placed from FS_BUTTONS (fullscreen-logic.mjs). */
+      #fs {
+        position: fixed;
+        inset: 0;
+        background: #1f2a44;
+      }
+      .fs-box {
+        position: fixed;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 16px;
+        font-size: 24px;
+        font-weight: 600;
+        cursor: pointer;
+        overflow: hidden;
+      }
+      #fs-element {
+        background: #f7c948;
+        color: #1f2a44;
+      }
+      #fs-player {
+        background: #4fc3f7;
+        color: #1f2a44;
+      }
+      #fs-player video {
+        display: block;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.35;
+        pointer-events: none;
+      }
+      .fs-label {
+        position: relative;
+        pointer-events: none;
+      }
+      .fs-exit {
+        display: none;
+        position: absolute;
+        border: 0;
+        border-radius: 16px;
+        font-size: 32px;
+        font-weight: 700;
+        background: #ffffff;
+        color: #1f2a44;
+        cursor: pointer;
+      }
+      .fs-box:fullscreen {
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        background: #2e7d32;
+      }
+      .fs-box:-webkit-full-screen {
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        background: #2e7d32;
+      }
+      .fs-box:fullscreen .fs-exit {
+        display: block;
+      }
+      .fs-box:-webkit-full-screen .fs-exit {
+        display: block;
+      }
+      .fs-box:fullscreen video {
+        pointer-events: auto;
+      }
+      .fs-box:-webkit-full-screen video {
+        pointer-events: auto;
+      }
+      #fs-video:fullscreen {
+        pointer-events: auto;
+        opacity: 1;
+      }
+      #fs-video:-webkit-full-screen {
+        pointer-events: auto;
+        opacity: 1;
+      }
+      #fs-status {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 45%;
+        margin: 0;
+        font-size: 13px;
+        text-align: center;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
@@ -53,6 +148,18 @@
       <button id="go" type="button">Go fullscreen</button>
       <p id="status">loading…</p>
       <video id="video" muted playsinline></video>
+    </div>
+    <div id="fs" hidden>
+      <div id="fs-element" class="fs-box" role="button">
+        <span class="fs-label">Element fullscreen</span>
+        <button id="fs-element-exit" class="fs-exit" type="button">Exit</button>
+      </div>
+      <div id="fs-player" class="fs-box" role="button">
+        <video id="fs-video" muted playsinline></video>
+        <span class="fs-label">Phone player</span>
+        <button id="fs-player-exit" class="fs-exit" type="button">Exit</button>
+      </div>
+      <p id="fs-status"></p>
     </div>
     <script type="module">
       import {
@@ -68,6 +175,15 @@
         viewportTitle,
       } from "./smoke-logic.mjs";
       import { probeApi, probeFile, probeRequest, probeTitle, raceRequest, RACE } from "./ext-probe.mjs";
+      import {
+        BEGIN_WAIT_MS,
+        FS_BUTTONS,
+        FsAttempt,
+        fsReadyTitle,
+        fsRequest,
+        playerPath,
+        unavailableTitle,
+      } from "./fullscreen-logic.mjs";
 
       const stage = document.getElementById("stage");
       const status = document.getElementById("status");
@@ -90,7 +206,9 @@
       const probe = probeRequest(location.search);
       // ?ext=race&base=<origin>: iframes and window.open at the panel while the app opens it.
       const race = raceRequest(location.search);
-      if (probe) {
+      if (fsRequest(location.search)) {
+        runFullscreen();
+      } else if (probe) {
         void runProbe(probe.base);
       } else if (race) {
         runRace(race.base);
@@ -157,6 +275,209 @@
         location.href = `${base}/index.html`;
         await new Promise((done) => setTimeout(done, 2500));
         show(probeTitle({ api, file, nav: "refused" }));
+      }
+
+      // ?fs=both (LJ36): "Element fullscreen" (requestFullscreen on a container, as desktop
+      // YouTube does) and "Phone player" (like m.youtube.com's player: under an iPhone agent
+      // video.webkitEnterFullscreen(), the iOS events and an orientation lock; otherwise element
+      // fullscreen of its container), each left through its own Exit (in fullscreen). Each
+      // attempt reports one LJ-FS title (fullscreen-logic.mjs); the run clicks, never presses keys.
+      function runFullscreen() {
+        stage.hidden = true;
+        const root = document.getElementById("fs");
+        const element = document.getElementById("fs-element");
+        const player = document.getElementById("fs-player");
+        const video = document.getElementById("fs-video");
+        const fsStatus = document.getElementById("fs-status");
+        root.hidden = false;
+        const place = (node, box) => {
+          node.style.left = `${box.x * 100}%`;
+          node.style.top = `${box.y * 100}%`;
+          node.style.width = `${box.width * 100}%`;
+          node.style.height = `${box.height * 100}%`;
+        };
+        place(element, FS_BUTTONS.element);
+        place(player, FS_BUTTONS.phone);
+        for (const exit of root.querySelectorAll(".fs-exit")) {
+          place(exit, FS_BUTTONS.exit);
+          exit.style.position = "absolute";
+        }
+        const report = (title) => {
+          document.title = title;
+          fsStatus.textContent = title;
+        };
+        const now = () => performance.now();
+        const ua = navigator.userAgent;
+        const fullscreenNow = () => Boolean(document.fullscreenElement ?? document.webkitFullscreenElement) || Boolean(video.webkitDisplayingFullscreen);
+
+        // The player's video: frames from a canvas (no media file in the repository).
+        let unavailable = "";
+        const canvas = document.createElement("canvas");
+        canvas.width = 320;
+        canvas.height = 180;
+        const paint = canvas.getContext("2d");
+        let frame = 0;
+        const draw = () => {
+          frame += 1;
+          paint.fillStyle = "#1f2a44";
+          paint.fillRect(0, 0, 320, 180);
+          paint.fillStyle = "#f7c948";
+          paint.fillRect((frame * 4) % 320, 70, 40, 40);
+          requestAnimationFrame(draw);
+        };
+        draw();
+        if (typeof canvas.captureStream !== "function") {
+          unavailable = "no-capture-stream";
+        } else {
+          video.srcObject = canvas.captureStream(30);
+          video.play().catch(() => undefined);
+        }
+
+        /** @type {FsAttempt | null} */
+        let attempt = null;
+        // The window's width when the attempt's click came (in fullscreen the page is wider).
+        let attemptWidth = 0;
+        const finish = () => {
+          report(attempt.report(attemptWidth, ua));
+          if (fullscreenNow()) {
+            // The exit click never worked: leave anyway, so the next attempt starts windowed.
+            if (document.exitFullscreen) {
+              document.exitFullscreen().catch(() => undefined);
+            } else if (document.webkitExitFullscreen) {
+              document.webkitExitFullscreen();
+            }
+            if (video.webkitDisplayingFullscreen && video.webkitExitFullscreen) {
+              video.webkitExitFullscreen();
+            }
+          }
+        };
+        const observe = (cause) => {
+          if (attempt && !attempt.done && attempt.observe(fullscreenNow(), now(), cause)) {
+            finish();
+          }
+        };
+        setInterval(() => {
+          observe("poll");
+          if (attempt && !attempt.done && attempt.expire(now())) {
+            finish();
+          }
+        }, 100);
+        for (const name of ["fullscreenchange", "webkitfullscreenchange"]) {
+          document.addEventListener(name, () => {
+            attempt?.note(name);
+            observe(name);
+          });
+        }
+        video.addEventListener("webkitbeginfullscreen", () => {
+          attempt?.note("webkitbeginfullscreen");
+          if (attempt && !attempt.done) {
+            attempt.observe(true, now(), "begin");
+          }
+        });
+        video.addEventListener("webkitendfullscreen", () => {
+          attempt?.note("webkitendfullscreen");
+          if (attempt && !attempt.done && attempt.observe(false, now(), "end")) {
+            finish();
+          }
+        });
+        const start = (path) => {
+          if (attempt && !attempt.done) {
+            return false;
+          }
+          attempt = new FsAttempt(path, now());
+          attemptWidth = window.innerWidth;
+          return true;
+        };
+        const askExit = (event) => {
+          event.stopPropagation();
+          if (!attempt || attempt.done) {
+            return;
+          }
+          attempt.askExit(now());
+          if (video.webkitDisplayingFullscreen && video.webkitExitFullscreen) {
+            attempt.note("webkit-exit");
+            video.webkitExitFullscreen();
+          } else if (document.exitFullscreen) {
+            attempt.note("exit-call");
+            document.exitFullscreen().catch(() => attempt.note("exit-refused"));
+          } else if (document.webkitExitFullscreen) {
+            attempt.note("exit-call");
+            document.webkitExitFullscreen();
+          }
+        };
+        const elementFullscreen = (node) => {
+          attempt.note("request");
+          if (typeof node.requestFullscreen === "function") {
+            node.requestFullscreen().catch(() => attempt.note("request-refused"));
+          } else if (typeof node.webkitRequestFullscreen === "function") {
+            node.webkitRequestFullscreen();
+          } else {
+            attempt.note("no-fullscreen-api");
+          }
+        };
+        element.addEventListener("click", () => {
+          if (start("element")) {
+            elementFullscreen(element);
+          }
+        });
+        player.addEventListener("click", () => {
+          if (attempt && !attempt.done) {
+            return;
+          }
+          if (unavailable || video.readyState < 1) {
+            report(unavailableTitle(window.innerWidth, ua, unavailable || "no-metadata"));
+            return;
+          }
+          start("phone");
+          if (playerPath(ua) === "element") {
+            elementFullscreen(player);
+            return;
+          }
+          // m.youtube.com's way: the iOS video fullscreen, then wait for its event and lock the
+          // orientation (in a try: macOS has neither).
+          attempt.note("webkit-enter");
+          try {
+            video.webkitEnterFullscreen();
+          } catch (err) {
+            attempt.note(`enter-error:${err && err.name}`);
+          }
+          const begun = new Promise((done) => {
+            video.addEventListener("webkitbeginfullscreen", () => done(true), { once: true });
+            setTimeout(() => done(false), BEGIN_WAIT_MS);
+          });
+          void begun.then((saw) => {
+            attempt.note(saw ? "begin-seen" : "no-begin");
+            try {
+              const lock = screen.orientation && screen.orientation.lock ? screen.orientation.lock("landscape") : null;
+              if (lock) {
+                lock.then(() => attempt.note("lock:ok"), (err) => attempt.note(`lock:${(err && err.name) || "refused"}`));
+              } else {
+                attempt.note("lock:missing");
+              }
+            } catch (err) {
+              attempt.note(`lock-error:${err && err.name}`);
+            }
+          });
+        });
+        // In the iOS route the video itself is fullscreen: a click on it is the player's exit.
+        video.addEventListener("click", askExit);
+        for (const exit of root.querySelectorAll(".fs-exit")) {
+          exit.addEventListener("click", askExit);
+        }
+
+        // What the page is ready for: its width and agent, after load and every settled resize
+        // (an attempt's own report stays until it is done).
+        let resizeTimer = 0;
+        const ready = () => {
+          if (!attempt || attempt.done) {
+            report(fsReadyTitle(window.innerWidth, ua));
+          }
+        };
+        setTimeout(ready, 300);
+        window.addEventListener("resize", () => {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(ready, 300);
+        });
       }
 
       function startCodecAndViewportReports() {

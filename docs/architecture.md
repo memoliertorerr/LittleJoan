@@ -213,7 +213,8 @@ src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on 
                                    (`SettingsTab`, tested), open on a tab or switch an open one,
                                    links to the default browser
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
-src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen
+src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen;
+                                   WebKitFullscreen (WKWebView's fullscreenState)
 src-tauri/src/keys.rs              page keys per OS (pure), app origin
 src-tauri/src/page_actions.rs      close / open location / reload / back / forward / translate /
                                    open in browser / history; translate_target (skips the start
@@ -223,7 +224,8 @@ src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
 src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → keys.rs;
                                    ContainsFullScreenElementChanged → window fullscreen
-src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode)
+src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode); WebKit's
+                                   fullscreenState (CI's `wk-fullscreen` log)
 src-tauri/src/platform/linux.rs    Linux: GTK window key-press-event → keys.rs; the bar's packing
                                    in the window's GtkBox (toolbar / overlay); enter/leave-
                                    fullscreen → hide the bar
@@ -256,8 +258,14 @@ scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which pane
                                    the toolbar's label, none of its requests refused); unit-tested
 scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report, the probe),
                                    unit-tested
+scripts/ci/smoke-fullscreen.mts    CI: the fullscreen run (the smoke page's ?fs=both buttons,
+                                   clicked where `page-screen` puts them) and its rules;
+                                   unit-tested
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button;
-                                   with ?persist=set|check, the cookie and localStorage check
+                                   with ?persist=set|check, the cookie and localStorage check;
+                                   with ?fs=both, "Element fullscreen" and "Phone player"
+tests/smoke/fullscreen-logic.mjs   ?fs=both's logic: the buttons' places, the player's route by
+                                   user agent, one attempt's report (plain JS, unit-tested)
 tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested)
 tests/smoke/ext-probe.mjs          the smoke page's ?ext=probe: a web page trying an extension's
                                    API, files and panel (unit-tested)
@@ -857,7 +865,12 @@ toolbar was told to name), `new-window-refused <url>` (a popup that isn't a web 
 `ljext-headers <webview> <method> <url without query> status=<n> referer=<own | other | - |
 twice> names=<header names> dest= site= mode= origin= service-worker=` (every `ljext` request:
 its answer and what the engine sent — never the token, nor the Referer's value, which can carry a
-nonce). Without the variable nothing is logged.
+nonce), `page-bounds <x,y,w,h>` and `page-visible <bool>` (every layout of the page webview:
+logical bounds in the window), `page-screen <x>,<y>,<w>,<h> scale=<s>` (where the page is on the
+screen, physical pixels, for CI's clicks), and on macOS `wk-fullscreen <not|entering|in|exiting>`
+(WKWebView's `fullscreenState`, polled every 100 ms while a page window exists — smoke mode only)
+and `wk-window <resized|focused|moved> <detail>` (the window's events while that isn't `not`).
+Without the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -1029,7 +1042,16 @@ and pushes to `main`:
   and in dark (`theme/page-dark.png`, `theme/command-bar-dark.png`, `theme/settings-dark.png`),
   and the
   default theme in dark (`theme/command-bar-default-dark.png`); every `theme` event must name the
-  run's mode and number of colors. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  run's mode and number of colors. Then the **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
+  its own launch: the smoke page in `?fs=both` mode at 390×600 (phone agent) and 720×600 (desktop
+  agent); at each size the page's "Element fullscreen" (`requestFullscreen` on a container, as
+  desktop YouTube) and "Phone player" (m.youtube.com's way under an iPhone agent:
+  `video.webkitEnterFullscreen()`, the iOS events, an orientation lock; element fullscreen of its
+  container otherwise) are clicked where the app's `page-screen` line puts them, and each one's
+  Exit (in fullscreen, at the screen's centre) 2 s later — clicks only, never keys. Each attempt
+  reports `LJ-FS <element|phone> width= ua= entered= held_ms= exited_by_page= events=`
+  (screenshots `fs/element-390.png`, `fs/phone-390.png`, `fs/element-720.png`, 1 s after each
+  click; log `smoke-fullscreen.log`; what happened in `summary.json`'s `fullscreenRun`). Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).
