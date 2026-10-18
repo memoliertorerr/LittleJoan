@@ -3701,10 +3701,21 @@ honest attempts, then stop).
   reached the handler on WebKit **without a CORS preflight** (custom schemes skip it there) and was
   refused for its Origin, its simple POST for the missing `X-LJ-Api`, its `<img>` for the page
   check, and `location.href` by the guard (`navigation-refused`). So the Origin check is what
-  stops a web page's request on WebKit, not the preflight. **Fix (`lj-step-29-fix`):**
-  `Referrer-Policy: same-origin` (nothing goes to other origins, so no more leaks than before), the
-  SDK's own fetch sets `referrerPolicy: "same-origin"` too (a panel's own `<meta name="referrer">`
-  can't break it), and an Origin refusal logs what the engine sent (`origin=<value>`).
+  stops a web page's request on WebKit, not the preflight. **Fix 1 (`lj-step-29-fix`), on a wrong
+  guess:** `Referrer-Policy: same-origin` (nothing goes to other origins, so no more leaks than
+  before; kept), the SDK's own fetch sets `referrerPolicy: "same-origin"` too, and an Origin
+  refusal logs what the engine sent. Run 39090864816 (verify, package, Windows smoke green again;
+  the three WebKit smoke jobs red the same way) showed `origin=-`: **WebKit sends no Origin at all**
+  with a same-origin POST to a custom scheme (it adds one only on the CORS path; the web page's
+  cross-origin POST had `origin=http://127.0.0.1:…`), not `null`. **Fix 2 (`lj-step-29-fix2`):**
+  `api::origin_ok` — an Origin that is sent must be exactly the extension's (once; `null` and an
+  empty one refused); Windows must send one (WebView2 always does); on macOS and Linux a missing
+  Origin is the extension's own request, unless a Referer from another origin comes with it.
+  Every cross-origin request carries an Origin on WebKit (spec, and the probe), so a web page's
+  call is still refused by it, and the page, webview and header checks are unchanged. Tests:
+  `webkit_sends_no_origin_from_the_extension_itself` (accepted on macOS / Linux, refused on
+  Windows, foreign Referer refused, empty Origin refused, other checks still apply); the refusal
+  log now carries the Referer too.
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
@@ -4223,11 +4234,13 @@ Populated from real friction, not speculation:
 - *(LJ29)* **Custom schemes are registered for every webview** (`register_*_uri_scheme_protocol`
   in tauri 2.12 adds the handler to each webview the app builds), so the handler must check
   `UriSchemeContext::webview_label()` — the bar and Settings can request `ljext:` URLs too.
-- *(LJ29)* **`Referrer-Policy: no-referrer` turns a same-origin POST's `Origin` into `null`** on
-  WebKit (macOS, Linux; the Fetch standard), so an API that checks the Origin refuses its own
-  pages. The `ljext` responses use `same-origin`. And **WebKit sends cross-origin requests to a
-  custom scheme without a CORS preflight**, custom header and all: a web page's POST to `ljext:`
-  reaches the handler, and only the handler's checks (Origin, page) refuse it.
+- *(LJ29)* **WebKit sends no `Origin` with a same-origin POST to a custom scheme** (macOS,
+  Linux): only its CORS path adds the header, so a panel's own fetch to `/__lj/api/v1/…` arrived
+  without one (`origin=-` in CI's log; not `null`, which was the first guess). Every cross-origin
+  request does carry one. WebView2 sends it always. `api::origin_ok` encodes that per platform.
+  And **WebKit sends cross-origin requests to a custom scheme without a CORS preflight**, custom
+  header and all: a web page's POST to `ljext:` reaches the handler, and only the handler's checks
+  (Origin, page) refuse it.
 - *(LJ29, Windows)* **A navigation cancelled in `NavigationStarting` may still request its URL**:
   CI's probe saw the guard refuse `http://ljext.hello.localhost/index.html` and then that very GET
   reach the `ljext` handler (refused there by the page check). The cancelled navigation also raised

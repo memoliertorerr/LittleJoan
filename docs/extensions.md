@@ -190,7 +190,7 @@ base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   `data:` / `blob:` URLs.
 - **No frames, plugins or forms**, and no page may frame a panel.
 - Also sent: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
-  `Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: no-referrer`,
+  `Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: same-origin`,
   `Cache-Control: no-store`, and a `Permissions-Policy` that denies camera, microphone,
   geolocation, reading the clipboard, screen capture, USB, serial, HID, Bluetooth and payments.
 
@@ -233,9 +233,10 @@ extension's own origin. Every request is checked from scratch:
 2. the extension exists and is switched on;
 3. the page web view is showing a panel of **that** extension, which Little Joan opened;
 4. files and the SDK: a `GET`, not for a frame, a plain path of a served type;
-5. the API: a `POST` with `X-LJ-Api: 1` — which also makes a web page's request need a CORS
-   preflight that is refused —, an `Origin` that is exactly the extension's origin, a method on
-   the list above, and the permission that method needs.
+5. the API: a `POST` with `X-LJ-Api: 1`, sent from the extension's own origin — an `Origin`
+   header that is exactly the extension's origin (on Windows it must be there; macOS and Linux
+   send none with a request to the panel's own origin, while every request from another origin
+   carries one), a method on the list above, and the permission that method needs.
 
 Little Joan never sends CORS headers, so no other page can read an answer. The window navigates to
 an extension URL only when Little Joan itself opens that exact URL; web pages can't, in any form

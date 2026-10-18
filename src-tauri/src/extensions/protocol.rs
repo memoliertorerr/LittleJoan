@@ -90,7 +90,11 @@ fn respond<R: Runtime>(
 fn refuse(incoming: &Incoming, refusal: api::Refusal) -> Response<Cow<'static, [u8]>> {
     // For an Origin refusal, what the engine sent (a web page's origin, `null`, or nothing).
     let origin = if refusal == api::Refusal::Origin {
-        format!(" origin={}", incoming.header("origin").unwrap_or("-"))
+        format!(
+            " origin={} referer={}",
+            incoming.header("origin").unwrap_or("-"),
+            incoming.header("referer").unwrap_or("-")
+        )
     } else {
         String::new()
     };

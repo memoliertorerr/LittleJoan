@@ -276,10 +276,6 @@ fn the_api_needs_its_header_exactly_once() {
 
 #[test]
 fn the_origin_must_be_the_extensions_own() {
-    assert_eq!(
-        refusal(decide(&without_header(api("storage.get"), "origin"))),
-        Some(Refusal::Origin)
-    );
     for origin in [
         "null",
         "https://example.com",
@@ -304,6 +300,93 @@ fn the_origin_must_be_the_extensions_own() {
         .headers
         .push(("Origin".to_owned(), "ljext://hello.localhost".to_owned()));
     assert_eq!(refusal(decide(&twice)), Some(Refusal::Origin));
+}
+
+#[test]
+fn webkit_sends_no_origin_from_the_extension_itself() {
+    // What CI saw on macOS and Linux: the panel's own POST carries no Origin and no Referer.
+    let bare = without_header(api("storage.get"), "origin");
+    for platform in [Platform::MacOs, Platform::Linux] {
+        assert!(
+            decide_on(
+                &bare,
+                platform,
+                Some("ljext://hello.localhost/index.html"),
+                Some("hello")
+            )
+            .is_ok(),
+            "{platform:?}"
+        );
+        // A Referer, when sent, must be the extension's own.
+        let own = with_header(
+            bare.clone(),
+            "referer",
+            "ljext://hello.localhost/index.html",
+        );
+        assert!(
+            decide_on(
+                &own,
+                platform,
+                Some("ljext://hello.localhost/index.html"),
+                Some("hello")
+            )
+            .is_ok()
+        );
+        for referer in [
+            "https://example.com/",
+            "ljext://other.localhost/index.html",
+            "ljext://hello.localhost.evil.com/",
+            "ljext://hello.localhostx/",
+            "",
+        ] {
+            let other = with_header(bare.clone(), "referer", referer);
+            assert_eq!(
+                refusal(decide_on(
+                    &other,
+                    platform,
+                    Some("ljext://hello.localhost/index.html"),
+                    Some("hello")
+                )),
+                Some(Refusal::Origin),
+                "{referer:?}"
+            );
+        }
+        // An empty Origin header is not a missing one.
+        let empty = with_header(bare.clone(), "origin", "");
+        assert_eq!(
+            refusal(decide_on(
+                &empty,
+                platform,
+                Some("ljext://hello.localhost/index.html"),
+                Some("hello")
+            )),
+            Some(Refusal::Origin)
+        );
+    }
+    // WebView2 always sends one: without it, refused.
+    assert_eq!(
+        refusal(decide_on(
+            &bare,
+            Platform::Windows,
+            Some("http://ljext.hello.localhost/index.html"),
+            Some("hello")
+        )),
+        Some(Refusal::Origin)
+    );
+    // The other checks still apply to an Origin-less call: the page, the header, the webview.
+    assert_eq!(
+        refusal(decide_on(
+            &bare,
+            Platform::MacOs,
+            Some("https://example.com/"),
+            Some("hello")
+        )),
+        Some(Refusal::Page)
+    );
+    assert_eq!(
+        refusal(decide(&without_header(bare.clone(), "x-lj-api"))),
+        Some(Refusal::Header)
+    );
 }
 
 #[test]

@@ -9,10 +9,17 @@
 //!   (so a web page — or its frames — can't load an extension's files or call its API);
 //! - files and the SDK: a `GET`, not for a frame (`Sec-Fetch-Dest`), a plain path (paths.rs) of a
 //!   type we serve;
-//! - the API: a `POST` with `X-LJ-Api: 1` (which also forces a CORS preflight that is refused, so
-//!   a web page's request never reaches a method), an `Origin` that is exactly the extension's
-//!   origin, `Sec-Fetch-Site: same-origin` when the engine sends it, a method on the allowlist,
-//!   and the manifest permission that method needs.
+//! - the API: a `POST` with `X-LJ-Api: 1` (on Chromium this also forces a CORS preflight, which
+//!   is refused), the extension's own origin (`origin_ok`), `Sec-Fetch-Site: same-origin` when the
+//!   engine sends it, a method on the allowlist, and the manifest permission that method needs.
+//!
+//! **The Origin rule differs per engine** (CI, LJ29). WebView2 (Windows) sends `Origin` with
+//! every POST, so it must be there and be exactly the extension's origin. WebKit (macOS, Linux)
+//! sends **no** `Origin` (nor a Referer) with a same-origin POST to a custom scheme — only the
+//! CORS path adds one, and every cross-origin request takes it (a web page's request arrived with
+//! `Origin: http://127.0.0.1:…`, without a preflight). So there an Origin that is sent must be
+//! exactly the extension's (`null` is refused too), a missing one means the request came from the
+//! extension's own origin, and a Referer, when sent, must be from that origin as well.
 
 use std::sync::Arc;
 
@@ -195,6 +202,26 @@ impl Refusal {
     }
 }
 
+/// Whether the API call comes from the extension's own origin (see the module docs): its
+/// `Origin`, exactly, once — or, on WebKit (macOS, Linux), no `Origin` at all (what a same-origin
+/// request to a custom scheme carries there) and no Referer from another origin.
+pub fn origin_ok(incoming: &Incoming, id: &str, platform: Platform) -> bool {
+    let own = urls::origin(id, platform);
+    match incoming.header("origin") {
+        Some(origin) => origin == own,
+        None if incoming.has_header("origin") => false,
+        None => {
+            platform != Platform::Windows
+                && match incoming.header("referer") {
+                    Some(referer) => referer
+                        .strip_prefix(own.as_str())
+                        .is_some_and(|rest| rest.starts_with('/')),
+                    None => !incoming.has_header("referer"),
+                }
+        }
+    }
+}
+
 /// Request destinations that are frames or plugins.
 const FRAME_DESTS: [&str; 5] = ["iframe", "frame", "embed", "object", "fencedframe"];
 
@@ -218,7 +245,7 @@ pub fn route(incoming: &Incoming, ctx: &Context<'_>) -> Result<Route, Refusal> {
         if incoming.header(API_HEADER) != Some("1") {
             return Err(Refusal::Header);
         }
-        if incoming.header("origin") != Some(urls::origin(&target.id, ctx.platform).as_str()) {
+        if !origin_ok(incoming, &target.id, ctx.platform) {
             return Err(Refusal::Origin);
         }
         if incoming.has_header("sec-fetch-site")
