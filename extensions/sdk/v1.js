@@ -32,6 +32,9 @@
       body: JSON.stringify(params),
       cache: "no-store",
       credentials: "same-origin",
+      // Little Joan checks the Origin of every call; under a "no-referrer" policy (a panel's own
+      // <meta name="referrer">) engines would send "null" instead of the panel's origin.
+      referrerPolicy: "same-origin",
     });
     /** @type {unknown} */
     let raw;

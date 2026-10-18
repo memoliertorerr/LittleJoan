@@ -3624,7 +3624,8 @@ honest attempts, then stop).
   restrictive choices:** serving files only while the page shows that extension (otherwise a web
   page could probe which developer extensions are installed with `<img>`), the frame and
   same-site checks, `frame-ancestors 'none'`, `X-Frame-Options: DENY`,
-  `Cross-Origin-Resource-Policy: same-origin`, a `Permissions-Policy`, `no-store`, `no-referrer`,
+  `Cross-Origin-Resource-Policy: same-origin`, a `Permissions-Policy`, `no-store`,
+  `Referrer-Policy: same-origin` (first `no-referrer` — see the CI notes below),
   and refusing `blob:` / `data:` documents while a panel is shown (they would keep its origin).
   URL parsing resolves `.` / `..` (also as `%2e`) before any path is checked, and never above the
   extension's root (tested).
@@ -3687,6 +3688,23 @@ honest attempts, then stop).
   flag, privacy), SECURITY.md.
 - `npm run verify`: 230 TS tests, 230 Rust tests, clippy clean. Disk: 13 GiB free at the start
   and after verify; `.cache/target` 1.3 GB.
+- **CI (run 39089886960): verify ×3 and package ×3 green — the Win32 / GTK / AppKit clipboard code
+  compiled on its first try — and `smoke (windows)` green; `smoke (macos)`, `smoke (linux)` and
+  `smoke (linux-scale-2)` red on one thing:** hello reported `storage=error-origin
+  theme=error-origin ipc=denied net=blocked` — every API call of the panel's own was refused by
+  the Origin check (`ljext-refused origin joan-page ljext://hello.localhost/__lj/api/v1/…`).
+  Cause: the responses said `Referrer-Policy: no-referrer`, and under that policy a same-origin
+  (non-CORS) POST carries `Origin: null` (the Fetch standard's "serializing a request origin";
+  WebKit follows it, Chromium evidently didn't). Everything else held on all four jobs: `ipc=denied`,
+  `net=blocked` (a real connect-src violation), and the probe — `ljext-api=blocked
+  ljext-file=blocked ljext-nav=refused`, with the log showing **why**: the web page's SDK-style POST
+  reached the handler on WebKit **without a CORS preflight** (custom schemes skip it there) and was
+  refused for its Origin, its simple POST for the missing `X-LJ-Api`, its `<img>` for the page
+  check, and `location.href` by the guard (`navigation-refused`). So the Origin check is what
+  stops a web page's request on WebKit, not the preflight. **Fix (`lj-step-29-fix`):**
+  `Referrer-Policy: same-origin` (nothing goes to other origins, so no more leaks than before), the
+  SDK's own fetch sets `referrerPolicy: "same-origin"` too (a panel's own `<meta name="referrer">`
+  can't break it), and an Origin refusal logs what the engine sent (`origin=<value>`).
 
 ### LJ30 — Extensions in the command bar and Settings; docs · strong · auto
 
@@ -4148,6 +4166,11 @@ Populated from real friction, not speculation:
 - *(LJ29)* **Custom schemes are registered for every webview** (`register_*_uri_scheme_protocol`
   in tauri 2.12 adds the handler to each webview the app builds), so the handler must check
   `UriSchemeContext::webview_label()` — the bar and Settings can request `ljext:` URLs too.
+- *(LJ29)* **`Referrer-Policy: no-referrer` turns a same-origin POST's `Origin` into `null`** on
+  WebKit (macOS, Linux; the Fetch standard), so an API that checks the Origin refuses its own
+  pages. The `ljext` responses use `same-origin`. And **WebKit sends cross-origin requests to a
+  custom scheme without a CORS preflight**, custom header and all: a web page's POST to `ljext:`
+  reaches the handler, and only the handler's checks (Origin, page) refuse it.
 - *(LJ29)* **Dot segments are gone before the handler runs:** engines and the `url` crate resolve
   `..` and `.` — also written `%2e` — while parsing (WHATWG URL), never above the root. A test
   that puts `/../x` in a URL tests the parser, not the path check; test `paths::clean` directly.

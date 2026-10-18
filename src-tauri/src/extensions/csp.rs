@@ -28,6 +28,12 @@ pub fn policy(network_hosts: &[&str]) -> String {
 pub const PERMISSIONS_POLICY: &str = "camera=(), microphone=(), geolocation=(), \
      clipboard-read=(), display-capture=(), usb=(), serial=(), hid=(), bluetooth=(), payment=()";
 
+/// The referrer policy of every response. Not `no-referrer`: under it WebKit (and the Fetch
+/// standard) send `Origin: null` with a same-origin POST, which the API must refuse — CI saw every
+/// call of the panel's own refused on macOS and Linux. `same-origin` sends nothing to other
+/// origins, so it leaks no more, and keeps the panel's own origin on its API calls.
+pub const REFERRER_POLICY: &str = "same-origin";
+
 /// The headers of every `ljext` response (files, the SDK, the API, refusals), given its CSP.
 pub fn headers(policy: &str) -> [(&'static str, String); 7] {
     [
@@ -35,7 +41,7 @@ pub fn headers(policy: &str) -> [(&'static str, String); 7] {
         ("X-Content-Type-Options", "nosniff".to_owned()),
         ("X-Frame-Options", "DENY".to_owned()),
         ("Cross-Origin-Resource-Policy", "same-origin".to_owned()),
-        ("Referrer-Policy", "no-referrer".to_owned()),
+        ("Referrer-Policy", REFERRER_POLICY.to_owned()),
         ("Permissions-Policy", PERMISSIONS_POLICY.to_owned()),
         ("Cache-Control", "no-store".to_owned()),
     ]
@@ -92,6 +98,8 @@ mod tests {
         assert_eq!(get("X-Frame-Options"), Some("DENY"));
         assert_eq!(get("Cross-Origin-Resource-Policy"), Some("same-origin"));
         assert_eq!(get("Cache-Control"), Some("no-store"));
+        // Never "no-referrer": it would make the engines send `Origin: null` to the API.
+        assert_eq!(get("Referrer-Policy"), Some("same-origin"));
         assert!(get("Content-Security-Policy").is_some_and(|v| v.starts_with("default-src")));
         assert!(get("Permissions-Policy").is_some_and(|v| v.contains("camera=()")));
         // Never a CORS header: web pages can't read an extension's answers.

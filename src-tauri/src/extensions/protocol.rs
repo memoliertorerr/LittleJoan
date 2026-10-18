@@ -88,9 +88,20 @@ fn respond<R: Runtime>(
 }
 
 fn refuse(incoming: &Incoming, refusal: api::Refusal) -> Response<Cow<'static, [u8]>> {
+    // For an Origin refusal, what the engine sent (a web page's origin, `null`, or nothing).
+    let origin = if refusal == api::Refusal::Origin {
+        format!(" origin={}", incoming.header("origin").unwrap_or("-"))
+    } else {
+        String::new()
+    };
     smoke::log(
         "ljext-refused",
-        &format!("{} {} {}", refusal.code(), incoming.webview, incoming.uri),
+        &format!(
+            "{} {} {}{origin}",
+            refusal.code(),
+            incoming.webview,
+            incoming.uri
+        ),
     );
     json(
         refusal.status(),
