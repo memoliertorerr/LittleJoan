@@ -4677,12 +4677,13 @@ a PR, merge, build on main, rename the installers, SHA256SUMS.txt, then
   the panel's URL, which the guard refuses (its nonce was used), so Back seems to do nothing; the
   command bar still opens anything. Options: Back goes `history.go(-n)` past extension and start-page
   entries (`back_stack` would count them), or the app navigates to the previous web page itself.
-- **macOS CI: synthetic arrow keys never reached a panel** (surfaced by LJ32 / LJ33's CI): 2048
-  got its four arrows on Windows and both Linux jobs but not on macOS, twice (in a window opened
-  from hibernation and in a summoned one), while key codes sent to the command bar do arrive there.
-  Possibly a CI-only matter (the page webview's first responder on an unattended runner), possibly
-  real; the owner's checklist asks whether the games take the keys without a click. Option, if
-  real: make the page webview first responder when a panel commits (`focus_page`).
+- **macOS CI: synthetic arrow keys don't always reach a panel** (surfaced by LJ32–LJ34's CI): 2048
+  got its four arrows on Windows and both Linux jobs in every run, on macOS in two runs out of four
+  (not in LJ32's and LJ33's, yes in LJ34's and its fix's), while key codes sent to the command bar
+  do arrive there. Possibly a CI-only matter (the page webview's first responder on an unattended
+  runner), possibly real; the owner's checklist asks whether the games take the keys without a
+  click. Option, if real: make the page webview first responder when a panel commits
+  (`focus_page`).
 - **macOS: a panel opened from hibernation can leave the toolbar unpainted** (surfaced by LJ32's
   CI). With `--extension <id>` while hibernating, the window is built with the command bar and the
   panel's commit can arrive before the bar's own page has loaded; on macOS the toolbar then showed
