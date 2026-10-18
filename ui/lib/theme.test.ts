@@ -297,7 +297,8 @@ describe("the default theme and presets", () => {
   });
 
   it("is what theme-defaults.css says (run `npm run theme:css` after changing the theme math)", () => {
-    const css = readFileSync(resolve(import.meta.dirname, "theme-defaults.css"), "utf8");
+    // A Windows checkout may turn the line endings into CRLF; they mean nothing in CSS.
+    const css = readFileSync(resolve(import.meta.dirname, "theme-defaults.css"), "utf8").replace(/\r\n/g, "\n");
     expect(css).toBe(defaultsCss());
   });
 });

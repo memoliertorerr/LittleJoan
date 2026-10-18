@@ -3369,6 +3369,10 @@ attempts, then stop). Look at the screenshots in light and dark.
   (`set_theme`), `scripts/ci/smoke-theme.mts` (+ test).
 - `npm run verify`: 207 TS tests, 168 Rust tests, clippy clean. Disk: 13 GiB free at the start
   and after verify; `.cache/target` 1.3 GB.
+- **CI (run 39082533736): verify red on Windows only** — the check that `theme-defaults.css` is
+  current compared bytes, and Windows' checkout had turned its line endings into CRLF.
+  **Fix (`lj-step-27-fix`):** the test compares with line endings normalized (they mean nothing
+  in CSS).
 
 ### LJ28 — Appearance editor · standard · auto
 
