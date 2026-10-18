@@ -101,11 +101,11 @@
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — the owner's checklist passed 2026-10-18 (one YouTube fullscreen bug, see notes); v0.2.0-beta.2 released |
-| LJ36 | *(round 3)* YouTube's fullscreen on macOS: reproduce in CI (element and video fullscreen, narrow and wide), then fix | strong | auto | ⬜ todo |
+| LJ36 | *(round 3)* YouTube's fullscreen on macOS (the phone site, confirmed by the owner): reproduce in CI; guard WebKit's fullscreen; youtube.com on the desktop agent on WebKit (a minimal per-site table) | strong | auto | ⬜ todo |
 | LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ⬜ todo |
 | LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ⬜ todo |
-| LJ39 | *(round 3)* Resizing, part 1 — DESIGN PENDING RESEARCH | strong | auto | ⬜ todo |
-| LJ40 | *(round 3)* Resizing, part 2; the owner's check — DESIGN PENDING RESEARCH | strong | checkpoint | ⬜ todo |
+| LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ⬜ todo |
+| LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ⬜ todo |
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ⬜ todo |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ⬜ todo |
@@ -166,14 +166,16 @@ bundled extensions — games, productivity, page actions and tools — then the 
 checklist) is PR #18 on `lj/p17-bundled-extensions`, merged by the agent once verify, package and
 smoke were green on every OS (the standing exception); LJ35 is a checkpoint: the owner's checklist
 is in PR #18. **2026-10-18: the owner's checklist passed ("all works amazingly"; one YouTube
-fullscreen bug, see LJ35's notes), and on their word `v0.2.0-beta.2` was released as a pre-release.
+fullscreen bug, see LJ35's notes — the phone site, as the owner confirmed later that day), and on
+their word `v0.2.0-beta.2` was released as a pre-release.
 Next: the owner's new requests ("Requested for the next version" under LJ35) and phases 7–10 —
 nothing starts until the owner says yes.**
 
 **Round 3 (planned 2026-10-18; decisions under "Design Decisions Already Made → round 3"): the
 owner said yes to the next version.** It finishes **v0.2.0** — phase 18 (LJ36–LJ38: YouTube's
-fullscreen on macOS reproduced in CI and fixed, Ctrl+H, the bar's first paint, double-click to
-zoom), phase 19 (LJ39–LJ40: responsive resizing), phase 20 (LJ41–LJ44: hide the icon safely, quick
+fullscreen on macOS reproduced in CI and fixed — the owner confirmed it was the phone site —,
+Ctrl+H, the bar's first paint, double-click to zoom), phase 19 (LJ39–LJ40: live resize like Little
+Arc and phone mode per site, designed from the resize research), phase 20 (LJ41–LJ44: hide the icon safely, quick
 commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ19, their prompts
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
@@ -256,11 +258,13 @@ phases after 17 then branch from `main` too; LJ15 and LJ16 use the toolbar that 
 → 25 → 26.** Every phase branches from the latest `main` and its PR goes into `main`. Round 1's
 phases 7–11 keep their numbers and steps (LJ13–LJ19), adjusted where round 2 changed the ground.
 
-18. **LJ36 → LJ38** · strong — `lj/p18-fixes`. Review: the fullscreen reproduction's log per OS and
-    what fixed it; the history key; the bar's initialization script (bar only). Merged by the agent
-    when green.
-19. **LJ39 → LJ40** · strong — `lj/p19-resizing`. Review: layout and agent changes per OS, the
-    resize smoke numbers. **Ends in a checkpoint** (the owner's eyes on the resizing feel).
+18. **LJ36 → LJ38** · strong — `lj/p18-fixes`. Review: the fullscreen reproduction's log per OS,
+    the macOS fullscreen guard, the minimal per-site table (YouTube on the desktop agent on
+    WebKit); the history key; the bar's initialization script (bar only). Merged by the agent when
+    green.
+19. **LJ39 → LJ40** · strong — `lj/p19-resizing`. Review: the layout diffing and macOS masks, the
+    phone-mode hysteresis, the per-site UI, Windows' agent override through CDP; the resize smoke
+    numbers. **Ends in a checkpoint** (the owner's eyes on the resizing feel).
 20. **LJ41 → LJ44** · strong — `lj/p20-control`. Review: the icon's safety rule, the quick
     commands' fixed command set, the keymap replacing every hard-coded key. Merged when green.
 7. **LJ13 → LJ14** · strong — `lj/p7-linux-fullscreen`. As planned; merged when green.
@@ -420,9 +424,10 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 | *(round 2)* No IPC for the page webview, ever | `cargo test` (LJ22) + smoke (LJ29) | A Rust test reads every capability file and finds no `joan-page`; the test extension reports `ipc=denied` |
 | *(round 2)* How the command bar, toolbar, history view, themes and extensions look | the agent from CI screenshots on all three OSes (each step names its screenshots), then **you** — LJ35 | Screenshots match the step's description in light and dark; at LJ35 it feels like Little Arc on your Mac |
 | *(round 2)* Suggestions feel right with real history | **you** — LJ35 | After a few days of use, the empty command bar shows the sites you actually open most, and typing finds them fast |
-| *(round 3)* Element and video fullscreen at narrow and wide widths, entered and left by clicks | CI `smoke` (LJ36's fullscreen run; macOS where the click reaches the page) | Every path that entered holds until the page's own exit, and leaves when asked |
-| *(round 3)* YouTube's own player: button, F, exit button | **you** — phase 18 PR, LJ19 | Fullscreen stays; the exit button works; at a narrow and a wide window |
-| *(round 3)* The resizing feel | **you** — LJ40 checkpoint | Defined in LJ40 (from the research) |
+| *(round 3)* Element fullscreen at narrow and wide widths, entered and left by clicks; nothing touches the page during WebKit's fullscreen | CI `smoke` (LJ36's fullscreen run; macOS where the click reaches the page) | Every element path holds until the page's own exit and leaves when asked; with `siteModes` the page gets the desktop agent at 390 px; no `page-bounds` during `wk-fullscreen` on macOS |
+| *(round 3)* YouTube's own player: button, F, exit button | **you** — phase 18 PR, LJ19 | The desktop site at any width on macOS; fullscreen stays; the exit button works |
+| *(round 3)* Resizing: smoothness, the 600 / 640 px switch, one reload per crossing | CI `smoke` (LJ39's resize run: the final viewport, switches and reloads counted, `bounds-set` ≤ 2 per event; LJ40's agent headers per request) | The numbers in LJ39 / LJ40's Verify |
+| *(round 3)* The resizing feel | **you** — LJ40 checkpoint | Dragging on a Retina Mac: no edge gaps, no lag; Windows: no white strips; Google / YouTube / Wikipedia right on both sides of 600 px; still signed in after switches |
 | *(round 3)* The icon hidden, and back by itself when the shortcut can't work | CI `smoke` (LJ41's tray run logs) + **you** (seeing the menu bar / tray) | `tray-visible false` with the setting off; `true` on a Wayland session; on your Mac the icon is gone and Little Joan still opens |
 | *(round 3)* Custom keys on real keyboards and layouts; the reserved-shortcut warnings | CI `smoke` (one rebinding, LJ43) + **you** — phase 20 PR | A rebound key works and the old one doesn't; the warnings name what the OS uses |
 | *(v0.3)* Little Joan as the OS's browser for links | CI `smoke` (LJ45/46: the registration read back, a link launched as the OS would, the defaults untouched, the Linux loop check) + **you** — phase 21 PR | It appears in the OS's default-apps list; once chosen, links from other apps open in it, and "Open in browser" goes to your main browser |
@@ -793,7 +798,13 @@ relitigate them mid-plan; a step that seems to need a change is a stop condition
   phases from 18; LJ13–LJ19 keep their numbers.
 - **Fixes (phase 18):** (a) YouTube's own fullscreen button on macOS — reproduce in CI first (a
   smoke page calling both `requestFullscreen()` and `video.webkitEnterFullscreen()` from a click,
-  at narrow and wide sizes), then fix; (b) the history key is **Ctrl+H** on Windows and Linux,
+  at narrow and wide sizes), then fix. **Confirmed by the owner: it was the phone site**
+  (m.youtube.com under phone mode's iPhone agent; desktop YouTube works). So, decided: on WebKit
+  (macOS and Linux) youtube.com and its subdomains use the desktop agent by default, through a
+  small per-site table (`siteModes`) the owner can override, with the m. → www rewrite on reload;
+  and on macOS layout and phone-mode switches are skipped while WebKit's fullscreen is on (wry's
+  `set_bounds` would otherwise resize the webview inside WebKit's fullscreen window). Phase 18
+  ships the table; phase 19 gives it its UI; (b) the history key is **Ctrl+H** on Windows and Linux,
   Cmd+Y stays on macOS; (c) macOS: the toolbar left blank when an extension opens from
   hibernation — the panel opens once the bar's script runs; (d) double-clicking the toolbar zooms
   the window (`core:window:allow-internal-toggle-maximize`, the bar only); (e) no default-theme
@@ -801,8 +812,27 @@ relitigate them mid-plan; a step that seems to need a change is a stop condition
   the page webview).
 - **Responsive resizing (phase 19):** the owner: "Little Arc has no mobile toggle; I like a mobile
   version on narrow sizes, but outside of that websites should be more responsive; optimize or
-  better the resizing." The design follows a research pass (LJ39–LJ40). Phase 19 ends in a
-  checkpoint: the feel is the owner's to judge.
+  better the resizing." Decided from the research (2026-10-18):
+  - **Like Little Arc, pages reflow live:** no scaling, no zoom-to-fit, no viewport emulation (the
+    desktop engines ignore `<meta viewport>`; only Windows could emulate one, through CDP). Phone
+    mode stays for narrow windows: the phone agent below 600 px, the desktop agent again from
+    640 px (hysteresis), no tablet range.
+  - **Smooth resizing per OS:** only changed layout calls (no `set_bounds` + `show()` on both
+    webviews per event); macOS autoresizing masks per mode so AppKit resizes the webviews in its
+    own pass (tao's `Resized` comes a frame late); layout and agent switches never during WebKit's
+    fullscreen; both webviews get the theme's background (Windows' white gutter); Linux no
+    `show_all` per event; never Tauri's `auto_resize` (it would grow the 40 px bar).
+  - **Phone mode per site:** auto / phone / desktop per host (`siteModes`, from LJ36), a
+    command-bar command ("Request desktop site" / "Request phone site") and a small toolbar pill,
+    a Settings list; a reload only when the agent really changes; known mobile hosts rewritten
+    when going back to desktop (m.youtube.com → www.youtube.com, *.m.wikipedia.org →
+    *.wikipedia.org).
+  - **Windows' phone agent with client hints:** CDP `Emulation.setUserAgentOverride` with
+    metadata (Android, mobile) instead of a bare custom agent, which disables UA client hints;
+    SetUserAgent stays the fallback; and Windows skips the reload when CDP's
+    `Page.getLayoutMetrics` shows the page already fits. Measuring a page on macOS / Linux would
+    need a script in the page (Ground Rule 10): not planned — Later, the owner's decision.
+  - Phase 19 ends in a checkpoint: the feel is the owner's to judge.
 - **Control (phase 20):** (a) an option to hide the tray / menu-bar icon (Settings → General); it
   comes back by itself whenever the global shortcut can't work; a second launch still opens the
   window; the command bar gets "Settings" and "Quit Little Joan". (b) Quick commands in the
@@ -2405,7 +2435,9 @@ Design (decided with the user; do not relitigate):
   download and log `download-refused panel`: no extension has a downloads permission, so a panel
   must not drop files in Downloads. (LJ47's popups refuse downloads too.)
 - The toolbar (LJ24: ui/toolbar/logic.ts + toolbar.ts, ui/bar.html, ui/style.css) gets a small
-  status area left of the open-in-browser button, pushed from Rust like the address:
+  status area left of the open-in-browser button — where LJ40's phone / desktop pill sits; the
+  status takes the pill's place while it shows, and both fit at 320 px — pushed from Rust like the
+  address:
   bar.eval("window.littleJoan.setStatus(<json>)"). Only the bar holds trusted UI (LJ22).
   It shows "Downloading lj-smoke.bin…", then "lj-smoke.bin saved" with a "Show in folder"
   button, or "Download failed". It clears after 8 s; while the command bar is open it waits and
@@ -2473,9 +2505,9 @@ Design (decided with the user; do not relitigate):
   WebView2's AcceleratorKeyPressed (platform/win.rs), the GTK key hook (platform/linux.rs), the
   View menu built from the keymap (menu.rs) — and the Keyboard tab lists them with no extra
   work. They call Webview::set_zoom on the PAGE webview with the level from zoom.rs.
-- Read LJ39's and LJ40's implementation notes first: if phase 19 changed anything about page
-  zoom or the page's bounds, the user's zoom must compose with it — stop and report if it
-  can't.
+- Phase 19 doesn't scale pages (LJ39: like Little Arc, pages reflow), so this is the only page
+  zoom. Read LJ39's and LJ40's implementation notes for anything that changed the page's bounds;
+  if the user's zoom can't compose with it, stop and report.
 - NEVER enable Tauri's zoom_hotkeys_enabled on joan-page. On macOS and Linux it injects a
   script into the page that needs core:webview:allow-set-webview-zoom, which is IPC for remote
   pages (Ground Rule 10; Landmines). On Windows it is WebView2's IsZoomControlEnabled, which
@@ -2485,8 +2517,8 @@ Design (decided with the user; do not relitigate):
   state in bar.rs or joan.rs.
 - Each change shows "Zoom 110 %" for 1.5 s in the bar's status area (from LJ15). At 100 % it
   shows "Zoom 100 %" once, then nothing.
-- Phone mode is unaffected: its 600 px threshold is the window's logical width, not the page's
-  CSS width.
+- Phone mode is unaffected: its 600 / 640 px thresholds (LJ39) are the window's logical width,
+  not the page's CSS width.
 
 Smoke: after the wide (720×600) viewport report, send Ctrl+= (Linux: `xdotool key ctrl+equal`;
 Windows: SendKeys "^="; macOS: a CGEvent key press, best-effort), and require the next viewport
@@ -4855,7 +4887,9 @@ amazingly". Logins survive, themes are "really good", QR code → Back returned 
 pressing F (YouTube's key) fullscreens fine, and then the player's exit button does nothing (Esc
 exits). Recorded under Deferred follow-ups; nothing else failed. The owner then said to release
 the current state: `v0.2.0-beta.2` (pre-release, like beta.1), released from the commit `main`'s
-CI built.
+CI built. **Confirmed by the owner (2026-10-18, while round 3 was planned): it was the phone
+version of YouTube — phone mode's iPhone agent, m.youtube.com — that failed; desktop YouTube
+works.** LJ36 fixes it.
 
 ### Requested for the next version (2026-10-18) — NOT started; waits for the owner's yes
 
@@ -4901,122 +4935,153 @@ planned as round 3 — LJ36–LJ44 and round 1's LJ13–LJ19 finish v0.2.0, LJ45
 > smoke runs and their rules into their own `scripts/ci/smoke-<topic>.mts` (+ test), wired into
 > `smoke.mts`'s sequence the way `smoke-theme.mts` is.
 
-### LJ36 — YouTube's fullscreen button on macOS: reproduce in CI, then fix · strong · auto
+### LJ36 — YouTube's fullscreen on macOS: reproduce in CI, guard WebKit's fullscreen, YouTube on the desktop agent · strong · auto
 
 > Phase 18. Branch `lj/p18-fixes` from the latest `main`; the PR goes into `main`.
 
-**Verify:** `npm run verify` green, including vitest tests for the smoke page's new logic
-(`tests/smoke/fullscreen-logic.mjs`, + test: the button positions, the report title for each path
-and outcome) and for the new rules (`scripts/ci/smoke-fullscreen.mts`, + test: a log where
-fullscreen ends within 1 s of entering fails; one where it holds until the page's own exit button
-ends it passes). CI green on all three OSes with a **fullscreen run** (its own launch): the smoke
-page in `?fs=both` mode at 390×600 (phone agent) and at 720×600 (desktop agent), each time
-(a) a click on "Element fullscreen" (`requestFullscreen()` on a container, as YouTube's desktop
-player does), (b) 2 s later a click on the page's "Exit" button (`document.exitFullscreen()`, as
-the player's exit button does), (c) a click on "Video fullscreen" (`video.webkitEnterFullscreen()`
-on a playing `<video>`, as YouTube's mobile player does), (d) the page's own exit for (c) — and
-the page reports `LJ-FS <element|video> width=<w> entered=<0|1> held_ms=<n> exited_by_page=<0|1>`
-for each. **The first commit makes the run informational** (results in `summary.json` and the
-notes, no failure), so CI shows the bug before anything changes; **the fix commit
-(`lj-step-36-fix`) turns the rule on:** every path that entered stays fullscreen at least 1.5 s
-until the page exits it, and leaves when the page asks — required on Windows and Linux, and on
-macOS whenever the click reached the page (the existing macOS click rule). Screenshots
-`fs/element-390.png`, `fs/element-720.png`, `fs/video-390.png`, `fs/video-720.png` (1 s after each
-entry).
-**Commit:** `lj-step-36: reproduce the macOS fullscreen bug in CI (element and video fullscreen, narrow and wide)`, then `lj-step-36-fix: <what fixed it>`
+**Verify:** `npm run verify` green, including:
+- vitest tests for the smoke page's new logic (`tests/smoke/fullscreen-logic.mjs`, + test: the
+  button positions; the report title for each path and outcome; `playerPath(userAgent)` — the
+  phone-like player takes the iOS path under an iPhone agent, element fullscreen otherwise) and
+  for the new rules (`scripts/ci/smoke-fullscreen.mts`, + test: a log where fullscreen ends within
+  1 s of entering fails; one where it holds until the page's own exit passes; a macOS log with a
+  `page-bounds` line while `wk-fullscreen` isn't `not` fails);
+- Rust tests in `phone.rs`: `site_mode(host, platform, overrides)` — the built-in WebKit list
+  gives `youtube.com` and its subdomains (`www.`, `m.`) the desktop agent on macOS and Linux and
+  nothing on Windows; a user entry wins, for the host or a parent domain; `"auto"` overrides a
+  built-in; `wants_mobile` honours the mode (desktop / phone at any width, auto by width);
+  `desktop_url` rewrites `m.youtube.com/watch?v=x` → `www.youtube.com/watch?v=x` and
+  `en.m.wikipedia.org/wiki/X` → `en.wikipedia.org/wiki/X` and nothing else;
+- `settings.rs`: `siteModes` (`{ "<host>": "auto" | "phone" | "desktop" }`; keys are lower-case
+  host names without `www.` and without a port — a mode is per host, not per port —, IP addresses
+  as they are; bad entries dropped, at most 500); the lookup walks a name up to its last two
+  labels and never walks an IP address;
+- the macOS guard's pure part (`fullscreen::page_layout_allowed(webkit_state, in_own_window)`).
+
+CI green on all three OSes with a **fullscreen run** (its own launch): the smoke page in `?fs=both`
+mode at 390×600 (phone agent) and at 720×600 (desktop agent) — (a) a click on "Element
+fullscreen" (`requestFullscreen()` on a container, as desktop YouTube does), (b) 2 s later a click
+on the page's "Exit" (`document.exitFullscreen()`), (c) a click on "Phone player" (behaves like
+m.youtube.com's player: under an iPhone agent `video.webkitEnterFullscreen()`, then it waits for
+`webkitbeginfullscreen` / `webkitendfullscreen` and tries `screen.orientation.lock`), (d) its own
+exit — each reported as `LJ-FS <element|phone> width=<w> ua=<phone|desktop> entered=<0|1>
+held_ms=<n> exited_by_page=<0|1> events=<list>`; then a second launch with `"siteModes":
+{ "127.0.0.1": "desktop" }` at 390×600 (added with the fix), where the page reports `ua=desktop`
+and its player takes element fullscreen. **The first commit makes the run informational** (results in `summary.json`
+and the notes), so CI shows the bug before anything changes. **The fix commit
+(`lj-step-36-fix`) turns the rules on:** every element-fullscreen path holds until the page exits
+it and leaves when asked (required on Windows and Linux; on macOS whenever the click reached the
+page — the existing macOS click rule); the `siteModes` launch reports `ua=desktop` at 390 on every
+OS; on macOS no `page-bounds` / `page-visible` line appears while `wk-fullscreen` isn't `not`. The
+phone path under the iPhone agent stays informational (it is how WebKit on a Mac treats a page
+written for iOS; the desktop default routes YouTube around it). Screenshots `fs/element-390.png`,
+`fs/element-720.png`, `fs/phone-390.png`, `fs/desktop-site-390.png` (1 s after each entry).
+**Commit:** `lj-step-36: reproduce the macOS fullscreen bug in CI (element and phone-player fullscreen, narrow and wide)`, then `lj-step-36-fix: guard WebKit's fullscreen on macOS; YouTube gets the desktop agent on WebKit`
 
 ```text
-The owner's checklist (LJ35's notes): on macOS, YouTube's own fullscreen button enters
-fullscreen and drops back to the normal size at once; YouTube's F key fullscreens fine, and then
-the player's exit button does nothing (Esc exits). CI's smoke page passes on macOS, so something
-YouTube does differs. Reproduce it in CI first, then fix it. Change no fullscreen code before the
-reproduction has run in CI and you have read its log.
+The owner's checklist (LJ35's notes): on macOS, YouTube's own fullscreen button entered
+fullscreen and dropped back at once; then the player's exit button did nothing (Esc exited).
+**Confirmed by the owner (2026-10-18): it was the PHONE version of YouTube — phone mode's
+iPhone agent, m.youtube.com — that failed; desktop YouTube works.** The research for phase 19
+explains it: the default 480 px window is below phone mode's 600 px, so YouTube serves its mobile
+site, whose player expects iOS events (webkitbeginfullscreen / webkitendfullscreen,
+screen.orientation.lock) that never fire on macOS. It also found a second hazard of our own: wry's
+set_bounds sets a WKWebView's frame inside its CURRENT superview (wry 0.57 wkwebview/mod.rs
+1031–1047), and during WebKit's element fullscreen that is WebKit's fullscreen window — so any
+apply_layout then shrinks the video. macOS has no element-fullscreen hook in Little Joan
+(fullscreen.rs, platform/mod.rs), so bar::element_fullscreen() is never true there:
+joan::on_window_event's Resized → bar::apply_layout → set_bounds() + show() on the page, and
+phone_mode::apply (it checks only window.is_fullscreen(), false for WebKit's separate window), run
+as if nothing were fullscreen.
 
-What the code does today (read it first): macOS has no element-fullscreen hook — fullscreen.rs
-and platform/mod.rs leave it to WebKit, which moves the page's WKWebView into its own fullscreen
-window. So bar::element_fullscreen() (bar/view.rs) is never true on macOS: joan::on_window_event's
-Resized → bar::apply_layout → set_bounds() + show() on the page webview, bar::focus_bar /
-set_overlay, and phone_mode::apply (which checks only window.is_fullscreen(), false for WebKit's
-separate window) all run as if nothing were fullscreen. Windows (platform/win.rs,
-ContainsFullScreenElementChanged) and Linux (platform/linux.rs, enter-/leave-fullscreen) call
-bar::set_element_fullscreen.
-
-Leads, in this order (Deferred follow-ups):
-1. Phone mode: below 600 px the page gets an iPhone agent (phone.rs), and YouTube's mobile site
-   then uses the iOS path, video.webkitEnterFullscreen(), which WKWebView on macOS handles
-   differently from element fullscreen.
-2. Something reaches the page webview during WebKit's fullscreen transition: set_bounds / show /
-   hide from apply_layout, a focus change, the window title set in on_document_title_changed,
-   the bar's eval calls, the once-a-second address check (bar/watch.rs).
-3. Click versus key: a click starts the transition with the mouse down in our window; the app is
-   ActivationPolicy::Accessory, so WebKit's fullscreen window may not become key — which would
-   also explain the exit button's click doing nothing (it only activates the window) while Esc
-   works.
+Decided (the owner's confirmation; do not relitigate): reproduce in CI first; guard WebKit's
+fullscreen on macOS; on WebKit (macOS and Linux) youtube.com and its subdomains use the desktop
+agent by default, through a small per-site table the owner can override, with the m. → www
+rewrite. Phase 19 (LJ40) builds the table's UI — the command-bar rows, the toolbar pill, the
+Settings list, Windows' agent — on top of what this step ships; keep the shapes below so it needs
+no migration.
 
 1. Reproduction (the first commit):
-   - tests/smoke/smoke.html gains `?fs=both`: four large buttons at known positions
-     (tests/smoke/fullscreen-logic.mjs exports them as fractions of the viewport, so smoke.mts
-     can click each) — "Element fullscreen" (requestFullscreen on a container div, with the
-     webkit-prefixed fallback), "Exit" (shown in fullscreen; document.exitFullscreen, prefixed
-     fallback), "Video fullscreen" (video.webkitEnterFullscreen() on a <video> playing a
-     canvas.captureStream() — no media file in the repository; if the engine has no
-     captureStream or the video never reaches HAVE_METADATA, that path reports `unavailable`),
-     and the video's own exit (webkitExitFullscreen). It listens to fullscreenchange,
-     webkitfullscreenchange, webkitbeginfullscreen and webkitendfullscreen and reports in its
-     title as the Verify says. Pure logic in fullscreen-logic.mjs (JSDoc-typed, tested, like
-     smoke-logic.mjs).
+   - tests/smoke/smoke.html gains `?fs=both`: large buttons at known positions
+     (tests/smoke/fullscreen-logic.mjs exports them as fractions of the viewport, so smoke.mts can
+     click each): "Element fullscreen" (requestFullscreen on a container div, prefixed fallback),
+     "Exit" (shown in fullscreen; document.exitFullscreen, prefixed fallback), "Phone player" (a
+     <video> playing a canvas.captureStream() — no media file in the repository — whose click
+     handler follows playerPath(navigator.userAgent): under an iPhone agent
+     video.webkitEnterFullscreen() and a 1 s wait for webkitbeginfullscreen, then
+     screen.orientation.lock("landscape") in a try, as m.youtube.com's player does; otherwise
+     element fullscreen of its container), and the player's own exit. It listens to
+     fullscreenchange, webkitfullscreenchange, webkitbeginfullscreen, webkitendfullscreen and
+     reports as the Verify says. Pure logic in fullscreen-logic.mjs (JSDoc-typed, tested, like
+     smoke-logic.mjs). If the engine has no captureStream, or the video never reaches
+     HAVE_METADATA, the phone path reports `unavailable`.
    - scripts/ci/smoke-fullscreen.mts (new, + test): the run and fullscreenFailures(events). Its
      own launch, so the main run's memory numbers don't move: --show the page, --size 390x600,
      click each button in turn with a variant of smoke.mts's clickCentre that takes a point
      (factor it out; clickCentre keeps its behaviour), screenshot, then --size 720x600 and again.
+     (The second launch, with siteModes, comes with the fix commit, which implements the setting.)
      Exits only through the page's buttons, never a key: the bug is about clicks.
-   - macOS instrumentation (smoke mode only, smoke::enabled()): platform/mac.rs reads WKWebView's
-     fullscreenState (macOS 13+, through objc2 msg_send after respondsToSelector:) every 100 ms
-     while a page window exists and logs `wk-fullscreen <not|entering|in|exiting>` on each
-     change; bar/view.rs's place() logs `page-bounds <x,y,w,h>` and `page-visible <bool>` for the
-     page webview; joan::on_window_event logs Resized / Focused / Moved while wk-fullscreen isn't
-     `not`. They stay after the fix — they are how CI proves it.
-   - summary.json gets `fullscreen` per path and width; the run doesn't fail the job yet.
-   Commit, push, open the phase-18 PR into main as a draft, let CI run, download the macOS logs
-   and the screenshots, and write into the notes exactly what happened per path and width on
+   - macOS instrumentation (smoke mode only, smoke::enabled()): platform/mac.rs polls WKWebView's
+     fullscreenState (macOS 13+, objc2 msg_send after respondsToSelector:; objc2-web-kit 0.3.2's
+     WKWebView.rs documents it) every 100 ms while a page window exists and logs `wk-fullscreen
+     <not|entering|in|exiting>` on each change; bar/view.rs's place() logs `page-bounds <x,y,w,h>`
+     and `page-visible <bool>` for the page webview; joan::on_window_event logs Resized / Focused
+     / Moved while wk-fullscreen isn't `not`. They stay after the fix — they are how CI proves it.
+   Commit, push, open the phase-18 PR into main as a draft, let CI run, download the macOS logs and
+   the screenshots, and write into the notes exactly what happened per path, width and agent on
    every OS.
 
-2. If CI did NOT reproduce it on macOS (every path held and the page's exits worked): stop and
-   report. Keep the run and the instrumentation; say what the log rules out, and propose the next
-   experiment (for example a CI run against YouTube's own mobile page — it needs the network and
-   YouTube's consent page on the runner, so it is the owner's call).
-
-3. The fix (`lj-step-36-fix`), decided by what the log shows:
-   - Anything touching the page webview during the transition (page-bounds, page-visible, focus
-     or eval while wk-fullscreen isn't `not`): treat WebKit's fullscreen as element fullscreen on
-     macOS. platform/mac.rs follows fullscreenState (the 100 ms check runs only while a page
-     window exists and ends with it — nothing at rest) and calls bar::set_element_fullscreen(app,
-     state != not) on changes, so the overlay can't open and phone mode doesn't switch; on macOS
-     place() must not set bounds on, show or hide the page while it is in WebKit's fullscreen
-     window (WebKit owns it then).
-   - The click path failing because WebKit's fullscreen window isn't key: make it key once
-     wk-fullscreen reaches `in` ([webview window] makeKeyAndOrderFront:, platform/mac.rs).
-   - Only the narrow width failing, caused by the iPhone agent's webkitEnterFullscreen path, with
-     nothing above helping: STOP and report the options with what CI showed — changing macOS's
-     phone agent (LJ10.3's "built for the same engine") or the activation policy (Accessory, a
-     v0.1 decision) is the owner's call.
+2. The fix (`lj-step-36-fix`):
+   a. The guard (macOS). A pure fullscreen::page_layout_allowed(webkit_state, in_own_window) and
+      platform::page_in_webkit_fullscreen(page) in platform/mac.rs: fullscreenState isn't
+      NotInFullscreen (macOS 13+), or — on macOS 12, which lacks the property — the page's
+      WKWebView no longer sits in the Little Joan window ([webview window] isn't ours). Read it
+      where the decision is made (on the main thread, through with_webview): bar/view.rs's
+      apply_layout and place() don't set bounds on, show or hide the page while it is true (the
+      bar may still be laid out); phone_mode::apply doesn't switch; set_overlay(true) / focus_bar
+      don't open the command bar. When the guard skipped a layout, check again every 100 ms only
+      until WebKit's fullscreen has ended, then apply the layout once (nothing runs at rest or
+      while nothing was skipped). Windows and Linux keep their hooks.
+   b. The per-site table, minimal. settings.rs: siteModes (Verify's shape). phone.rs:
+      site_mode(host, platform, overrides) with a built-in list for the WebKit engines (macOS,
+      Linux): youtube.com → desktop (subdomains included); a user entry for the host or a parent
+      domain (walking up to the last two labels; an IP address is never walked; the port is
+      ignored) wins, "auto" included. wants_mobile(enabled,
+      width, mode): desktop and phone hold at any width; auto follows the width when mobileSites
+      is on and is desktop when it is off. phone_mode::apply takes the page's host
+      (bar::page_url) into account; the app's own navigations (bar::navigate: typed addresses,
+      picked rows, links from other apps later) set the agent for the target's host first; for a
+      navigation the page starts itself, the page's Started event applies it, and when the agent
+      really changes the page is reloaded once (never twice in a row for the same URL).
+   c. The rewrite. phone::desktop_url (pure, Verify's rules) — when the agent goes to desktop for
+      a page on a known mobile host, navigate to the rewritten URL instead of reloading; when the
+      app navigates to such a URL for a host whose mode is desktop, it navigates to the rewritten
+      one.
+   - No UI in this step (LJ40 adds it); the README says that YouTube uses the desktop site on
+     macOS and Linux, and that `siteModes` in settings.json overrides it.
+   - If the element path still drops out of fullscreen on macOS with the guard in place, stop and
+     report with the log — that would be a different cause.
    - Leave Windows' and Linux's fullscreen code alone; if the run fails there, fix it only if it
      is a bug in our code, otherwise record it and stop.
 
-4. Docs: docs/architecture.md (the Fullscreen video table's macOS row, the smoke-log events),
-   CHANGELOG ([Unreleased] → Fixed), this plan (Deferred follow-ups: annotate the YouTube line
-   with what CI found; Landmines: what WebKit does).
+3. Docs: docs/architecture.md (the Fullscreen video table's macOS row: the guard; Page size and
+   phone mode: siteModes and the built-in list; the smoke-log events), README (phone mode:
+   YouTube on the desktop site on macOS and Linux), CHANGELOG ([Unreleased] → Fixed), this plan
+   (Deferred follow-ups: strike the YouTube line once CI is green, naming LJ36 — the owner's eyes
+   on real YouTube are the phase's human check; Landmines: what CI showed).
 
-Do NOT add a fullscreen setting, switch macOS to window fullscreen, or add YouTube-specific code.
+Do NOT add a fullscreen setting, switch macOS to window fullscreen, or add YouTube checks anywhere
+but the built-in site list and the rewrite rules.
 
 Run `source scripts/env.sh && npm run verify`. If it is green, add implementation notes (with the
 df -h numbers) and commit everything as one commit: "lj-step-36: reproduce the macOS fullscreen bug
-in CI (element and video fullscreen, narrow and wide)". Push, open the phase-18 PR into main as a
-draft, and watch CI (`gh run watch <id> --repo memoliertorerr/LittleJoan`). Then the fix as above:
-local verify green, flip LJ36 to ✅ with notes, commit "lj-step-36-fix: <what fixed it>", push, and
-watch CI until verify, package and smoke are green on all three OSes; fix Windows/Linux-only
-failures per Ground Rule 3. If it is still red after two honest fix attempts, stop and report.
-Never commit red; never weaken a check.
+in CI (element and phone-player fullscreen, narrow and wide)". Push, open the phase-18 PR into main
+as a draft, and watch CI (`gh run watch <id> --repo memoliertorerr/LittleJoan`). Then the fix as
+above: local verify green, flip LJ36 to ✅ with notes, commit "lj-step-36-fix: guard WebKit's
+fullscreen on macOS; YouTube gets the desktop agent on WebKit", push, and watch CI until verify,
+package and smoke are green on all three OSes; fix Windows/Linux-only failures per Ground Rule 3.
+If it is still red after two honest fix attempts, stop and report. Never commit red; never weaken
+a check.
 ```
 
 ### LJ37 — Ctrl+H opens history on Windows and Linux; double-clicking the toolbar zooms the window · standard · auto
@@ -5151,8 +5216,8 @@ before it paints; panels opened from hibernation wait for the bar". Push and wat
 job is green (Ground Rule 3; two honest fix attempts, then stop). Look at extension-hello.png and
 the theme runs' screenshots on every OS. This ends phase 18. Fill the PR description from the
 template. Needs human check, on your Mac (Windows / Linux where you have them):
-- YouTube: its fullscreen button, F, and the player's exit button, in a narrow (< 600 px) and a
-  wide window.
+- YouTube in a narrow (< 600 px) window: the desktop site now (macOS); its fullscreen button, F,
+  and the player's exit button work; in a wide window too.
 - Windows / Linux: Ctrl+H opens history; Ctrl+Y redoes in a text field.
 - Double-click the toolbar's empty part: the window zooms; again: it comes back.
 - With a non-default theme, summon ten times: no Mist flash.
@@ -5163,44 +5228,204 @@ commit (`gh pr merge <n> --merge --repo memoliertorerr/LittleJoan`; never squash
 --delete-branch), then stop and report.
 ```
 
-### LJ39 — Resizing, part 1 · strong · auto — DESIGN PENDING RESEARCH
+### LJ39 — Live resize like Little Arc · strong · auto
 
-> Phase 19. Branch `lj/p19-resizing` from the latest `main`. **Provisional — do not execute.** A
-> research pass (Little Arc's resize behaviour; the engines' zoom, viewport and client-hint APIs;
-> resize smoothness per OS) is under way, and a planning session replaces this outline with the
-> final steps before phase 19 starts.
+> Phase 19. Branch `lj/p19-resizing` from the latest `main`; the PR goes into `main`. Designed
+> from the round-3 resize research (2026-10-18; "Design Decisions Already Made → Round 3").
 
-**Verify:** to be written from the research. It will at least keep `layout.rs`'s tests at scale 1,
-1.5 and 2, the CI viewport checks (390 / 720 px with the right agent), and add a smoke check that
-measures what the research says matters (for example how often the page is laid out or reloaded
-during a burst of `--size` steps).
-**Commit:** `lj-step-39: <from the research>`
+**Verify:** `npm run verify` green, including Rust tests:
+- `layout.rs`: `changes(previous: Option<&Layout>, next: &Layout) -> Changes` (pure) — only what
+  changed: the bar's and the page's bounds, and their visibility; nothing when nothing changed;
+  everything for a new window; at scale 1, 1.5 and 2, in every mode;
+- `layout.rs` / a pure part for macOS: `mask_for(mode)` — the autoresizing masks per mode: the
+  page width- and height-sizable while shown; the bar width-sizable with a flexible bottom margin
+  in Toolbar mode, width- and height-sizable in Overlay mode; nothing changes in Fullscreen;
+- `phone.rs`: hysteresis — the phone agent below 600 px, the desktop agent again from 640 px,
+  in between the previous one stays (a new window decides by 600); a sweep 380 → 820 → 380
+  switches exactly twice; LJ36's per-site modes still win;
+- the webviews' background color: a pure `background_for(theme_tokens?, dark)` — the bar's last
+  painted `--lj-bg-0` (checked `#rrggbb`) else white / near-black from the system's scheme.
+
+CI green on all three with a **resize run** (`scripts/ci/smoke-resize.mts`, + test, its own
+launch): a burst of 12 `--size` steps from 380 to 820 px wide, 30 ms apart, then back; the final
+viewport is right (`innerWidth` = the window's width, the height minus the 40 px toolbar); exactly
+one `user-agent` switch and one reload per crossing; a new smoke-log count `bounds-set <n>` per
+Resized event is at most 2 (one per webview, only when they changed); `--size 620x600` coming from
+phone stays `ua=phone`, `--size 660x600` gives `ua=desktop`. Screenshots `resize-380.png`,
+`resize-820.png` (dark theme run: no white strip at the right or bottom edge on Windows).
+**Commit:** `lj-step-39: live resize like Little Arc — only changed layout, macOS autoresizing, themed webview backgrounds, phone-mode hysteresis`
 
 ```text
-Provisional, do not execute. The owner: "Little Arc has no mobile toggle; I like a mobile version
-on narrow sizes, but outside of that websites should be more responsive; optimize or better the
-resizing." Known today: phone mode (phone.rs, phone_mode.rs) switches the page's user agent below
-600 logical px after a 400 ms still period and reloads the page; layout (layout.rs, bar/view.rs)
-re-applies the bar's and the page's bounds on every Resized; Linux packs the views in a GtkBox.
-Candidate directions for the research to settle: how Little Arc behaves while resizing; whether
-page zoom, viewport emulation or client hints can make sites fit narrow windows without a mobile
-agent; what makes resizing feel slow or flicker per OS; a per-site phone / desktop choice.
+The owner: "Little Arc has no mobile toggle; I like a mobile version on narrow sizes, but outside
+of that websites should be more responsive; optimize or better the resizing." The research: Little
+Arc is a plain desktop viewport that reflows live — no scaling, no mobile mode. So Little Joan
+keeps reflowing pages (no zoom-to-fit, no viewport emulation: desktop engines ignore <meta
+viewport>), keeps phone mode for narrow windows, and makes resizing itself smooth. This step is the
+smoothness and the threshold; LJ40 is phone mode per site.
+
+What the research found in our code and the vendored sources (REG = the cargo registry under
+.cache/cargo/registry/src/index.crates.io-*/):
+- Every Resized (src-tauri/src/joan.rs on_window_event) calls bar::apply_layout, which calls
+  set_bounds AND show() on both webviews (src-tauri/src/bar/view.rs apply_layout / place). On
+  Windows that is ShowWindow + SetIsVisible twice per event; on Linux show() is show_all().
+- macOS is about a frame behind: wry gives child WKWebViews the autoresizing mask
+  ViewMinYMargin (REG/wry-0.57.0/src/wkwebview/mod.rs 502–504), and tao delivers Resized from a
+  BeforeWaiting observer after Core Animation has committed (REG/tao-0.37.1/src/platform_impl/
+  macos/window_delegate.rs 94–99, observer.rs 239–241, app_state.rs 384–396), so the bounds we
+  set land a frame late and the edges show gaps while dragging.
+- Windows: Resized arrives synchronously in WM_SIZE, but the renderer is out of process, so a
+  fast drag shows a white gutter — the webviews' default background. WebviewBuilder's
+  background_color (tauri 2.12.4 webview/mod.rs ~1205) is unused today.
+- Tauri's auto_resize scales child webviews proportionally, so the 40 px bar would grow: never
+  use it.
+
+Design (decided; do not relitigate):
+1. Only what changed. bar/view.rs keeps the last applied Layout per window (reset with the
+   window); apply_layout computes layout::changes and calls set_bounds only for changed bounds
+   and show / hide only for changed visibility. In smoke mode log `bounds-set <n>` per call.
+   Linux: no show_all per event — the GtkBox packing (platform/linux.rs) is GTK's layout; only
+   mode changes touch it, as today.
+2. macOS autoresizing. platform/mac.rs sets each WKWebView's autoresizingMask from
+   layout::mask_for(mode) (objc2 msg_send setAutoresizingMask:, as mac.rs already talks to the
+   WKWebView) after the webviews are built and on every mode change, so AppKit resizes them in its
+   own layout pass during a live resize; apply_layout still runs on Resized and confirms the exact
+   bounds (with the diffing above, usually nothing). Never touch the page's mask or bounds while
+   it is in WebKit's fullscreen (LJ36's guard: platform::page_in_webkit_fullscreen).
+3. Windows (and every OS): both webviews get a background color — WebviewBuilder::background_color
+   at build time from background_for(the last tokens the bar painted, kept in AppState across
+   windows: a few bytes, memory only), and again when the bar reports a new theme
+   (set_theme_tokens) if tauri's Webview has a runtime setter for it (check
+   REG/tauri-2.12.4/src/webview/mod.rs; if it doesn't, the next window gets it — say so). Also
+   the page webview: its background shows only before a page paints.
+4. Phone-mode hysteresis. phone.rs: phone below 600, desktop again from 640 (PHONE_BELOW = 600,
+   DESKTOP_FROM = 640), the previous agent kept in between; no tablet range. phone_mode.rs keeps
+   its 400 ms still period and reloads only when the agent really changes (it does; keep it), and
+   never during fullscreen (LJ36's guard on macOS, element_fullscreen elsewhere).
+
+Smoke: scripts/ci/smoke-resize.mts + test (the Verify's sequence; the burst sends `--size` through
+single-instance 30 ms apart; count `user-agent` switches and `page-loaded` reloads between
+crossings). The run uses a dark theme so a white gutter would show in the screenshots.
+
+Docs: docs/architecture.md (Page size and phone mode: the hysteresis, the diffing, macOS masks,
+the background), CHANGELOG ([Unreleased] → Changed), README (phone mode: below 600 px, back to
+desktop from 640 px).
+
+Do NOT scale or zoom pages to fit, emulate a viewport, use Tauri's auto_resize, or add a tablet
+mode.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ39 to ✅, add implementation
+notes (with df -h), and commit everything as one commit: "lj-step-39: live resize like Little Arc —
+only changed layout, macOS autoresizing, themed webview backgrounds, phone-mode hysteresis". Push,
+open the phase-19 PR into main as a draft, and watch CI until every job is green (Ground Rule 3; two
+honest fix attempts, then stop). Look at both screenshots on every OS.
 ```
 
-### LJ40 — Resizing, part 2; the owner's check · strong · checkpoint — DESIGN PENDING RESEARCH
+### LJ40 — Phone mode per site: a command, a toolbar pill, Windows' agent with client hints; the owner's check · strong · checkpoint
 
-> Phase 19, last step. **Provisional — do not execute** (see LJ39). It ends in a **checkpoint**:
-> the resizing feel needs the owner's eyes (Ground Rule 24).
+> Phase 19, last step. A **checkpoint**: the resizing feel needs the owner's eyes (Ground Rule 24).
 
-**Verify:** to be written from the research.
-**Human check:** to be written from the research (at least: dragging the window's edge on a Retina
-Mac and on Windows, sites across the phone threshold both ways, staying signed in).
-**Commit:** `lj-step-40: <from the research>`
+**Verify:** `npm run verify` green, including:
+- Rust tests: `set_site_mode(mode)` (bar capability; the host is the open web page's, taken by Rust
+  — the bar sends only `auto | phone | desktop`) writes LJ36's `siteModes` for that host (`auto`
+  removes a user entry, or stores `"auto"` when a built-in would otherwise apply), refuses
+  without a web page, and applies at once: the agent changes and the page reloads only if the
+  agent really changed — through `desktop_url` when going to desktop on a known mobile host;
+  `site_mode_info()` returns `{ host, mode, builtIn, agent }` for the toolbar and the command bar;
+- Windows: a pure builder for CDP's `Emulation.setUserAgentOverride` parameters — the phone agent
+  with `userAgentMetadata` `{ platform: "Android", mobile: true, brands / fullVersionList from
+  WebView2's own agent }`, the desktop agent with WebView2's own metadata — and the decision
+  `skip_reload(css_content_width, viewport_width)` (the page already fits: no reload);
+- vitest: the toolbar pill (`ui/toolbar/logic.ts`): shown while the page uses the phone agent or
+  a site has its own mode ("Phone" / "Desktop"), a click toggles phone ↔ desktop for the site;
+  the command bar's built-in rows "Request desktop site" / "Request phone site" / "Automatic for
+  this site" with the current one marked; Settings → General's "Phone or desktop per site" list
+  (each entry, built-in ones marked, Remove / Reset).
+
+Capabilities: the bar gains only `allow-set-site-mode` and `allow-site-mode-info`. CI green on all
+three: the smoke server records each request's `User-Agent`, `Sec-CH-UA-Mobile` and
+`Sec-CH-UA-Platform` (into the run's folder) and the smoke page's title adds
+`uamobile=<navigator.userAgentData?.mobile>`; on Windows the phone agent sends `Sec-CH-UA-Mobile:
+?1` and platform `"Android"`, and `uamobile=true` — if CDP is refused with DevTools disabled or
+doesn't persist across navigations, the notes say so and the SetUserAgent fallback stays (then the
+rule is informational on Windows); at 390 px the command bar's "Request desktop site" (typed,
+Windows / Linux; best effort on macOS) stores `"127.0.0.1": "desktop"` and the page reloads once
+with `ua=desktop`; "Automatic for this site" brings `ua=phone` back. Screenshots `phone-pill.png`,
+`settings-site-modes.png`.
+**Human check:** the checklist in this step's prompt, copied into the PR.
+**Commit:** `lj-step-40: phone mode per site — command, toolbar pill, Settings list; Windows' agent with client hints`
 
 ```text
-Provisional, do not execute. Whatever the research puts here, this step ends phase 19 as a
-checkpoint: fill the PR with the owner's checklist, merge it once every CI job is green, then STOP
-until the owner says go.
+Phone mode per site (the research's recommendation, matching what browsers that do it well do:
+automatic by size, a quick toggle, memory per site, a reload only when the agent changes). LJ36
+shipped the table (settings siteModes, phone::site_mode with the built-in WebKit entry for
+youtube.com, desktop_url); this step gives it its UI and makes Windows' phone agent coherent.
+
+Design (decided; do not relitigate):
+- Commands (a child module src-tauri/src/commands/site.rs; build.rs's manifest; bar capability):
+  site_mode_info() and set_site_mode(mode) as Verify says. Rust takes the host from the open web
+  page (bar::page_url, keyed as LJ36's siteModes are: no www., no port), never from the bar;
+  extension panels and the start page have no site mode.
+- The toolbar pill (ui/toolbar/: logic.ts pure + tests, toolbar.ts, styles): a small "Phone" or
+  "Desktop" label between the site and the right-hand buttons, shown only while the phone agent is
+  in use or the site has its own mode (a desktop page in a wide window shows nothing — most of the
+  time there is no pill); a click toggles phone ↔ desktop for this site. It must fit beside the
+  site at 320 px (shorten the domain first; LJ15 later puts its status area there too).
+- The command bar: built-in rows (ui/command/rows.ts builtInCommands, like History) "Request
+  desktop site", "Request phone site", "Automatic for this site", offered while a web page is open
+  and the typed text matches ("desktop", "phone", "mobile", "site"); the current mode is marked.
+  LJ42 later folds them into the quick commands with their state.
+- Settings → General: "Phone or desktop per site" — the user's entries and the built-in ones
+  ("youtube.com — Desktop, built in on macOS and Linux"), each with Remove (or Reset for a
+  built-in that was overridden); Save covers it (save_settings takes siteModes).
+- Windows' phone agent with client hints. Today platform/win.rs sets the agent with
+  ICoreWebView2Settings2::SetUserAgent, which "may clear" UA client hints; Chromium disables UA-CH
+  for a custom agent without metadata, so sites get mixed signals. Instead call
+  ICoreWebView2::CallDevToolsProtocolMethod("Emulation.setUserAgentOverride", <json>) with the
+  metadata from Verify (webview2-com-sys 0.39.1 has no client-hints API of its own). Unverified,
+  so CI must show it: whether it works while release builds call SetAreDevToolsEnabled(false) (wry
+  0.57 webview2/mod.rs ~640) and whether it holds across navigations (if not, apply it again on
+  each NavigationStarting). If it fails, keep SetUserAgent as the fallback, log
+  `ua-override fallback <reason>`, and say so in the notes — don't enable DevTools to make it work.
+- Windows only: before reloading for an agent change, ask CDP's Page.getLayoutMetrics; when the
+  page's cssContentSize width already fits the viewport, skip the reload (`ua-reload skipped
+  fits`). macOS and Linux would need a script in the page to measure it, which Ground Rule 10
+  forbids: they reload as today (Later records the option for the owner).
+- Sessions: cookies are shared across agents; per-site memory reduces agent flips, which matter
+  for sessions bound to the agent (Landmines, round 2). Nothing more to do.
+
+Smoke: the smoke server (scripts/ci/smoke.mts) writes each request's agent headers to a file in
+the run's folder; the rules in scripts/ci/smoke-resize.mts (+ test) or a smoke-sitemode.mts (+
+test); the typing with the existing helpers.
+
+Docs: README (phone mode: per site, the pill, the command), docs/architecture.md (Page size and
+phone mode; commands; capabilities), CHANGELOG ([Unreleased] → Added).
+
+Do NOT measure pages with a script on macOS or Linux, enable DevTools, add a tablet mode, or show
+the pill on the start page or a panel.
+
+The owner's checklist (the PR's "Needs human check"):
+- [ ] Retina Mac: drag the window's edges and corner slowly and fast, narrow and wide — the toolbar
+      and the page follow the edge with no gap and no lag; in the dark theme no light strips.
+- [ ] Windows laptop (if you have one): the same — no white strips while dragging.
+- [ ] YouTube: desktop site by default (macOS); its fullscreen button, F and the exit button work;
+      force "Request phone site" with the pill or the command: the phone site, and fullscreen as
+      far as WebKit allows (record what happens) — then "Automatic for this site".
+- [ ] Google, YouTube and Wikipedia: drag across 600 px both ways — one reload per crossing, no
+      flip-flop between 600 and 640, the right version each time (Wikipedia's m. site becomes the
+      desktop one).
+- [ ] Signed-in sites stay signed in across the switches (Instagram, Google).
+- [ ] The pill: shown in phone mode and for sites with their own mode, gone otherwise; a click
+      toggles; Settings → General lists the sites, Remove works.
+- [ ] The must-not-disturb list.
+
+Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ40 to ✅ with the note
+"waiting for the owner's check", add implementation notes (with df -h), and commit everything as
+one commit: "lj-step-40: phone mode per site — command, toolbar pill, Settings list; Windows' agent
+with client hints". Push and watch CI until every job is green (Ground Rule 3; two honest fix
+attempts, then stop). Look at the screenshots on every OS. This ends phase 19 and is a checkpoint
+(Ground Rule 24): fill the PR description from the template with the checklist above as "Needs
+human check", merge the PR into main with a merge commit once every CI job is green, tell the owner
+exactly what to check and where, then STOP — don't start phase 20 until the owner says go.
 ```
 
 ### LJ41 — Hide the tray / menu-bar icon (safely); Settings and Quit in the command bar · standard · auto
@@ -5310,7 +5535,9 @@ The list (decided): Translate page, Open in browser, Copy link, Copy as Markdown
 the theme presets and Theme: System / Light / Dark; Search engine (one row per engine); Mobile
 sites on / off; Remember history on / off; Clear history (last hour, 24 hours, 7 days,
 everything); Start at login on / off; Settings → <each tab>; Reload extensions; Show / hide the
-icon (LJ41); Quit (LJ41's row).
+icon (LJ41); Quit (LJ41's row); and LJ40's "Request desktop site" / "Request phone site" /
+"Automatic for this site", which move from the built-in rows into the quick commands with their
+state ("Desktop site — this site ✓").
 
 Design (decided; do not relitigate):
 - Rust, a new child module src-tauri/src/commands/quick.rs:
@@ -6529,7 +6756,11 @@ above, merge it when green, tell the owner exactly what to check and where, then
   agent, and YouTube then uses the iOS-style `video.webkitEnterFullscreen()` path, which WKWebView
   on macOS handles differently), and whether a bounds or layout update reaches the page webview
   during WebKit's fullscreen transition. Reproduce with a smoke page that calls both APIs from a
-  click before changing anything. → *Planned as LJ36 (round 3).*
+  click before changing anything. → *Confirmed by the owner (2026-10-18): the phone version
+  (m.youtube.com under the iPhone agent) failed; desktop YouTube works. The round-3 research adds
+  that m.youtube.com's player waits for iOS events that never fire on macOS, and that wry's
+  `set_bounds` would resize the webview inside WebKit's fullscreen window. Planned as LJ36:
+  reproduce in CI, guard WebKit's fullscreen, and youtube.com on the desktop agent on WebKit.*
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -6755,6 +6986,30 @@ Populated from real friction, not speculation:
 - *(round 3 planning, vendored tauri-utils 2.10.2)* **Tauri's desktop-file template offers only
   `categories`, `comment`, `exec`, `icon` and `name`;** `MimeType=` and `%u` go into the template's
   text (LJ45).
+- *(round 3 resize research, vendored wry 0.57)* **wry's `set_bounds` sets a WKWebView's frame in
+  its current superview** (`wkwebview/mod.rs` 1031–1047). During WebKit's element fullscreen that
+  is WebKit's fullscreen window, so a layout then shrinks the video. LJ36 skips layout while
+  WebKit's fullscreen is on.
+- *(round 3 resize research, vendored wry 0.57 / tao 0.37.1)* **macOS resizes are a frame late.**
+  wry gives child WKWebViews the autoresizing mask `ViewMinYMargin` (`wkwebview/mod.rs` 502–504),
+  and tao delivers `Resized` from a BeforeWaiting observer after Core Animation committed
+  (`window_delegate.rs` 94–99, `observer.rs` 239–241, `app_state.rs` 384–396), so bounds set in
+  `Resized` show up a frame later. LJ39 sets the masks per mode instead.
+- *(round 3 resize research, vendored tauri 2.12.4)* **Tauri's `auto_resize` scales child webviews
+  proportionally** — the 40 px bar would grow with the window. Never use it (LJ39).
+- *(round 3 resize research)* **A bare custom user agent turns WebView2's client hints off.**
+  `put_UserAgent` "may clear" UA client hints, and Chromium disables UA-CH for a custom agent
+  without metadata, so a site sees an Android agent with no (or desktop) hints. webview2-com-sys
+  0.39.1 has no client-hints API; CDP's `Emulation.setUserAgentOverride` with
+  `userAgentMetadata` is the way (LJ40) — whether it works with DevTools disabled is for CI to show.
+- *(round 3 resize research)* **The desktop engines ignore `<meta name="viewport">`.** A narrow
+  window gets a narrow layout only from the page's own CSS; only Windows could emulate a mobile
+  viewport (CDP `Emulation.setDeviceMetricsOverride`), and macOS has only private SPI. Phase 19
+  doesn't emulate viewports.
+- *(round 3 research, to watch)* **macOS 26 / 27: an `.accessory` app's element fullscreen may
+  leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
+  and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after
+  a video's fullscreen, look there first.
 
 ---
 
@@ -6786,6 +7041,8 @@ or round 3 picked up point at their step and stay here for the record.
 | *(round 2)* **One user agent per signed-in site** | Remember the agent a site was signed in with and keep it across phone-mode switches | Per-host user agent at navigation time |
 | *(round 3, deferred by the owner)* **macOS saved passwords and passkeys** | Passkeys (WebAuthn) in an app's WKWebView that isn't Safari need Apple's restricted web-browser entitlement (`com.apple.developer.web-browser.public-key-credential`), which Apple grants on request to apps that are web browsers, and which needs Developer ID signing with a provisioning profile (LJ18 first); WKWebView's password AutoFill for embedding apps isn't dependable. LJ52 records what CI's `?webauthn=1` page showed | Apple's entitlement (a request to Apple), signing with a profile, then the engine's own UI — never a password store of Little Joan's own (Ground Rule 26) |
 | *(round 3)* **Saved logins on Linux** | WebKitGTK has no password manager; one would be Little Joan's own (libsecret + UI) | A new dependency and a credential store to secure — big; against Ground Rule 26's spirit |
+| *(round 3, the owner's decision)* **Measuring a page's width on macOS and Linux** | Skip a phone-mode reload when the page already fits the window, as Windows does with CDP's `Page.getLayoutMetrics` (LJ40) | A script in the page (an isolated world, still app code in a web page) — against Ground Rule 10 unless the owner decides otherwise |
+| *(round 3)* **Viewport emulation** | A mobile viewport for narrow windows (Windows: CDP `Emulation.setDeviceMetricsOverride { mobile: true }`) | Windows only — macOS has only private SPI; Little Arc doesn't do it, and phase 19 reflows instead |
 | *(round 3)* **Routing links by site** | Rules that send some sites from Little Joan straight to the main browser (or the reverse) | A rules editor; LJ46's handoff is the hook |
 | *(round 3)* **Keyboard extras** | Chorded keys, keys for extension commands, per-site keys | The keymap (LJ43) is the base |
 | *(round 3)* **Pinned sites extras** | Reorder by drag, folders, pinned extension commands | UI in the command bar's empty state |
