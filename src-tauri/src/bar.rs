@@ -25,8 +25,8 @@ mod view;
 mod watch;
 
 pub use view::{
-    apply_layout, element_fullscreen, log_overlay, mode, overlay, set_element_fullscreen,
-    set_overlay,
+    after_webkit_fullscreen, apply_layout, element_fullscreen, log_overlay, mode, overlay,
+    page_in_webkit_fullscreen, set_element_fullscreen, set_overlay,
 };
 pub use watch::watch_url;
 
@@ -37,6 +37,7 @@ use crate::keys;
 use crate::layout::{Mode, Rect, layout};
 use crate::navigation;
 use crate::page_address::PageAddress;
+use crate::phone_mode;
 use crate::platform;
 use crate::smoke;
 use crate::tray;
@@ -131,6 +132,8 @@ pub fn add_webviews<R: Runtime>(
                     // What the toolbar shows, and what the extension handler serves beyond a
                     // panel's document: an extension only once its panel committed here.
                     extensions::session::page_committed(webview.app_handle(), payload.url());
+                    // A page the page itself opened gets its site's user agent (phone_mode.rs).
+                    phone_mode::page_started(webview.app_handle(), payload.url());
                 }
                 PageLoadEvent::Finished => {
                     address().finished(payload.url().clone());
@@ -255,8 +258,11 @@ pub fn publish_url<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Opens the command bar and puts the keyboard in its field with the text selected
-/// (Ctrl/Cmd+L, and on summon).
+/// (Ctrl/Cmd+L, and on summon). Not while WebKit shows the page fullscreen (macOS).
 pub fn focus_bar<R: Runtime>(app: &AppHandle<R>) {
+    if page_in_webkit_fullscreen(app) {
+        return;
+    }
     set_overlay(app, true);
     if let Some(bar) = app.get_webview(BAR) {
         let _ = bar.set_focus();
@@ -267,7 +273,7 @@ pub fn focus_bar<R: Runtime>(app: &AppHandle<R>) {
 /// Opens the command bar's overlay in its history view, the keyboard in its search field
 /// (Ctrl/Cmd+Y: page keys and the macOS menu). Not during element fullscreen, which always wins.
 pub fn show_history<R: Runtime>(app: &AppHandle<R>) {
-    if element_fullscreen() {
+    if element_fullscreen() || page_in_webkit_fullscreen(app) {
         return;
     }
     // Opening the overlay tells the bar first, so the history view comes after (evals run in
@@ -304,17 +310,26 @@ pub fn focus_page<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Loads `url` in the page and tells the bar. Showing a page closes the command bar, and the
-/// keyboard follows the page out of it (the toolbar has no field to keep it).
+/// keyboard follows the page out of it (the toolbar has no field to keep it). The page gets its
+/// site's user agent first (phone_mode.rs, which may load a known phone address's desktop one).
 pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
-    if let Some(page) = app.get_webview(PAGE) {
+    if app.get_webview(PAGE).is_some() {
         let was_open = overlay();
         set_overlay(app, false);
-        address().navigating(url.clone());
-        page.navigate(url)?;
-        publish_url(app);
+        load(app, phone_mode::prepare(app, url))?;
         if was_open {
             focus_page(app);
         }
+    }
+    Ok(())
+}
+
+/// Loads `url` in the page and tells the bar, leaving the view as it is.
+pub fn load<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
+    if let Some(page) = app.get_webview(PAGE) {
+        address().navigating(url.clone());
+        page.navigate(url)?;
+        publish_url(app);
     }
     Ok(())
 }

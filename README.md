@@ -122,9 +122,15 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   [Extensions](#extensions-experimental) below.
 - **Phone mode:** pages always fit the window and reflow as you resize it. When the window is
   narrower than 600 px, Little Joan also tells websites it is a phone browser (iPhone Safari on
-  macOS and Linux, Chrome on Android on Windows), so Google, YouTube and others serve their
-  mobile versions; widen it past 600 px and the page reloads in its desktop version once you
-  let go. Switch it off in Settings ("Mobile sites in a narrow window").
+  macOS and Linux, Chrome on Android on Windows), so Google and others serve their mobile
+  versions; widen it past 600 px and the page reloads in its desktop version once you let go.
+  Switch it off in Settings ("Mobile sites in a narrow window"). **YouTube always gets its
+  desktop site on macOS and Linux** — its phone site's player expects an iPhone's video
+  fullscreen, so its fullscreen button didn't work there (`m.youtube.com` addresses open as
+  `www.youtube.com`). To choose per site yourself, add `"siteModes"` to `settings.json` (Settings →
+  Privacy shows its folder; quit Little Joan first), e.g. `"siteModes": { "youtube.com": "auto", "example.com":
+  "desktop" }` — `"phone"`, `"desktop"` or `"auto"` (the window's width decides) for a host and
+  its subdomains; an entry wins over the built-in YouTube one.
 - **Dismiss:** press the shortcut again, press Ctrl/Cmd+W, close the window, or press Esc in the
   empty command bar before opening anything. The page is discarded and Little Joan goes back to sleep. The window remembers its
   size.

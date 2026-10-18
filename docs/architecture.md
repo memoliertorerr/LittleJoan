@@ -196,8 +196,12 @@ src-tauri/src/layout.rs            where the bar and the page go per mode (Toolb
                                    Fullscreen), from physical size + scale (pure)
 src-tauri/src/capability_tests.rs  tests: no capability reaches the page webview, its window, or
                                    remote URLs (Ground Rule 18)
-src-tauri/src/phone.rs             phone mode decisions: 600 px threshold, user agents, debounce
-src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user agent, reload
+src-tauri/src/phone.rs             phone mode decisions: 600 px threshold, user agents, debounce,
+                                   a site's mode (siteModes + the WebKit built-in list), the
+                                   desktop address of a known phone host (pure, tested)
+src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user agent for its width
+                                   and site, before the app's navigations and on the page's own,
+                                   reload (or load the desktop address)
 src-tauri/src/placement.rs         where a new window opens (monitor under the cursor)
 src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
                                    with rollback (Registrar trait), suspend while recording
@@ -239,6 +243,8 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/settings/theme.rs    the `theme` field: mode, 1–3 colors, intensity, grain (tolerant
                                    parse, tested; the default matches ui/lib/presets.ts)
+src-tauri/src/settings/site_modes.rs  the `siteModes` field: host → auto | phone | desktop, keys,
+                                   the lookup that walks a name up to its last two labels (tested)
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
                                    --start-at-login on|off / --settings [tab] / --extension <id> /
@@ -662,8 +668,9 @@ page; it is a separate webview with its own capability, and the page webview has
   which stays when the icon fails. That is why the CSP's `img-src` allows `https:` (and only
   `img-src`); history itself is never sent anywhere.
 - **Element fullscreen:** Windows hides the bar in the `ContainsFullScreenElementChanged`
-  handler; Linux on WebKitGTK's `enter-fullscreen` / `leave-fullscreen` signals; macOS needs
-  nothing (WebKit shows the element in its own fullscreen window).
+  handler; Linux on WebKitGTK's `enter-fullscreen` / `leave-fullscreen` signals; macOS leaves the
+  page alone meanwhile (WebKit shows the element in its own fullscreen window; the guard under
+  "Fullscreen video").
 
 ## Themes
 
@@ -803,8 +810,26 @@ visible in panels as in web pages, and every call is refused.
   - A new window gets the right agent before any web page loads. A resize that crosses the
     threshold switches the agent once the resize has been still for 400 ms (`Debounce`), then
     reloads the current web page (its URL is kept; the bar keeps working). Nothing switches
-    during fullscreen — a fullscreen video makes the window wide, and a reload would end it.
+    during fullscreen — a fullscreen video makes the window wide, and a reload would end it
+    (macOS: also while WebKit's own fullscreen window shows the page).
   - Changing the setting applies at once.
+  - **Per site** (`siteModes` in settings.json, `settings/site_modes.rs`; LJ36): `{ "<host>":
+    "auto" | "phone" | "desktop" }` — lower-case host names without `www.` or a port, IP
+    addresses as they are; an entry covers its subdomains (the lookup walks a name up to its last
+    two labels, never an IP address). `phone` and `desktop` hold at any width and whatever
+    `mobileSites` says; `auto` follows the width. **Built in, on the WebKit engines (macOS,
+    Linux):** `youtube.com` and its subdomains get the desktop agent — its phone site's player
+    waits for iOS's video fullscreen (`webkitbeginfullscreen`, an orientation lock), which a
+    desktop WebKit never gives it, so its fullscreen button dropped out at once on macOS; a user
+    entry (`"auto"` too) wins over it. `phone::site_mode` decides; Windows has no built-ins.
+  - **When the agent follows the site:** the app's own navigations (`bar::navigate`: typed
+    addresses, picked rows, `--show <url>`) set the target's agent first (`phone_mode::prepare`);
+    a navigation the page starts itself gets it on its `Started` event, and when the agent really
+    changes the page loads once more (never twice in a row for the same URL; the visit counts as
+    a reload). Going to the desktop agent on a known phone host loads its desktop address instead
+    — `m.youtube.com` → `www.youtube.com`, `<lang>.m.wikipedia.org` → `<lang>.wikipedia.org`
+    (`phone::desktop_url`) —, and the app's navigation to such an address for a site on `desktop`
+    goes to the desktop one directly. No UI yet (LJ40 adds it).
 
 ## Fullscreen video
 
@@ -813,7 +838,7 @@ HTML5 element fullscreen (a video's fullscreen button) must fill the screen:
 | Engine | What happens | Code |
 |---|---|---|
 | WebView2 (Windows) | The engine only fills the webview's bounds and raises `ContainsFullScreenElementChanged`; the app makes the window fullscreen and back. The change is queued off the callback because resizing re-enters WebView2. | `platform/win.rs` + `fullscreen.rs` |
-| WKWebView (macOS 12.3+) | wry enables `elementFullscreenEnabled`; WebKit moves the element into its own fullscreen window (its own Space). | none |
+| WKWebView (macOS 12.3+) | wry enables `elementFullscreenEnabled`; WebKit moves the element into its own fullscreen window (its own Space). **The guard:** meanwhile nothing touches the page — `bar/view.rs`'s layout sets no bounds on, shows or hides the page (wry's `set_bounds` would set the WKWebView's frame inside WebKit's fullscreen window and shrink the video), phone mode doesn't switch (a reload would end it), and the command bar (Cmd+L, Cmd+Y, a click on the toolbar's site) doesn't open. "Meanwhile" is `fullscreenState` isn't "not in fullscreen" (macOS 13+), or the page's WKWebView isn't in the Little Joan window (macOS 12's only sign) — `fullscreen::page_layout_allowed`, read on the main thread where each decision is made. A skipped layout is applied once, after a 100 ms check finds the fullscreen ended (nothing runs otherwise). | `platform/mac.rs` + `fullscreen.rs` + `bar/view.rs` |
 | WebKitGTK (Linux) | The default `enter-fullscreen` handler fullscreens the toplevel GTK window. | none |
 
 `FullscreenTracker` only undoes a fullscreen it caused, so a window the user made fullscreen
@@ -868,9 +893,11 @@ its answer and what the engine sent — never the token, nor the Referer's value
 nonce), `page-bounds <x,y,w,h>` and `page-visible <bool>` (every layout of the page webview:
 logical bounds in the window), `page-screen <x>,<y>,<w>,<h> scale=<s>` (where the page is on the
 screen, physical pixels, for CI's clicks), and on macOS `wk-fullscreen <not|entering|in|exiting>`
-(WKWebView's `fullscreenState`, polled every 100 ms while a page window exists — smoke mode only)
-and `wk-window <resized|focused|moved> <detail>` (the window's events while that isn't `not`).
-Without the variable nothing is logged.
+(WKWebView's `fullscreenState`, polled every 100 ms while a page window exists — smoke mode only),
+`wk-window <resized|focused|moved> <detail>` (the window's events while that isn't `not`), and
+`layout-deferred` / `layout-resumed` (macOS: a layout waited for WebKit's fullscreen to end),
+`user-agent <phone|desktop>` (phone mode switched the page's agent). Without the variable nothing
+is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -887,8 +914,9 @@ The modules below hold every decision the app makes; the native glue only calls 
   which redirects to `<host>.translate.goog`; skipped for non-web pages and pages that are
   already translated.
 - **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
-  mobileSites, rememberHistory, theme, developerMode, disabledExtensions}` (camelCase JSON;
-  `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once). Each field falls back to its default on its own; sizes are clamped to
+  mobileSites, rememberHistory, theme, developerMode, disabledExtensions, siteModes}` (camelCase
+  JSON; `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once; `siteModes` keeps
+  at most 500 valid `host: auto|phone|desktop` entries). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; `theme` = `{mode, colors, intensity, grain}`, each part on its own too
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
@@ -1051,7 +1079,13 @@ and pushes to `main`:
   Exit (in fullscreen, at the screen's centre) 2 s later — clicks only, never keys. Each attempt
   reports `LJ-FS <element|phone> width= ua= entered= held_ms= exited_by_page= events=`
   (screenshots `fs/element-390.png`, `fs/phone-390.png`, `fs/element-720.png`, 1 s after each
-  click; log `smoke-fullscreen.log`; what happened in `summary.json`'s `fullscreenRun`). Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
+  click; log `smoke-fullscreen.log`; what happened in `summary.json`'s `fullscreenRun`). A second
+  launch whose settings say `"siteModes": { "127.0.0.1": "desktop" }` must report the desktop
+  agent at 390 px, where the player takes element fullscreen (`fs/desktop-site-390.png`, log
+  `smoke-fullscreen-site.log`). The rules: every element-fullscreen path enters, holds until the
+  page's own exit and leaves when asked (required on Windows and Linux; on macOS whenever the
+  click reached the page), the player's iOS route under an iPhone agent is informational, and on
+  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Last comes the **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs
   `smoke-first-run.log`, `smoke-relaunch.log`).

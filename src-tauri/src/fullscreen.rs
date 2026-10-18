@@ -73,6 +73,14 @@ impl WebKitFullscreen {
     }
 }
 
+/// Whether the app may lay out the page's WKWebView (set its bounds, show or hide it): only while
+/// WebKit's element fullscreen is off — `webkit_state` is `fullscreenState` (`None` on macOS 12,
+/// which lacks it) — and the view sits in the Little Joan window, where WebKit's fullscreen takes
+/// it from (`in_own_window`, the only sign on macOS 12).
+pub fn page_layout_allowed(webkit_state: Option<WebKitFullscreen>, in_own_window: bool) -> bool {
+    in_own_window && webkit_state.is_none_or(|state| state == WebKitFullscreen::Not)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,5 +123,19 @@ mod tests {
             .map(|raw| WebKitFullscreen::from_raw(raw).name())
             .into();
         assert_eq!(names, ["not", "entering", "in", "exiting"]);
+    }
+
+    #[test]
+    fn the_page_is_laid_out_only_outside_webkits_fullscreen() {
+        use WebKitFullscreen::{Entering, Exiting, In, Not};
+        assert!(page_layout_allowed(Some(Not), true));
+        for state in [Entering, In, Exiting] {
+            assert!(!page_layout_allowed(Some(state), true), "{state:?}");
+        }
+        // macOS 12: no fullscreenState; the view's window tells.
+        assert!(page_layout_allowed(None, true));
+        assert!(!page_layout_allowed(None, false));
+        // Outside the window even with the state saying "not": leave it alone.
+        assert!(!page_layout_allowed(Some(Not), false));
     }
 }

@@ -276,7 +276,7 @@ export function webkitStates(events: LogEvent[]): string[] {
 }
 
 /**
- * The rules (turned on by LJ36's fix):
+ * The rules:
  * - every element-fullscreen path enters, holds until the page's own exit and leaves when asked —
  *   required on Windows and Linux; on macOS whenever the click reached the page (it reported);
  *   the phone player under an iPhone agent (the iOS route) is informational;
@@ -330,7 +330,7 @@ export function fullscreenFailures(run: FsRunEvents, os: string): string[] {
   return failures;
 }
 
-/** What summary.json records of the run (informational in LJ36's first commit). */
+/** What summary.json records of the run. */
 export function fullscreenSummary(run: FsRunEvents, os: string) {
   return {
     reports: fsReports(run.main),

@@ -4,6 +4,7 @@
 //! default without discarding the others, and an unreadable file means "all defaults". Saving
 //! is atomic (write a temp file, then rename over the old one).
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -14,8 +15,10 @@ use serde_json::Value;
 use crate::input::SearchEngine;
 use crate::translate::is_valid_lang;
 
+pub mod site_modes;
 pub mod theme;
 
+pub use site_modes::SiteMode;
 pub use theme::{Theme, ThemeMode};
 
 pub const SETTINGS_FILE: &str = "settings.json";
@@ -51,6 +54,9 @@ pub struct Settings {
     /// Extensions switched off in Settings → Extensions: extension ids, and `builtin:<name>`
     /// for the built-in quick answers (`disabled_extensions`).
     pub disabled_extensions: Vec<String>,
+    /// Per site: the phone or the desktop user agent whatever the width, or `auto`
+    /// (settings/site_modes.rs; phone.rs adds a built-in list for the WebKit engines).
+    pub site_modes: BTreeMap<String, SiteMode>,
 }
 
 impl Default for Settings {
@@ -67,6 +73,7 @@ impl Default for Settings {
             theme: Theme::default(),
             developer_mode: false,
             disabled_extensions: Vec::new(),
+            site_modes: BTreeMap::new(),
         }
     }
 }
@@ -138,6 +145,7 @@ pub fn parse(json: &str) -> Settings {
         theme,
         developer_mode,
         disabled_extensions: disabled_extensions(map.get("disabledExtensions")),
+        site_modes: site_modes::parse(map.get("siteModes")),
     }
 }
 
@@ -246,6 +254,7 @@ mod tests {
             remember_history: false,
             developer_mode: true,
             disabled_extensions: vec!["hello".into(), "builtin:calc".into()],
+            site_modes: BTreeMap::from([("youtube.com".to_owned(), SiteMode::Phone)]),
             theme: Theme {
                 mode: ThemeMode::Dark,
                 colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],
@@ -341,6 +350,28 @@ mod tests {
         );
         let json = serde_json::to_string(&Settings::default()).expect("json");
         assert!(json.contains(r#""disabledExtensions":[]"#), "{json}");
+    }
+
+    #[test]
+    fn site_modes_are_read_on_their_own() {
+        assert!(Settings::default().site_modes.is_empty());
+        assert!(
+            parse("{}").site_modes.is_empty(),
+            "settings from before the option existed"
+        );
+        let s = parse(
+            r#"{"siteModes": {"YouTube.com": "phone", "bad host": "desktop"}, "mobileSites": false}"#,
+        );
+        assert_eq!(
+            s.site_modes,
+            BTreeMap::from([("youtube.com".to_owned(), SiteMode::Phone)])
+        );
+        assert!(!s.mobile_sites, "the rest is read as before");
+        let json = serde_json::to_string(&s).expect("json");
+        assert!(
+            json.contains(r#""siteModes":{"youtube.com":"phone"}"#),
+            "{json}"
+        );
     }
 
     #[test]

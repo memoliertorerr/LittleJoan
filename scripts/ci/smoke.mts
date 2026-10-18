@@ -77,7 +77,7 @@ import {
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
-import { fullscreenRun, fullscreenSummary, type FsApp, type FsDriver } from "./smoke-fullscreen.mts";
+import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsApp, type FsDriver } from "./smoke-fullscreen.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -1126,8 +1126,8 @@ function fullscreenLaunch(name: string, settings: Record<string, unknown>): Prom
 }
 const fullscreenDriver: FsDriver = { os, pageUrl: smokePageUrl, launch: fullscreenLaunch, clickAt, screenshot, sleep: (ms) => sleep(ms).then(() => undefined) };
 mkdirSync(join(out, "fs"), { recursive: true });
-// Informational until LJ36's fix turns its rules on: what CI shows goes into summary.json.
-const fullscreenCheck = await fullscreenRun(fullscreenDriver, false);
+// With the second launch, whose siteModes put the smoke page's host on the desktop agent.
+const fullscreenCheck = await fullscreenRun(fullscreenDriver, true);
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -1255,6 +1255,7 @@ const failures = evaluate(
   .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
+  .concat(fullscreenFailures(fullscreenCheck, os))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));

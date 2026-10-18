@@ -6,6 +6,15 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **YouTube's fullscreen button on macOS.** In a narrow window phone mode gave YouTube an iPhone
+  agent, and its phone site's player waits for an iPhone's video fullscreen, which a Mac never
+  gives it: the video dropped out of fullscreen at once, and its exit button did nothing. On
+  macOS and Linux (WebKit) YouTube now always gets its desktop site — `m.youtube.com` addresses
+  open as `www.youtube.com` — and `"siteModes"` in settings.json chooses the phone or desktop
+  site per host (`"auto"` undoes the built-in). On macOS nothing resizes, moves or reloads the
+  page while WebKit shows it fullscreen any more, nor opens the command bar over it.
+
 ## [0.2.0-beta.2] — 2026-10-18
 
 A second pre-release of v0.2: Little Joan now looks and works like Little Arc — a command bar

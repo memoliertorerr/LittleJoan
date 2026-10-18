@@ -101,7 +101,7 @@
 | LJ33 | *(v0.2, round 2)* Bundled productivity: Notes, Focus timer, World clock | standard | auto | ✅ done |
 | LJ34 | *(v0.2, round 2)* Bundled page actions and tools: QR code, Clean link, Wayback, Markdown link, JSON + text + color tools | standard | auto | ✅ done |
 | LJ35 | *(v0.2, round 2)* Docs, screenshots, the user's checklist; v0.2.0-beta.2 on the user's word | standard | checkpoint | ✅ done — the owner's checklist passed 2026-10-18 (one YouTube fullscreen bug, see notes); v0.2.0-beta.2 released |
-| LJ36 | *(round 3)* YouTube's fullscreen on macOS (the phone site, confirmed by the owner): reproduce in CI; guard WebKit's fullscreen; youtube.com on the desktop agent on WebKit (a minimal per-site table) | strong | auto | ⬜ todo |
+| LJ36 | *(round 3)* YouTube's fullscreen on macOS (the phone site, confirmed by the owner): reproduce in CI; guard WebKit's fullscreen; youtube.com on the desktop agent on WebKit (a minimal per-site table) | strong | auto | ✅ done (reproduced, then lj-step-36-fix — see notes) |
 | LJ37 | *(round 3)* Ctrl+H for history on Windows and Linux (Cmd+Y stays); double-clicking the toolbar zooms the window | standard | auto | ⬜ todo |
 | LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ⬜ todo |
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ⬜ todo |
@@ -5124,6 +5124,72 @@ a check.
 - `npm run verify`: 482 TS tests, 257 Rust tests, clippy clean. Disk: 12 GiB free at the start of
   the phase, 11 GiB after verify; `.cache/target` 1.4 GB.
 
+**What CI showed (run 39147876852, every job green — the run was informational):**
+
+| | Element, 390 px (phone agent) | Phone player, 390 px | Element, 720 px (desktop agent) | Phone player, 720 px |
+|---|---|---|---|---|
+| Windows (Android agent: every path is element fullscreen) | held 3.3 s, left by its Exit | held 3.4 s, left by its Exit | held 3.3 s, left by its Exit | held 2.9 s, left by its Exit |
+| Linux, scale 1 and 2 | held 2.2 s / 2.3 s, left by its Exit | iOS route: entered (`fullscreenchange`, no `webkitbeginfullscreen`, no `screen.orientation.lock`), left by its `webkitExitFullscreen` | held, left by its Exit (scale 2: the exit seen by the poll) | held, left by its Exit |
+| **macOS** | **entered, then the Exit did nothing (6 s timeout)** | iOS route: entered, held 3.4 s, left by its own exit | **no report: the page reloaded 300 ms into fullscreen** | (on the phone agent by then) iOS route, held 3.4 s, left by its own exit |
+
+- **macOS, the cause (the log):** while WebKit entered element fullscreen (`wk-fullscreen entering`),
+  tao delivered `Moved`, `Resized` and `Moved` for the Little Joan window — `resized 480x640`, the
+  size the window was created at, not its 390×600 —, and `apply_layout` set the page's bounds
+  (`page-bounds 0,40,480,600`). wry's `set_bounds` sets the WKWebView's frame in its current
+  superview, WebKit's fullscreen window: `fs/element-390.png` shows that black fullscreen window
+  with the page shrunk to a 480×600 frame in its top-left corner — the owner's "drops back to
+  the normal size at once" —, the centred Exit out of reach of the click at the screen's centre
+  ("the exit button does nothing"). At 720 px the same spurious 480 px width also crossed phone
+  mode's 600 px: `user-agent phone` and a reload ended the fullscreen (`fs/element-720.png` caught
+  the aborted transition, the window behind it) and left the page on the phone agent at 720 px.
+  The phone player's iOS route on macOS, by contrast, held until its own exit in both runs, with
+  no window events: it is the element route, and our layout during it, that broke. The phone
+  site makes it likelier only through phone mode (the 600 px switch).
+- **Screenshots:** Windows and Linux (scale 1 and 2) — the element fills the whole screen
+  (yellow, the Exit in the middle; the fullscreen color rule lost to the id's, fixed in the fix
+  commit), the phone player's element route fills it in blue, Linux's iOS route shows the video
+  with WebKitGTK's media controls; macOS — `element-390.png` as above, `phone-390.png` the video
+  fullscreen with WebKit's native controls ("Live Broadcast"), `element-720.png` the aborted
+  transition.
+
+**Implementation notes — the fix (`lj-step-36-fix`):**
+
+- **The guard (macOS):** `fullscreen::page_layout_allowed(state, in_own_window)` (pure, tested):
+  only while `fullscreenState` is "not in fullscreen" (`None` on macOS 12) **and** the page's
+  WKWebView sits in the Little Joan window — both, so CI's macOS 15 runs test the window check
+  too. `platform::page_in_webkit_fullscreen(page)` reads them on the main thread
+  (`mac::webkit_fullscreen`: `with_webview`, which runs at once on the main thread and is
+  answered within 500 ms elsewhere; no answer counts as "not"). `bar/view.rs`'s `apply_layout`
+  still lays out the bar but sets no bounds on, shows or hides the page meanwhile; `set_overlay(true)`,
+  `focus_bar` and `show_history` don't open the command bar; `phone_mode` doesn't switch. A
+  skipped layout or switch starts one checker (`after_webkit_fullscreen`, every 100 ms, smoke log
+  `layout-deferred` / `layout-resumed`) that applies the layout and phone mode once when the
+  fullscreen has ended, and stops with the window. Windows and Linux keep their hooks (the
+  function is `false` there).
+- **`siteModes`** (`settings/site_modes.rs`): keys through `site_key` (the `url` crate's host:
+  lower case, IDNs in ASCII, `www.` dropped; a scheme, port, path, user or space drops the entry;
+  IPv6 as `[::1]`), values `auto` / `phone` / `desktop`, the first of two spellings of one site
+  wins, at most 500 (in key order, serde_json's map being sorted). `candidates` walks a name up to
+  its last two labels and returns an IP address (or a single label) alone. Settings saves keep it
+  (`save_settings` only changes the fields Settings sends).
+- **`phone.rs`:** `site_mode(host, platform, overrides)` — a user entry for the host or its
+  nearest parent wins (`auto` too), else `WEBKIT_DESKTOP_SITES = ["youtube.com"]` on macOS and
+  Linux (subdomains included), else auto; `wants_mobile(enabled, width, mode)`; `desktop_url`
+  (`m.youtube.com` → `www.youtube.com`, `<lang>.m.wikipedia.org` → `<lang>.wikipedia.org`, http(s)
+  only, nothing else).
+- **`phone_mode.rs`:** the agent follows the page's host (web pages only — the app's pages and
+  extension panels are auto). `prepare` (called by `bar::navigate`, so typed addresses, picked
+  rows, `--show <url>` and Translate) sets the target's agent first and turns a known phone address
+  of a site on `desktop` into its desktop one; `page_started` (the page's `Started` event, handled
+  off the engine's callback) switches for a navigation the page made itself and loads the page
+  once more when the agent really changed — never twice in a row for the same URL; the reload
+  counts as a reload visit. Going to the desktop agent on a known phone host loads its desktop
+  address (`bar::load`, which leaves the view alone) instead of reloading.
+- **The smoke** turns the rules on (`fullscreenFailures`) and adds the second launch with
+  `"siteModes": { "127.0.0.1": "desktop" }` at 390×600 (`fs/desktop-site-390.png`).
+- `npm run verify`: 482 TS tests, 271 Rust tests, clippy clean. Disk: 13 GiB free at the start of
+  the fix and after verify; `.cache/target` 1.4 GB.
+
 ### LJ37 — Ctrl+H opens history on Windows and Linux; double-clicking the toolbar zooms the window · standard · auto
 
 **Verify:** `npm run verify` green, including `keys.rs` tests: Ctrl+H → `PageAction::History` on
@@ -7045,6 +7111,13 @@ Populated from real friction, not speculation:
   window gets a narrow layout only from the page's own CSS; only Windows could emulate a mobile
   viewport (CDP `Emulation.setDeviceMetricsOverride`), and macOS has only private SPI. Phase 19
   doesn't emulate viewports.
+- *(LJ36, CI run 39147876852)* **macOS: tao reports the window moved and resized while WebKit
+  enters element fullscreen** — `Resized` with the size the window was created at (480×640 after a
+  `--size 390x600`), and `inner_size()` agrees for that moment. Anything that lays out the page or
+  switches phone mode on `Resized` then acts inside WebKit's fullscreen window: CI saw the page
+  shrunk to 480×600 in a black fullscreen window, and at 720 px phone mode's reload ending the
+  fullscreen. Lay out the page on macOS only through `bar::apply_layout`, which asks
+  `platform::page_in_webkit_fullscreen` first.
 - *(round 3 research, to watch)* **macOS 26 / 27: an `.accessory` app's element fullscreen may
   leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
   and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after

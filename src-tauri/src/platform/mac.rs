@@ -2,6 +2,7 @@
 //! fullscreen (`fullscreenState`), and the general pasteboard (extensions' clipboard.writeText).
 
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
+use std::sync::mpsc;
 use std::time::Duration;
 
 use objc2::rc::Retained;
@@ -33,6 +34,29 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     if let Err(err) = result {
         eprintln!("little-joan: could not change the user agent: {err}");
     }
+}
+
+/// What WebKit says about the page's element fullscreen: its `fullscreenState` (`None` before
+/// macOS 13, which lacks the property) and whether the page's WKWebView still sits in the Little
+/// Joan window (during element fullscreen WebKit moves it into a window of its own). Read on the
+/// main thread (`with_webview`); `None` when the webview couldn't be asked in time.
+pub fn webkit_fullscreen<R: Runtime>(
+    page: &Webview<R>,
+) -> Option<(Option<WebKitFullscreen>, bool)> {
+    let ours = page.window().ns_window().ok()? as usize;
+    let (sent, answer) = mpsc::channel();
+    page.with_webview(move |webview| {
+        let view = webview.inner().cast::<AnyObject>();
+        if view.is_null() {
+            return;
+        }
+        // The view's window now (wry reads `[webview window]` for this).
+        let current = webview.ns_window() as usize;
+        let _ = sent.send((fullscreen_state(view), current == ours));
+    })
+    .ok()?;
+    // On the main thread with_webview has run already; elsewhere the main thread answers soon.
+    answer.recv_timeout(Duration::from_millis(500)).ok()
 }
 
 /// `[view fullscreenState]` where the WKWebView has it (macOS 13+).
