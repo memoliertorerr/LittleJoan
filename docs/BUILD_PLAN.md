@@ -201,6 +201,16 @@ opens history on Windows and Linux; double-clicking the toolbar zooms; the bar p
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
 
+**Phase 19 (LJ39 → LJ40, 2026-10-18)** is PR #22 on `lj/p19-resizing`, merged by the agent once
+verify, package and smoke were green on every OS job (the standing exception). Resizing applies
+only what changed, macOS's webviews follow the window through autoresizing masks, the toolbar's
+webview background is the theme's, and phone mode switches below 600 px and back only from 640 px
+(CI's resize run: one switch and one reload per crossing, at most two bounds per resize); phone or
+desktop per site has a toolbar pill, command-bar rows and a Settings list; Windows' phone agent
+carries client hints through WebView2's own DevTools protocol (CI: `?1` / `"Android"` /
+`userAgentData.mobile` true, in the release build). **LJ40 is a checkpoint: waiting for the
+owner's check (the checklist in PR #22); phase 20 starts only on the owner's go.**
+
 **Model note:** phases 1, 2, and 4 need the strongest model available — phase 1 sets the shape
 every later step inherits, phase 2 is native per-OS code the local Mac cannot compile for
 Windows or Linux (CI is the only compiler for those paths), and phase 4 is CI packaging, where
@@ -5806,7 +5816,15 @@ exactly what to check and where, then STOP — don't start phase 20 until the ow
   log: `quit` after the typing), unnoticed because that step is best effort there. The fix: every
   synthetic key and mouse event on macOS carries explicit flags, and the shortcut script posts a
   Command key-up after Cmd+<letter>. The rules stayed informational on macOS (typing is best
-  effort there), so the run was green; the fix's run shows whether macOS now types.
+  effort there), so the run was green.
+- **CI for the fix (run 39164040097): all ten jobs green, and macOS types now.** macOS's site-mode
+  run went through like the others — `request desktop` reached the command bar (`typed=15`), ↓ ↓
+  Enter logged `site-mode 127.0.0.1 desktop`, one reload to `390x560 ua=desktop`, settings.json
+  held the entry; `automatic` removed it and brought `ua=phone` back with one reload — so its rules
+  applied and passed; `settings-site-modes.png` shows "127.0.0.1 — Desktop" and "youtube.com —
+  Desktop, built in on macOS and Linux", each with Remove, the toolbar behind it saying "Desktop".
+  Side effect: the bundled run's QR page action now opens on macOS too (`qr.png` shows the code for
+  the smoke page), and the app no longer quits mid-run there.
 
 ### LJ41 — Hide the tray / menu-bar icon (safely); Settings and Quit in the command bar · standard · auto
 
