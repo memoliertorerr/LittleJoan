@@ -6565,8 +6565,9 @@ this PR (and Windows / Linux where you have them):
       quick commands, downloads, zoom, fullscreen.
 - [ ] Memory at rest: no webview helpers while hibernating, also after a popup was open.
 
-Merge the PR once every CI job is green (docs only), then STOP for the checklist (Ground Rule 24).
-Do not start any further work until the owner says go. A `v0.3.0-beta.1` pre-release happens only
+Once every CI job is green, merge the PR (docs only) if CLAUDE.md's standing exception covers v0.3
+by then, otherwise leave it ready; then STOP for the checklist (Ground Rule 24). Do not start any
+further work until the owner says go. A `v0.3.0-beta.1` pre-release happens only
 on the owner's word, the way beta.2 was made: bump the three versions through a PR, merge it, let
 main's CI build the installers, rename them (LittleJoan-0.3.0-beta.1-windows-x64-setup.exe,
 -macos-universal.dmg, -linux-amd64.deb, -linux-x86_64.AppImage), write SHA256SUMS.txt, then
@@ -6576,9 +6577,10 @@ asset's checksum.
 
 Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ57 to ✅ with the note
 "waiting for the owner's checklist", add implementation notes (with df -h), and commit everything
-as one commit: "lj-step-57: docs and screenshots for v0.3". Push and watch CI until every job is
-green (two honest fix attempts, then stop). This is a checkpoint: fill the PR with the checklist
-above, merge it when green, tell the owner exactly what to check and where, then stop.
+as one commit: "lj-step-57: docs and screenshots for v0.3". Push, open the phase-26 PR into main,
+and watch CI until every job is green (two honest fix attempts, then stop). This is a checkpoint: fill the PR with the checklist
+above, merge it when green as the paragraph above allows, tell the owner exactly what to check and
+where, then stop.
 ```
 
 ---
