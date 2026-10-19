@@ -1,0 +1,39 @@
+import { describe, expect, it } from "vitest";
+import { parseLog } from "./smoke-log.mts";
+import { keymapFailures, keymapSummary, menuKeys, type KeymapRun } from "./smoke-keymap.mts";
+
+const log = (rows: string[]) => parseLog(rows.map((row, i) => `${1000 + i} ${row}`).join("\n") + "\n");
+
+const MAC_MENU = ["menu-keys open-location=⌘L", "menu-keys history=⌘⇧K", "menu-keys close=⌘W", "started"];
+
+function run(over: Partial<KeymapRun> = {}): KeymapRun {
+  return { events: log(["started", "history-view"]), newKeyOpened: true, afterOldKey: log(["overlay true"]), ...over };
+}
+
+describe("the keymap run's rules (LJ43)", () => {
+  it("passes when the new key opens history and the old one nothing", () => {
+    expect(keymapFailures(run(), "win32")).toEqual([]);
+    expect(keymapFailures(run(), "linux")).toEqual([]);
+    expect(keymapFailures(run({ events: log(MAC_MENU) }), "darwin")).toEqual([]);
+  });
+
+  it("wants the new key to work on Windows and Linux", () => {
+    expect(keymapFailures(run({ newKeyOpened: false }), "linux").join()).toContain("Ctrl+Shift+K didn't open");
+    expect(keymapFailures(run({ afterOldKey: log(["history-view"]) }), "win32").join()).toContain("still opened");
+    const notPressed: KeymapRun = { events: log([]), newKeyOpened: true };
+    expect(keymapFailures(notPressed, "linux").join()).toContain("never pressed");
+  });
+
+  it("wants the macOS menu built from the keymap, the presses best effort", () => {
+    expect(keymapFailures(run({ events: log(["menu-keys history=⌘Y", "menu-keys open-location=⌘L"]) }), "darwin").join()).toContain("not ⌘⇧K");
+    expect(keymapFailures(run({ events: log(["menu-keys history=⌘⇧K"]) }), "darwin").join()).toContain("Open Location");
+    const unreached: KeymapRun = { events: log(MAC_MENU), newKeyOpened: false };
+    expect(keymapFailures(unreached, "darwin")).toEqual([]);
+    expect(keymapFailures({ ...run({ events: log(MAC_MENU) }), afterOldKey: log(["history-view"]) }, "darwin").join()).toContain("⌘Y");
+  });
+
+  it("reads the menu's keys and summarises", () => {
+    expect(menuKeys(log(MAC_MENU))).toEqual({ "open-location": "⌘L", history: "⌘⇧K", close: "⌘W" });
+    expect(keymapSummary(run({ events: log(MAC_MENU) }), "darwin")).toMatchObject({ newKeyOpened: true, afterOldKey: ["overlay"], rules: [] });
+  });
+});

@@ -34,10 +34,12 @@ use windows::core::{HSTRING, Interface, PWSTR};
 
 use crate::bar;
 use crate::fullscreen::FullscreenTracker;
-use crate::keys::{self, Key, Mods, Platform};
+use crate::keymap::KeyAction;
+use crate::keys::{Key, Mods, Platform};
 use crate::page_actions;
 use crate::phone::{self, agent};
 use crate::smoke;
+use crate::state;
 
 /// The URL bar: page keys only.
 pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
@@ -79,8 +81,9 @@ fn install<R: Runtime>(webview: &Webview<R>, with_fullscreen: bool) {
                 alt: is_down(VK_MENU),
                 meta: is_down(VK_LWIN) || is_down(VK_RWIN),
             };
+            let key = Key::from_windows_vk(virtual_key);
             if let Some(action) =
-                keys::action_for(Key::from_windows_vk(virtual_key), mods, Platform::Windows)
+                state::with(&app, |s| s.keymap.action_for(key, mods)).map(KeyAction::page_action)
             {
                 // SAFETY: as above; marks the key as consumed so the page never sees it.
                 unsafe { args.SetHandled(true)? };

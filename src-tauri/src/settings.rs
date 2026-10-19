@@ -16,6 +16,7 @@ use crate::input::SearchEngine;
 use crate::translate::is_valid_lang;
 
 pub mod change;
+pub mod keys;
 pub mod site_modes;
 pub mod theme;
 
@@ -62,6 +63,9 @@ pub struct Settings {
     /// The tray / menu-bar icon (on by default). Off, it is hidden — unless the global shortcut
     /// can't work, when it comes back by itself (tray.rs).
     pub show_tray_icon: bool,
+    /// The user's own keys for Little Joan's actions (settings/keys.rs, keymap.rs): action id →
+    /// accelerator, `""` = no key; actions not named keep their defaults.
+    pub keys: BTreeMap<String, String>,
 }
 
 impl Default for Settings {
@@ -80,6 +84,7 @@ impl Default for Settings {
             disabled_extensions: Vec::new(),
             site_modes: BTreeMap::new(),
             show_tray_icon: true,
+            keys: BTreeMap::new(),
         }
     }
 }
@@ -157,6 +162,7 @@ pub fn parse(json: &str) -> Settings {
         disabled_extensions: disabled_extensions(map.get("disabledExtensions")),
         site_modes: site_modes::parse(map.get("siteModes")),
         show_tray_icon,
+        keys: keys::parse(map.get("keys")),
     }
 }
 
@@ -267,6 +273,10 @@ mod tests {
             disabled_extensions: vec!["hello".into(), "builtin:calc".into()],
             site_modes: BTreeMap::from([("youtube.com".to_owned(), SiteMode::Phone)]),
             show_tray_icon: false,
+            keys: BTreeMap::from([(
+                "history".to_owned(),
+                "CommandOrControl+Shift+KeyK".to_owned(),
+            )]),
             theme: Theme {
                 mode: ThemeMode::Dark,
                 colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],

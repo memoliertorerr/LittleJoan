@@ -25,7 +25,9 @@
 // pill, the command bar's "Request desktop site" and "Automatic for this site", Settings' list,
 // Windows' client hints from the server's agent-headers.jsonl; smoke-sitemode.mts), then the
 // quick-commands run (its own launch: "mobile" and "dark" in the command bar change and save those
-// settings, the theme rows, Copy link over the smoke page; smoke-quick.mts), then the tray
+// settings, the theme rows, Copy link over the smoke page; smoke-quick.mts), then the keymap run
+// (its own launch with History on Ctrl/Cmd+Shift+K: the new key works, the old one doesn't, the
+// macOS menu shows it; smoke-keymap.mts), then the tray
 // run (its own launches with the icon switched off: it hides, a plain second launch opens the
 // window, the command bar's "Quit Little Joan" quits, Settings → General shows the switch, and on
 // Linux a Wayland session brings the icon back; smoke-tray.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
@@ -92,6 +94,7 @@ import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
+import { keymapFailures, keymapRun, keymapSummary, type KeymapDriver } from "./smoke-keymap.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -375,22 +378,23 @@ for code in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4 };
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40 };
 /** The history view's key: Ctrl+H on Windows and Linux, Cmd+Y on macOS (LJ37). */
 const HISTORY_KEY = os === "darwin" ? "y" : "h";
 
 /**
- * Presses Ctrl+<letter> (Cmd+<letter> on macOS) in the app's window: xdotool on Linux, SendKeys
- * on Windows (after bringing the window to the front), a key event with the Command flag from a
- * small Swift script on macOS (best effort, as for typing).
+ * Presses Ctrl+<letter> (Cmd+<letter> on macOS), with Shift when asked, in the app's window:
+ * xdotool on Linux, SendKeys on Windows (after bringing the window to the front), a key event
+ * with the Command (and Shift) flag from a small Swift script on macOS (best effort, as for
+ * typing).
  */
-function pressShortcut(letter: string, appPid: number): void {
+function pressShortcut(letter: string, appPid: number, shift = false): void {
   if (os === "win32") {
     powershell(`Add-Type -AssemblyName System.Windows.Forms
 $shell = New-Object -ComObject WScript.Shell
 $null = $shell.AppActivate(${appPid})
 Start-Sleep -Milliseconds 400
-[System.Windows.Forms.SendKeys]::SendWait('^${letter}')`);
+[System.Windows.Forms.SendKeys]::SendWait('^${shift ? "+" : ""}${letter}')`);
   } else if (os === "darwin") {
     const swift = join(out, "shortcut.swift");
     writeFileSync(
@@ -398,11 +402,12 @@ Start-Sleep -Milliseconds 400
       `import AppKit
 let pid = pid_t(CommandLine.arguments[1]) ?? 0
 let key = CGKeyCode(CommandLine.arguments[2]) ?? 0
+let shift = CommandLine.arguments.count > 3 && CommandLine.arguments[3] == "shift"
 NSRunningApplication(processIdentifier: pid)?.activate(options: [])
 usleep(400000)
 for down in [true, false] {
   let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)
-  event?.flags = .maskCommand
+  event?.flags = shift ? [.maskCommand, .maskShift] : .maskCommand
   event?.post(tap: .cghidEventTap)
   usleep(60000)
 }
@@ -413,11 +418,11 @@ release?.post(tap: .cghidEventTap)
 usleep(60000)
 `,
     );
-    run("swift", [swift, String(appPid), String(MAC_KEYS[letter] ?? 0)]);
+    run("swift", [swift, String(appPid), String(MAC_KEYS[letter] ?? 0), ...(shift ? ["shift"] : [])]);
   } else {
-    run("xdotool", ["key", `ctrl+${letter}`]);
+    run("xdotool", ["key", `ctrl+${shift ? "shift+" : ""}${letter}`]);
   }
-  console.log(`pressed ${os === "darwin" ? "Cmd" : "Ctrl"}+${letter.toUpperCase()}`);
+  console.log(`pressed ${os === "darwin" ? "Cmd" : "Ctrl"}+${shift ? "Shift+" : ""}${letter.toUpperCase()}`);
 }
 
 /** Resident memory of `pid` in MB (working set on Windows, RSS elsewhere). */
@@ -1223,6 +1228,17 @@ const quickDriver: QuickDriver = {
 };
 const quickCheck = await quickRun(quickDriver);
 console.log(`quick: ${JSON.stringify(quickSummary(quickCheck, os))}`);
+// The keymap run (LJ43, smoke-keymap.mts): its own launch with History on Ctrl/Cmd+Shift+K.
+const keymapDriver: KeymapDriver = {
+  os,
+  pageUrl: smokePageUrl,
+  launch: fullscreenLaunch,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  pressKeys,
+  pressShortcut,
+};
+const keymapCheck = await keymapRun(keymapDriver);
+console.log(`keymap: ${JSON.stringify(keymapSummary(keymapCheck, os))}`);
 server.close();
 // The tray run (LJ41, smoke-tray.mts): the icon switched off, and every way back still there.
 const trayDriver: TrayDriver = {
@@ -1323,6 +1339,7 @@ const summary = {
   resizeRun: { steps: resizeSummary(resizeCheck.results), rules: resizeFailures(RESIZE_STEPS, resizeCheck.results) },
   siteModeRun: siteModeSummary(siteModeCheck, os),
   quickRun: quickSummary(quickCheck, os),
+  keymapRun: keymapSummary(keymapCheck, os),
   trayRun: traySummary(trayCheck, os),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
@@ -1371,6 +1388,7 @@ const failures = evaluate(
   .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(siteModeFailures(siteModeCheck, os))
   .concat(quickFailures(quickCheck, os))
+  .concat(keymapFailures(keymapCheck, os))
   .concat(trayFailures(trayCheck, os))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
@@ -1379,7 +1397,7 @@ if (failures.length > 0) {
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
   const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
-  const trayLogs = ["quick", "tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
+  const trayLogs = ["quick", "keymap", "tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }

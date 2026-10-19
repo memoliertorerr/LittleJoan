@@ -9,6 +9,8 @@ use crate::cli::Args;
 use crate::cookies::SessionCookies;
 use crate::extensions::theme::Tokens;
 use crate::history_store::OpenHistory;
+use crate::keymap::Keymap;
+use crate::keys::Platform;
 use crate::settings::{self, SETTINGS_FILE, Settings, Theme};
 
 /// Development builds point this at `.cache/dev-data` (see scripts/env.sh). Shipped builds never
@@ -45,6 +47,9 @@ pub struct AppState {
     /// webview background (bar/background.rs); `None` until a bar painted, or after the theme
     /// changed.
     pub painted_background: Option<Tokens>,
+    /// Every Little Joan key on this OS: the defaults and the settings' `keys` (keymap.rs, LJ43);
+    /// built here and again whenever the settings change.
+    pub keymap: Keymap,
 }
 
 impl AppState {
@@ -62,6 +67,7 @@ impl AppState {
             history: None,
             theme_preview: None,
             painted_background: None,
+            keymap: Keymap::new(Platform::current(), &std::collections::BTreeMap::new()),
         }
     }
 
@@ -88,6 +94,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         };
     let first_run = is_first_run(&data_dir);
     let settings = settings::load(&data_dir);
+    let keymap = Keymap::new(Platform::current(), &settings.keys);
     app.manage(Mutex::new(AppState {
         settings,
         data_dir,
@@ -99,6 +106,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         history: None,
         theme_preview: None,
         painted_background: None,
+        keymap,
     }));
     Ok(())
 }

@@ -32,6 +32,8 @@ use crate::welcome;
 
 /// The app itself from the command bar (LJ41): `quit_app`.
 pub mod app;
+/// Little Joan's keys for Settings (LJ43): `keymap_info`.
+pub mod keys;
 /// Quick commands in the command bar (LJ42): `quick_state`, `quick_command`.
 pub mod quick;
 /// Phone or desktop per site (LJ40): `site_mode_info`, `set_site_mode`.
@@ -277,6 +279,10 @@ pub struct SettingsInput {
     /// Settings → General's tray / menu-bar icon switch. Left out, the saved one stays.
     #[serde(default)]
     show_tray_icon: Option<bool>,
+    /// The user's own keys (LJ43; Settings → Keyboard, LJ44): the whole table, checked by
+    /// keymap::validate. Left out, the saved one stays.
+    #[serde(default)]
+    keys: Option<Value>,
 }
 
 /// Validates and applies new settings: every part is checked first (settings::apply_change), the
@@ -300,6 +306,7 @@ pub async fn save_settings<R: Runtime>(
         developer_mode: settings.developer_mode,
         site_modes: settings.site_modes,
         show_tray_icon: settings.show_tray_icon,
+        keys: settings.keys,
     };
     // A refused part changes nothing — not even the shortcut.
     let current = state::with(&app, |s| s.settings.clone());

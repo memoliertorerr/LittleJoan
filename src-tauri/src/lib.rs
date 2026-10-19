@@ -15,6 +15,7 @@ pub mod history;
 pub mod history_store;
 pub mod input;
 pub mod joan;
+pub mod keymap;
 pub mod keys;
 pub mod layout;
 pub mod navigation;
@@ -94,7 +95,8 @@ pub fn run() {
             commands::site::set_site_mode,
             commands::app::quit_app,
             commands::quick::quick_state,
-            commands::quick::quick_command
+            commands::quick::quick_command,
+            commands::keys::keymap_info
         ])
         // Extension panels and their API (extensions/protocol.rs). Registered for every
         // webview; each request is checked (extensions/api.rs), and only the page webview's
@@ -117,12 +119,14 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let handle = app.handle();
+            state::init(handle)?;
             #[cfg(target_os = "macos")]
             {
-                app.set_menu(menu::create(handle)?)?;
+                // The page items' keys come from the keymap (state::init built it).
+                let keymap = state::with(handle, |s| s.keymap.clone());
+                app.set_menu(menu::create(handle, &keymap)?)?;
                 app.on_menu_event(menu::on_menu_event);
             }
-            state::init(handle)?;
             tray::create(handle)?;
             shortcut::register_from_settings(handle);
             // Hidden only while the shortcut works (tray.rs, LJ41).

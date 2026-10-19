@@ -238,6 +238,7 @@ src-tauri/src/phone/agent.rs       Windows' phone agent with client hints: CDP
 src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the built-in sites for
                                    Settings
 src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan")
+src-tauri/src/commands/keys.rs     the bar and Settings: keymap_info
 src-tauri/src/commands/quick.rs    the bar: quick_state, quick_command (a serde enum of fixed
                                    kinds, deny_unknown_fields; tested)
 src-tauri/src/settings_live.rs     a settings change at runtime: AppState, the bar's theme, the tray
@@ -264,11 +265,17 @@ src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on 
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen;
                                    WebKitFullscreen (WKWebView's fullscreenState)
-src-tauri/src/keys.rs              page keys per OS (pure), app origin
+src-tauri/src/keys.rs              keys and presses: `Key` (what the recorder records) from
+                                   KeyboardEvent.code names, Windows virtual keys and GDK key
+                                   names; `Mods`; the app origin (pure, tested)
+src-tauri/src/keymap.rs            the keymap: every Little Joan key, the defaults per OS, the
+                                   user's overrides, matching, validation, keymap_info's list
+                                   (pure; tests in keymap/tests.rs)
 src-tauri/src/page_actions.rs      close / open location / reload / back / forward / translate /
                                    open in browser / history; translate_target (skips the start
                                    page)
-src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView) + page keys;
+src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView) + the page items,
+                                   their keys from the keymap (set again when the keys change);
                                    Cmd+Q goes through joan::quit
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
 src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → keys.rs;
@@ -292,6 +299,8 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/settings/theme.rs    the `theme` field: mode, 1–3 colors, intensity, grain (tolerant
                                    parse, tested; the default matches ui/lib/presets.ts)
+src-tauri/src/settings/keys.rs     the `keys` field: action id → accelerator or "" (tolerant per
+                                   entry, tested)
 src-tauri/src/settings/change.rs   one settings change (Save's or a quick command's): every part
                                    checked, all or nothing — `apply_change` (pure, tested)
 src-tauri/src/settings/site_modes.rs  the `siteModes` field: host → auto | phone | desktop, keys,
@@ -325,6 +334,8 @@ scripts/ci/smoke-sitemode.mts      CI: the site-mode run (the command bar's site
                                    rules; unit-tested
 scripts/ci/smoke-quick.mts         CI: the quick-commands run ("mobile", "dark", the theme rows,
                                    Copy link over the smoke page) and its rules; unit-tested
+scripts/ci/smoke-keymap.mts        CI: the keymap run (History on Ctrl/Cmd+Shift+K: the new key,
+                                   the old one, macOS's menu) and its rules; unit-tested
 scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a second launch, Quit
                                    from the command bar, a Wayland session) and its rules;
                                    unit-tested
@@ -418,8 +429,8 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
-| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `core:window:allow-close` |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `allow-keymap-info` (the bar and Settings only, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
+| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `allow-keymap-info`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
@@ -454,6 +465,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `set_site_mode(mode)` | the toolbar's pill, the command bar's site rows ("Desktop site" / "Phone site" / "Automatic", LJ42's quick rows) | keeps `mode` for the open web page's site in `siteModes` — the site is Rust's (`bar::page_url`), the bar sends only the mode; `auto` removes the entry, or keeps `"auto"` when a built-in or a parent's entry would still decide —, saves the settings and applies it at once: the agent switches and the page loads again only when it really changed (going to desktop on a known phone host: its desktop address). Refused without a web page, or with 500 sites already. Logs `site-mode <site> <mode>`; returns the new info |
 | `quick_state()` | the command bar, each time it opens (with `extensions_list`), and after a quick command | `{ page: { url, title } \| null (a web page only; the title is the window's), theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool \| null, showTrayIcon, iconForced }` — what the quick rows show (LJ42) |
 | `quick_command(command)` | the command bar's quick rows (LJ42) | one of a fixed set, `{ kind, …fields }` (a serde enum with `deny_unknown_fields`: any other kind or field is refused): `translate`, `openInBrowser`, `reload` (the page actions; refused without a web page), `setThemeMode { mode }`, `setTheme { theme }` (a preset's whole theme, checked like Save's), `setSearchEngine { id }`, `setMobileSites { on }`, `setRememberHistory { on }`, `clearHistory { range }` (as `history_clear`; returns how many pages went), `setStartAtLogin { on }`, `openSettings { tab }`, `reloadExtensions`, `setTrayIcon { on }`. Settings ones go through `settings_live::apply` (as Save) and an open settings window rebases its draft (`window.littleJoanSettings.savedChanged(<settings>, <startAtLogin \| null>)`, by `eval`). Never: the shortcut or keys, developer mode, switching extensions, custom colors — Settings only. Logs `quick-command <kind> [<value>]`, never a URL or a title |
+| `keymap_info()` | Settings (LJ44's Keyboard tab); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut }` — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) and its **Settings** row (tab `general`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
@@ -602,7 +614,10 @@ shows the error.
   handed to the OS default browser (`tauri_plugin_opener::open_url`, used as a plain function —
   the opener plugin and its JS commands are not registered).
 - **Keys:** remote pages get no IPC and no injected scripts, so page keys are caught natively
-  before the page sees them:
+  before the page sees them. **Every one comes from the keymap** (`keymap.rs`, LJ43; Ground Rule
+  25): the native hooks (`platform/win.rs`, `platform/linux.rs`) turn a press into a `Key` and
+  `Mods` (`keys.rs`: Windows virtual keys, GDK key names) and ask `AppState::keymap`; macOS's menu
+  (`menu.rs`) takes its page items' key equivalents from it. These are the **default keys**:
 
   | Keys | Windows (WebView2 `AcceleratorKeyPressed`) | Linux (GTK `key-press-event`) | macOS (app menu) |
   |---|---|---|---|
@@ -615,8 +630,31 @@ shows the error.
   | Open page in default browser (then hibernate) | tray menu | tray menu | Cmd+Shift+O, tray menu |
   | Copy / paste / select all | built-in | built-in | Edit menu (needed by WKWebView) |
 
-  Matches are exact: Ctrl+Shift+W is not Ctrl+W, and Ctrl+Alt (AltGr) never matches. On macOS
-  the menu bar is hidden (Accessory app) but its key equivalents work; Cmd+Q quits for real.
+  Matches are exact: Ctrl+Shift+W is not Ctrl+W, and a Ctrl+Alt press (AltGr) never matches a
+  Ctrl key. On macOS the menu bar is hidden (Accessory app) but its key equivalents work; Cmd+Q
+  quits for real.
+- **The keymap** (`keymap.rs`, pure; tests in `keymap/tests.rs`): actions `open-location`,
+  `history`, `translate`, `reload`, `back`, `forward`, `open-in-browser`, `close` (LJ16 adds zoom,
+  LJ49 find), each with an ordered list of default bindings per OS — the first is the one Settings
+  shows and changes, the rest are fixed aliases (Linux's F5 for reload); an action may have none
+  (Windows leaves Reload, Back and Forward to WebView2, which handles Ctrl+R, F5 and Alt+← / Alt+→
+  itself; Open in browser has no key on Windows and Linux). Bindings are accelerators in the global
+  shortcut's syntax with `KeyboardEvent.code` key names (`CommandOrControl+Shift+KeyT`,
+  `Alt+ArrowLeft`, `F5`), `CommandOrControl` resolved per OS only when a key is matched; a key is
+  matched by what it types on a US layout (a letter key is the key that types that letter in the
+  user's layout, as Windows' virtual keys, GDK's key names and macOS's key equivalents all do).
+  **settings' `keys`** (`settings/keys.rs`): `{ "<action-id>": "<accelerator>" | "" }` — unknown
+  ids and unparsable accelerators dropped on load, `""` = no key; an override replaces the
+  action's first binding and drops its aliases (F5 reloads only while reload has its default); one
+  equal to the default is the default; a typing key in a hand-edited file is never bound. Typing
+  keys can never be bound (no modifier and not an F-key, or Shift alone with a key that types); on
+  macOS a key needs ⌘ or ⌃. `keymap::validate` (Settings' Save, `settings::apply_change`) also
+  refuses two actions on one key (aliases included) and an action on the global shortcut — and a
+  new global shortcut that is one of the keys. A save rebuilds `AppState::keymap` and, on macOS,
+  sets the menu again (on the main thread). Not in the keymap (fixed): Esc / Enter / arrows / Tab
+  in the bar, the Edit menu, Cmd+Q and Cmd+, on macOS. macOS's Close Window is Little Joan's own
+  item now (its key from the keymap): with Settings in front it closes Settings, as the standard
+  item did. `keymap_info` hands it all to Settings (LJ44).
 - The app origin is `tauri://localhost` on macOS/Linux and `http://tauri.localhost` on Windows
   (`keys::app_origin`).
 
@@ -1057,7 +1095,8 @@ recorded), `history-saved <records>` (history.json written), `history-view` (Ctr
 the history view), `history-list <pages>` (the history view asked for the pages; a count only),
 `theme <mode> colors=<n>` (the bar asked for its theme, or a settings change handed it a new one;
 never the colors), `quick-command <kind> [<value>]` (a quick command ran, LJ42; never a URL or a
-title), `theme-early <mode>
+title), `menu-keys <action>=<key | none>` (macOS: the menu's page items were built from the
+keymap, LJ43; one line per action), `theme-early <mode>
 colors=<n>` (the bar painted its initialization script's theme first), `bar-ready` (the bar's
 script runs: its first call) and `bar-ready timeout` (a panel opened with a new window stopped
 waiting for it), `theme-preview <mode>
@@ -1101,7 +1140,7 @@ The modules below hold every decision the app makes; the native glue only calls 
   already translated.
 - **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
   mobileSites, rememberHistory, theme, developerMode, disabledExtensions, siteModes,
-  showTrayIcon}` (camelCase
+  showTrayIcon, keys}` (camelCase
   JSON; `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once; `siteModes` keeps
   at most 500 valid `host: auto|phone|desktop` entries). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; `theme` = `{mode, colors, intensity, grain}`, each part on its own too
@@ -1307,7 +1346,13 @@ and pushes to `main`:
   `dark` (typed on Windows and Linux; best effort on macOS); typing `theme` shows the theme rows
   (`quick-theme.png`); over the smoke page Ctrl/Cmd+L, `copy` (`quick-page.png`), ` link`, ↓ ↓
   Enter copies its address — read back from the clipboard where the runner can (informational).
-  Log `smoke-quick.log`, `summary.json`'s `quickRun`. Then the **tray run**
+  Log `smoke-quick.log`, `summary.json`'s `quickRun`. Then the **keymap run** (`smoke-keymap.mts`,
+  LJ43), its own launch whose settings.json says `"keys": { "history":
+  "CommandOrControl+Shift+KeyK" }`: over the smoke page Ctrl+Shift+K (SendKeys `^+k`, xdotool
+  `ctrl+shift+k`) must open the history view, and the old key (Ctrl+H), pressed with the view
+  closed again, must open nothing within 2 s; on macOS the log's `menu-keys history=⌘⇧K` (and
+  `open-location=⌘L`) shows the menu was built from the keymap (required; the presses are best
+  effort there). Log `smoke-keymap.log`, `summary.json`'s `keymapRun`. Then the **tray run**
   (`smoke-tray.mts`, LJ41), its own launches with `"showTrayIcon": false`: the log must have
   `tray-visible false` after `shortcut-registered` (and never `true`); a second launch without
   flags must log `window-created`; typing `quit` in its command bar, ↓ ↓ Enter (the search row,

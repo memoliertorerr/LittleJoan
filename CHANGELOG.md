@@ -19,6 +19,11 @@ All notable changes to Little Joan are recorded here. The format follows
   engine, Mobile sites, Remember history, Start at login and the icon (✓ or on/off); Clear history
   (it asks for a second Enter); Settings → each tab; Reload extensions. Settings changed this way
   are saved at once, and an open Settings window keeps up.
+- **Little Joan's own keys can be changed** — Ctrl/Cmd+L, history, translate, reload, back,
+  forward, open in browser, close — in `settings.json` for now (`"keys": { "history":
+  "CommandOrControl+Shift+KeyK" }`; `""` for no key); Settings gets a Keyboard tab next. Keys
+  that type text, two actions on one key and the shortcut that summons Little Joan are refused.
+  On Windows, WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ keep working beside your keys.
 
 ### Changed
 - The command bar's rows for phone or desktop per site are now **Desktop site**, **Phone site**

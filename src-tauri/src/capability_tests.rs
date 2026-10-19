@@ -271,6 +271,31 @@ fn only_the_bar_may_run_quick_commands() {
 }
 
 #[test]
+fn only_the_bar_and_settings_may_read_the_keymap() {
+    // keymap_info (LJ43): Little Joan's keys, for Settings → Keyboard and the bar — never the page.
+    let mut granted_to = Vec::new();
+    for (place, capability) in all_capabilities() {
+        if !permissions(&capability).contains(&"allow-keymap-info") {
+            continue;
+        }
+        let id = capability.get("identifier").and_then(Value::as_str);
+        let bar_only = id == Some("bar")
+            && scopes(&capability, "webviews") == [bar::BAR]
+            && scopes(&capability, "windows").is_empty();
+        let settings_only = id == Some("settings")
+            && scopes(&capability, "windows") == [settings_window::LABEL]
+            && scopes(&capability, "webviews").is_empty();
+        assert!(
+            bar_only || settings_only,
+            "{place}: only the bar's and the settings window's capabilities may read the keymap"
+        );
+        granted_to.extend(id.map(str::to_owned));
+    }
+    granted_to.sort();
+    assert_eq!(granted_to, ["bar", "settings"]);
+}
+
+#[test]
 fn no_capability_is_added_at_runtime() {
     // A capability added in code (Manager::add_capability) would escape the checks above.
     for path in files(&manifest_dir().join("src")) {

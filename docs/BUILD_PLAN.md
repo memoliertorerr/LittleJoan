@@ -108,7 +108,7 @@
 | LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ✅ done — the owner's check passed 2026-10-18 (see LJ40's notes); `v0.2.0-beta.3` released |
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ✅ done |
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ✅ done |
-| LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ⬜ todo |
+| LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ✅ done |
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ⬜ todo |
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ⬜ todo |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ⬜ todo |
@@ -6193,6 +6193,64 @@ notes (with df -h), and commit everything as one commit: "lj-step-43: one keymap
 Joan key, configurable in settings (engine side)". Push and watch CI until every job is green
 (Ground Rule 3; two honest fix attempts, then stop).
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **`keymap.rs`** (pure; 11 tests in `keymap/tests.rs`): `KeyAction` (ids `open-location`,
+  `history`, `translate`, `reload`, `back`, `forward`, `open-in-browser`, `close`; titles as the
+  menu has them; `page_action()` — the one place an action meets a `PageAction`), `Binding` (an
+  accelerator's modifiers unresolved — `CommandOrControl`, `Control`, `Super`, `Alt`, `Shift` —
+  and a `Key`; `parse` takes the global shortcut's names in any case and refuses a repeated or
+  unknown modifier; `accelerator()` writes `CommandOrControl…` back, never the resolved modifier;
+  `mods(platform)` resolves; `display` as Settings shows it), `defaults(platform, action)` (the
+  table test: today's keys exactly), `Keymap::new(platform, overrides)`, `action_for(key, mods)`
+  (exact), `binding`/`bindings`, `bindable`, `validate(platform, overrides, global_shortcut)` with
+  `Problem::message`, and `info()` for `keymap_info`.
+- **`keys.rs`** keeps `Key`, `Mods`, `Platform`, `PageAction` and the origin; `action_for` moved to
+  the keymap, its tests with it. `Key` now covers what the recorder records — letters, digits,
+  F1–F24, arrows, Home / End / PageUp / PageDown, `Equal`, `Minus`, the brackets, `Comma`,
+  `Period`, `Slash`, `Semicolon`, `Quote`, `Backquote`, `Backslash`, the keypad's digits and
+  operators — from `KeyboardEvent.code` names (`from_code` / `code`, round-trip tested), Windows
+  virtual keys (`VK_OEM_*` as on a US keyboard) and GDK key names (with Shift held GDK names the
+  shifted character — `braceleft`, `exclam` — counted as its key on a US layout). Keys match by what
+  they type, as before: on AZERTY Ctrl+W is still the key that types W (Windows' virtual keys,
+  GDK's names and macOS's key equivalents all work that way).
+- **Typing keys, a little wider than the prompt's words:** "Shift alone with a letter or digit" is
+  refused for every key that types (punctuation and the keypad too: Shift+= types "+"); Shift with
+  an arrow, Home/End/Page or an F-key is allowed (they type nothing).
+- **Settings:** `keys` (`settings/keys.rs`: unknown ids and unparsable accelerators dropped alone,
+  kept in the keymap's spelling; the round-trip test keeps them). A typing key from a hand-edited
+  file is never bound (`Keymap::new` ignores an override that isn't `bindable`; the default stays).
+  `save_settings` takes `keys` (optional, like `disabledExtensions`), through LJ42's shared change:
+  `settings::apply_change` refuses a set that fails `keymap::validate` with the first problem's
+  message — and also **a new global shortcut that is one of the keys** (validated whenever the
+  shortcut or the keys change). `AppState::keymap` is built at startup and again by
+  `settings_live::apply`.
+- **The hooks:** Windows' `AcceleratorKeyPressed` (both webviews) and Linux's `key-press-event`
+  ask `AppState::keymap` (a lock per press, held only for the lookup). **macOS:** `menu.rs` builds
+  the page items from the keymap (an action without a key gets none) and logs `menu-keys
+  <action>=<key | none>` in smoke mode; `settings_live` sets the menu again on the main thread
+  when the keys changed (`menu::refresh`). **Close Window is now Little Joan's own item** (the
+  standard `close_window` item's Cmd+W was fixed): its key comes from the keymap, and with Settings
+  in front it closes Settings, as the standard item did. `setup` now builds the state before the
+  menu (the menu needs the keymap).
+- **"Parses as a menu accelerator":** Tauri's menu items parse with muda and silently drop an
+  accelerator that fails, so the test matters — but muda isn't a direct dependency (adding one is a
+  stop condition). The test parses every default and every binding the recorder can produce (each
+  key with five modifier sets) with the global shortcut's parser (global-hotkey 0.8.0), whose
+  modifier and key names are the same as muda 0.20.0's for everything `accelerator()` writes
+  (checked in both crates' sources: muda additionally accepts `Meta` and falls back to
+  `keyboard_types::Code`'s names), and checks each round-trips through `Binding::parse`.
+- **`keymap_info`** (`src-tauri/src/commands/keys.rs`): `{ platform, actions: [{ id, title,
+  binding, defaults }], globalShortcut }`; `allow-keymap-info` in `capabilities/bar.json` and
+  `capabilities/settings.json`, and `capability_tests.rs`' `only_the_bar_and_settings_may_read_the_keymap`.
+- **Ground Rule 25 check:** a search of `ui/` and `src-tauri/src/` for key strings finds only the
+  global shortcut's default, macOS's fixed Settings… (Cmd+,) and Quit (Cmd+Q), the recorder's
+  modifier names and tests.
+- **Smoke** (`scripts/ci/smoke-keymap.mts` + test, after the quick-commands run): `pressShortcut`
+  learned Shift (SendKeys `^+k`, xdotool `ctrl+shift+k`, the Swift script's Command + Shift flags).
+- `npm run verify`: 565 TS tests, 338 Rust tests, clippy clean. Disk: 8.9 GiB free at the start of
+  the step, 8.8 GiB after verify; `.cache/target` 1.6 GB.
 
 ### LJ44 — Settings → Keyboard: record every key; clashes and the system's reserved shortcuts · standard · auto
 

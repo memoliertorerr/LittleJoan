@@ -7,6 +7,7 @@ use tauri::{AppHandle, Runtime};
 
 use crate::bar;
 use crate::extensions;
+use crate::keymap::Keymap;
 use crate::phone_mode;
 use crate::settings::{self, Change, Settings};
 use crate::smoke;
@@ -25,6 +26,8 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, change: &Change) -> Result<Settings
             s.theme_preview = None;
         }
         let before = std::mem::replace(&mut s.settings, next);
+        // The keys follow the settings (LJ43): the native hooks read this keymap.
+        s.keymap = Keymap::new(s.keymap.platform(), &s.settings.keys);
         Ok::<_, String>((
             s.data_dir.clone(),
             before,
@@ -42,6 +45,11 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, change: &Change) -> Result<Settings
     if change.touches_extensions() {
         // Switched-off extensions and Developer mode take effect with the next read.
         extensions::registry::forget();
+    }
+    // macOS: the menu's key equivalents come from the keymap.
+    #[cfg(target_os = "macos")]
+    if before.keys != updated.keys {
+        crate::menu::refresh(app);
     }
     if before.mobile_sites != updated.mobile_sites || before.site_modes != updated.site_modes {
         // Phone mode on or off, or a site's mode: at once on the open page.

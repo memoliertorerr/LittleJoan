@@ -15,10 +15,11 @@ use tauri::{Manager, Runtime, Webview, Window};
 use webkit2gtk::{SettingsExt, WebViewExt};
 
 use crate::bar;
-use crate::keys::{self, Key, Mods, Platform};
+use crate::keys::{Key, Mods, Platform};
 use crate::layout::BAR_HEIGHT;
 use crate::page_actions;
 use crate::phone;
+use crate::state;
 
 /// The bar: a fixed height at the top of the window's box instead of an equal share.
 ///
@@ -146,9 +147,9 @@ pub fn install_page<R: Runtime>(page: &Webview<R>) {
                 .keyval()
                 .name()
                 .map_or(Key::Other, |name| Key::from_gdk_name(name.as_str()));
-            match keys::action_for(key, mods, Platform::Linux) {
+            match state::with(&app, |s| s.keymap.action_for(key, mods)) {
                 Some(action) => {
-                    page_actions::perform(&app, action);
+                    page_actions::perform(&app, action.page_action());
                     Propagation::Stop
                 }
                 None => Propagation::Proceed,

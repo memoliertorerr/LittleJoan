@@ -6,8 +6,10 @@
 
 use serde_json::Value;
 
-use super::{Settings, ThemeMode, disabled_extensions, site_modes, theme};
+use super::{Settings, ThemeMode, disabled_extensions, keys, site_modes, theme};
 use crate::input::SearchEngine;
+use crate::keymap;
+use crate::keys::Platform;
 use crate::translate::is_valid_lang;
 
 /// The parts a change may set; `None` leaves that part alone.
@@ -30,9 +32,17 @@ pub struct Change {
     /// General's per-site list (checked entry by entry).
     pub site_modes: Option<Value>,
     pub show_tray_icon: Option<bool>,
+    /// The user's own keys (LJ43): the whole table, checked by keymap::validate against the global
+    /// shortcut it would sit beside.
+    pub keys: Option<Value>,
 }
 
 impl Change {
+    /// It sets the keys, or the global shortcut they must not take.
+    pub fn touches_keys(&self) -> bool {
+        self.keys.is_some() || self.shortcut.is_some()
+    }
+
     /// It sets the theme or its mode.
     pub fn touches_theme(&self) -> bool {
         self.theme.is_some() || self.theme_mode.is_some()
@@ -89,6 +99,20 @@ pub fn apply_change(current: &Settings, change: &Change) -> Result<Settings, Str
     }
     if let Some(on) = change.show_tray_icon {
         next.show_tray_icon = on;
+    }
+    if let Some(value) = &change.keys {
+        next.keys = keys::from_input(value)
+            .ok_or_else(|| "The keys must be a list of actions and keys.".to_owned())?;
+    }
+    if change.touches_keys() {
+        // Every key valid, none twice, none the global shortcut (keymap.rs).
+        let platform = Platform::current();
+        keymap::validate(platform, &next.keys, &next.shortcut).map_err(|problems| {
+            problems
+                .first()
+                .map_or_else(String::new, |problem| problem.message(platform))
+        })?;
+        next.keys = keys::parse(Some(&serde_json::to_value(&next.keys).unwrap_or_default()));
     }
     Ok(next)
 }
@@ -208,6 +232,59 @@ mod tests {
             .touches_theme()
         );
         assert!(!Change::default().touches_theme());
+    }
+
+    #[test]
+    fn keys_are_checked_whole_against_the_shortcut() {
+        let current = Settings::default();
+        let next = apply_change(
+            &current,
+            &Change {
+                keys: Some(json!({ "history": "cmdorctrl+shift+KeyK", "close": "" })),
+                ..Change::default()
+            },
+        )
+        .expect("valid");
+        assert_eq!(
+            next.keys,
+            std::collections::BTreeMap::from([
+                ("close".to_owned(), String::new()),
+                (
+                    "history".to_owned(),
+                    "CommandOrControl+Shift+KeyK".to_owned()
+                ),
+            ]),
+            "kept in the keymap's spelling"
+        );
+        for bad in [
+            json!({ "history": "CommandOrControl+KeyL" }),
+            json!({ "history": "KeyK" }),
+            json!({ "zoom": "CommandOrControl+KeyZ" }),
+            json!({ "history": 3 }),
+            json!(["history"]),
+        ] {
+            let refused = apply_change(
+                &current,
+                &Change {
+                    keys: Some(bad.clone()),
+                    mobile_sites: Some(false),
+                    ..Change::default()
+                },
+            );
+            assert!(refused.is_err(), "{bad}");
+        }
+        // A new global shortcut may not be one of the keys either.
+        let taken = apply_change(
+            &next,
+            &Change {
+                shortcut: Some("CommandOrControl+Shift+KeyK".into()),
+                ..Change::default()
+            },
+        );
+        assert_eq!(
+            taken,
+            Err("History: that's the shortcut that summons Little Joan.".to_owned())
+        );
     }
 
     #[test]
