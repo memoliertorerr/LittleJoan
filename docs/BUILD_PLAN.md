@@ -2390,6 +2390,25 @@ job is still red after two honest fix attempts, stop and report.
   can hold spaces and parentheses).
 - No app code changed. `npm run verify`: 593 TS tests, 342 Rust tests, clippy clean. Disk: 13 GiB
   free at the start of the phase and after verify; `.cache/target` 1.6 GB.
+- **CI (run 39240281091):** verify and package green everywhere; smoke green on Windows, macOS,
+  `linux` and `linux-scale-2`. **The package jobs:** the AppImage is **156.79 MiB** (164,407,800
+  bytes; v0.1.0's was 142 MiB — about 10 % more, 24.04's newer WebKitGTK, GTK and GStreamer: a
+  note, not a fix), bundles **WebKitGTK 2.52.6** (`usr/lib/libwebkit2gtk-4.1.so.0`, from
+  `libwebkit2gtk-4.1-0 2.52.6-0ubuntu0.24.04.1`) and needs **glibc 2.39**; its `AppRun` is
+  linuxdeploy's bash script (sourcing `linuxdeploy-plugin-gstreamer.sh` and
+  `linuxdeploy-plugin-gtk.sh`, then `exec "$this_dir"/AppRun.wrapped "$@"`), as expected. The
+  `.deb` is 3.0 MiB and its binary needs glibc 2.34. **`linux-appimage` smoke: the app never
+  started** — `little-joan: error while loading shared libraries: libEGL.so.1` (exit 127): an
+  AppImage leaves EGL, GL, GBM, ALSA, X11 and fonts to the system (linuxdeploy's excludelist),
+  every desktop has them, the runner didn't have EGL; and the harness then waited out every step
+  until the job's 45 minutes ran out.
+- **`lj-step-13-fix`:** the AppImage job installs what a desktop has and the AppImage leaves to it
+  (`libegl1 libgl1 libgles2 libgbm1 libegl-mesa0 libgl1-mesa-dri libasound2t64`; still no
+  WebKitGTK), then lists any library that is neither in the AppImage nor on the runner (`ldd` over
+  every ELF file in it; a warning, not a failure: an optional GStreamer plugin may need something
+  no one loads); `smoke.mts` fails at once when the app ends before it logged `started`, instead of
+  timing out step by step. The `.deb`'s comment and the Packaging table now say glibc 2.34 (the
+  binary's real need) instead of 2.35.
 
 ### LJ14 — WebKitGTK older than 2.52: fullscreen the window instead of aborting · strong · auto
 

@@ -686,6 +686,11 @@ const port = (server.address() as AddressInfo).port;
 const child = launch();
 
 await waitFor("started + shortcut", (e) => count(e, "started") > 0 && (count(e, "shortcut-registered") > 0 || count(e, "shortcut-failed") > 0));
+if (count(events(), "started") === 0 && (child.exitCode !== null || child.signalCode !== null)) {
+  // Every later step would only time out (CI's AppImage job once spent its 45 minutes so).
+  console.log("\nSMOKE FAILED:\n- the app ended before it started (its output is above)");
+  process.exit(1);
+}
 await sleep(3000);
 const pid = appPid(child);
 const idleMb = memoryMb(pid);

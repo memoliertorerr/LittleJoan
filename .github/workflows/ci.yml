@@ -111,8 +111,8 @@ jobs:
             os: macos-latest
             bundles: app,dmg
             target: universal-apple-darwin
-          # The .deb on the oldest supported Ubuntu runner: its glibc floor (2.35) lets it install
-          # on Ubuntu 22.04+ and Debian 12+, where it uses the system's WebKitGTK.
+          # The .deb on the oldest supported Ubuntu runner (its binary needs glibc 2.34), so it
+          # installs on Ubuntu 22.04+ and Debian 12+, where it uses the system's WebKitGTK.
           - name: linux
             os: ubuntu-22.04
             bundles: deb
@@ -352,20 +352,41 @@ jobs:
           sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11 gdb
           echo "APP=$(command -v little-joan)" >> "$GITHUB_ENV"
 
-      # As a user gets it: the release's file name (no space), made executable. gdb can't follow
-      # the AppImage's runtime into the app (AppRun is a shell script whose subshells it would
-      # follow instead), so smoke.mts attaches gdb to the app once it runs: ptrace beyond a
-      # process's own children must be allowed on this runner.
+      # As a user gets it: the release's file name (no space), made executable. An AppImage leaves
+      # some libraries to the system — every desktop has them (linuxdeploy's excludelist: EGL and
+      # GL with Mesa's drivers, GBM, ALSA, X11, fonts …); this runner lacks EGL, so those are
+      # installed (no WebKitGTK), and anything still missing is listed. gdb can't follow the
+      # AppImage's runtime into the app (AppRun is a shell script whose subshells it would follow
+      # instead), so smoke.mts attaches gdb to the app once it runs: ptrace beyond a process's own
+      # children must be allowed on this runner.
       - name: Install (Linux, the AppImage)
         if: matrix.artifact == 'linux-appimage'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xdotool imagemagick openbox dbus-x11 gdb
+          sudo apt-get install -y xvfb xdotool imagemagick openbox dbus-x11 gdb \
+            libegl1 libgl1 libgles2 libgbm1 libegl-mesa0 libgl1-mesa-dri libasound2t64
           image="$RUNNER_TEMP/appimage/LittleJoan-$(node -p 'require("./package.json").version')-linux-x86_64.AppImage"
           mkdir -p "$(dirname "$image")"
           cp installers/*.AppImage "$image"
           chmod +x "$image"
           ls -l "$image"
+          check="$RUNNER_TEMP/appimage-check" && rm -rf "$check" && mkdir -p "$check"
+          (cd "$check" && "$image" --appimage-extract >/dev/null)
+          root="$check/squashfs-root"
+          missing=""
+          while IFS= read -r -d '' file; do
+            if [ "$(head -c 4 "$file" | tr -d '\177\000')" = ELF ]; then
+              gaps="$(LD_LIBRARY_PATH="$root/usr/lib:$root/usr/lib/x86_64-linux-gnu" ldd "$file" 2>/dev/null | grep 'not found' | tr -s ' \t\n' ' ' || true)"
+              if [ -n "$gaps" ]; then missing+="${file#"$root"/}:$gaps"$'\n'; fi
+            fi
+          done < <(find "$root/usr" -type f -print0)
+          if [ -n "$missing" ]; then
+            printf 'Not in the AppImage nor on this runner:\n%s' "$missing"
+            echo "::warning::The AppImage needs libraries this runner lacks (the step's log lists them)"
+          else
+            echo "Every library the AppImage's files need is in it or on this runner."
+          fi
+          rm -rf "$check"
           if [ -e /proc/sys/kernel/yama/ptrace_scope ]; then sudo sysctl -w kernel.yama.ptrace_scope=0; fi
           echo "APP=$image" >> "$GITHUB_ENV"
 
