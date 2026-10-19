@@ -2623,6 +2623,19 @@ true`; the 24.04 and AppImage entries never log `fullscreen-off`.
   (Landmines; Deferred follow-ups: option (e) done).
 - `npm run verify`: 599 TS tests, 343 Rust tests, clippy clean (the Linux code compiles only in
   CI's verify).
+- **CI (run 39258604008): all thirteen jobs green on the first try**, the new `smoke (linux-22.04)`
+  among them. On 22.04's WebKitGTK 2.50.4 every page window logged `fullscreen-off 2.50.4`, nothing
+  logged `fullscreen true` or `element-fullscreen true`, and every fullscreen-run path reported
+  `entered=0` — the element paths with `no-fullscreen-api` (the page has no Fullscreen API with the
+  setting off), the phone player's iOS route with `enter-error:invalidstateerror` —, while the rest of
+  the smoke passed there as on 24.04: codecs H.264 / VP9 / AV1 through MSE, no helper left after
+  hibernating, logins, history, Settings, the extension runtime's security checks, the bundled
+  extensions, themes, resize, site modes, quick commands, the keymap, the tray. Own memory at rest
+  21.8 MB. No other job logged `fullscreen-off`. **Screenshots** (`linux-22.04`): `fullscreen.png` —
+  the window as it was, 480×640 with the toolbar (the Phone pill) above the smoke page's "Go
+  fullscreen", the click having changed nothing; `fs/element-720.png` — the 720 px window with
+  "Element fullscreen" and "Phone player" in place, the page still `ready`. The run's annotations
+  don't mention the ubuntu-22.04 image's retirement.
 
 ### LJ15 — Downloads · strong · auto
 
