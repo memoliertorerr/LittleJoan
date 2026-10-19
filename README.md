@@ -26,7 +26,7 @@ affiliated with or endorsed by The Browser Company.
 > has everything v0.2 adds so far — start at login, a first-launch welcome, the Little Arc-style
 > command bar and toolbar, logins that survive closing, local history, themes, extensions
 > (experimental) with twelve bundled ones, smooth resizing, and phone or desktop per site. Every build is smoke-tested in CI on all three systems
-> (Linux on Ubuntu 24.04); none is code-signed yet. See the known issue under Fullscreen video.
+> (Linux: the `.deb` and the AppImage, on Ubuntu 24.04); none is code-signed yet. See the known issue under Fullscreen video.
 > The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
@@ -54,12 +54,14 @@ aren't code-signed yet, so the first launch shows a warning; the steps below get
   Security**. (Right-click → Open no longer gets past this on macOS 15 and later.) Little Joan
   lives in the menu bar, with no Dock icon.
 - **Linux (x86_64):**
-  - Debian/Ubuntu: `sudo apt install ./LittleJoan-<version>-linux-amd64.deb` (about 3 MB; it
-    pulls in WebKitGTK and the GStreamer plugins that video needs). Ubuntu 24.04 or later is
-    recommended: on 22.04 the system WebKitGTK crashes when a page goes fullscreen.
-  - Elsewhere: `chmod +x LittleJoan-<version>-linux-x86_64.AppImage` and run it (about 150 MB;
-    it carries its own WebKitGTK and media framework). It currently bundles the WebKitGTK version
-    with the fullscreen crash, so prefer the `.deb` where you can.
+  - Debian/Ubuntu (Ubuntu 22.04 or later, Debian 12 or later):
+    `sudo apt install ./LittleJoan-<version>-linux-amd64.deb` (about 3 MB; it pulls in the
+    system's WebKitGTK and the GStreamer plugins that video needs). On Ubuntu 22.04 the system
+    WebKitGTK crashes when a page goes fullscreen (see Fullscreen video).
+  - Elsewhere, on a distribution with glibc 2.39 or later (Ubuntu 24.04+, Debian 13, Fedora 40+
+    and other current ones): `chmod +x LittleJoan-<version>-linux-x86_64.AppImage` and run it
+    (about 150 MB; it carries its own WebKitGTK 2.52 and media framework, so fullscreen video
+    works wherever it runs). Older systems: use the `.deb`.
   - The tray icon needs an AppIndicator host (on GNOME, the "AppIndicator and
     KStatusNotifierItem Support" extension).
 - **Check a download (optional):** each release includes `SHA256SUMS.txt`. Run
@@ -178,7 +180,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   `gstreamer1.0-libav` on Debian/Ubuntu); the `.deb` installs them.
   **Known issue:** the WebKitGTK shipped with Ubuntu 22.04 at the moment (2.50.4) crashes when
   any page goes fullscreen — reproduced in testing without Little Joan. Ubuntu 24.04's
-  (2.52) works. The AppImage currently bundles the 22.04 version.
+  (2.52) works, and the AppImage brings its own 2.52.
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),

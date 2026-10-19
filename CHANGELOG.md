@@ -36,6 +36,13 @@ All notable changes to Little Joan are recorded here. The format follows
 - The command bar's rows for phone or desktop per site are now **Desktop site**, **Phone site**
   and **Automatic**, "this site", the current one marked ✓ (they were "Request desktop site",
   "Request phone site" and "Automatic for this site").
+- **The AppImage is built on Ubuntu 24.04** and carries WebKitGTK 2.52, so it now needs glibc
+  2.39 or later (Ubuntu 24.04+, Debian 13, Fedora 40+). On Ubuntu 22.04 and Debian 12, use the
+  `.deb`, which is still built on 22.04 and uses the system's WebKitGTK.
+
+### Fixed
+- **Fullscreen video in the AppImage:** it bundled Ubuntu 22.04's WebKitGTK 2.50, which crashes
+  when a page goes fullscreen, on every distribution it ran on.
 
 ## [0.2.0-beta.3] — 2026-10-18
 

@@ -111,11 +111,18 @@ jobs:
             os: macos-latest
             bundles: app,dmg
             target: universal-apple-darwin
-          # The oldest supported Ubuntu runner: an older glibc makes the .deb and AppImage run
-          # on more distributions.
+          # The .deb on the oldest supported Ubuntu runner: its glibc floor (2.35) lets it install
+          # on Ubuntu 22.04+ and Debian 12+, where it uses the system's WebKitGTK.
           - name: linux
             os: ubuntu-22.04
-            bundles: deb,appimage
+            bundles: deb
+            target: ""
+          # The AppImage carries the WebKitGTK of the machine that built it. 22.04's (2.50.4)
+          # aborts on element fullscreen (the plan's Landmines), 24.04's (2.52) doesn't — so it is
+          # built here, and its glibc floor rises to 2.39 (Ubuntu 24.04+, Debian 13, Fedora 40+).
+          - name: linux-appimage
+            os: ubuntu-24.04
+            bundles: appimage
             target: ""
     runs-on: ${{ matrix.os }}
     defaults:
@@ -191,8 +198,50 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Inspect the .deb
-        if: runner.os == 'Linux'
-        run: dpkg-deb -I bundles/*.deb
+        if: matrix.name == 'linux'
+        run: |
+          deb="$(ls bundles/*.deb | head -1)"
+          dpkg-deb -I "$deb"
+          # The newest glibc symbol version the binary needs: its floor (WebKitGTK is the system's).
+          dir="$RUNNER_TEMP/deb" && rm -rf "$dir" && dpkg-deb -x "$deb" "$dir"
+          glibc="$(grep -hoa 'GLIBC_2\.[0-9]*' "$dir/usr/bin/little-joan" | sort -uV | tail -1)"
+          echo "glibc floor: $glibc"
+          echo "The .deb needs ${glibc/_/ } or later (it uses the system's WebKitGTK)." >> "$GITHUB_STEP_SUMMARY"
+
+      # What the AppImage really carries: its WebKitGTK (the bundled library asked for its own
+      # version), its glibc floor (the newest glibc symbol version any of its files needs), and
+      # how it starts (AppRun). A bundled WebKitGTK older than 2.52 fails the job: 2.50 aborts on
+      # element fullscreen.
+      - name: Inspect the AppImage
+        if: matrix.name == 'linux-appimage'
+        run: |
+          image="$PWD/$(ls bundles/*.AppImage | head -1)"
+          chmod +x "$image"
+          dir="$RUNNER_TEMP/appimage" && rm -rf "$dir" && mkdir -p "$dir"
+          (cd "$dir" && "$image" --appimage-extract >/dev/null)
+          root="$dir/squashfs-root"
+          file "$root/AppRun"
+          if file "$root/AppRun" | grep -q text; then head -n 40 "$root/AppRun"; fi
+          ls "$root/apprun-hooks" 2>/dev/null || true
+          lib="$(find "$root" -name 'libwebkit2gtk-4.1.so.*' -type f | head -1)"
+          test -n "$lib"
+          echo "bundled: ${lib#"$root"/}"
+          version="$(python3 -I -c 'import ctypes, sys
+          lib = ctypes.CDLL(sys.argv[1])
+          print(f"{lib.webkit_get_major_version()}.{lib.webkit_get_minor_version()}.{lib.webkit_get_micro_version()}")' "$lib")"
+          source_package="$(dpkg-query -W -f='${Package} ${Version}' libwebkit2gtk-4.1-0)"
+          glibc="$(grep -rhoa 'GLIBC_2\.[0-9]*' "$root" | sort -uV | tail -1)"
+          echo "WebKitGTK $version (from $source_package); glibc floor $glibc"
+          {
+            echo
+            echo "The AppImage bundles **WebKitGTK $version** (\`$(basename "$lib")\`, from $source_package)"
+            echo "and needs ${glibc/_/ } or later."
+          } >> "$GITHUB_STEP_SUMMARY"
+          minor="$(echo "$version" | cut -d. -f2)"
+          if [ "$(echo "$version" | cut -d. -f1)" -lt 2 ] || { [ "$(echo "$version" | cut -d. -f1)" -eq 2 ] && [ "$minor" -lt 52 ]; }; then
+            echo "::error::The AppImage bundles WebKitGTK $version; older than 2.52 aborts on element fullscreen"
+            exit 1
+          fi
 
       - name: Inspect the macOS app
         if: runner.os == 'macOS'
@@ -244,6 +293,16 @@ jobs:
             os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
             screen: 2560x1600x24
             app_env: GDK_SCALE=2
+          # The AppImage (built on 24.04, with its own WebKitGTK 2.52), through the same smoke as
+          # `linux`. The runners have no FUSE, so it extracts itself and runs from there
+          # (APPIMAGE_EXTRACT_AND_RUN); every launch, the smoke's second instances included, shares
+          # that folder, and NO_CLEANUP stops a second instance from deleting it as it exits while
+          # the first still runs from it. Its glibc floor is 2.39: never on linux_runner's 22.04.
+          - name: linux-appimage
+            artifact: linux-appimage
+            os: ubuntu-24.04
+            screen: 1280x800x24
+            app_env: APPIMAGE_EXTRACT_AND_RUN=1 NO_CLEANUP=1
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -287,11 +346,28 @@ jobs:
           echo "APP=$app/Contents/MacOS/little-joan" >> "$GITHUB_ENV"
 
       - name: Install (Linux, .deb through apt)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.artifact == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11 gdb
           echo "APP=$(command -v little-joan)" >> "$GITHUB_ENV"
+
+      # As a user gets it: the release's file name (no space), made executable. gdb can't follow
+      # the AppImage's runtime into the app (AppRun is a shell script whose subshells it would
+      # follow instead), so smoke.mts attaches gdb to the app once it runs: ptrace beyond a
+      # process's own children must be allowed on this runner.
+      - name: Install (Linux, the AppImage)
+        if: matrix.artifact == 'linux-appimage'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xdotool imagemagick openbox dbus-x11 gdb
+          image="$RUNNER_TEMP/appimage/LittleJoan-$(node -p 'require("./package.json").version')-linux-x86_64.AppImage"
+          mkdir -p "$(dirname "$image")"
+          cp installers/*.AppImage "$image"
+          chmod +x "$image"
+          ls -l "$image"
+          if [ -e /proc/sys/kernel/yama/ptrace_scope ]; then sudo sysctl -w kernel.yama.ptrace_scope=0; fi
+          echo "APP=$image" >> "$GITHUB_ENV"
 
       - name: Smoke test (Windows, macOS)
         if: runner.os != 'Linux'
@@ -313,9 +389,10 @@ jobs:
             'if [ "$LJ_WM" != none ]; then openbox & sleep 2; fi; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
 
       # Diagnostics: the same click in a bare WebKitGTK 4.1 window built with PyGObject (no Tauri,
-      # wry, or tao), to tell an engine crash from an embedding one.
+      # wry, or tao), to tell an engine crash from an embedding one. The system's WebKitGTK, so only
+      # where the .deb runs.
       - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
-        if: ${{ !cancelled() && runner.os == 'Linux' && inputs.linux_plain_webkit_check }}
+        if: ${{ !cancelled() && matrix.artifact == 'linux' && inputs.linux_plain_webkit_check }}
         run: |
           sudo apt-get install -y python3-gi gir1.2-webkit2-4.1
           cat > /tmp/plain.html <<'HTML'
@@ -349,15 +426,6 @@ jobs:
             if kill -0 "$app" 2>/dev/null; then echo "BARE WEBKITGTK: still running after the click"; else wait "$app"; echo "BARE WEBKITGTK: exited with status $?"; fi
             wait "$app" 2>/dev/null || true
           '
-
-      - name: AppImage starts (Linux)
-        if: runner.os == 'Linux'
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: |
-          image="$(ls installers/*.AppImage | head -1)"
-          chmod +x "$image"
-          xvfb-run -a dbus-run-session -- node scripts/ci/smoke.mts --app "$image" --out test-results/smoke --started-only
 
       - uses: actions/upload-artifact@v7
         if: always()

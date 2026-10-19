@@ -78,7 +78,7 @@
 | LJ10.3 | *(added mid-plan 2026-10-17)* Page size at every scale factor; phone mode for narrow windows | strong | auto | ✅ done |
 | LJ11 | *(v0.2)* Start at login: tauri-plugin-autostart, a Settings switch, `--start-at-login on\|off`, the OS entry checked in smoke | strong | auto | ✅ done |
 | LJ12 | *(v0.2)* First launch: the window opens once with a welcome (shortcut, where the icon is, start at login) | standard | auto | ✅ done |
-| LJ13 | *(v0.2)* AppImage built on Ubuntu 24.04 (WebKitGTK 2.52); the AppImage gets the full smoke | strong | auto | ⬜ todo |
+| LJ13 | *(v0.2)* AppImage built on Ubuntu 24.04 (WebKitGTK 2.52); the AppImage gets the full smoke | strong | auto | ✅ done |
 | LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⬜ todo |
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ⬜ todo |
 | LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ⬜ todo |
@@ -2351,6 +2351,45 @@ fully". Push, open the phase-7 PR into main as a draft, and watch CI until every
 Download linux-appimage's fullscreen.png into test-results/ci/, look at it, then delete it. If a
 job is still red after two honest fix attempts, stop and report.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **Package** (`.github/workflows/ci.yml`): `linux` (ubuntu-22.04) builds only the `.deb` and
+  `linux-appimage` (ubuntu-24.04) only the `.AppImage`, each with its own artifact
+  (`little-joan-linux`, `little-joan-linux-appimage`) and cache key (`package-<name>-…`, as before).
+  The `.deb` job adds its binary's glibc floor to the summary (the newest `GLIBC_` symbol version in
+  `usr/bin/little-joan`); the AppImage job extracts the AppImage it built (`--appimage-extract`),
+  prints how it starts (`AppRun` and its hooks), asks the bundled `libwebkit2gtk-4.1.so.*` for its
+  own version (`webkit_get_major/minor/micro_version` through Python's ctypes, so it is the
+  library that ships, not just the build machine's package — that package is named too) and greps
+  every file for the newest `GLIBC_` version (the floor). **One addition to the prompt:** a bundled
+  WebKitGTK older than 2.52 fails the job — the point of the step, kept from regressing silently.
+- **Smoke:** a matrix entry `linux-appimage` (ubuntu-24.04 always — not `linux_runner`, whose 22.04
+  can't run a glibc-2.39 build) runs the whole `smoke.mts` against the AppImage, copied to the
+  release's file name (`LittleJoan-<version>-linux-x86_64.AppImage`, no space) and made executable;
+  only the X11 test tools are installed, no WebKitGTK. The launch-only "AppImage starts" step is
+  gone; the bare-WebKitGTK diagnostics run only where the `.deb` runs (they test the system's
+  engine). `installers_from_run` still fetches `little-joan-<artifact>` per entry (a run from before
+  this step has no `little-joan-linux-appimage`, so its AppImage entry would fail there).
+- **Two things the prompt didn't foresee, both about how an AppImage runs without FUSE:**
+  `APPIMAGE_EXTRACT_AND_RUN=1` makes the runtime extract into `$TMPDIR/appimage_extracted_<md5>`,
+  run `AppRun` as its child, wait — and then **delete that folder**. Every second instance (the
+  smoke's remote control: `--show`, `--size`, `--hide` …) shares the folder, so the first one to
+  exit would delete the running app's files. `NO_CLEANUP=1` (the runtime's own switch) keeps it.
+  And **gdb can't follow the runtime into the app**: with plugin hooks (GTK, GStreamer) linuxdeploy
+  writes `AppRun` as a shell script that sources them and then `exec`s the app, and gdb would
+  follow its `$(…)` subshells instead (the package job prints `AppRun`, so CI shows what it is). So for the AppImage `smoke.mts` attaches gdb (`gdb -p <pid> -ex continue`,
+  then the same backtraces) once the app runs, and the job sets `kernel.yama.ptrace_scope=0` on
+  the runner so gdb may attach to a process that isn't its child. A crash in the first moment,
+  before gdb is attached, shows only as the runtime's exit status.
+- **Which process is the app** (`scripts/ci/smoke-linux.mts` + test, new): the newest process in the
+  launch's tree whose executable (`/proc/<pid>/exe`) is a file called `little-joan` — gdb's child for
+  the `.deb`, the runtime's child for the AppImage (its process name follows the `AppRun.wrapped`
+  link it was run through, so the old `pgrep -x little-joan` would miss it). Second instances are
+  started apart, never in that tree. `/proc/<pid>/stat` is read after the last `)` (a process name
+  can hold spaces and parentheses).
+- No app code changed. `npm run verify`: 593 TS tests, 342 Rust tests, clippy clean. Disk: 13 GiB
+  free at the start of the phase and after verify; `.cache/target` 1.6 GB.
 
 ### LJ14 — WebKitGTK older than 2.52: fullscreen the window instead of aborting · strong · auto
 
@@ -7594,8 +7633,10 @@ Populated from real friction, not speculation:
   enters element fullscreen** — in CI under Xvfb, with or without a window manager, with the
   DMABUF renderer or compositing disabled, and in a bare PyGObject WebKitGTK window with no
   Tauri at all. WebKitGTK 2.52.6 (Ubuntu 24.04) works. The Linux smoke therefore runs the
-  `.deb` on 24.04; the AppImage (built on 22.04) bundles 2.50.4. Whether real 22.04 desktops
-  crash too is a human check.
+  `.deb` on 24.04. *(LJ13)* The AppImage bundles the WebKitGTK of the machine that builds it, so
+  it is built on ubuntu-24.04 since LJ13 (2.52; the package job fails on anything older), and its
+  glibc floor is 2.39; the `.deb`, still built on 22.04, uses whatever the system has. Whether
+  real 22.04 desktops crash too is a human check.
 - **On Linux, tao doesn't see WebKitGTK's fullscreen.** WebKitGTK fullscreens the GTK window
   itself; `Window::is_fullscreen()` (tao's own state) stays false. Read the GDK window state
   (`platform::is_fullscreen`).

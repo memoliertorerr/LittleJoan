@@ -352,6 +352,8 @@ scripts/ci/smoke-keymap.mts        CI: the keymap run (History on Ctrl/Cmd+Shift
 scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a second launch, Quit
                                    from the command bar, a Wayland session) and its rules;
                                    unit-tested
+scripts/ci/smoke-linux.mts         CI: which process is the app on Linux (under gdb, in the
+                                   AppImage), read from /proc (pure parts unit-tested)
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
                                    (under a desktop agent a 600 px minimum width, like most
                                    desktop pages, unless ?fits=1; its report says `uamobile=`);
@@ -1212,7 +1214,8 @@ Installers are built in CI only (`package` job), never on a developer machine:
 |---|---|---|---|
 | Windows | windows-latest | `tauri build --bundles nsis` | `Little Joan_<v>_x64-setup.exe` — per-user install (no admin), downloads the WebView2 runtime if missing |
 | macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+ |
-| Linux | ubuntu-22.04 | `tauri build --bundles deb,appimage` | `.deb` (depends on the GStreamer plugins for video) and `.AppImage` (bundles the media framework) |
+| Linux (`linux`) | ubuntu-22.04 | `tauri build --bundles deb` | `.deb` — depends on the system's WebKitGTK and the GStreamer plugins for video; built on 22.04 so its glibc floor is 2.35 (Ubuntu 22.04+, Debian 12+) |
+| Linux (`linux-appimage`) | ubuntu-24.04 | `tauri build --bundles appimage` | `.AppImage` — bundles the WebKitGTK of the machine that built it (24.04's 2.52: 22.04's 2.50 aborts on element fullscreen) and the media framework; glibc floor 2.39 (Ubuntu 24.04+, Debian 13, Fedora 40+) |
 
 The release profile optimizes for size (`opt-level = "s"`, LTO, one codegen unit, stripped)
 but keeps `panic = "unwind"`: on macOS, wry catches the Objective-C exception WebKit raises when
@@ -1227,10 +1230,14 @@ and pushes to `main`:
 
 - **verify** — `npm run verify` on Ubuntu, Windows, and macOS. It is the only compiler for the
   Windows- and Linux-specific code paths.
-- **package** — the installers above, uploaded as artifacts `little-joan-<os>` (14 days), with
-  their sizes in the job summary.
+- **package** — the installers above, uploaded as artifacts `little-joan-<name>` (14 days:
+  `windows`, `macos`, `linux` — the `.deb` —, `linux-appimage`), with their sizes in the job
+  summary. The Linux jobs also write the glibc floor (the newest `GLIBC_` symbol version the
+  `.deb`'s binary, or any file in the AppImage, needs), and the AppImage job the WebKitGTK it
+  bundles — the bundled library asked for its own version through `webkit_get_*_version`; older
+  than 2.52 fails the job — and how it starts (its `AppRun`).
 - **smoke** — installs each installer the way a user would (NSIS `/S`; copy the `.app` out of
-  the mounted `.dmg`; `apt install ./….deb`) and runs `scripts/ci/smoke.mts` against the
+  the mounted `.dmg`; `apt install ./….deb`; the AppImage made executable) and runs `scripts/ci/smoke.mts` against the
   installed binary: launch with `LITTLEJOAN_SMOKE_LOG`, `--show` (the command bar covers the
   window), `--show http://127.0.0.1:<port>/smoke.html` (it closes: the toolbar above the page),
   click the screen centre (the page's fullscreen button),
@@ -1393,11 +1400,18 @@ and pushes to `main`:
   `summary.json` (memory — resident and the app's own: private bytes / private dirty /
   physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs,
   the login entries found)
-  are uploaded as `smoke-<os>`. Linux runs under `xvfb-run` + `dbus-run-session`
+  are uploaded as `smoke-<name>`. Linux runs under `xvfb-run` + `dbus-run-session`
   (single-instance needs a session bus) with openbox, and under gdb so a crash leaves a
-  backtrace; the AppImage gets a launch check. A second Linux job (`linux-scale-2`) runs the
+  backtrace. A second Linux job (`linux-scale-2`) runs the
   same test at **scale factor 2** (`GDK_SCALE=2` on a 2560×1600 Xvfb screen); the Windows and
-  macOS runners can't change their display scale.
+  macOS runners can't change their display scale. A third (`linux-appimage`, ubuntu-24.04) runs
+  the whole test against the **AppImage**, under the release's file name: the runners have no
+  FUSE, so it extracts itself and runs from there (`APPIMAGE_EXTRACT_AND_RUN=1`), every launch —
+  the second instances too — sharing that folder (`NO_CLEANUP=1`, or a second instance would
+  delete it as it exits while the first still runs from it). Its runtime starts the app through
+  `AppRun`, a shell script, which gdb can't follow, so `smoke.mts` attaches gdb to the app once it
+  runs (`smoke-linux.mts` finds it in `/proc`: the newest `little-joan` in the launch's process
+  tree; the job allows ptrace beyond a process's own children).
 - **Smoke-only reruns** (manual `workflow_dispatch`, for diagnosing without rebuilding):
   `installers_from_run` (smoke the installers of an earlier run; skips verify and package),
   `extra_env` (e.g. `WEBKIT_DISABLE_DMABUF_RENDERER=1`), `linux_runner` (`ubuntu-24.04`),

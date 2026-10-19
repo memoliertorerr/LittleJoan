@@ -93,6 +93,7 @@ import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } f
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
+import { findApp, listProcs } from "./smoke-linux.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
 import {
   keyboardProblemFailures,
@@ -576,20 +577,47 @@ function serve(): Promise<Server> {
   return new Promise((done) => server.listen(0, "127.0.0.1", () => done(server)));
 }
 
-/** Launches the app; with LJ_SMOKE_GDB=1 (Linux) it runs under gdb so a crash prints a backtrace. */
+/** The AppImage (LJ13): its runtime starts the app as a child (smoke-linux.mts). */
+const appImage = os === "linux" && app.endsWith(".AppImage");
+/** gdb's commands once the app runs: a crash prints a backtrace. */
+const GDB_AFTER = ["-ex", "bt 40", "-ex", "thread apply all bt 8"];
+
+/**
+ * Launches the app; with LJ_SMOKE_GDB=1 (Linux) it runs under gdb so a crash prints a backtrace —
+ * the AppImage's app gets gdb attached once it runs (attachGdb).
+ */
 function launch(withEnv: NodeJS.ProcessEnv = env): ChildProcess {
   const underGdb = os === "linux" && process.env.LJ_SMOKE_GDB === "1";
-  const [command, args] = underGdb
-    ? [
-        "gdb",
-        ["-q", "-batch", "-ex", "run", "-ex", "bt 40", "-ex", "thread apply all bt 8", "--args", app as string],
-      ]
-    : [app as string, []];
+  const [command, args] =
+    underGdb && !appImage ? ["gdb", ["-q", "-batch", "-ex", "run", ...GDB_AFTER, "--args", app as string]] : [app as string, []];
   const child = spawn(command, args, { env: withEnv, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
   child.stderr?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
   child.on("exit", (code, signal) => console.log(`app exited with code ${code} signal ${signal}`));
+  if (underGdb && appImage) {
+    void attachGdb(child);
+  }
   return child;
+}
+
+/**
+ * The AppImage under gdb: gdb can't follow its runtime into the app (AppRun's subshells come
+ * first), so it attaches to the app once that runs (CI allows ptrace beyond a process's children
+ * for this, ci.yml). A crash before that has no backtrace; the runtime's exit status still shows it.
+ */
+async function attachGdb(runtime: ChildProcess): Promise<void> {
+  for (let waited = 0; waited < 30_000 && runtime.exitCode === null && runtime.signalCode === null; waited += 100) {
+    const pid = runtime.pid === undefined ? undefined : findApp(listProcs(), runtime.pid);
+    if (pid !== undefined) {
+      const gdb = spawn("gdb", ["-q", "-batch", "-p", String(pid), "-ex", "continue", ...GDB_AFTER], { stdio: ["ignore", "pipe", "pipe"] });
+      gdb.stdout.on("data", (chunk: Buffer) => process.stdout.write(`[gdb] ${chunk.toString()}`));
+      gdb.stderr.on("data", (chunk: Buffer) => process.stdout.write(`[gdb] ${chunk.toString()}`));
+      console.log(`gdb attached to the AppImage's app (pid ${pid})`);
+      return;
+    }
+    await sleep(100);
+  }
+  console.log("(gdb: the AppImage's app never showed up)");
 }
 
 function alive(pid: number): boolean {
@@ -635,11 +663,13 @@ async function exited(pid: number, timeoutMs: number): Promise<boolean> {
   return gone;
 }
 
-/** The pid of the app itself (under gdb, the debuggee is gdb's child). */
+/**
+ * The pid of the app itself: on Linux the newest little-joan in the launched process's tree (gdb's
+ * child; the AppImage runtime's — smoke-linux.mts), elsewhere the launched process.
+ */
 function appPid(child: ChildProcess): number {
-  if (os === "linux" && process.env.LJ_SMOKE_GDB === "1") {
-    const found = run("pgrep", ["-n", "-x", "little-joan"]).trim();
-    return Number(found) || -1;
+  if (os === "linux" && child.pid !== undefined) {
+    return findApp(listProcs(), child.pid) ?? -1;
   }
   return child.pid ?? -1;
 }
