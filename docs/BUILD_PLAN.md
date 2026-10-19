@@ -6464,6 +6464,11 @@ the player's centre from that line (2080,1453), below the real page (y 260–138
 takes the latest `page-screen` whose width is the page's own (`pageScreenFor`, falling back to the
 latest; a test with the logged lines). The rule is unchanged — the click must reach the page and
 the page must report. The app's race is recorded under Deferred follow-ups.
+**CI for fix2 (run 39226938206): all ten jobs green after one re-run** — linux-scale-2 passed its
+fullscreen run; macOS's smoke first failed LJ29's race step (the panel's load came 5 s after
+`extension-opened hello`, no file was served to it and hello never reported; every racer was
+still refused), a step this phase doesn't touch that passed in the six earlier runs; `gh run
+rerun --failed` once: green (Deferred follow-ups).
 - **CI for the fix (run 39219919487): all ten jobs green.** macOS's Keyboard tab read
   `system-shortcuts 19 keys=2` — exactly the runner's export (`systemShortcutFailures` passed);
   `settings-keyboard-problem.png` now shows "Hyper+Nope" as written with "That isn't a shortcut
@@ -7539,6 +7544,11 @@ and where, then stop.
   webviews, a stale layout would size the page wrong until the next `Resized` — not seen in CI
   there. Option: lay out once more on the main thread after a fullscreen change settles (read the
   size then), or drop a layout whose size isn't the window's current one.
+- **LJ29's race step flaked once on macOS** (run 39226938206, phase 20; green on a re-run): with the
+  racing page alive, the panel's load came 5 s after `extension-opened hello`, the start-page
+  detour didn't show, no `ljext` request was answered for the panel, and hello never reported — the
+  security rules held (every racer refused). If it recurs, look at the main thread's load during
+  the race (the detour's 1 s limit) first.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
