@@ -20,30 +20,31 @@ affiliated with or endorsed by The Browser Company.
 </p>
 <p align="center"><sub>Screenshots from the CI smoke test on macOS (its test page and sample data only).</sub></p>
 
-> **Status:** [v0.1.0](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.1.0) is the
-> latest release; the
-> [v0.2.0-beta.3 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.3)
-> has everything v0.2 adds so far — start at login, a first-launch welcome, the Little Arc-style
-> command bar and toolbar, logins that survive closing, local history, themes, extensions
-> (experimental) with twelve bundled ones, smooth resizing, and phone or desktop per site. Every build is smoke-tested in CI on all three systems
-> (Linux: the `.deb` on Ubuntu 24.04 and 22.04 and the AppImage on 24.04, on x86_64 and — from
-> v0.2.0 — ARM64); none is code-signed yet. See the known issue under Fullscreen video.
+> **Status:** [v0.2.0](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0) is the
+> latest release — start at login and a first-launch welcome, the Little Arc-style command bar and
+> toolbar, logins that survive closing, local history, themes, extensions (experimental) with
+> twelve bundled ones, smooth resizing, phone or desktop per site, quick commands, keys of your
+> own, downloads, page zoom, the shortcut under Wayland, and Linux ARM64 builds (the
+> [changelog](CHANGELOG.md) has everything, and the known issues). Every build is smoke-tested in
+> CI on all three systems (Linux: the `.deb` on Ubuntu 24.04 and 22.04 and the AppImage on 24.04,
+> on x86_64 and ARM64); none is code-signed yet. See the known issue under Fullscreen video.
 > The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## Install
 
 Download the installer for your system from the
-**[latest release](https://github.com/memoliertorerr/LittleJoan/releases/latest)**. The builds
-aren't code-signed yet, so the first launch shows a warning; the steps below get past it.
+**[latest release](https://github.com/memoliertorerr/LittleJoan/releases/latest)** — v0.2.0, with
+the file names below. The builds aren't code-signed yet, so the first launch shows a warning; the
+steps below get past it.
 (Development builds of every change are also kept as artifacts of the
 [CI workflow](https://github.com/memoliertorerr/LittleJoan/actions/workflows/ci.yml).)
 
-- **Windows 10/11 (x64):** `LittleJoan-<version>-windows-x64-setup.exe` (about 2 MB). It
+- **Windows 10/11 (x64):** `LittleJoan-0.2.0-windows-x64-setup.exe` (about 2 MB). It
   installs for your user only, no admin needed. Windows SmartScreen may warn about an unknown
   publisher: choose **More info → Run anyway**. Windows 10 without the WebView2 runtime gets it
   during setup.
-- **macOS 12.3 or later (Intel or Apple silicon):** `LittleJoan-<version>-macos-universal.dmg`
+- **macOS 12.3 or later (Intel or Apple silicon):** `LittleJoan-0.2.0-macos-universal.dmg`
   (about 5 MB). Open it and drag Little Joan to Applications. It isn't notarized, so macOS
   blocks the first launch. Either run this once:
 
@@ -56,22 +57,21 @@ aren't code-signed yet, so the first launch shows a warning; the steps below get
   lives in the menu bar, with no Dock icon.
 - **Linux (x86_64):**
   - Debian/Ubuntu (Ubuntu 22.04 or later, Debian 12 or later):
-    `sudo apt install ./LittleJoan-<version>-linux-amd64.deb` (about 3 MB; it pulls in the
+    `sudo apt install ./LittleJoan-0.2.0-linux-amd64.deb` (about 3 MB; it pulls in the
     system's WebKitGTK and the GStreamer plugins that video needs). On Ubuntu 22.04 a video
     can't go fullscreen (see Fullscreen video).
   - Elsewhere, on a distribution with glibc 2.39 or later (Ubuntu 24.04+, Debian 13, Fedora 40+
-    and other current ones): `chmod +x LittleJoan-<version>-linux-x86_64.AppImage` and run it
-    (about 150 MB; it carries its own WebKitGTK 2.52 and media framework, so fullscreen video
+    and other current ones): `chmod +x LittleJoan-0.2.0-linux-x86_64.AppImage` and run it
+    (about 160 MB; it carries its own WebKitGTK 2.52 and media framework, so fullscreen video
     works wherever it runs). Older systems: use the `.deb`.
   - The tray icon needs an AppIndicator host (on GNOME, the "AppIndicator and
     KStatusNotifierItem Support" extension).
-- **Linux (ARM64 / aarch64)** — new in v0.2.0 (until it is released, the `little-joan-linux-arm64`
-  and `little-joan-linux-appimage-arm64` artifacts of the CI workflow): the same two downloads,
-  built on ARM, for ARM machines such as Ubuntu in a virtual machine on an Apple silicon Mac.
+- **Linux (ARM64 / aarch64)** — new in v0.2.0: the same two downloads, built on ARM, for ARM
+  machines such as Ubuntu in a virtual machine on an Apple silicon Mac.
   - Debian/Ubuntu (Ubuntu 22.04 or later, Debian 12 or later):
-    `sudo apt install ./LittleJoan-<version>-linux-arm64.deb` (about 3 MB). As on x86_64, on
+    `sudo apt install ./LittleJoan-0.2.0-linux-arm64.deb` (about 3 MB). As on x86_64, on
     Ubuntu 22.04 a video can't go fullscreen.
-  - Elsewhere, with glibc 2.39 or later: `chmod +x LittleJoan-<version>-linux-aarch64.AppImage`
+  - Elsewhere, with glibc 2.39 or later: `chmod +x LittleJoan-0.2.0-linux-aarch64.AppImage`
     and run it (about 150 MB; it carries its own WebKitGTK 2.52 and media framework).
   - The tray icon needs an AppIndicator host, as above.
 - **Check a download (optional):** each release includes `SHA256SUMS.txt`. Run
@@ -202,7 +202,9 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   safe file name, and never overwriting one: a second `report.pdf` becomes `report (1).pdf`. The
   toolbar says "Downloading report.pdf…", then "report.pdf saved" with **Show in folder** (or
   "Download failed") for a few seconds. Closing the window ends a download that is still under way.
-  Nothing is downloaded while an extension is open: extensions can't save files.
+  Nothing is downloaded while an extension is open: extensions can't save files. On macOS a file
+  the web engine can show — a PDF, an image — opens in the page instead, as in Safari, even when
+  the site sends it as a download; a link marked as a download is saved.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),
   `little-joan --start-at-login on|off`, `little-joan --settings [general|keyboard|appearance|extensions|privacy|about]`
@@ -247,6 +249,9 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
   - **Search with** — Google, DuckDuckGo, Bing, or Brave.
   - **Translate pages to** — the language for "Translate Page".
   - **Mobile sites in a narrow window** — phone mode (above).
+  - **Phone or desktop per site** — the sites with a mode of their own, each with Remove (or
+    Reset, which brings back YouTube's built-in desktop site on macOS and Linux once you changed
+    it).
   - **Start Little Joan at login** — adds Little Joan to your system's login items: a
     LaunchAgent on macOS (`~/Library/LaunchAgents/Little Joan.plist`), the startup apps on
     Windows (the registry's Run key), `~/.config/autostart/Little Joan.desktop` on Linux. Little
