@@ -3213,6 +3213,11 @@ report.
   shortcut line with **Change…** and the icon note naming the shortcut; `welcome.png` — "Ctrl+Shift+Space
   summons and dismisses this window." (Linux scale 2). Disk: 9.2 GiB free with the artifacts
   downloaded; deleted after looking.
+- **CI on the docs commit (run 39301164697): all thirteen jobs green after one re-run** — the first
+  attempt's `smoke (windows)` failed LJ16's zoom check: Ctrl+= arrived (`zoom 110`, the page at
+  655×509) but the SendKeys Ctrl+0 that followed never did (no `zoom 100` within 15 s), in a check
+  this phase doesn't touch, with the same code green in run 39297748893; `gh run rerun --failed`
+  once: green (Deferred follow-ups).
 
 ### LJ18 — macOS Developer ID signing and notarization · strong · auto
 
@@ -8169,6 +8174,11 @@ and where, then stop.
   (not in LJ17's files) only checks `tray-visible true` there. Option: also require
   `shortcut-portal-unavailable` and then `shortcut-registered <accel>` in that launch (run
   39297748893 logged exactly that on all four Linux jobs).
+- **Windows CI: a synthetic Ctrl+0 can miss the app** (phase 9, run 39301164697; green on a re-run):
+  in the main run's zoom check SendKeys' Ctrl+= reached the page and Ctrl+0 3 s later didn't — the
+  first miss of that check in eight Windows runs. If it recurs, look at where the keyboard focus is
+  after the zoom status shows (the toolbar's status area changes), or send the key twice, rather
+  than loosen the rule.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
