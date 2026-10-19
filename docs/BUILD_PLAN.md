@@ -183,7 +183,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Next: phase 8.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Next: phase 9.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -203,6 +203,16 @@ and the guard fixed it on every element path; YouTube gets the desktop agent on 
 opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
+
+**Phase 8 (LJ15 → LJ16, 2026-10-19)** is PR #26 on `lj/p8-downloads-zoom`, merged by the agent once
+verify, package and smoke were green on every job (the standing exception). Downloads go to the OS
+Downloads folder under a cleaned, unique name on every engine, with "Downloading …" / "… saved" +
+Show in folder / "Download failed" in the toolbar's status area; none while an extension's panel
+shows; closing the window ends a download under way (WebKitGTK cancelled through an emission hook
+— 2.50.4 needed it —, WKDownloads noted through a wrapped `-[WKDownload setDelegate:]` and
+cancelled, WebView2's end with the window). Page zoom: Ctrl/Cmd + / − / 0 as keymap actions (the
+Keyboard tab lists them, the macOS View menu has them), 50–300 %, per window, "Zoom 110 %" in the
+status area. Human checks are in PR #26; they also go into LJ19's checklist.
 
 **Phase 7 (LJ13 → LJ14.1, 2026-10-19)** is PR #25 on `lj/p7-linux-fullscreen`, merged by the agent
 once verify, package and smoke were green on every job (the standing exception). LJ13: the AppImage
@@ -2869,7 +2879,7 @@ download.png.
   the download when `decide-destination` comes**, which is why the first design (a handler connected in
   `download-started`) saw nothing there. The PDF attachment: saved on Windows and Linux, shown in the
   page on macOS. Nothing turned up outside Downloads. macOS's bundled run passed this time.
-- **`lj-step-15-fix3`** (with phase 8's last docs): closing the window during a download is a smoke
+- **`lj-step-15-fix3`** (after LJ16, before the merge): closing the window during a download is a smoke
   rule now (`closeFailures`: the slow download started, the server saw the engine go before its last
   chunk, nothing of it left in Downloads; 1 more test), since every engine does it.
 
@@ -2985,6 +2995,16 @@ merge commit (Ground Rule 24), then stop and report.
 - Docs: README (the keys table, a line on zoom), CHANGELOG (Added), docs/architecture.md (page keys,
   the keymap, Page zoom, the status area, file map, smoke log, CI), this plan (Later).
 - `npm run verify`: 623 TS tests, 367 Rust tests, clippy clean.
+- **CI (run 39283498532, with `lj-step-15-fix2` under it): all thirteen jobs green on the first try.**
+  The zoom check on every job: Ctrl+= (macOS ⌘=, whose key event reached the View menu) logged `zoom
+  110`, the page reported **655×509 on Windows and 654×509 on macOS and the four Linux jobs** (dpr
+  1.1 — the engines' zoom, not the window), and Ctrl+0 / ⌘0 logged `zoom 100` and brought 720×560
+  back. macOS's menu was built with `menu-keys zoom-in=⌘=`, `zoom-out=⌘-`, `zoom-reset=⌘0`. The
+  downloads run (fix2's code) passed on all six smoke jobs again. **Screenshots:** `zoom.png` — the
+  toolbar's status "Zoom 110 %" in the pill's place on Windows (the page at 655 px), macOS (654 px,
+  traffic lights in the toolbar) and Linux (scale 1 and 2); `settings-keyboard.png` — the Keyboard tab
+  as before, Zoom In / Zoom Out / Actual Size below the fold after Forward (`keymap_info`'s list, tested).
+  Disk: 6.3 GiB free with the artifacts downloaded; deleted after looking.
 
 ### LJ17 — Wayland-native global shortcut · strong · auto
 
