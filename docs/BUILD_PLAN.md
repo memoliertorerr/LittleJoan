@@ -205,6 +205,15 @@ opens history on Windows and Linux; double-clicking the toolbar zooms; the bar p
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
 
+**Phase 10 (LJ18 ⏭ skipped, LJ18.1, 2026-10-19)** is PR #28 on `lj/p10-arm64`, merged by the agent
+once verify, package and smoke were green on every job (the standing exception). LJ18 is skipped —
+no Apple signing secrets —, and LJ18.1 adds Linux ARM64: an `arm64` `.deb` built on
+ubuntu-22.04-arm (3.03 MiB, glibc 2.34) and an `aarch64` AppImage built on ubuntu-24.04-arm (148.62
+MiB, WebKitGTK 2.52.6 bundled, glibc 2.39), each smoke-tested on ARM runners like its x86_64 twin
+(`linux-arm64`, `linux-22.04-arm64` with fullscreen off on 2.50.4, `linux-appimage-arm64`); all
+eighteen jobs green on the first try. The owner's check — the arm64 `.deb` in Ubuntu 22.04 ARM in
+Parallels — is in PR #28 and LJ19's checklist.
+
 **Phase 9 (LJ17, 2026-10-19)** is PR #27 on `lj/p9-wayland-shortcut`, merged by the agent once
 verify, package and smoke were green on every job (the standing exception). In a Linux Wayland
 session Little Joan asks the XDG GlobalShortcuts portal for its shortcut first (ashpd, sharing the
@@ -3410,6 +3419,38 @@ ready, merge it with a merge commit, check main's CI, then stop. Don't start LJ1
 - CONTRIBUTING doesn't list the jobs (it says CI builds and smoke-tests every installer), so it is
   unchanged.
 - `npm run verify`: 628 TS tests, 376 Rust tests, clippy clean (no code changed).
+- **CI (run 39321011322): all eighteen jobs green on the first try** — verify ×3, package ×6, smoke
+  ×9; 20 minutes in all, the arm64 jobs no slower than their twins (cold caches: the arm64 `.deb`
+  4½ minutes, the AppImage 8½ — 3½ of them linuxdeploy —, each arm64 smoke about 7). The arm64
+  runners already have rustup (the toolchain synced as `1.99.1-aarch64-unknown-linux-gnu`), so the
+  fallback didn't run. **`package (linux-arm64)`:** `Little Joan_0.2.0-beta.3_arm64.deb`, **3.03
+  MiB** (3,181,616 bytes; the amd64 one 3.15 MiB), `Architecture: arm64`, `usr/bin/little-joan` an
+  `ELF 64-bit LSB pie executable, ARM aarch64`, glibc floor **2.34** (as amd64). **`package
+  (linux-appimage-arm64)`:** `Little Joan_0.2.0-beta.3_aarch64.AppImage`, **148.62 MiB** (155,834,888
+  bytes; x86_64's 156.92 MiB), its app an aarch64 ELF, bundling **WebKitGTK 2.52.6**
+  (`usr/lib/libwebkit2gtk-4.1.so.0`, from `libwebkit2gtk-4.1-0 2.52.6-0ubuntu0.24.04.1`), glibc floor
+  **2.39**; Tauri fetched `AppRun-aarch64` (tauri-apps/binary-releases `apprun-old`),
+  `linuxdeploy-aarch64.AppImage` (`linuxdeploy-07333c6`) and `linuxdeploy-plugin-appimage-aarch64`
+  (`continuous`), and `AppRun` is the same linuxdeploy bash script with the GStreamer and GTK hooks
+  as on x86_64. Nothing about the AppImage tooling needed a workaround on aarch64.
+- **The arm64 smoke jobs passed every rule of the full smoke**, as their twins: codecs H.264 / VP9 /
+  AV1 through MSE on all three; no WebKit helper left after hibernating (0 at 2–60 s, `[0,0,0]` per
+  cycle; 2 helpers with a page); the login entry pointing at `/usr/bin/little-joan`, or for the
+  AppImage at `…/LittleJoan-0.2.0-beta.3-linux-aarch64.AppImage` (the release's name), and gone after
+  `off`. `linux-arm64` and `linux-appimage-arm64` (WebKitGTK 2.52.6): window and page fullscreen
+  after the click, every fullscreen-run path entered, held ~2.15 s and left by the page's own Exit;
+  no `fullscreen-off`. `linux-22.04-arm64` (WebKitGTK **2.50.4**, as amd64's 22.04): `fullscreen-off
+  2.50.4` in every launch that opened a page (29 lines), no fullscreen, every path `entered=0`
+  (`no-fullscreen-api`, the phone player's `enter-error:invalidstateerror`), no abort. The AppImage's
+  library check found only the bundled fluidsynth MIDI plugin's `libjack.so.0` /
+  `libpipewire-0.3.so.0` missing — exactly as on x86_64 — and gdb attached to the app in all 21
+  launches. Own memory at rest (private dirty): the arm64 `.deb` 20.1 MB on 24.04 and 22.0 MB on
+  22.04, the AppImage 52.5 MB (the bundled libraries, as on x86_64). **Screenshots** (downloaded,
+  looked at, deleted): `fullscreen.png` — on `linux-arm64` and `linux-appimage-arm64` the green stage
+  fills the whole 1280×800 screen, the page reporting 1280×800; on `linux-22.04-arm64` the 480×600
+  window as it was, toolbar with the Phone pill above "Go fullscreen"; `fs/element-390.png` (AppImage)
+  — the element fills the screen with its Exit; `command-bar.png` (`linux-arm64`) — the command bar
+  with the smoke page as the top site; `narrow.png` (22.04 arm64) — 390×560 with the phone agent.
 
 ### LJ19 — Release v0.2.0 · standard · checkpoint
 
@@ -8603,6 +8644,16 @@ Populated from real friction, not speculation:
   accelerator** (`CTRL+SHIFT+space` → `<ctrl><shift>space`, modifier names upper case, the key an
   xkb name), and its `trigger_description` is a translated sentence ("Press <ctrl><shift>space"):
   show it as the desktop wrote it, never parse it.
+- *(LJ18.1)* **Tauri names its Linux packages per architecture, but not alike:** `_amd64.deb` /
+  `_amd64.AppImage` on x86_64, `_arm64.deb` / `_aarch64.AppImage` on ARM. The release names follow
+  Debian for the `.deb` (`-linux-amd64.deb`, `-linux-arm64.deb`) and the machine for the AppImage
+  (`-linux-x86_64.AppImage`, `-linux-aarch64.AppImage`) — rename from the artifact, never by pattern
+  on Tauri's name. The AppImage smoke builds its name from `uname -m`.
+- *(LJ18.1)* **The AppImage tooling is downloaded at build time, per architecture**, from moving
+  releases: `AppRun-<arch>` (tauri-apps/binary-releases `apprun-old`), `linuxdeploy-<arch>.AppImage`
+  (`linuxdeploy-07333c6`) and `linuxdeploy-plugin-appimage-<arch>.AppImage` (linuxdeploy's
+  `continuous`). If an AppImage build breaks one day with no change here — on one architecture only,
+  say — look at those first (the package log prints each URL).
 - *(round 3 research, to watch)* **macOS 26 / 27: an `.accessory` app's element fullscreen may
   leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
   and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after

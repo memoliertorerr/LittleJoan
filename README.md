@@ -69,10 +69,10 @@ aren't code-signed yet, so the first launch shows a warning; the steps below get
   and `little-joan-linux-appimage-arm64` artifacts of the CI workflow): the same two downloads,
   built on ARM, for ARM machines such as Ubuntu in a virtual machine on an Apple silicon Mac.
   - Debian/Ubuntu (Ubuntu 22.04 or later, Debian 12 or later):
-    `sudo apt install ./LittleJoan-<version>-linux-arm64.deb`. As on x86_64, on Ubuntu 22.04 a
-    video can't go fullscreen.
+    `sudo apt install ./LittleJoan-<version>-linux-arm64.deb` (about 3 MB). As on x86_64, on
+    Ubuntu 22.04 a video can't go fullscreen.
   - Elsewhere, with glibc 2.39 or later: `chmod +x LittleJoan-<version>-linux-aarch64.AppImage`
-    and run it (it carries its own WebKitGTK 2.52 and media framework).
+    and run it (about 150 MB; it carries its own WebKitGTK 2.52 and media framework).
   - The tray icon needs an AppIndicator host, as above.
 - **Check a download (optional):** each release includes `SHA256SUMS.txt`. Run
   `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` in the download folder on macOS or Linux, or
