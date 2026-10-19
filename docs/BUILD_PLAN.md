@@ -107,7 +107,7 @@
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ✅ done (the bar's background only — see notes) |
 | LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ✅ done — the owner's check passed 2026-10-18 (see LJ40's notes); `v0.2.0-beta.3` released |
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ✅ done |
-| LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ⬜ todo |
+| LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ✅ done |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ⬜ todo |
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ⬜ todo |
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ⬜ todo |
@@ -5957,6 +5957,15 @@ fix attempts, then stop). Look at the screenshot on every OS.
   keyboard from the command bar's typing.
 - `npm run verify`: 545 TS tests, 317 Rust tests, clippy clean. Disk: 10 GiB free at the start of
   the phase, 9.2 GiB after verify; `.cache/target` 1.6 GB.
+- **CI (run 39210723268): all ten jobs green.** The tray run on every OS: `tray-visible false` right
+  after `shortcut-registered` and never `true`; a plain second launch logged `window-created`;
+  "quit" reached the command bar (macOS too), ↓ ↓ Enter logged `quit` and the process ended by
+  itself; on both Linux jobs the `XDG_SESSION_TYPE=wayland` launch logged `tray-visible true`.
+  **Screenshots:** `settings-general-tray.png` — General with "Show the icon in the menu bar"
+  (macOS) / "… in the system tray" (Windows, Linux) unchecked under the shortcut, and the note
+  naming ⌘⇧Space / Ctrl+Shift+Space (on macOS the menu bar shows no Little Joan icon);
+  `command-quit.png` — "Search Google for "quit"", then "Quit Little Joan" with the power glyph,
+  then "Settings & extensions", on every OS (Linux at scale 2 crisp).
 
 ### LJ42 — Quick commands in the command bar, each showing its state · standard · auto
 
@@ -6044,6 +6053,62 @@ notes (with df -h), and commit everything as one commit: "lj-step-42: quick comm
 bar, each showing its current state". Push and watch CI until every job is green (Ground Rule 3;
 two honest fix attempts, then stop). Look at both screenshots on every OS.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **One path for settings changes — split in two (a deviation in shape, not in substance):** the
+  prompt's `settings::apply_change(app, change)` would put Tauri types into `settings.rs`, which is
+  pure (Ground Rule 14). So `settings::apply_change(&Settings, &Change) -> Result<Settings, String>`
+  (`settings/change.rs`, pure) checks every part of a change — a search engine id, a language, a
+  whole theme (new `theme::parse_strict`: a known mode, 1–3 colors that all parse, numbers in 0–1),
+  a theme mode, the extensions' and sites' lists (entry by entry, as before), the bools — and
+  refuses the whole change for one bad part (tests: a bad engine id, an unknown mode, a bad color,
+  a bad language, an empty shortcut change nothing). `settings_live::apply(app, &change)` puts it to
+  work under the state lock (checked again against that moment's settings), ends a preview when the
+  theme changed, pushes a new theme to the bar (smoke log `theme <mode> colors=<n>` — `theme` now
+  also means "handed a new one"), re-runs LJ41's tray rule, forgets the registry when extensions
+  changed, runs `phone_mode::apply` when `mobileSites` or `siteModes` changed, and saves atomically.
+  `save_settings` checks the whole change first (so a refused part never swaps the shortcut), swaps
+  the shortcut, then calls the same function; its `searchEngine` is now an id string checked there,
+  and its theme is checked strictly (the Settings window only ever sends a valid one).
+- **`quick_state` / `quick_command`** (`src-tauri/src/commands/quick.rs`; build.rs's manifest;
+  `capabilities/bar.json` gains exactly `allow-quick-state` and `allow-quick-command`;
+  `capability_tests.rs`' `only_the_bar_may_run_quick_commands`, through a shared
+  `only_the_bar_grants` that `only_the_bar_may_quit` uses too). The command is a serde enum
+  `#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]`; **the field-less kinds are
+  empty structs (`Reload {}`), not unit variants** — a test showed serde's internally tagged unit
+  variants accept extra fields despite `deny_unknown_fields`. Tests refuse other kinds (`setShortcut`,
+  `setDeveloperMode`, `setExtension`, `setKeys`), extra fields, wrong types and missing ones. Page
+  commands are refused without a web page (`commands::web_page`, now shared with `open_extension`).
+  It logs `quick-command <kind> [<value>]` once accepted — values filtered to short words, never a URL
+  or a title (a test). After a settings command an open Settings window gets
+  `window.littleJoanSettings.savedChanged(<settings>, <startAtLogin | null>)`.
+- **The bar** (`ui/command/quick.ts`, pure + 13 tests; glue in `command.ts`): the list from the prompt,
+  each row's state after the title as text — "Mobile sites — on", "Theme: Dark ✓" (a new `mark` on a
+  row, drawn as text by `view.ts`, in the accent color), "Search with DuckDuckGo ✓", "Start at login —
+  off", "Icon — shown (the shortcut can't work)"; a preset row sends the preset's whole theme with the
+  user's mode, and is ✓ when the theme matches it. LJ40's three rows moved in as "Desktop site",
+  "Phone site", "Automatic", each "— this site", the current ✓ (the prompt's "Desktop site — this site
+  ✓"; "request" and "automatic" still find them, so LJ40's smoke types the same). Settings → <tab>
+  covers Appearance, Extensions, Privacy and About: **General is LJ41's "Settings" row**, so it isn't
+  offered twice. Clear history offers its four ranges; the first Enter turns the row into "press
+  Enter again to remove the history of the last hour" (`quickEnter`, tested), a second Enter on that
+  row runs it and says what went; Esc (`command.cancel()`, before the bar's own Esc), moving away or
+  typing cancels. Up to three quick rows always find room among the 8 (`QUICK_ROOM` in `buildRows`;
+  history matches make way); quick rows are never preselected, so Enter on typed text still opens it
+  — the smoke presses ↓ ↓ Enter as for LJ40's rows (the prompt's "type `mobile` → Enter" taken as that).
+  Copy link / Copy as Markdown link copy in the bar on the keypress (`copy.ts`), the Markdown from
+  `extensions/markdown-link/logic.js`'s `link("markdown", …)` imported by the bar (Vite and tsc took
+  it as is); page commands then close the command bar, settings ones keep it open and the rows show
+  the new state from a fresh `quick_state` (asked when the command bar opens, with `extensions_list`,
+  and again after each command; rows are built again if it lands after the typing).
+- **Settings follows** (`ui/settings-logic.ts` `rebase(draft, oldSaved, newSaved)`, tested): a field
+  the window didn't edit follows the command bar's change, an edited one keeps the edit (the theme
+  compared deeply, lists in any order); `settings.ts`' `savedChanged` applies it to the controls, the
+  Appearance editor, the Extensions tab and the site list (each only when not edited) and the login
+  switch.
+- `npm run verify`: 561 TS tests, 327 Rust tests, clippy clean. Disk: 9.2 GiB free at the start of
+  the step, 8.9 GiB after verify; `.cache/target` 1.6 GB.
 
 ### LJ43 — One keymap: every key of Little Joan's own, configurable (engine side) · strong · auto
 

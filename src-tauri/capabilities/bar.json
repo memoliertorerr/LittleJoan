@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "bar",
-  "description": "The bar, which holds every screen of the app's own in the page window (toolbar, command bar, welcome, history view): open what was typed in the page, read the page's address, open or close the command bar, go back, open the page in the default browser, drag the window by the toolbar and zoom it with a double click there, hand the keyboard back to the page, close, read the command bar's suggestions and the history view's list, forget one history record or clear a range of history, open Settings, quit Little Joan (the command bar's Quit, for when the tray icon is hidden), read what the welcome shows and add or remove the login entry from it, report the theme colors it applied (for extension panels), list the extensions and open one's command or page action, and read or set whether the open web page's site gets the phone or the desktop version (the site is Rust's, never the bar's). The page webview (joan-page) has no capability at all.",
+  "description": "The bar, which holds every screen of the app's own in the page window (toolbar, command bar, welcome, history view): open what was typed in the page, read the page's address, open or close the command bar, go back, open the page in the default browser, drag the window by the toolbar and zoom it with a double click there, hand the keyboard back to the page, close, read the command bar's suggestions and the history view's list, forget one history record or clear a range of history, open Settings, quit Little Joan (the command bar's Quit, for when the tray icon is hidden), read the quick commands' state and run one of the fixed quick commands (page actions and a few settings — never the shortcut, keys, developer mode or extensions), read what the welcome shows and add or remove the login entry from it, report the theme colors it applied (for extension panels), list the extensions and open one's command or page action, and read or set whether the open web page's site gets the phone or the desktop version (the site is Rust's, never the bar's). The page webview (joan-page) has no capability at all.",
   "webviews": ["joan-bar"],
   "permissions": [
     "allow-open-input",
@@ -24,6 +24,8 @@
     "allow-site-mode-info",
     "allow-set-site-mode",
     "allow-quit-app",
+    "allow-quick-state",
+    "allow-quick-command",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize"
   ]

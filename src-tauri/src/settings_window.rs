@@ -124,6 +124,29 @@ pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme)
     }
 }
 
+/// Tells an open settings window that settings changed from the command bar (a quick command,
+/// LJ42) — and, with `start_at_login`, that the login entry did — so its draft follows
+/// (settings-logic.ts `rebase`: a field it didn't edit takes the new value) and a later Save
+/// doesn't undo the change.
+pub fn saved_changed<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &crate::settings::Settings,
+    start_at_login: Option<bool>,
+) {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    // Checked settings (settings.rs) as JSON: one value each, a safe script literal.
+    if let (Ok(json), Ok(login)) = (
+        serde_json::to_string(settings),
+        serde_json::to_string(&start_at_login),
+    ) {
+        let _ = window.eval(format!(
+            "window.littleJoanSettings && window.littleJoanSettings.savedChanged({json}, {login})"
+        ));
+    }
+}
+
 /// When the window closes: the shortcut it may have paused while recording comes back, and a
 /// theme it was previewing without saving (Cancel, or the close button) gives way to the saved
 /// one in the page window.

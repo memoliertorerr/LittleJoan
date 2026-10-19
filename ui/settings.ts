@@ -13,6 +13,7 @@ import { appearance } from "./settings/appearance.ts";
 import { extensionsTab } from "./settings/extensions.ts";
 import { sitesList } from "./settings/sites.ts";
 import { builtInsFrom, siteModesFrom } from "./settings/sites-logic.ts";
+import { sameTheme } from "./settings/appearance-logic.ts";
 import { BUILT_INS } from "./answers/index.ts";
 import {
   CLEAR_CHOICES,
@@ -22,6 +23,7 @@ import {
   clearQuestion,
   clearStep,
   hasChanges,
+  rebase,
   tabForKey,
   tabFrom,
   toInput,
@@ -39,7 +41,11 @@ import {
 declare global {
   interface Window {
     __littleJoanSettingsTab?: string;
-    littleJoanSettings?: { showTab(name: string): void; setTheme(theme: unknown): void };
+    littleJoanSettings?: {
+      showTab(name: string): void;
+      setTheme(theme: unknown): void;
+      savedChanged(settings: Settings, startAtLogin: boolean | null): void;
+    };
   }
 }
 
@@ -84,6 +90,7 @@ const sites = sitesList(element<HTMLElement>("#site-modes"), element<HTMLElement
 
 let saved: Settings | null = null;
 let savedLogin: boolean | null = null;
+let builtInSites: ReturnType<typeof builtInsFrom> = [];
 let isMac = false;
 let shortcut = "";
 let recording = false;
@@ -144,6 +151,24 @@ function input(): SettingsInput {
     sites.draft(),
     tray.checked,
   );
+}
+
+/** What the window shows now, as settings: `from` with every tab's draft on top. */
+function shownSettings(from: Settings): Settings {
+  const extensions = extensionsPanel.draft();
+  return {
+    ...from,
+    shortcut,
+    searchEngine: engine.value,
+    translateTo: language.value,
+    mobileSites: mobile.checked,
+    rememberHistory: remember.checked,
+    showTrayIcon: tray.checked,
+    theme: look.draft(),
+    disabledExtensions: extensions.disabledExtensions,
+    developerMode: extensions.developerMode,
+    siteModes: sites.draft() ?? from.siteModes,
+  };
 }
 
 function pending(from: Settings): Changes {
@@ -291,6 +316,41 @@ window.littleJoanSettings = {
   setTheme(theme: unknown) {
     look.load(themeFrom(theme));
   },
+  // A quick command changed settings (or the login entry) from the command bar (LJ42): what this
+  // window didn't edit follows, its edits stay (rebase), so Save doesn't undo the change.
+  savedChanged(next: Settings, startAtLogin: boolean | null) {
+    if (saved === null) {
+      return;
+    }
+    const shown = shownSettings(saved);
+    const draft = rebase(shown, saved, next);
+    const editedSites = sites.draft() !== undefined;
+    saved = next;
+    if (!recording) {
+      shortcut = draft.shortcut;
+    }
+    engine.value = draft.searchEngine;
+    language.value = draft.translateTo;
+    mobile.checked = draft.mobileSites;
+    remember.checked = draft.rememberHistory;
+    tray.checked = draft.showTrayIcon;
+    if (!sameTheme(draft.theme, shown.theme)) {
+      look.load(themeFrom(draft.theme));
+    }
+    if (draft.developerMode !== shown.developerMode || draft.disabledExtensions !== shown.disabledExtensions) {
+      extensionsPanel.load({ disabledExtensions: draft.disabledExtensions, developerMode: draft.developerMode });
+    }
+    if (!editedSites) {
+      sites.load(siteModesFrom(next.siteModes), builtInSites);
+    }
+    if (startAtLogin !== null) {
+      if (login.checked === savedLogin) {
+        login.checked = startAtLogin;
+      }
+      savedLogin = startAtLogin;
+    }
+    refresh();
+  },
 };
 
 showTab(tab);
@@ -309,7 +369,8 @@ invoke<SettingsView>("get_settings")
     tray.checked = view.settings.showTrayIcon;
     trayLabel.textContent = trayLabelFor(view.platform);
     extensionsPanel.load({ disabledExtensions: view.settings.disabledExtensions, developerMode: view.settings.developerMode });
-    sites.load(siteModesFrom(view.settings.siteModes), builtInsFrom(view.builtInSiteModes));
+    builtInSites = builtInsFrom(view.builtInSiteModes);
+    sites.load(siteModesFrom(view.settings.siteModes), builtInSites);
     savedLogin = view.startAtLogin;
     login.checked = view.startAtLogin ?? false;
     login.disabled = view.startAtLogin === null;

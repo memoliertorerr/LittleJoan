@@ -99,7 +99,11 @@ ui/answers/                        quick answers, our own code in the bar: calc.
                                    clock), random.ts (web crypto, no modulo bias), timestamp.ts,
                                    index.ts (the built-ins, their order, the answer row) — each
                                    pure and unit-tested
-ui/command/copy.ts                 copies a quick answer: the async clipboard API on the keypress,
+ui/command/quick.ts                the quick commands (LJ42): the fixed list, matching, each row's
+                                   state as text, Clear history's second Enter, Rust's
+                                   quick_state checked (pure, unit-tested); Copy as Markdown link
+                                   uses extensions/markdown-link/logic.js's `link`
+ui/command/copy.ts                 copies a quick answer (and the page's link): the async clipboard API on the keypress,
                                    a hidden-textarea fallback
 ui/command/extensions.ts           extension commands and page actions as command-bar rows:
                                    matching, "for this page", switched-off ones hidden (pure,
@@ -234,6 +238,11 @@ src-tauri/src/phone/agent.rs       Windows' phone agent with client hints: CDP
 src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the built-in sites for
                                    Settings
 src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan")
+src-tauri/src/commands/quick.rs    the bar: quick_state, quick_command (a serde enum of fixed
+                                   kinds, deny_unknown_fields; tested)
+src-tauri/src/settings_live.rs     a settings change at runtime: AppState, the bar's theme, the tray
+                                   rule, phone mode, the registry, the atomic save (Save and the
+                                   quick commands share it)
 src-tauri/src/phone_mode.rs        phone mode at runtime: set the page's user agent for its width
                                    and site, before the app's navigations and on the page's own,
                                    reload (or load the desktop address); a site's mode from the bar,
@@ -283,6 +292,8 @@ src-tauri/src/translate.rs         Google Translate proxy URL, language codes, L
 src-tauri/src/settings.rs          Settings (settings.json): tolerant per-field parse, atomic save
 src-tauri/src/settings/theme.rs    the `theme` field: mode, 1–3 colors, intensity, grain (tolerant
                                    parse, tested; the default matches ui/lib/presets.ts)
+src-tauri/src/settings/change.rs   one settings change (Save's or a quick command's): every part
+                                   checked, all or nothing — `apply_change` (pure, tested)
 src-tauri/src/settings/site_modes.rs  the `siteModes` field: host → auto | phone | desktop, keys,
                                    the lookup that walks a name up to its last two labels (tested)
 src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
@@ -312,6 +323,8 @@ scripts/ci/smoke-resize.mts        CI: the resize run (bursts of `--size`, the p
 scripts/ci/smoke-sitemode.mts      CI: the site-mode run (the command bar's site rows, Settings'
                                    list, Windows' client hints from the server's header log) and its
                                    rules; unit-tested
+scripts/ci/smoke-quick.mts         CI: the quick-commands run ("mobile", "dark", the theme rows,
+                                   Copy link over the smoke page) and its rules; unit-tested
 scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a second launch, Quit
                                    from the command bar, a Wayland session) and its rules;
                                    unit-tested
@@ -405,7 +418,7 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
@@ -424,7 +437,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `hibernate()` | the bar, Esc with no page | close the window (same path as `--hide`) |
 | `start_info()` | the bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut, theme }`: the theme the bar applies, and the welcome's facts; `firstRun` is true once; logs `theme <mode> colors=<n>` |
 | `get_settings()` | settings window, on load | settings + engine and language lists + platform + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version` + `builtInSiteModes` (`[{ host, mode }]`: YouTube on desktop on macOS and Linux, none on Windows); logs `settings-loaded` |
-| `save_settings(settings)` | settings window, Save | validate; swap the shortcut live (old one restored if the new one is taken); save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` and optionally `theme` (checked field by field; left out, the saved one stays) and `siteModes` (General's list, only when it was edited — so a pill click while Settings is open isn't undone). A new theme goes at once to the open window's bar (`window.littleJoan.setTheme`) and to the settings window (`window.littleJoanSettings.setTheme`), both by `eval` |
+| `save_settings(settings)` | settings window, Save | check every part first (`settings::apply_change`: a bad engine id, language, theme mode or color refuses the whole Save, nothing changed); swap the shortcut live (old one restored if the new one is taken); then `settings_live::apply` — the path the quick commands take too — and save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` and optionally `theme` (valid as it stands — `parse_strict`; left out, the saved one stays), `showTrayIcon` and `siteModes` (General's list, only when it was edited — so a pill click while Settings is open isn't undone). A new theme goes at once to the open window's bar (`window.littleJoan.setTheme`) and to the settings window (`window.littleJoanSettings.setTheme`), both by `eval` |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 | `history_list()` | the history view, when it opens and after a change | every record, latest visit first: `[{ url, title, host, lastVisit, visitCount }]` (empty with no window); the view searches, groups and draws them; logs `history-list <n>` |
@@ -438,7 +451,9 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `reload_extensions()` | Settings → Extensions → Reload extensions | read the registry again; returns the new list |
 | `open_extensions_folder()` | Settings → Extensions → Open extensions folder | create `<config dir>/extensions/` if needed and show it in the file manager (`tauri_plugin_opener::reveal_item_in_dir`) |
 | `site_mode_info()` | the bar, on load (Rust also pushes it: `window.littleJoan.setSiteMode`, on every address change and agent switch) | `{ host, mode, builtIn, agent }` for the open web page's site — `host` the key a mode is kept under (`youtube.com` for `m.youtube.com`), `mode` `auto` \| `phone` \| `desktop`, `builtIn` whether the built-in list decides, `agent` `phone` \| `desktop`; `null` without a web page (the start page, a panel) |
-| `set_site_mode(mode)` | the toolbar's pill, the command bar's "Request desktop site" / "Request phone site" / "Automatic for this site" | keeps `mode` for the open web page's site in `siteModes` — the site is Rust's (`bar::page_url`), the bar sends only the mode; `auto` removes the entry, or keeps `"auto"` when a built-in or a parent's entry would still decide —, saves the settings and applies it at once: the agent switches and the page loads again only when it really changed (going to desktop on a known phone host: its desktop address). Refused without a web page, or with 500 sites already. Logs `site-mode <site> <mode>`; returns the new info |
+| `set_site_mode(mode)` | the toolbar's pill, the command bar's site rows ("Desktop site" / "Phone site" / "Automatic", LJ42's quick rows) | keeps `mode` for the open web page's site in `siteModes` — the site is Rust's (`bar::page_url`), the bar sends only the mode; `auto` removes the entry, or keeps `"auto"` when a built-in or a parent's entry would still decide —, saves the settings and applies it at once: the agent switches and the page loads again only when it really changed (going to desktop on a known phone host: its desktop address). Refused without a web page, or with 500 sites already. Logs `site-mode <site> <mode>`; returns the new info |
+| `quick_state()` | the command bar, each time it opens (with `extensions_list`), and after a quick command | `{ page: { url, title } \| null (a web page only; the title is the window's), theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool \| null, showTrayIcon, iconForced }` — what the quick rows show (LJ42) |
+| `quick_command(command)` | the command bar's quick rows (LJ42) | one of a fixed set, `{ kind, …fields }` (a serde enum with `deny_unknown_fields`: any other kind or field is refused): `translate`, `openInBrowser`, `reload` (the page actions; refused without a web page), `setThemeMode { mode }`, `setTheme { theme }` (a preset's whole theme, checked like Save's), `setSearchEngine { id }`, `setMobileSites { on }`, `setRememberHistory { on }`, `clearHistory { range }` (as `history_clear`; returns how many pages went), `setStartAtLogin { on }`, `openSettings { tab }`, `reloadExtensions`, `setTrayIcon { on }`. Settings ones go through `settings_live::apply` (as Save) and an open settings window rebases its draft (`window.littleJoanSettings.savedChanged(<settings>, <startAtLogin \| null>)`, by `eval`). Never: the shortcut or keys, developer mode, switching extensions, custom colors — Settings only. Logs `quick-command <kind> [<value>]`, never a URL or a title |
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) and its **Settings** row (tab `general`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
@@ -566,7 +581,10 @@ that runs before the page's own; an open window is focused and switched with
 `window.littleJoanSettings.showTab(<tab>)`. Tab names come from `SettingsTab`, never from user
 text. The window may only navigate within the app's origin; a link (About's) opens in the
 default browser (web URLs only), like the page's new-window requests. Smoke log:
-`settings-window <tab>` (or `focus`), `settings-loaded`.
+`settings-window <tab>` (or `focus`), `settings-loaded`. **A quick command that changes a
+setting while Settings is open** (LJ42) reaches it as `window.littleJoanSettings.savedChanged(...)`:
+`rebase` (settings-logic.ts, tested) keeps what the window edited and lets every field it didn't
+edit follow the change — so a later Save neither undoes the quick command nor loses an edit.
 
 The General tab records a shortcut by listening to the next key press. While it listens, the active global shortcut is **suspended** (unregistered) so
 pressing it doesn't summon or dismiss the page window; it is resumed when recording stops, when
@@ -682,9 +700,23 @@ page; it is a separate webview with its own capability, and the page webview has
   starters); typing → a quick answer, the best history match, "Search <engine> for …", more
   matches, the built-in commands (**History**, **Settings** — for "settings", "preferences",
   "options" —, **Quit Little Joan** — for "quit", "exit" (LJ41), each when what is typed starts
-  one of its words, two letters or more, or names it —, and the site-mode rows), extension
-  commands — at most 8, then Settings & extensions. The built-in commands always find room; history
-  matches make way. **Quick answers** (`ui/answers/`) are
+  one of its words, two letters or more, or names it), the **quick commands**, extension commands
+  — at most 8, then Settings & extensions. The built-in commands always find room, and so do up to
+  three quick commands; history matches make way. **Quick commands** (LJ42, `ui/command/quick.ts`)
+  show their state after the title, as text: with a web page open Translate page, Open in browser,
+  Copy link, Copy as Markdown link (copied in the bar on the keypress, the Markdown from the
+  bundled extension's own `link("markdown", …)`), Reload, and the site rows (Desktop site, Phone
+  site, Automatic — "this site", the current ✓); always Theme: System / Light / Dark and Theme:
+  <preset> (the current ✓; a preset keeps the user's mode), Search with <engine> (✓), Mobile sites
+  — on/off, Remember history — on/off, Clear history — last hour / 24 hours / 7 days / everything
+  (the first Enter turns the row into "press Enter again to remove …"; a second Enter on that row
+  clears; Esc, another row or typing cancels), Start at login — on/off, Settings → Appearance /
+  Extensions / Privacy / About, Reload extensions, Icon — shown / hidden / shown (the shortcut
+  can't work). A row matches when every typed word (two letters or more) starts a word of its
+  title or keywords; it is chosen with ↓/↑ like any row (never preselected, so Enter on typed text
+  still opens it). Settings commands keep the command bar open and the rows show the new state
+  (`quick_state` again); page commands close it. Rows come only from this list — nothing a page
+  supplies picks a command — and are drawn with `textContent`. **Quick answers** (`ui/answers/`) are
   Little Joan's own TypeScript, asked in order — calculator (`= …` always; bare text only when it
   has a digit and an operator or a function, and isn't a date), units (`<n> <unit> in|to|as
   <unit>`), time zones (`time in <city>`, `<time> <city> to <city>`), random (`uuid`,
@@ -950,10 +982,10 @@ visible in panels as in web pages, and every call is refused.
     "Desktop" while its site has a mode of its own (a built-in one too); nothing for a desktop page
     that follows the width (most of the time), the start page or a panel; it fits beside the site
     at 320 px (the domain shortens first). A click asks `set_site_mode` for the other version. The
-    command bar's built-in rows "Request desktop site", "Request phone site", "Automatic for this
-    site" (while a web page is open; typed words must start the row's words: "desktop", "phone",
-    "mobile", "site", "request", "auto…"), the current one marked "current"; picking one calls
-    `set_site_mode` and closes the command bar. Settings → General's list (above). Rust pushes the
+    command bar's quick rows (LJ42; LJ40's built-in rows moved there) "Desktop site", "Phone
+    site", "Automatic" — each "— this site", the current one marked ✓ — while a web page is open
+    (typed words must start the row's words: "desktop", "phone", "mobile", "site", "request",
+    "auto…"); picking one calls `set_site_mode` and closes the command bar. Settings → General's list (above). Rust pushes the
     site info to the bar (`setSiteMode`) on every address change and agent switch.
   - **Windows' phone agent with client hints** (LJ40, `platform/win.rs`, `phone::agent`): a bare
     custom agent (`ICoreWebView2Settings2::SetUserAgent`) left Chromium's user-agent client hints
@@ -1023,7 +1055,9 @@ bar was handed the first run), `quit` (Quit or `--quit` is about to exit),
 close, set again in the new window; counts only), `history-visit <kind> <url>` (a visit was
 recorded), `history-saved <records>` (history.json written), `history-view` (Ctrl+H / Cmd+Y opened
 the history view), `history-list <pages>` (the history view asked for the pages; a count only),
-`theme <mode> colors=<n>` (the bar asked for its theme; never the colors), `theme-early <mode>
+`theme <mode> colors=<n>` (the bar asked for its theme, or a settings change handed it a new one;
+never the colors), `quick-command <kind> [<value>]` (a quick command ran, LJ42; never a URL or a
+title), `theme-early <mode>
 colors=<n>` (the bar painted its initialization script's theme first), `bar-ready` (the bar's
 script runs: its first call) and `bar-ready timeout` (a panel opened with a new window stopped
 waiting for it), `theme-preview <mode>
@@ -1263,9 +1297,17 @@ and pushes to `main`:
   `?1` and `"Android"` and the page `uamobile=true`, the desktop agent's `?0`, `"Windows"` and
   `uamobile=false` — informational if the app logged `ua-override fallback`. Then, informational,
   `?fits=1` (the smoke page without the 600 px minimum width it has under a desktop agent) at 720
-  and then 390 px: Windows skips the reload, macOS and Linux reload. Last, "Request desktop site"
+  and then 390 px: Windows skips the reload, macOS and Linux reload. Last, "Desktop site"
   once more and `--settings general` (`settings-site-modes.png`: the list). Log
-  `smoke-site-mode.log`, `summary.json`'s `siteModeRun`. Then the **tray run**
+  `smoke-site-mode.log`, `summary.json`'s `siteModeRun`. Then the **quick-commands run**
+  (`smoke-quick.mts`, LJ42), its own launch on a fresh data folder: a new command bar, `mobile`,
+  ↓ ↓ Enter (the search row, then "Mobile sites — on") must log `quick-command setMobileSites
+  false` and leave `"mobileSites": false` in settings.json; a new command bar, `dark`, ↓ ↓ Enter
+  must log `quick-command setThemeMode dark`, hand the bar `theme dark colors=1` and save the mode
+  `dark` (typed on Windows and Linux; best effort on macOS); typing `theme` shows the theme rows
+  (`quick-theme.png`); over the smoke page Ctrl/Cmd+L, `copy` (`quick-page.png`), ` link`, ↓ ↓
+  Enter copies its address — read back from the clipboard where the runner can (informational).
+  Log `smoke-quick.log`, `summary.json`'s `quickRun`. Then the **tray run**
   (`smoke-tray.mts`, LJ41), its own launches with `"showTrayIcon": false`: the log must have
   `tray-visible false` after `shortcut-registered` (and never `true`); a second launch without
   flags must log `window-created`; typing `quit` in its command bar, ↓ ↓ Enter (the search row,

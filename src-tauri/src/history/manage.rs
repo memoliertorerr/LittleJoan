@@ -21,6 +21,16 @@ pub enum ClearRange {
 }
 
 impl ClearRange {
+    /// The range's name (`hour`, `day`, `week`, `all`: the smoke log, the bar).
+    pub fn name(self) -> &'static str {
+        match self {
+            ClearRange::Hour => "hour",
+            ClearRange::Day => "day",
+            ClearRange::Week => "week",
+            ClearRange::All => "all",
+        }
+    }
+
     /// The earliest visit time (unix ms) the range removes; `None` = everything.
     pub fn since(self, now: u64) -> Option<u64> {
         match self {

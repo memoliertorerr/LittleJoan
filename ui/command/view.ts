@@ -76,7 +76,7 @@ function icon<E extends ElementLike>(doc: DocumentLike<E>, row: Row): E {
   return siteIcon(doc, row.kind === "settings" ? "" : row.host, row.kind);
 }
 
-/** One row: icon, then "Title — domain" with the domain muted. */
+/** One row: icon, then "Title — domain" with the domain muted, then a current choice's mark. */
 export function renderRow<E extends ElementLike>(doc: DocumentLike<E>, row: Row, index: number, selected: boolean): E {
   const item = element(doc, "li", `row row-${row.kind}${selected ? " selected" : ""}`);
   item.setAttribute("role", "option");
@@ -86,6 +86,9 @@ export function renderRow<E extends ElementLike>(doc: DocumentLike<E>, row: Row,
   text.append(element(doc, "span", "row-title", row.title));
   if (row.domain) {
     text.append(element(doc, "span", "row-domain", ` — ${row.domain}`));
+  }
+  if (row.mark) {
+    text.append(element(doc, "span", "row-mark", ` ${row.mark}`));
   }
   item.append(icon(doc, row), text);
   return item;

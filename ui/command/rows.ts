@@ -1,7 +1,7 @@
 // The command bar's rows (pure, unit-tested): what to show for what is typed, in what order, the
 // inline autofill, and what the keys do. Rust's suggest() supplies the suggestions
-// (src-tauri/src/suggest.rs); view.ts draws the rows, as text only.
-import type { SiteModeInfo } from "../toolbar/logic.ts";
+// (src-tauri/src/suggest.rs), quick.ts the quick commands; view.ts draws the rows, as text only.
+import type { QuickCommand } from "./quick.ts";
 
 /** One suggestion from Rust's `suggest(query)`. */
 export interface Suggestion {
@@ -28,8 +28,13 @@ export type Action =
   | { kind: "history" }
   /** An extension's command, or a page action for the open web page (extensions.ts). */
   | { kind: "command"; extension: string; command: string; pageAction: boolean }
-  /** A quick answer's text, to copy (LJ31). */
-  | { kind: "copy"; text: string }
+  /** Text to copy: a quick answer's (LJ31), or the page's link (LJ42: then the command bar closes). */
+  | { kind: "copy"; text: string; close?: boolean }
+  /**
+   * A quick command (LJ42: quick_command). `key` names the row; `closes`: the command bar closes
+   * after it (page commands); `confirm`: it runs on a second Enter, and says this meanwhile.
+   */
+  | { kind: "quick"; command: QuickCommand; key: string; closes: boolean; confirm?: string }
   /** Phone or desktop for the open web page's site (LJ40: set_site_mode). */
   | { kind: "siteMode"; mode: "auto" | "phone" | "desktop" }
   /** Quit Little Joan (LJ41: quit_app — the way out when the tray icon is hidden). */
@@ -41,6 +46,8 @@ export interface Row {
   title: string;
   /** Muted after the title ("Title — domain"); "" for none. */
   domain: string;
+  /** After that, the mark of a current choice ("✓", quick.ts). */
+  mark?: string;
   /** Whose favicon to show; "" = the row kind's own icon. */
   host: string;
   /** A built-in symbol instead of the kind's icon (style.css: `row-icon-<icon>`). */
@@ -54,13 +61,16 @@ export interface Row {
 
 /**
  * Hooks for rows that don't come from history: quick answers (LJ31), extension commands (LJ30),
- * and what the open web page's site is on (LJ40, for the site-mode rows).
+ * and the quick commands (LJ42, quick.ts — the site-mode rows among them).
  */
 export interface Hooks {
   quickAnswer?: (query: string) => Row | null;
   commands?: (query: string) => Row[];
-  site?: SiteModeInfo | null;
+  quick?: (query: string) => Row[];
 }
+
+/** The most quick rows that always find room among the 8 (more show when there is room). */
+export const QUICK_ROOM = 3;
 
 /** The inline completion in the field: the full text it shows, and the row it belongs to. */
 export interface Autofill {
@@ -132,49 +142,17 @@ function names(typed: string, words: readonly string[]): boolean {
   return starts || words.some((word) => typedWords.includes(word));
 }
 
-/** Says which of the site-mode rows is the site's mode now (in the row's muted part). */
-export const CURRENT_MODE = "current";
-
-/** The site-mode rows (LJ40), each with the words that find it. */
-const SITE_MODE_ROWS: readonly { mode: "auto" | "phone" | "desktop"; title: string; icon: string; words: readonly string[] }[] = [
-  { mode: "desktop", title: "Request desktop site", icon: "desktop", words: ["request", "desktop", "site"] },
-  { mode: "phone", title: "Request phone site", icon: "phone", words: ["request", "phone", "mobile", "site"] },
-  { mode: "auto", title: "Automatic for this site", icon: "auto", words: ["automatic", "auto", "site", "desktop", "phone", "mobile"] },
-];
-
-/**
- * The site-mode rows for what is typed, while a web page is open (`site`, Rust's info): each row
- * whose words start every typed word (two letters or more: "desk", "mobile", "request phone",
- * "site"), in a fixed order; the site's mode now is marked.
- */
-export function siteModeRows(query: string, site: SiteModeInfo | null): Row[] {
-  const typed = query.trim().toLowerCase().split(/\s+/).filter((word) => word !== "");
-  if (!site || typed.length === 0 || typed.some((word) => word.length < 2)) {
-    return [];
-  }
-  return SITE_MODE_ROWS.filter((row) => typed.every((word) => row.words.some((w) => w.startsWith(word)))).map((row) => ({
-    kind: "command",
-    title: row.title,
-    domain: row.mode === site.mode ? CURRENT_MODE : "",
-    host: "",
-    icon: row.icon,
-    action: { kind: "siteMode", mode: row.mode },
-  }));
-}
-
 /**
  * The built-in commands for what is typed: "History" when the text starts the word (two letters
  * or more: "hi", "hist") or contains it ("history", "clear history"); "Settings" the same way for
- * "settings", "preferences" or "options", and "Quit Little Joan" for "quit" or "exit" (LJ41); with
- * a web page open, the site-mode rows (`siteModeRows`).
+ * "settings", "preferences" or "options", and "Quit Little Joan" for "quit" or "exit" (LJ41).
  */
-export function builtInCommands(query: string, site: SiteModeInfo | null = null): Row[] {
+export function builtInCommands(query: string): Row[] {
   const typed = query.trim().toLowerCase();
   return [
     ...(names(typed, HISTORY_WORDS) ? [HISTORY_ROW] : []),
     ...(names(typed, SETTINGS_WORDS) ? [SETTINGS_COMMAND_ROW] : []),
     ...(names(typed, QUIT_WORDS) ? [QUIT_ROW] : []),
-    ...siteModeRows(query, site),
   ];
 }
 
@@ -236,8 +214,9 @@ export function autofillFor(query: string, history: readonly Suggestion[]): stri
 /**
  * The rows for `query`. Nothing typed: the top sites (or the starters), up to 8. Typing: a quick
  * answer if one applies, the best history match, "Search <engine> for …", more history matches,
- * matching commands (the built-in ones, which always find room, then extensions') — at most 8 in
- * all. "Settings & extensions" is always last.
+ * matching commands (the built-in ones, which always find room; the quick commands, up to three
+ * of which always find room; then extensions') — at most 8 in all. "Settings & extensions" is
+ * always last.
  */
 export function buildRows(query: string, suggestions: readonly Suggestion[], hooks: Hooks = {}): RowList {
   const typed = query.trim();
@@ -258,9 +237,11 @@ export function buildRows(query: string, suggestions: readonly Suggestion[], hoo
     rows.push(rowFor(best));
   }
   rows.push(searchRow(typed, engine));
-  const builtIn = builtInCommands(typed, hooks.site ?? null);
-  rows.push(...more.slice(0, Math.max(0, MAX_SUGGESTIONS - rows.length - builtIn.length)).map(rowFor));
-  rows.push(...builtIn);
+  const builtIn = builtInCommands(typed);
+  const quick = hooks.quick?.(typed) ?? [];
+  const reserved = builtIn.length + Math.min(quick.length, QUICK_ROOM);
+  rows.push(...more.slice(0, Math.max(0, MAX_SUGGESTIONS - rows.length - reserved)).map(rowFor));
+  rows.push(...builtIn, ...quick);
   rows.push(...(hooks.commands?.(typed) ?? []));
   const shown = rows.slice(0, MAX_SUGGESTIONS);
   const text = autofillFor(typed, history);

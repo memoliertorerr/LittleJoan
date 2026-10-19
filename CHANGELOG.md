@@ -14,6 +14,16 @@ All notable changes to Little Joan are recorded here. The format follows
   is never out of reach.
 - **Settings and Quit in the command bar:** type "settings" (or "preferences", "options") for
   **Settings**, "quit" (or "exit") for **Quit Little Joan**.
+- **Quick commands in the command bar**, each showing its state: Translate page, Open in browser,
+  Copy link, Copy as Markdown link and Reload on a page; the theme's mode and presets, the search
+  engine, Mobile sites, Remember history, Start at login and the icon (✓ or on/off); Clear history
+  (it asks for a second Enter); Settings → each tab; Reload extensions. Settings changed this way
+  are saved at once, and an open Settings window keeps up.
+
+### Changed
+- The command bar's rows for phone or desktop per site are now **Desktop site**, **Phone site**
+  and **Automatic**, "this site", the current one marked ✓ (they were "Request desktop site",
+  "Request phone site" and "Automatic for this site").
 
 ## [0.2.0-beta.3] — 2026-10-18
 

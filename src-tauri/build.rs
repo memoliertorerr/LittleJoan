@@ -34,6 +34,8 @@ fn main() {
             "site_mode_info",
             "set_site_mode",
             "quit_app",
+            "quick_state",
+            "quick_command",
         ]),
     ))
     .expect("failed to run tauri-build");

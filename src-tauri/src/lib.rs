@@ -24,6 +24,7 @@ pub mod phone;
 pub mod phone_mode;
 pub mod placement;
 pub mod settings;
+pub mod settings_live;
 pub mod settings_window;
 pub mod shortcut;
 pub mod smoke;
@@ -91,7 +92,9 @@ pub fn run() {
             commands::open_extension,
             commands::site::site_mode_info,
             commands::site::set_site_mode,
-            commands::app::quit_app
+            commands::app::quit_app,
+            commands::quick::quick_state,
+            commands::quick::quick_command
         ])
         // Extension panels and their API (extensions/protocol.rs). Registered for every
         // webview; each request is checked (extensions/api.rs), and only the page webview's

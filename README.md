@@ -87,6 +87,18 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   "hi") offers **History**; "settings" (or "preferences", "options") offers **Settings**; "quit"
   (or "exit") offers **Quit Little Joan**. The last row, **Settings & extensions**, opens Settings
   on its Extensions tab.
+- **Quick commands** in the command bar, each showing how things are now — type a word and pick
+  the row with ↓ and Enter:
+  - on a page: **Translate page**, **Open in browser**, **Copy link**, **Copy as Markdown link**,
+    **Reload**, and Desktop site / Phone site / Automatic for the site;
+  - **Theme: System / Light / Dark** and **Theme: Sand**, **Dusk**… (the presets; the current one
+    marked ✓), **Search with Google / DuckDuckGo / Bing / Brave** (✓), **Mobile sites — on/off**,
+    **Remember history — on/off**, **Start at login — on/off**, **Icon — shown/hidden**;
+  - **Clear history** (last hour, 24 hours, 7 days, everything — press Enter twice; Esc cancels),
+    **Settings → Appearance / Extensions / Privacy / About**, **Reload extensions**.
+
+  Settings you change this way are saved at once (an open Settings window follows); the shortcut,
+  keys, Developer mode and switching extensions stay in Settings.
 - **Quick answers** come first in the command bar as you type; Enter copies the answer:
   - calculator: `= 12*7`, `(1+2)^3`, `sqrt(2)`, `50% * 30`, `2pi`;
   - units: `10 km in mi`, `72f to c`, `5 kg in lb`, `1 gallon to liters`, `100 km/h in mph`,
@@ -134,8 +146,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Phone or desktop per site:** while a page shows its phone version, or its site has a mode of
   its own, the toolbar shows a small **Phone** / **Desktop** label — click it for the other
   version of that site, kept from then on. In the command bar, type "desktop", "phone" or "site"
-  for **Request desktop site**, **Request phone site** and **Automatic for this site** (the
-  window's width decides again); the current one is marked. **Settings → General → Phone or
+  for **Desktop site**, **Phone site** and **Automatic** (the window's width decides again), each
+  for this site; the current one is marked ✓. **Settings → General → Phone or
   desktop per site** lists them, with Remove. **YouTube always gets its desktop site on macOS and
   Linux** (built in) — its phone site's player expects an iPhone's video fullscreen, so its
   fullscreen button didn't work there (`m.youtube.com` addresses open as `www.youtube.com`); the

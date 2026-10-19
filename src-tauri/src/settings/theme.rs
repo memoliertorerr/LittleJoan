@@ -32,6 +32,16 @@ impl ThemeMode {
             ThemeMode::Dark => "dark",
         }
     }
+
+    /// A mode by name, in any case, spaces around allowed; anything else is none.
+    pub fn from_name(name: &str) -> Option<ThemeMode> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "system" => Some(ThemeMode::System),
+            "light" => Some(ThemeMode::Light),
+            "dark" => Some(ThemeMode::Dark),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -92,12 +102,7 @@ pub fn parse(value: Option<&Value>) -> Theme {
     let mode = map
         .get("mode")
         .and_then(Value::as_str)
-        .and_then(|mode| match mode.trim().to_ascii_lowercase().as_str() {
-            "system" => Some(ThemeMode::System),
-            "light" => Some(ThemeMode::Light),
-            "dark" => Some(ThemeMode::Dark),
-            _ => None,
-        })
+        .and_then(ThemeMode::from_name)
         .unwrap_or(defaults.mode);
     let colors: Vec<String> = map
         .get("colors")
@@ -122,10 +127,66 @@ pub fn parse(value: Option<&Value>) -> Theme {
     }
 }
 
+/// A theme that is valid as it stands — what Settings saves, a preset the command bar sends
+/// (LJ42): an object with a known mode, one to three colors that all parse, and an intensity and a
+/// grain in 0–1. Anything else is refused (`None`), so a bad theme changes nothing.
+pub fn parse_strict(value: &Value) -> Option<Theme> {
+    let Value::Object(map) = value else {
+        return None;
+    };
+    let mode = ThemeMode::from_name(map.get("mode")?.as_str()?)?;
+    let list = map.get("colors")?.as_array()?;
+    if list.is_empty() || list.len() > MAX_COLORS {
+        return None;
+    }
+    let colors = list
+        .iter()
+        .map(|c| c.as_str().and_then(color))
+        .collect::<Option<Vec<String>>>()?;
+    let number = |key: &str| {
+        map.get(key)?
+            .as_f64()
+            .filter(|x| x.is_finite() && (0.0..=1.0).contains(x))
+    };
+    Some(Theme {
+        mode,
+        colors,
+        intensity: number("intensity")?,
+        grain: number("grain")?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_strict_theme_is_refused_whole_for_one_bad_part() {
+        let good = json!({ "mode": "dark", "colors": ["#9D8FD0", "#e0a2a0"], "intensity": 0.6, "grain": 0.3 });
+        assert_eq!(
+            parse_strict(&good),
+            Some(Theme {
+                mode: ThemeMode::Dark,
+                colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],
+                intensity: 0.6,
+                grain: 0.3,
+            })
+        );
+        for bad in [
+            json!({ "mode": "sepia", "colors": ["#9d8fd0"], "intensity": 0.6, "grain": 0.3 }),
+            json!({ "mode": "dark", "colors": ["#9d8fd0", "red"], "intensity": 0.6, "grain": 0.3 }),
+            json!({ "mode": "dark", "colors": [], "intensity": 0.6, "grain": 0.3 }),
+            json!({ "mode": "dark", "colors": ["#111111", "#222222", "#333333", "#444444"], "intensity": 0.6, "grain": 0.3 }),
+            json!({ "mode": "dark", "colors": ["#9d8fd0"], "intensity": 1.5, "grain": 0.3 }),
+            json!({ "mode": "dark", "colors": ["#9d8fd0"], "intensity": 0.6 }),
+            json!({ "colors": ["#9d8fd0"], "intensity": 0.6, "grain": 0.3 }),
+            json!("dark"),
+            json!(null),
+        ] {
+            assert_eq!(parse_strict(&bad), None, "{bad}");
+        }
+    }
 
     fn theme(value: Value) -> Theme {
         parse(Some(&value))

@@ -15,9 +15,11 @@ use serde_json::Value;
 use crate::input::SearchEngine;
 use crate::translate::is_valid_lang;
 
+pub mod change;
 pub mod site_modes;
 pub mod theme;
 
+pub use change::{Change, apply_change};
 pub use site_modes::SiteMode;
 pub use theme::{Theme, ThemeMode};
 

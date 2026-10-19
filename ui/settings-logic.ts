@@ -167,6 +167,29 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
   );
 }
 
+/**
+ * The window's edits on new saved settings (a quick command changed some from the command bar,
+ * LJ42): a field the window didn't edit — still the old saved value — follows the change; an
+ * edited one keeps the edit, so a later Save neither undoes the change nor loses the edit.
+ */
+export function rebase(draft: Settings, oldSaved: Settings, newSaved: Settings): Settings {
+  const follow = <K extends keyof Settings>(key: K, same: (a: Settings[K], b: Settings[K]) => boolean = Object.is): Settings[K] =>
+    same(draft[key], oldSaved[key]) ? newSaved[key] : draft[key];
+  return {
+    ...newSaved,
+    shortcut: follow("shortcut"),
+    searchEngine: follow("searchEngine"),
+    translateTo: follow("translateTo"),
+    mobileSites: follow("mobileSites"),
+    rememberHistory: follow("rememberHistory"),
+    showTrayIcon: follow("showTrayIcon"),
+    developerMode: follow("developerMode"),
+    theme: follow("theme", sameTheme),
+    disabledExtensions: follow("disabledExtensions", sameIds),
+    siteModes: follow("siteModes", sameSites),
+  };
+}
+
 /** What Save has to apply: the settings, the login entry, both, or neither. */
 export interface Changes {
   settings: boolean;

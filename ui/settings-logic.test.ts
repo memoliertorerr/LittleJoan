@@ -10,6 +10,7 @@ import {
   isChanged,
   tabForKey,
   tabFrom,
+  rebase,
   toInput,
   trayLabelFor,
   trayText,
@@ -91,6 +92,28 @@ describe("settings logic", () => {
       "Without it, press ⌘⇧Space or open Little Joan again from your apps. The icon comes back by itself whenever the shortcut can't work.",
     );
     expect(trayText("")).toContain("press your shortcut");
+  });
+
+  it("rebases the window's draft on settings changed from the command bar (LJ42)", () => {
+    const dark = { ...saved.theme, mode: "dark" as const };
+    const changed: Settings = { ...saved, mobileSites: false, searchEngine: "brave", theme: dark, showTrayIcon: false };
+    // Nothing edited: everything follows the change.
+    expect(rebase(saved, saved, changed)).toEqual(changed);
+    // Edited fields keep their edit; the rest follows.
+    const draft: Settings = { ...saved, searchEngine: "bing", theme: { ...saved.theme, grain: 0.9 }, rememberHistory: false };
+    const rebased = rebase(draft, saved, changed);
+    expect(rebased.searchEngine).toBe("bing");
+    expect(rebased.theme.grain).toBe(0.9);
+    expect(rebased.theme.mode).toBe(saved.theme.mode);
+    expect(rebased.rememberHistory).toBe(false);
+    expect(rebased.mobileSites).toBe(false);
+    expect(rebased.showTrayIcon).toBe(false);
+    // An equal theme or list in another order counts as not edited.
+    const same: Settings = { ...saved, theme: { ...saved.theme, colors: [...saved.theme.colors] }, disabledExtensions: [...saved.disabledExtensions] };
+    expect(rebase(same, saved, changed).theme).toEqual(dark);
+    // A later Save sends the change, not the old value.
+    expect(isChanged(changed, toInput(rebased.shortcut, rebased.searchEngine, rebased.translateTo, rebased.mobileSites, rebased.rememberHistory))).toBe(true);
+    expect(toInput(rebased.shortcut, rebased.searchEngine, rebased.translateTo, rebased.mobileSites, rebased.rememberHistory).mobileSites).toBe(false);
   });
 
   it("sends only the edited fields", () => {

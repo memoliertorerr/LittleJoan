@@ -231,21 +231,43 @@ fn only_the_bar_may_read_and_set_site_modes() {
     assert_eq!(bar_has, ["allow-set-site-mode", "allow-site-mode-info"]);
 }
 
-#[test]
-fn only_the_bar_may_quit() {
-    // The command bar's "Quit Little Joan" (LJ41): the trusted bar only — never the page.
-    let mut bar_has_it = false;
+/// Fails unless exactly the bar's capability grants each of `wanted` (and the bar has them all).
+fn only_the_bar_grants(wanted: &[&str]) {
+    let mut bar_has = Vec::new();
     for (place, capability) in all_capabilities() {
-        if !permissions(&capability).contains(&"allow-quit-app") {
+        let granted: Vec<&str> = permissions(&capability)
+            .into_iter()
+            .filter(|p| wanted.contains(p))
+            .collect();
+        if granted.is_empty() {
             continue;
         }
         let only_the_bar = capability.get("identifier").and_then(Value::as_str) == Some("bar")
             && scopes(&capability, "webviews") == [bar::BAR]
             && scopes(&capability, "windows").is_empty();
-        assert!(only_the_bar, "{place}: only the bar's capability may quit");
-        bar_has_it = true;
+        assert!(
+            only_the_bar,
+            "{place}: only the bar's capability may grant {granted:?}"
+        );
+        bar_has.extend(granted.into_iter().map(str::to_owned));
     }
-    assert!(bar_has_it, "the bar lost allow-quit-app");
+    bar_has.sort();
+    let mut want: Vec<String> = wanted.iter().map(|p| (*p).to_owned()).collect();
+    want.sort();
+    assert_eq!(bar_has, want, "the bar must have exactly these");
+}
+
+#[test]
+fn only_the_bar_may_quit() {
+    // The command bar's "Quit Little Joan" (LJ41): the trusted bar only — never the page.
+    only_the_bar_grants(&["allow-quit-app"]);
+}
+
+#[test]
+fn only_the_bar_may_run_quick_commands() {
+    // The command bar's quick commands (LJ42): the trusted bar only — never the page, never
+    // Settings (which has its own Save).
+    only_the_bar_grants(&["allow-quick-state", "allow-quick-command"]);
 }
 
 #[test]

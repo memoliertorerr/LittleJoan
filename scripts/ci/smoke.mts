@@ -23,7 +23,9 @@
 // 380 ↔ 820 px 30 ms apart and the phone-mode hysteresis, screenshots resize-380.png and
 // resize-820.png; smoke-resize.mts), then the site-mode run (its own launch: the toolbar's phone
 // pill, the command bar's "Request desktop site" and "Automatic for this site", Settings' list,
-// Windows' client hints from the server's agent-headers.jsonl; smoke-sitemode.mts), then the tray
+// Windows' client hints from the server's agent-headers.jsonl; smoke-sitemode.mts), then the
+// quick-commands run (its own launch: "mobile" and "dark" in the command bar change and save those
+// settings, the theme rows, Copy link over the smoke page; smoke-quick.mts), then the tray
 // run (its own launches with the icon switched off: it hides, a plain second launch opens the
 // window, the command bar's "Quit Little Joan" quits, Settings → General shows the switch, and on
 // Linux a Wayland session brings the icon back; smoke-tray.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
@@ -89,6 +91,7 @@ import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } f
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
+import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -1206,6 +1209,20 @@ const siteDriver: SiteDriver = {
 };
 const siteModeCheck = await siteModeRun(siteDriver);
 console.log(`site mode: ${JSON.stringify(siteModeSummary(siteModeCheck, os))}`);
+// The quick-commands run (LJ42, smoke-quick.mts): its own launch, typing like the site-mode run.
+const quickDriver: QuickDriver = {
+  os,
+  pageUrl: smokePageUrl,
+  launch: fullscreenLaunch,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  typeText,
+  pressKeys,
+  pressShortcut,
+  readClipboard,
+};
+const quickCheck = await quickRun(quickDriver);
+console.log(`quick: ${JSON.stringify(quickSummary(quickCheck, os))}`);
 server.close();
 // The tray run (LJ41, smoke-tray.mts): the icon switched off, and every way back still there.
 const trayDriver: TrayDriver = {
@@ -1305,6 +1322,7 @@ const summary = {
   fullscreenRun: fullscreenSummary(fullscreenCheck, os),
   resizeRun: { steps: resizeSummary(resizeCheck.results), rules: resizeFailures(RESIZE_STEPS, resizeCheck.results) },
   siteModeRun: siteModeSummary(siteModeCheck, os),
+  quickRun: quickSummary(quickCheck, os),
   trayRun: traySummary(trayCheck, os),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
@@ -1352,6 +1370,7 @@ const failures = evaluate(
   .concat(fullscreenFailures(fullscreenCheck, os))
   .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(siteModeFailures(siteModeCheck, os))
+  .concat(quickFailures(quickCheck, os))
   .concat(trayFailures(trayCheck, os))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
@@ -1360,7 +1379,7 @@ if (failures.length > 0) {
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
   const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
-  const trayLogs = ["tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
+  const trayLogs = ["quick", "tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
