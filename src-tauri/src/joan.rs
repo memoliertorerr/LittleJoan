@@ -250,6 +250,8 @@ fn destroy<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             remember_size(app, &window);
             history_store::close(app);
             keep_session_cookies(app);
+            // A download under way ends with the window (Ground Rule 9).
+            bar::download::window_closed(app);
             release_page(app, &window);
             let destroyed = window.destroy();
             extensions::forget_window();

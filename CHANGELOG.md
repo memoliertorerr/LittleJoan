@@ -7,6 +7,11 @@ All notable changes to Little Joan are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Downloads** go to your Downloads folder on every system, under the site's name for the file,
+  made safe (no path parts, hidden-file dots or characters Windows refuses) and never overwriting a
+  file: a second `report.pdf` lands as `report (1).pdf`. The toolbar shows "Downloading …", then
+  "… saved" with **Show in folder**, or "Download failed". Closing the window ends a download under
+  way. Nothing is saved while an extension is open — extensions can't drop files into Downloads.
 - **Hide the tray / menu-bar icon** (Settings → General → "Show the icon in the menu bar" on
   macOS, "… in the system tray" on Windows and Linux). Little Joan then lives on its shortcut;
   opening it again from your apps also opens the window. The icon comes back by itself whenever

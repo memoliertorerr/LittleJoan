@@ -10,9 +10,10 @@
 // Settings saves one); the bar reports the colors it painted (set_theme_tokens) for extension
 // panels. window.littleJoan.setExtension names the extension whose panel the page shows, and
 // window.littleJoan.setSiteMode what the open web page's site is on (the toolbar's "Phone" /
-// "Desktop" pill and the command bar's "Request desktop site" rows, LJ40). Before all of that, at
-// the top: the theme Rust's initialization script left (bar-boot.ts), so the first frame isn't the
-// default theme.
+// "Desktop" pill and the command bar's "Request desktop site" rows, LJ40), and
+// window.littleJoan.setStatus what just happened (the toolbar's status area: downloads, LJ15).
+// Before all of that, at the top: the theme Rust's initialization script left (bar-boot.ts), so
+// the first frame isn't the default theme.
 import { invoke } from "@tauri-apps/api/core";
 import { bootTheme, needsTheme } from "./bar-boot.ts";
 import { mayReplace, textFor } from "./bar-logic.ts";
@@ -37,6 +38,7 @@ declare global {
       setTheme(theme: unknown): void;
       setExtension(label: unknown): void;
       setSiteMode(info: unknown): void;
+      setStatus(message: unknown): void;
     };
   }
 }
@@ -170,6 +172,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
         historyPanel.close();
       }
       render();
+      tools.setVisible(state.view === "toolbar");
       if (changed) {
         if (!on) {
           field.value = state.shown;
@@ -196,6 +199,9 @@ if (field && rowList && toolbarRoot && historyRoot) {
     setSiteMode(info: unknown) {
       siteInfo = siteModeInfo(info);
       tools.update(state.shown, canGoBack, extension, siteInfo);
+    },
+    setStatus(message: unknown) {
+      tools.setStatus(message);
     },
   };
 

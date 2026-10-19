@@ -271,6 +271,13 @@ fn only_the_bar_may_run_quick_commands() {
 }
 
 #[test]
+fn only_the_bar_may_reveal_downloads() {
+    // The toolbar's "Show in folder" for the last download (LJ15): the trusted bar only — never
+    // the page, whose downloads it would reveal.
+    only_the_bar_grants(&["allow-reveal-download"]);
+}
+
+#[test]
 fn only_the_bar_and_settings_may_read_the_keymap() {
     // keymap_info (LJ43): Little Joan's keys, for Settings → Keyboard and the bar — never the page.
     let mut granted_to = Vec::new();

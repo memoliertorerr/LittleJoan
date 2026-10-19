@@ -23,6 +23,7 @@ use url::Url;
 
 mod background;
 mod boot;
+pub mod download;
 mod view;
 mod watch;
 
@@ -90,6 +91,7 @@ pub fn add_webviews<R: Runtime>(
     let theme = crate::state::with(window.app_handle(), |s| s.shown_theme());
     boot::set_early_theme(theme.clone());
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    download::new_window();
     let whole = Rect {
         x: 0.0,
         y: 0.0,
@@ -178,6 +180,13 @@ pub fn add_webviews<R: Runtime>(
             }
             NewWindowResponse::Deny
         });
+    // Downloads go to the Downloads folder, the toolbar says how they went (bar/download.rs).
+    // WebKitGTK's come through platform/linux.rs instead: wry's handler there is the web
+    // context's, and the first webview's decides for all of them (Landmines).
+    #[cfg(not(target_os = "linux"))]
+    {
+        page = page.on_download(download::on_download);
+    }
     // Both webviews of a window must share one data directory (WebView2 requires it).
     if let Some(dir) = data_dir {
         bar = bar.data_directory(dir.clone());
@@ -227,6 +236,7 @@ pub fn tell_state<R: Runtime>(app: &AppHandle<R>) {
     }
     extensions::session::publish_label(app, true);
     phone_mode::republish(app);
+    download::retell(app);
 }
 
 fn tell_back<R: Runtime>(bar: &Webview<R>, on: bool) {
@@ -366,40 +376,4 @@ pub fn webviews<R: Runtime>(app: &AppHandle<R>) -> Vec<Webview<R>> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn url(s: &str) -> Url {
-        Url::parse(s).expect("valid")
-    }
-
-    #[test]
-    fn the_start_page_shows_an_empty_bar() {
-        for (origin, start) in [
-            ("tauri://localhost/", "tauri://localhost/index.html"),
-            (
-                "http://tauri.localhost/",
-                "http://tauri.localhost/index.html",
-            ),
-        ] {
-            assert_eq!(bar_text(&url(start), &url(origin)), None);
-        }
-        assert_eq!(
-            bar_text(&url("about:blank"), &url("tauri://localhost/")),
-            None
-        );
-    }
-
-    #[test]
-    fn web_pages_show_their_full_address() {
-        let origin = url("http://tauri.localhost/");
-        assert_eq!(
-            bar_text(&url("https://example.com/a?b=1#c"), &origin).as_deref(),
-            Some("https://example.com/a?b=1#c")
-        );
-        assert_eq!(
-            bar_text(&url("http://127.0.0.1:8123/smoke.html"), &origin).as_deref(),
-            Some("http://127.0.0.1:8123/smoke.html")
-        );
-    }
-}
+mod tests;

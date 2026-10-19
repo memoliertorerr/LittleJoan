@@ -9,6 +9,7 @@ pub mod bar;
 pub mod cli;
 pub mod commands;
 pub mod cookies;
+pub mod downloads;
 pub mod extensions;
 pub mod fullscreen;
 pub mod history;
@@ -95,6 +96,7 @@ pub fn run() {
             commands::site::site_mode_info,
             commands::site::set_site_mode,
             commands::app::quit_app,
+            commands::downloads::reveal_download,
             commands::quick::quick_state,
             commands::quick::quick_command,
             commands::keys::keymap_info

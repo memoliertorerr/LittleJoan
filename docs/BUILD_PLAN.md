@@ -81,7 +81,7 @@
 | LJ13 | *(v0.2)* AppImage built on Ubuntu 24.04 (WebKitGTK 2.52); the AppImage gets the full smoke | strong | auto | ✅ done |
 | LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⏭ stopped at its experiment: 2.50.4 aborts even when `enter-fullscreen` is handled — no app change; the Launchpad draft written (see notes) → LJ14.1 |
 | LJ14.1 | *(added mid-plan 2026-10-19)* WebKitGTK older than 2.52: element fullscreen switched off instead of the abort; an Ubuntu 22.04 smoke job | strong | auto | ✅ done |
-| LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ⬜ todo |
+| LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ✅ done |
 | LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ⬜ todo |
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⬜ todo |
@@ -2718,6 +2718,84 @@ open the phase-8 PR into main as a draft, and watch CI until
 every job is green (Ground Rule 3; two honest attempts, then stop). Look at each OS's
 download.png.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **Disk:** 12 GiB free at the start of the phase and after verify; `.cache/target` 1.6 GB.
+- **`downloads.rs`** (pure; 13 tests in `downloads/tests.rs`): `accepts` (http / https; `data:`;
+  `blob:` whose page is http(s); never an extension URL in any form — `ljext:`, `http(s)://ljext.*`,
+  a blob of either —, the app's own origin, Windows' `http://tauri.localhost` included, `file:` or
+  another scheme), `file_name` (the engine's suggestion, else the URL's last path segment
+  percent-decoded, else `download`; WebKitGTK's payload "name" for a `data:` URL counts as none),
+  `clean` (the prompt's rules, and a little more, the restrictive choices: the characters Windows
+  refuses (`<>:"|?*`) become `_` on every OS, format characters go with the control ones — a bidi
+  override could show `…fdp.exe` as `…exe.pdf` (the manifest's `is_hidden_char`) —, leading dots go
+  too, so no hidden files and no `..`; device names get a `_` in front, `extensions::paths::DEVICES`),
+  the 200-byte cap keeping the extension at a character boundary, `split_extension` (the last dot
+  part when it is 1–10 letters or digits, with a `.tar` before it: `archive (1).tar.gz` but
+  `v1.2.3-setup (1).exe`, and `Chapter 1. Intro (1)` has none), `unique` (up to ` (9999)`, then
+  refused), and `Downloads` — the window's downloads under way keyed by URL (the earliest of a URL
+  first; reported twice → once), the last one saved, `decide` (panel → scheme → name; a name under
+  way counts as taken, case aside, so two quick downloads can't pick one name before either lands)
+  and `closed`.
+- **Runtime** (`bar/download.rs`, a child of bar.rs — which moved its tests to `bar/tests.rs` to stay
+  under 400 lines): `on_download` for WebView2 and WKWebView (Requested: the suggestion is the file
+  name of the engine's own destination; Finished: by URL), `requested` / `finished` for every engine,
+  the Downloads folder (`download_dir()`, else `~/Downloads`, created), the status pushed to the bar
+  (`setStatus({ kind: "download", state, name })`) and kept per window to tell the bar again when its
+  script runs (`tell_state`), and `window_closed` (from `joan::destroy`, before the page is
+  released). Smoke log: `download-folder`, `download-started`, `download-finished <name> ok|failed`,
+  `download-refused <reason>`, `download-closed`. "While the page shows an extension panel" is the
+  committed panel **or** the one the guard admitted and that hasn't committed yet (the more
+  restrictive reading; `--show <download>` over a panel leaves `committed` set, since a download
+  never commits). A refused download shows "Download blocked" (panel) or "Download failed" (the
+  rest) — the prompt named only the other three texts.
+- **WebKitGTK, a deviation the code forced (`platform/linux.rs`, beyond the prompt's files):** read
+  in wry 0.57 (`webkitgtk/web_context.rs`, `webkitgtk/mod.rs`, `lib.rs`) — every webview's
+  attributes default to an allow-all `download_started_handler`, and on Linux wry registers it on
+  the **web context** (`connect_download_started`, then `decide-destination` on each download) once
+  per webview built; Tauri keeps one context per data folder for the app's lifetime on Linux
+  (tauri-runtime-wry's `WebviewWrapper::drop`), shared by both webviews of every window (and
+  Settings in installed builds). WebKitGTK's `decide-destination` stops at the first handler that
+  returns TRUE (`g_signal_accumulator_true_handled`, checked in WebKit's `WebKitDownload.cpp`), and
+  wry's always do — so the bar's default handler, registered first, would have decided every page
+  download, `on_download`'s `Requested` would never have run, and each new window would have added
+  one more `finished` report, with a `failed` flag that is never reset. So on Linux the page doesn't
+  use Tauri's `on_download`: `install_page` hooks `download-started` once per context, takes only
+  downloads whose `web_view` is the open window's page, disconnects the `decide-destination`
+  handlers connected so far (`g_signal_handlers_disconnect_matched` by signal id; smoke log
+  `download-deciders-removed <n>`) and connects its own, which calls the same `requested` and sets a
+  `file://` URI (`g_filename_to_uri`: the 4.1 API's legacy form, which 22.04's 2.50 needs), with
+  per-download `failed` / `finished` handlers and a list of the page's downloads under way, cancelled
+  on the main thread when the window closes (`platform::cancel_downloads`). Landmines has it.
+- **Windows' download flyout:** nothing to add in `platform/win.rs`: wry's `DownloadStarting` handler
+  calls `SetHandled(true)` whenever `on_download` accepts (and `SetCancel(true)` when it refuses), and
+  a handled download shows no WebView2 UI — the screenshot decides.
+- **The toolbar** (`ui/toolbar/logic.ts` + `toolbar.ts`, `bar.html`, `style.css`): a generic status
+  area — `statusMessage` (checked), `statusView` (text, tooltip, an optional action: only
+  `reveal_download`), `lingerFor` (until replaced while downloading, else 8 s), and a small state
+  (`withStatus`, `withToolbarVisible`, `shownStatus`, `nextStatusChange`) that counts only the time
+  the toolbar is visible, one status per kind, the latest shown; 9 new tests in `logic.test.ts`
+  (downloading → saved → cleared after 8 s; failed; the command bar opening never loses one; a
+  status that arrives while the command bar is open waits; names shortened in the middle; markup
+  stays text). While a status shows, the pill hides. `#toolbar-status` sits between the pill and
+  open-in-browser, `max-width: 60%`, the name ellipsized, the button kept, so site and status share
+  320 px.
+- **`reveal_download()`** (`commands/downloads.rs`; build.rs's manifest; `capabilities/bar.json` gains
+  exactly `allow-reveal-download`; `capability_tests.rs`' `only_the_bar_may_reveal_downloads`): the
+  last file saved in this window, `tauri_plugin_opener::reveal_item_in_dir`.
+- **Smoke** (`scripts/ci/smoke-downloads.mts` + test, 7 tests; the smoke server's routes in
+  `smoke.mts`): its own launch after the keymap run. The address (`/dl-attachment`) names something
+  else than the header, so the name must come from `Content-Disposition`. Two more things,
+  informational in `summary.json`'s `downloads`: a PDF sent as an attachment (`/dl-pdf`) — whether
+  each engine downloads it or shows it (wry's WKWebView response policy looks only at
+  `canShowMIMEType`) —, and **closing the window during a download** (`/dl-slow`, 40 × 1 KB, one
+  every 500 ms): whether the server saw the engine stop, what is left in Downloads, the log after
+  `--hide` — the evidence for what WKWebView and WebView2 do (below, with CI).
+- Docs: README (Downloads; Privacy), CHANGELOG (Added), docs/architecture.md (file map, the page's
+  Downloads, the toolbar's status area, commands, capabilities, smoke log, CI), this plan (Deferred
+  follow-ups, Landmines).
+- `npm run verify`: 615 TS tests, 357 Rust tests, clippy clean (the Linux path compiles only in CI).
 
 ### LJ16 — Page zoom · standard · auto
 
@@ -7532,9 +7610,10 @@ and where, then stop.
 - **macOS menu page items are always enabled** (surfaced by LJ7). The menu bar is hidden
   (Accessory app), so only the key equivalents matter, and they do nothing without a page. The
   tray items do track page state.
-- **Downloads use each engine's default** (surfaced by LJ4). WebView2 saves to Downloads with its
+- ~~**Downloads use each engine's default**~~ (surfaced by LJ4). WebView2 saves to Downloads with its
   own UI; WKWebView and WebKitGTK ignore downloads unless the app handles them. Designed under
-  Later. → *Planned as LJ15.*
+  Later. → *Planned as LJ15. Handled by LJ15: every engine saves to the Downloads folder under a
+  cleaned, unique name, with the status in the toolbar.*
 - **Linux fullscreen on Ubuntu 22.04 / the AppImage** (surfaced by LJ9). WebKitGTK 2.50.4
   aborts on element fullscreen (Landmines). Options for the user: (a) build the AppImage on
   ubuntu-24.04 so it bundles WebKitGTK 2.52 (raises its glibc floor to 2.39); (b) wait for
@@ -8055,6 +8134,17 @@ Populated from real friction, not speculation:
   promise). Little Joan sets it on the page webview below 2.52 (`fullscreen-off` in the smoke log).
   **A force-cancelled job keeps no log** (`gh api …/force-cancel`): its log blob is never written,
   so the diagnostics it ran are lost — cancel normally, or let it end.
+- *(LJ15, read in wry 0.57)* **On Linux wry's download handler belongs to the web context, and the
+  first one wins.** Every webview's attributes default to an allow-all `download_started_handler`,
+  and on WebKitGTK wry registers it on the shared `WebKitWebContext` once per webview built (Tauri
+  keeps one context per data folder for the app's lifetime on Linux, shared by the bar, the page and
+  — in installed builds — Settings). WebKitGTK's `decide-destination` stops at the first handler
+  that returns TRUE, and wry's always do: the first webview ever built decides every download's
+  destination, Tauri's `on_download` on a later webview never sees `Requested`, each new webview adds
+  one more `finished` report, and wry's per-registration `failed` flag is never reset. LJ15 handles
+  the page's downloads in `platform/linux.rs` instead (one hook per context, wry's deciders
+  disconnected). On Windows and macOS `on_download` is per webview and works. Also: WebKitGTK 4.1's
+  `webkit_download_set_destination` takes a `file://` URI on 2.50 (newer versions take a path too).
 - *(LJ13)* **An AppImage without FUSE (`APPIMAGE_EXTRACT_AND_RUN=1`) deletes its extracted folder
   when it exits** — `$TMPDIR/appimage_extracted_<md5>`, shared by every launch of the same image.
   A second instance (single-instance's remote control) exiting would delete the running first

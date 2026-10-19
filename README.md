@@ -184,6 +184,11 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   declines the page's request — so on it a video's fullscreen button does nothing. Ubuntu 24.04's
   (2.52) works, and the AppImage brings its own 2.52 (it needs Ubuntu 24.04 or newer, though).
 - **Links that open a new window** (`target=_blank`) open in your default browser.
+- **Downloads** go to your Downloads folder, under the name the site gives the file — tidied into a
+  safe file name, and never overwriting one: a second `report.pdf` becomes `report (1).pdf`. The
+  toolbar says "Downloading report.pdf…", then "report.pdf saved" with **Show in folder** (or
+  "Download failed") for a few seconds. Closing the window ends a download that is still under way.
+  Nothing is downloaded while an extension is open: extensions can't save files.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),
   `little-joan --start-at-login on|off`, `little-joan --settings [general|keyboard|appearance|extensions|privacy|about]`
@@ -318,6 +323,8 @@ You can write your own with plain HTML, CSS and JavaScript — see
 - Session cookies (the "until you close the browser" kind) last while Little Joan runs, across
   closing and reopening the window. On Windows, Little Joan holds them in memory meanwhile —
   never on disk — and quitting forgets them, as quitting a browser does.
+- **Downloads** land in your Downloads folder; Little Joan keeps no list of them (only the last
+  one's place, for **Show in folder**, until the window closes).
 - **Site icons in the command bar** are loaded straight from each suggested site
   (`https://<site>/favicon.ico`, without a referrer); nothing else is fetched for suggestions.
 - **History stays on your computer.** Little Joan records the pages you open (address, title,

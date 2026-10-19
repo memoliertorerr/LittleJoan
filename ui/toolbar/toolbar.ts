@@ -2,11 +2,25 @@
 // extension's panel its icon and name, as text — (a click opens the command bar with the address
 // selected), "open in default browser" on the right, and before it the "Phone" / "Desktop" pill
 // (logic.ts says when; a click asks Rust for the other version for this site: set_site_mode).
-// The empty parts carry data-tauri-drag-region, so they drag the window. What it shows comes
-// from logic.ts.
+// The empty parts carry data-tauri-drag-region, so they drag the window. The status area (LJ15)
+// takes the pill's place while it shows: Rust's message ("Downloading …", "… saved" with "Show in
+// folder"), timed by logic.ts against the time the toolbar is visible. What it shows comes from
+// logic.ts.
 import { invoke } from "@tauri-apps/api/core";
 import { siteIcon } from "../command/view.ts";
-import { toolbarView, type ExtensionLabel, type Pill, type SiteModeInfo } from "./logic.ts";
+import {
+  initialStatus,
+  nextStatusChange,
+  shownStatus,
+  statusMessage,
+  toolbarView,
+  withStatus,
+  withToolbarVisible,
+  type ExtensionLabel,
+  type Pill,
+  type SiteModeInfo,
+  type StatusView,
+} from "./logic.ts";
 
 export interface Toolbar {
   /**
@@ -14,6 +28,10 @@ export interface Toolbar {
    * its site is on.
    */
   update(address: string, canGoBack: boolean, extension: ExtensionLabel | null, info: SiteModeInfo | null): void;
+  /** Rust's status message (anything: checked). */
+  setStatus(message: unknown): void;
+  /** The toolbar is shown (true) or the command bar covers it. */
+  setVisible(visible: boolean): void;
 }
 
 export function toolbar(root: HTMLElement): Toolbar {
@@ -23,10 +41,17 @@ export function toolbar(root: HTMLElement): Toolbar {
   const badge = root.querySelector<HTMLElement>("#site-badge");
   const openInBrowser = root.querySelector<HTMLButtonElement>("#open-browser");
   const pill = root.querySelector<HTMLButtonElement>("#site-pill");
+  const status = root.querySelector<HTMLElement>("#toolbar-status");
+  const statusText = root.querySelector<HTMLElement>("#toolbar-status-text");
+  const statusAction = root.querySelector<HTMLButtonElement>("#toolbar-status-action");
   /** What the icon shows now: a site, or `ext:<name>`. */
   let shownSite: string | null = null;
   /** What the pill shows now (its click asks for `next`). */
   let shownPill: Pill | null = null;
+  /** The statuses held, and the one shown (a new window opens with the command bar over it). */
+  let statuses = initialStatus(false, performance.now());
+  let shown: StatusView | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
   back?.addEventListener("click", () => void invoke("go_back"));
   site?.addEventListener("click", () => void invoke("set_overlay", { on: true }));
@@ -36,13 +61,45 @@ export function toolbar(root: HTMLElement): Toolbar {
       void invoke("set_site_mode", { mode: shownPill.next });
     }
   });
+  statusAction?.addEventListener("click", () => {
+    if (shown?.action) {
+      // Which file is Rust's (the last one saved); a failure leaves the status as it is.
+      invoke(shown.action.command).catch(() => undefined);
+    }
+  });
+
+  /** The pill shows only while no status does. */
+  const showPill = (): void => {
+    if (pill) {
+      pill.hidden = shownPill === null || shown !== null;
+    }
+  };
+
+  /** Draws the status that is due now (as text), and wakes up when it runs out. */
+  const refresh = (): void => {
+    const now = performance.now();
+    shown = shownStatus(statuses, now);
+    if (status && statusText && statusAction) {
+      status.hidden = shown === null;
+      statusText.textContent = shown?.text ?? "";
+      status.title = shown?.title ?? "";
+      statusAction.hidden = !shown?.action;
+      statusAction.textContent = shown?.action?.label ?? "";
+    }
+    showPill();
+    clearTimeout(timer);
+    const next = nextStatusChange(statuses, now);
+    if (next !== null) {
+      timer = setTimeout(refresh, next + 20);
+    }
+  };
 
   return {
     update(address: string, canGoBack: boolean, extension: ExtensionLabel | null, info: SiteModeInfo | null) {
       const view = toolbarView(address, canGoBack, extension, info);
       shownPill = view.pill;
+      showPill();
       if (pill) {
-        pill.hidden = view.pill === null;
         pill.textContent = view.pill?.label ?? "";
         pill.title = view.pill?.title ?? "";
         pill.setAttribute("aria-label", view.pill?.title ?? "");
@@ -78,6 +135,17 @@ export function toolbar(root: HTMLElement): Toolbar {
       if (openInBrowser) {
         openInBrowser.disabled = !view.openInBrowser;
       }
+    },
+    setStatus(value: unknown) {
+      const message = statusMessage(value);
+      if (message) {
+        statuses = withStatus(statuses, message, performance.now());
+        refresh();
+      }
+    },
+    setVisible(visible: boolean) {
+      statuses = withToolbarVisible(statuses, visible, performance.now());
+      refresh();
     },
   };
 }

@@ -64,6 +64,18 @@ pub fn install_bar<R: Runtime>(_bar: &Webview<R>) {}
 #[cfg(not(any(windows, target_os = "linux")))]
 pub fn install_page<R: Runtime>(_page: &Webview<R>) {}
 
+/// Linux: cancels the page's downloads under way (the window is closing). WebKitGTK keeps its
+/// web context — and so its downloads — for the app's lifetime.
+#[cfg(target_os = "linux")]
+pub fn cancel_downloads<R: Runtime>(app: &AppHandle<R>) {
+    linux::cancel_downloads(app);
+}
+
+/// Windows and macOS: a download goes with its webview (WebView2's environment ends with the
+/// window; what WKWebView's does is in the plan's LJ15 notes).
+#[cfg(not(target_os = "linux"))]
+pub fn cancel_downloads<R: Runtime>(_app: &AppHandle<R>) {}
+
 /// Whether the window is fullscreen right now, however it got there. On Linux WebKitGTK
 /// fullscreens the GTK window itself for a page's fullscreen element, which tao's own state
 /// doesn't see, so the GDK window state is read instead. Main thread only.

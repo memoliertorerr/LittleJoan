@@ -32,6 +32,8 @@ use crate::welcome;
 
 /// The app itself from the command bar (LJ41): `quit_app`.
 pub mod app;
+/// The toolbar's "Show in folder" for a download (LJ15): `reveal_download`.
+pub mod downloads;
 /// Little Joan's keys for Settings (LJ43): `keymap_info`.
 pub mod keys;
 /// Quick commands in the command bar (LJ42): `quick_state`, `quick_command`.
