@@ -390,6 +390,64 @@ jobs:
           if [ -e /proc/sys/kernel/yama/ptrace_scope ]; then sudo sysctl -w kernel.yama.ptrace_scope=0; fi
           echo "APP=$image" >> "$GITHUB_ENV"
 
+      # Diagnostics: the same click in a bare WebKitGTK 4.1 window built with PyGObject (no Tauri,
+      # wry, or tao), to tell an engine crash from an embedding one. The system's WebKitGTK, so only
+      # where the .deb runs; before the app's smoke, which may run into the job's time limit after an
+      # abort. Three variants (LJ14): WebKitGTK's own handling ("default"), an `enter-fullscreen`
+      # handler that returns TRUE ("handled": WebKit declines the page's request), and that plus the
+      # window fullscreened by the handler ("handled-window", as Little Joan's stopgap does).
+      - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
+        if: ${{ !cancelled() && matrix.artifact == 'linux' && inputs.linux_plain_webkit_check }}
+        run: |
+          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1 xvfb xdotool openbox dbus-x11
+          cat > /tmp/plain.html <<'HTML'
+          <!doctype html><title>plain ready</title>
+          <div id="s" style="position:fixed;inset:0;background:#f7c948" onclick="this.requestFullscreen().catch((e) => { document.title = 'plain request refused: ' + e.name; })"></div>
+          <script>
+          document.addEventListener("fullscreenchange", () => { document.title = "plain fullscreen=" + (document.fullscreenElement ? "on" : "off"); });
+          document.addEventListener("fullscreenerror", () => { document.title = "plain fullscreenerror"; });
+          </script>
+          HTML
+          cat > /tmp/plain.py <<'PY'
+          import sys
+          import gi
+          gi.require_version("Gtk", "3.0")
+          gi.require_version("Gdk", "3.0")
+          gi.require_version("WebKit2", "4.1")
+          from gi.repository import Gdk, GLib, Gtk, WebKit2
+          mode = sys.argv[1] if len(sys.argv) > 1 else "default"
+          print(f"plain ({mode}): WebKitGTK {WebKit2.get_major_version()}.{WebKit2.get_minor_version()}.{WebKit2.get_micro_version()}", flush=True)
+          window = Gtk.Window()
+          window.set_default_size(480, 640)
+          window.set_position(Gtk.WindowPosition.CENTER)
+          view = WebKit2.WebView()
+          view.connect("notify::title", lambda v, _: print("title:", v.get_title(), flush=True))
+          def on_enter(_view):
+              print(f"enter-fullscreen: {mode}", flush=True)
+              if mode == "handled-window":
+                  window.fullscreen()
+              return mode != "default"
+          view.connect("enter-fullscreen", on_enter)
+          window.connect("window-state-event", lambda _w, e: print("window fullscreen:", bool(e.new_window_state & Gdk.WindowState.FULLSCREEN), flush=True) or False)
+          window.add(view)
+          view.load_uri("file:///tmp/plain.html")
+          window.show_all()
+          GLib.timeout_add_seconds(30, Gtk.main_quit)
+          Gtk.main()
+          print(f"plain ({mode}): main loop ended normally", flush=True)
+          PY
+          for mode in default handled handled-window; do
+            xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
+              openbox & sleep 2
+              python3 /tmp/plain.py "$0" & app=$!
+              sleep 8
+              xdotool mousemove 640 400 click 1
+              sleep 8
+              if kill -0 "$app" 2>/dev/null; then echo "BARE WEBKITGTK ($0): still running after the click"; kill "$app"; else wait "$app"; echo "BARE WEBKITGTK ($0): exited with status $?"; fi
+              wait "$app" 2>/dev/null || true
+            ' "$mode"
+          done
+
       - name: Smoke test (Windows, macOS)
         if: runner.os != 'Linux'
         env:
@@ -408,45 +466,6 @@ jobs:
         run: |
           xvfb-run -a -s "-screen 0 $LJ_SCREEN" dbus-run-session -- bash -c \
             'if [ "$LJ_WM" != none ]; then openbox & sleep 2; fi; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
-
-      # Diagnostics: the same click in a bare WebKitGTK 4.1 window built with PyGObject (no Tauri,
-      # wry, or tao), to tell an engine crash from an embedding one. The system's WebKitGTK, so only
-      # where the .deb runs.
-      - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
-        if: ${{ !cancelled() && matrix.artifact == 'linux' && inputs.linux_plain_webkit_check }}
-        run: |
-          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1
-          cat > /tmp/plain.html <<'HTML'
-          <!doctype html><title>plain ready</title>
-          <div id="s" style="position:fixed;inset:0;background:#f7c948" onclick="this.requestFullscreen()"></div>
-          <script>document.addEventListener("fullscreenchange", () => { document.title = "plain fullscreen=" + (document.fullscreenElement ? "on" : "off"); });</script>
-          HTML
-          cat > /tmp/plain.py <<'PY'
-          import gi
-          gi.require_version("Gtk", "3.0")
-          gi.require_version("WebKit2", "4.1")
-          from gi.repository import GLib, Gtk, WebKit2
-          window = Gtk.Window()
-          window.set_default_size(480, 640)
-          window.set_position(Gtk.WindowPosition.CENTER)
-          view = WebKit2.WebView()
-          view.connect("notify::title", lambda v, _: print("title:", v.get_title(), flush=True))
-          window.add(view)
-          view.load_uri("file:///tmp/plain.html")
-          window.show_all()
-          GLib.timeout_add_seconds(30, Gtk.main_quit)
-          Gtk.main()
-          print("plain: main loop ended normally", flush=True)
-          PY
-          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
-            openbox & sleep 2
-            python3 /tmp/plain.py & app=$!
-            sleep 8
-            xdotool mousemove 640 400 click 1
-            sleep 8
-            if kill -0 "$app" 2>/dev/null; then echo "BARE WEBKITGTK: still running after the click"; else wait "$app"; echo "BARE WEBKITGTK: exited with status $?"; fi
-            wait "$app" 2>/dev/null || true
-          '
 
       - uses: actions/upload-artifact@v7
         if: always()
