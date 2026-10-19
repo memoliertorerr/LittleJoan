@@ -94,6 +94,7 @@ import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
 import { findApp, listProcs } from "./smoke-linux.mts";
+import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
 import {
   keyboardProblemFailures,
@@ -134,6 +135,10 @@ const extraEnv = Object.fromEntries(
     .filter((pair) => pair.includes("="))
     .map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]),
 );
+// LJ_SMOKE_FULLSCREEN=off: this job's engine has element fullscreen switched off (WebKitGTK older
+// than 2.52, which aborts on it: LJ14.1), so a page's request must change nothing — and crash
+// nothing (smoke-fullscreen-off.mts).
+const fullscreenOff = process.env.LJ_SMOKE_FULLSCREEN === "off";
 // Data folders live outside <out>, which is uploaded (WebView2 keeps its profile there).
 const dataRoot = process.env.RUNNER_TEMP ?? tmpdir();
 /**
@@ -720,13 +725,19 @@ writeFileSync(join(out, "helpers-with-page.txt"), helperListing());
 screenshot("page.png");
 
 clickCentre();
-const windowWanted = os !== "darwin";
-await waitFor(
-  "fullscreen",
-  (e) => lastTitle(e, "LJ-SMOKE fullscreen=on") !== undefined && (!windowWanted || count(e, "fullscreen", "true") > 0),
-  15_000,
-);
-await sleep(2000);
+const windowWanted = os !== "darwin" && !fullscreenOff;
+if (fullscreenOff) {
+  // Fullscreen is off on this engine: the click must leave the window as it is (and the app alive,
+  // which the page's next load shows).
+  await sleep(4000);
+} else {
+  await waitFor(
+    "fullscreen",
+    (e) => lastTitle(e, "LJ-SMOKE fullscreen=on") !== undefined && (!windowWanted || count(e, "fullscreen", "true") > 0),
+    15_000,
+  );
+  await sleep(2000);
+}
 screenshot("fullscreen.png");
 
 // Leave fullscreen by loading the page again, then resize the window: the page must reflow to
@@ -1241,7 +1252,15 @@ function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra
     },
   });
 }
-const fullscreenDriver: FsDriver = { os, pageUrl: smokePageUrl, launch: fullscreenLaunch, clickAt, screenshot, sleep: (ms) => sleep(ms).then(() => undefined) };
+const fullscreenDriver: FsDriver = {
+  os,
+  pageUrl: smokePageUrl,
+  launch: fullscreenLaunch,
+  clickAt,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  fullscreenOff,
+};
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
 const fullscreenCheck = await fullscreenRun(fullscreenDriver, true);
@@ -1396,7 +1415,9 @@ const summary = {
     up: [...BUNDLED_PANELS, ...PAGE_ACTIONS].filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
     keysReached: bundledCheck.keys,
   },
-  fullscreenRun: fullscreenSummary(fullscreenCheck, os),
+  fullscreenRun: fullscreenSummary(fullscreenCheck, os, fullscreenOff),
+  // LJ14.1: element fullscreen switched off (expected on WebKitGTK older than 2.52 only).
+  fullscreenOff: { expected: fullscreenOff, versions: fullscreenOffVersions(log) },
   resizeRun: { steps: resizeSummary(resizeCheck.results), rules: resizeFailures(RESIZE_STEPS, resizeCheck.results) },
   siteModeRun: siteModeSummary(siteModeCheck, os),
   quickRun: quickSummary(quickCheck, os),
@@ -1449,7 +1470,8 @@ const failures = evaluate(
   .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
-  .concat(fullscreenFailures(fullscreenCheck, os))
+  .concat(fullscreenFailures(fullscreenCheck, os, fullscreenOff))
+  .concat(fullscreenOffFailures(fullscreenOff, { main: log, fullscreen: fullscreenCheck }))
   .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(siteModeFailures(siteModeCheck, os))
   .concat(quickFailures(quickCheck, os))

@@ -7,7 +7,10 @@
 //! - **WKWebView (macOS):** wry enables `elementFullscreenEnabled`; WebKit moves the element into
 //!   its own fullscreen window. The app only watches it (`WebKitFullscreen`, platform/mac.rs).
 //! - **WebKitGTK (Linux):** the default `enter-fullscreen` handler fullscreens the toplevel GTK
-//!   window (`enable-fullscreen` defaults to true). Nothing to do here.
+//!   window (`enable-fullscreen` defaults to true). Older than 2.52 (Ubuntu 22.04's 2.50.4) the
+//!   process aborts as a page enters element fullscreen — even when `enter-fullscreen` declines it
+//!   (LJ14) —, so there platform/linux.rs switches `enable-fullscreen` off (`needs_fullscreen_off`):
+//!   a page's request is refused and nothing crashes (LJ14.1).
 
 /// Remembers whether the window went fullscreen because of the page, so leaving element
 /// fullscreen never undoes a fullscreen the user chose.
@@ -38,6 +41,13 @@ impl FullscreenTracker {
             None
         }
     }
+}
+
+/// WebKitGTK older than 2.52 aborts the process when a page enters element fullscreen (2.50.4 on
+/// Ubuntu 22.04; the plan's Landmines), whatever the app answers to `enter-fullscreen`, so element
+/// fullscreen is switched off there: the page's request is refused, nothing goes fullscreen.
+pub fn needs_fullscreen_off(major: u32, minor: u32) -> bool {
+    (major, minor) < (2, 52)
 }
 
 /// WKWebView's `fullscreenState` (macOS 13+): where WebKit's element fullscreen is. During it
@@ -108,6 +118,17 @@ mod tests {
         // The page swaps its fullscreen element; the window is already fullscreen.
         assert_eq!(tracker.on_element_change(true, true), None);
         assert_eq!(tracker.on_element_change(false, true), Some(false));
+    }
+
+    #[test]
+    fn webkitgtk_older_than_2_52_has_fullscreen_off() {
+        assert!(needs_fullscreen_off(2, 44));
+        assert!(needs_fullscreen_off(2, 50));
+        assert!(needs_fullscreen_off(2, 51));
+        assert!(needs_fullscreen_off(1, 99));
+        assert!(!needs_fullscreen_off(2, 52));
+        assert!(!needs_fullscreen_off(2, 54));
+        assert!(!needs_fullscreen_off(3, 0));
     }
 
     #[test]

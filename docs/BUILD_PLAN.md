@@ -79,7 +79,8 @@
 | LJ11 | *(v0.2)* Start at login: tauri-plugin-autostart, a Settings switch, `--start-at-login on\|off`, the OS entry checked in smoke | strong | auto | ✅ done |
 | LJ12 | *(v0.2)* First launch: the window opens once with a welcome (shortcut, where the icon is, start at login) | standard | auto | ✅ done |
 | LJ13 | *(v0.2)* AppImage built on Ubuntu 24.04 (WebKitGTK 2.52); the AppImage gets the full smoke | strong | auto | ✅ done |
-| LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⏭ stopped at its experiment: 2.50.4 aborts even when `enter-fullscreen` is handled — no app change; the Launchpad draft written (see notes) |
+| LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⏭ stopped at its experiment: 2.50.4 aborts even when `enter-fullscreen` is handled — no app change; the Launchpad draft written (see notes) → LJ14.1 |
+| LJ14.1 | *(added mid-plan 2026-10-19)* WebKitGTK older than 2.52: element fullscreen switched off instead of the abort; an Ubuntu 22.04 smoke job | strong | auto | ✅ done |
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ⬜ todo |
 | LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ⬜ todo |
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
@@ -128,9 +129,10 @@
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
 for narrow windows, and layout tests at scale factors 1, 1.5 and 2). PRs #1–#7 were merged into
 `main` at the user's request. The GitHub Release `v0.1.0` carries the Windows, macOS and Linux
-installers CI built from the tagged commit. Still open: Linux fullscreen on Ubuntu 22.04's `.deb`
-(WebKitGTK 2.50.4 aborts on element fullscreen, even when the app declines the request — LJ14's
-experiment; the AppImage is fixed by LJ13; see Deferred follow-ups).**
+installers CI built from the tagged commit. Linux fullscreen: the AppImage is fixed by LJ13; on
+Ubuntu 22.04's `.deb` (WebKitGTK 2.50.4, which aborts on element fullscreen even when the app
+declines the request) fullscreen is switched off since LJ14.1 — no crash, no fullscreen video; see
+Deferred follow-ups.**
 
 **v0.2 status: planned 2026-10-17 with the user (scope and decisions under "Design Decisions
 Already Made → v0.2"). PR #8 (housekeeping: `.claude/` ignored, the Linux verify runner pinned
@@ -181,7 +183,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25, a draft): LJ13 done; LJ14 stopped at its own experiment — waiting for the owner.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Next: phase 8.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -202,14 +204,15 @@ opens history on Windows and Linux; double-clicking the toolbar zooms; the bar p
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
 
-**Phase 7 (LJ13 → LJ14, 2026-10-19)** is PR #25 on `lj/p7-linux-fullscreen` — **a draft, not
-merged: LJ14 stopped at its own stop condition.** LJ13: the AppImage is built on ubuntu-24.04
-(WebKitGTK 2.52.6 bundled, glibc 2.39, 156.79 MiB) and passes the whole smoke as `linux-appimage`;
-the `.deb` stays on ubuntu-22.04. LJ14: the 22.04 experiment showed WebKitGTK 2.50.4 aborting even
-when `enter-fullscreen` is handled (the request declined, with or without fullscreening the window
-instead), so the stopgap can't work; no app code changed; the Launchpad report is drafted in
-`docs/upstream/`. **Waiting for the owner:** whether to merge PR #25 as it stands (LJ13 plus the
-report), and what to do for 22.04 (Deferred follow-ups, "Linux fullscreen on Ubuntu 22.04").
+**Phase 7 (LJ13 → LJ14.1, 2026-10-19)** is PR #25 on `lj/p7-linux-fullscreen`, merged by the agent
+once verify, package and smoke were green on every job (the standing exception). LJ13: the AppImage
+is built on ubuntu-24.04 (WebKitGTK 2.52.6 bundled, glibc 2.39, 156.79 MiB) and passes the whole
+smoke as `linux-appimage`; the `.deb` stays on ubuntu-22.04. LJ14 stopped at its own experiment:
+WebKitGTK 2.50.4 aborts even when `enter-fullscreen` declines the request, so the window stopgap
+can't work; the Launchpad report is drafted in `docs/upstream/`. On the owner's call ("a crash is
+worse than no fullscreen") **LJ14.1** was added: with `enable-fullscreen` off the bare window
+survives on 22.04, so the page webview gets it off below WebKitGTK 2.52, and a permanent
+`linux-22.04` smoke job runs the whole smoke on 22.04's engine. Human checks are in PR #25.
 
 **Phase 20 (LJ41 → LJ44, 2026-10-19)** is PR #24 on `lj/p20-control`, merged by the agent once
 verify, package and smoke were green on every OS job (the standing exception; LJ36's fullscreen
@@ -458,7 +461,7 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 | Gatekeeper (unsigned macOS), SmartScreen (unsigned Windows), tray on GNOME | **you** — LJ10 | The documented workaround opens the app |
 | *(v0.2)* Login entry written and removed per OS | CI `smoke` (LJ11) | The registry value / LaunchAgent plist / autostart `.desktop` appears after `--start-at-login on`, points at the installed binary, and is gone after `off` |
 | *(v0.2)* Start at login across a real logout or reboot; the first-run welcome | **you** — phase 6 PR | The icon is there after logging in and the shortcut works; a fresh profile shows the welcome once |
-| *(v0.2)* Fullscreen on a real Ubuntu 22.04 desktop (the `.deb`), and the AppImage on 24.04 | **you** — phase 7 PR, if you have the machines | 22.04: no crash, the window fills the screen; 24.04 AppImage: the video fills the screen |
+| *(v0.2)* Fullscreen on a real Ubuntu 22.04 desktop (the `.deb`), and the AppImage on 24.04 | **you** — phase 7 PR, if you have the machines | 22.04: no crash, the video stays in the window (fullscreen is off there, LJ14.1); 24.04 AppImage: the video fills the screen |
 | *(v0.2)* A real download (a PDF from a site), "Show in folder", zoom keys | **you** — phase 8 PR | The file is in Downloads under its own name; the folder opens with it selected; zoom steps and resets |
 | *(v0.2)* Wayland-native shortcut (GNOME 48+ or KDE Plasma, Wayland session) | **you** — LJ17 (CI has no portal backend) | The desktop asks once to allow the shortcut; it then summons and dismisses the window |
 | *(v0.2)* Gatekeeper on a DMG downloaded with a browser (notarized build) | **you** — LJ18 / LJ19 | It opens without any warning or `xattr` step |
@@ -2549,6 +2552,77 @@ merge commit (Ground Rule 24), then stop and report.
   this commit says what it holds.
 - `npm run verify`: 593 TS tests, 342 Rust tests, clippy clean (no code changed since
   `lj-step-13-fix`).
+
+### LJ14.1 — WebKitGTK older than 2.52: element fullscreen off instead of the abort · strong · auto
+
+> **Added mid-plan 2026-10-19** — the owner's call after LJ14 stopped (through the session's
+> coordinator): "a crash is worse than no fullscreen", so try the remaining option before merging
+> phase 7. Same branch (`lj/p7-linux-fullscreen`), same PR (#25), merged when green.
+
+**Verify:** first, the experiment: a CI run on ubuntu-22.04 (two runners) of the bare PyGObject
+check with WebKitSettings' `enable-fullscreen` FALSE shows the process still running after the
+click; if it aborts too, no app code — record it under LJ14 and Landmines. If it survives: `npm run
+verify` green, including Rust tests for `fullscreen::needs_fullscreen_off(major, minor)` (2.44 /
+2.50 → true, 2.52 / 2.54 → false) and vitest tests for the new rules; CI green everywhere plus a
+permanent smoke entry `linux-22.04` (ubuntu-22.04, the `.deb`) whose log shows `fullscreen-off
+<version>`, no abort, the page still loading and reporting, and after the click no `fullscreen
+true`; the 24.04 and AppImage entries never log `fullscreen-off`.
+**Commit:** `lj-step-14.1-experiment: …` (the variant, as for LJ14), then `lj-step-14.1: WebKitGTK older than 2.52 turns element fullscreen off instead of crashing; Ubuntu 22.04 smoke`
+
+```text
+1. Experiment first: the bare check gains a variant with enable-fullscreen = FALSE; run it on
+   ubuntu-22.04 on two runners (installers_from_run, linux_runner=ubuntu-22.04,
+   linux_plain_webkit_check=true). A fullscreenerror or a rejected promise in the page is fine.
+2. If it survives on both: platform/linux.rs sets enable-fullscreen FALSE on the page webview when
+   the runtime WebKitGTK is older than 2.52 (pure fullscreen::needs_fullscreen_off, tested), and
+   logs `fullscreen-off <version>`. A permanent smoke entry `linux-22.04` (ubuntu-22.04, the .deb):
+   `fullscreen-off`, no abort, the page still loads and reports, no `fullscreen true` after the
+   click; the 24.04 / AppImage entries never log `fullscreen-off`.
+3. Docs: README and CHANGELOG ("on Ubuntu 22.04's WebKitGTK 2.50 a video can't go fullscreen;
+   Little Joan turns fullscreen off there instead of crashing"), the architecture's Fullscreen
+   table, Landmines, Deferred follow-ups (annotate the Linux fullscreen line).
+4. If it still aborts: no app code; record it in LJ14's notes and Landmines; keep the known issue.
+```
+
+**Implementation notes (2026-10-19):**
+
+- **Disk:** 11 GiB free at the start of the step (other things on the Mac used 2 GiB meanwhile),
+  11 GiB after verify; `.cache/target` 1.6 GB.
+- **The experiment** (`lj-step-14.1-experiment`): a fourth variant of the bare check,
+  `fullscreen-off` (`view.get_settings().set_enable_fullscreen(False)` before the load; the handler
+  now returns TRUE only for the two `handled` variants). Run 39253920848 (`installers_from_run=
+  39251243907`, `linux_runner=ubuntu-22.04`, `linux_plain_webkit_check=true`); its first attempt's
+  22.04 jobs were force-cancelled once the check had run, which threw their logs away (GitHub keeps
+  no log of a force-cancelled job), so they were re-run (`gh run rerun --failed`, attempt 2) and
+  left to end. **On both 22.04 runners (WebKitGTK 2.50.4):** `default`, `handled` and
+  `handled-window` exit with status 134 again, and `fullscreen-off` prints `enable-fullscreen:
+  False`, `title: plain ready`, then `BARE WEBKITGTK (fullscreen-off): still running after the
+  click`. The page never changed its title: with the setting off WebKit doesn't expose the
+  Fullscreen API at all, so the page's `requestFullscreen()` isn't there to call (no
+  `fullscreenerror`, nothing to reject).
+- **The app** (`platform/linux.rs`, `fullscreen.rs`): `needs_fullscreen_off(major, minor)` — older
+  than 2.52 — (pure, tested at 1.99, 2.44, 2.50, 2.51, 2.52, 2.54, 3.0); `install_page` reads the
+  runtime version (`webkit_get_major/minor/micro_version` through `webkit2gtk::ffi`, the library
+  actually loaded: the system's for the `.deb`, the bundled one in the AppImage) and, below 2.52,
+  sets WebKitSettings' `enable-fullscreen` FALSE on the page webview and logs `fullscreen-off
+  <major.minor.micro>` — every page window, before any web page loads. The `enter-fullscreen` /
+  `leave-fullscreen` hooks stay (they never fire there). Windows and macOS untouched; WebKitGTK
+  2.52+ untouched.
+- **Smoke:** `linux-22.04` (ubuntu-22.04, the `.deb`, `LJ_SMOKE_FULLSCREEN=off`) runs the whole
+  smoke. The main run's click waits 4 s and expects nothing (window fullscreen and page fullscreen
+  not required; the page's next load and the viewports after it show the app alive); the fullscreen
+  run skips its Exit clicks (there is no fullscreen to leave) and `fullscreenFailures(…, true)` wants
+  every element path to report `entered=0`; `smoke-fullscreen-off.mts` (+ test, new):
+  `fullscreen-off` with a version older than 2.52 in the main and both fullscreen launches, no
+  `fullscreen true` / `element-fullscreen true` there, no `LJ-SMOKE fullscreen=on`; on every other
+  job no `fullscreen-off` at all. `summary.json` gets `fullscreenOff: { expected, versions }`.
+- Docs: README (install and Fullscreen video), CHANGELOG (Fixed; Known issues: no fullscreen video
+  on 22.04), architecture.md (the Fullscreen table's WebKitGTK < 2.52 row, the smoke log's
+  `fullscreen-off`, the CI's `linux-22.04` job, the bare check's four variants, the file map), the
+  Launchpad draft (switching fullscreen off is the only way around it found; the new run), this plan
+  (Landmines; Deferred follow-ups: option (e) done).
+- `npm run verify`: 599 TS tests, 343 Rust tests, clippy clean (the Linux code compiles only in
+  CI's verify).
 
 ### LJ15 — Downloads · strong · auto
 
@@ -7464,7 +7538,12 @@ and where, then stop.
   WebKitGTK's `enable-fullscreen` setting off below 2.52: the page's request would then fail
   without reaching the code that aborts (probably), so no crash, but no fullscreen either and no
   signal for a window fallback; one more variant of the bare check
-  (`view.get_settings().set_enable_fullscreen(False)`) would show whether it avoids the abort.*
+  (`view.get_settings().set_enable_fullscreen(False)`) would show whether it avoids the abort.* →
+  *The owner chose (e) on 2026-10-19 ("a crash is worse than no fullscreen"): the bare window
+  survives with it on two 22.04 runners, and LJ14.1 switches fullscreen off below WebKitGTK 2.52 —
+  22.04's `.deb` no longer crashes, and plays video in the window only. Still open: (b) a jammy
+  update (then the switch turns itself off: it follows the runtime version), and (c) filing the
+  drafted report — the owner's.*
 - **macOS footprint after the first page stays ~12 MB above the hibernating baseline**
   (11 → 23 MB) — WebKit's framework state in our process. Acceptable for v0.1; noted so a
   future memory pass knows where to look. Not in v0.2: worth a time-boxed look (vmmap /
@@ -7957,6 +8036,12 @@ Populated from real friction, not speculation:
   shrunk to 480×600 in a black fullscreen window, and at 720 px phone mode's reload ending the
   fullscreen. Lay out the page on macOS only through `bar::apply_layout`, which asks
   `platform::page_in_webkit_fullscreen` first.
+- *(LJ14.1)* **On WebKitGTK 2.50.4 only `enable-fullscreen` FALSE avoids the abort:** with it the
+  bare window survives the click on two 22.04 runners (run 39253920848), because the page doesn't
+  even get the Fullscreen API (`requestFullscreen` is missing: no `fullscreenerror`, no rejected
+  promise). Little Joan sets it on the page webview below 2.52 (`fullscreen-off` in the smoke log).
+  **A force-cancelled job keeps no log** (`gh api …/force-cancel`): its log blob is never written,
+  so the diagnostics it ran are lost — cancel normally, or let it end.
 - *(LJ13)* **An AppImage without FUSE (`APPIMAGE_EXTRACT_AND_RUN=1`) deletes its extracted folder
   when it exits** — `$TMPDIR/appimage_extracted_<md5>`, shared by every launch of the same image.
   A second instance (single-instance's remote control) exiting would delete the running first

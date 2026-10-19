@@ -188,6 +188,11 @@ export interface FsDriver {
   clickAt(target: { x: number; y: number } | "centre"): void;
   screenshot(name: string): void;
   sleep(ms: number): Promise<void>;
+  /**
+   * Element fullscreen is switched off on this engine (WebKitGTK older than 2.52, LJ14.1): every
+   * request is refused, so there is no Exit to click.
+   */
+  fullscreenOff?: boolean;
 }
 
 /** The logs of the fullscreen launches. */
@@ -228,8 +233,9 @@ async function attempt(d: FsDriver, app: FsApp, size: FsSize, path: FsReport["pa
     d.screenshot(shot);
   }
   await d.sleep(1000);
-  // Already reported (fullscreen ended, or the player can't play): there is no exit to click.
-  if (!reportAfter(app.events(), from, path)) {
+  // Already reported (fullscreen ended, or the player can't play), or fullscreen is off: there is
+  // no exit to click.
+  if (!d.fullscreenOff && !reportAfter(app.events(), from, path)) {
     d.clickAt("centre");
   }
   await app.waitFor(`fullscreen: ${path} at ${size.width} reported`, (e) => reportAfter(e, from, path) !== undefined, 9_000);
@@ -299,9 +305,12 @@ export function webkitStates(events: LogEvent[]): string[] {
  *   required on Windows and Linux; on macOS whenever the click reached the page (it reported);
  *   the phone player under an iPhone agent (the iOS route) is informational;
  * - the siteModes launch reports the desktop agent at 390 on every OS;
- * - macOS: no page-bounds / page-visible line while WebKit's fullscreen isn't `not`.
+ * - macOS: no page-bounds / page-visible line while WebKit's fullscreen isn't `not`;
+ * - with `fullscreenOff` (WebKitGTK older than 2.52, LJ14.1): every element path still reports —
+ *   the click reached the page and nothing crashed — and none entered fullscreen
+ *   (smoke-fullscreen-off.mts checks the window).
  */
-export function fullscreenFailures(run: FsRunEvents, os: string): string[] {
+export function fullscreenFailures(run: FsRunEvents, os: string, fullscreenOff = false): string[] {
   const failures: string[] = [];
   const launches: { name: string; events: LogEvent[]; sizes: readonly FsSize[] }[] = [
     { name: "fullscreen", events: run.main, sizes: FS_SIZES },
@@ -322,6 +331,12 @@ export function fullscreenFailures(run: FsRunEvents, os: string): string[] {
           continue;
         }
         if (report.unavailable || route(report) === "ios") {
+          continue;
+        }
+        if (fullscreenOff) {
+          if (report.entered) {
+            failures.push(`${where}: entered fullscreen, which is off on this WebKitGTK (events ${report.events.join(",")})`);
+          }
           continue;
         }
         if (!report.entered) {
@@ -349,12 +364,12 @@ export function fullscreenFailures(run: FsRunEvents, os: string): string[] {
 }
 
 /** What summary.json records of the run. */
-export function fullscreenSummary(run: FsRunEvents, os: string) {
+export function fullscreenSummary(run: FsRunEvents, os: string, fullscreenOff = false) {
   return {
     reports: fsReports(run.main),
     webkit: webkitStates(run.main),
     windowEvents: run.main.filter((e) => e.event === "wk-window").map((e) => e.detail),
     siteModes: run.site ? { reports: fsReports(run.site), webkit: webkitStates(run.site) } : null,
-    rules: fullscreenFailures(run, os),
+    rules: fullscreenFailures(run, os, fullscreenOff),
   };
 }

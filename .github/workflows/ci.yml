@@ -278,9 +278,8 @@ jobs:
           - name: macos
             artifact: macos
             os: macos-latest
-          # Ubuntu 22.04's current WebKitGTK (2.50.4) aborts when any page enters element
-          # fullscreen — reproduced with a bare WebKitGTK window, no Tauri involved (see the plan's
-          # Landmines) — so the installed .deb is smoke-tested on 24.04 (WebKitGTK 2.52).
+          # The installed .deb on 24.04 (WebKitGTK 2.52), where element fullscreen works; 22.04's
+          # own engine has its own job below.
           - name: linux
             artifact: linux
             os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
@@ -303,6 +302,15 @@ jobs:
             os: ubuntu-24.04
             screen: 1280x800x24
             app_env: APPIMAGE_EXTRACT_AND_RUN=1 NO_CLEANUP=1
+          # The .deb on Ubuntu 22.04, with its own WebKitGTK 2.50.4: it aborts when a page enters
+          # element fullscreen, whatever the app answers (the plan's Landmines), so Little Joan
+          # switches fullscreen off there (LJ14.1). The whole smoke runs, and a page's request must
+          # change nothing and crash nothing (LJ_SMOKE_FULLSCREEN=off, smoke-fullscreen-off.mts).
+          - name: linux-22.04
+            artifact: linux
+            os: ubuntu-22.04
+            screen: 1280x800x24
+            fullscreen: "off"
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -465,6 +473,7 @@ jobs:
           # debuginfod downloads time out, and Ubuntu's ddebs have no symbols for WebKitGTK 2.50.4.)
           LJ_SMOKE_GDB: "1"
           LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }} ${{ matrix.app_env }}
+          LJ_SMOKE_FULLSCREEN: ${{ matrix.fullscreen }}
           LJ_WM: ${{ inputs.linux_window_manager || 'openbox' }}
           LJ_SCREEN: ${{ matrix.screen }}
         run: |

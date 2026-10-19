@@ -6,7 +6,8 @@
 //! Page keys go through the GTK window's `key-press-event`, which runs before WebKitGTK receives
 //! the key (handlers connected with `connect_*` run before the class handler). Element
 //! fullscreen is followed through WebKitGTK's `enter-fullscreen` and `leave-fullscreen`
-//! signals, to hide the bar meanwhile.
+//! signals, to hide the bar meanwhile — and switched off on WebKitGTK older than 2.52, which
+//! aborts the process as a page enters it (LJ14.1, `fullscreen::needs_fullscreen_off`).
 
 use gtk::glib::Propagation;
 use gtk::glib::prelude::*;
@@ -15,10 +16,12 @@ use tauri::{Manager, Runtime, Webview, Window};
 use webkit2gtk::{SettingsExt, WebViewExt};
 
 use crate::bar;
+use crate::fullscreen;
 use crate::keys::{Key, Mods, Platform};
 use crate::layout::BAR_HEIGHT;
 use crate::page_actions;
 use crate::phone;
+use crate::smoke;
 use crate::state;
 
 /// The bar: a fixed height at the top of the window's box instead of an equal share.
@@ -115,11 +118,44 @@ pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: &Webview<R>, on: bool) {
     }
 }
 
+/// WebKitGTK's version at run time: the library actually loaded (the system's for the `.deb`,
+/// the bundled one in the AppImage), not the one the app was built against.
+fn webkit_version() -> (u32, u32, u32) {
+    // SAFETY: argument-less getters of numbers compiled into the loaded libwebkit2gtk.
+    unsafe {
+        (
+            webkit2gtk::ffi::webkit_get_major_version(),
+            webkit2gtk::ffi::webkit_get_minor_version(),
+            webkit2gtk::ffi::webkit_get_micro_version(),
+        )
+    }
+}
+
+/// WebKitGTK older than 2.52 aborts as a page enters element fullscreen, whatever
+/// `enter-fullscreen` answers (LJ14's experiment), so the page's fullscreen is switched off there:
+/// its request is refused, and nothing crashes (smoke log `fullscreen-off <version>`).
+fn fullscreen_off_where_it_aborts(view: &webkit2gtk::WebView) {
+    let (major, minor, micro) = webkit_version();
+    if !fullscreen::needs_fullscreen_off(major, minor) {
+        return;
+    }
+    match WebViewExt::settings(view) {
+        Some(settings) => {
+            settings.set_enable_fullscreen(false);
+            smoke::log("fullscreen-off", &format!("{major}.{minor}.{micro}"));
+        }
+        None => eprintln!(
+            "little-joan: the webview has no settings; element fullscreen stays on (WebKitGTK {major}.{minor})"
+        ),
+    }
+}
+
 /// The page: page keys for the whole window, and element fullscreen.
 pub fn install_page<R: Runtime>(page: &Webview<R>) {
     let app = page.app_handle().clone();
     let result = page.with_webview(move |webview| {
         let view = webview.inner();
+        fullscreen_off_where_it_aborts(&view);
         for (signal, on) in [("enter-fullscreen", true), ("leave-fullscreen", false)] {
             let app = app.clone();
             view.connect_local(signal, false, move |_| {

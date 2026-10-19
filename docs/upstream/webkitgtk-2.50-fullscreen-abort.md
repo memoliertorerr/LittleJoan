@@ -27,7 +27,10 @@ The abort does not depend on how the application handles the request: it happens
 default handling of `WebKitWebView::enter-fullscreen`, and also when the application connects a
 handler that returns `TRUE` (so WebKit should decline the request) — with or without the handler
 fullscreening the window itself. The signal is emitted, the handler returns, and the process aborts.
-So applications have no way to avoid it.
+The only way around it we found is to switch fullscreen off altogether
+(`webkit_settings_set_enable_fullscreen (settings, FALSE)`): the same click then leaves the process
+running — which is what Little Joan now does on 2.50.x, so its users there get no fullscreen video
+at all.
 
 ### Steps to reproduce
 
@@ -74,7 +77,8 @@ So applications have no way to avoid it.
    ```
 
 4. Run `python3 /tmp/plain.py` (or with `handled`, or `handled-window`) and click anywhere in the
-   yellow page.
+   yellow page. (For comparison: with `view.get_settings().set_enable_fullscreen(False)` before
+   `load_uri`, the click leaves the process running.)
 
 **Expected:** the page goes fullscreen (`default`), or the request is declined and the page gets
 `fullscreenerror` (`handled`, `handled-window`); the process keeps running.
@@ -154,6 +158,9 @@ script reports `plain fullscreen=on` and keeps running.
   modes above on two `ubuntu-22.04` runners (jobs "smoke (linux)" and "smoke (linux-scale-2)",
   step "Bare WebKitGTK fullscreen check") — every mode exits with status 134 after
   `enter-fullscreen` was emitted; the same jobs' application run shows the backtrace above.
+- https://github.com/memoliertorerr/LittleJoan/actions/runs/39253920848 (2026-10-19, attempt 2):
+  the same three modes abort again on two runners, while a fourth with `enable-fullscreen` off
+  survives the click on both.
 - https://github.com/memoliertorerr/LittleJoan/actions/runs/38934582112 (2026-10-16): the
   application aborts under gdb (the backtrace above) and the bare window exits with status 134,
   on `ubuntu-22.04`.
