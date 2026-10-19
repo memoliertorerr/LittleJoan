@@ -186,3 +186,148 @@ export function toolbarView(
 export function isMac(userAgent: string): boolean {
   return /Macintosh|Mac OS X/.test(userAgent);
 }
+
+// The status area (LJ15): a short line where the pill sits — "Downloading report.pdf…", then
+// "report.pdf saved" with "Show in folder", or "Download failed"; the page's zoom level, "Zoom
+// 110 %" (LJ16) — pushed by Rust (window.littleJoan.setStatus). While it shows, the pill makes way.
+// A finished download stays STATUS_LINGER_MS of the time the toolbar is visible, a zoom level
+// ZOOM_LINGER_MS: opening the command bar never loses one, it shows when the toolbar comes back.
+// Generic — text and an optional action — so later steps add their own kinds.
+
+/** How long a finished status stays, in milliseconds the toolbar is visible. */
+export const STATUS_LINGER_MS = 8_000;
+/** How long a zoom level shows (LJ16). */
+export const ZOOM_LINGER_MS = 1_500;
+/** The longest file name shown in full (longer ones are shortened in the middle). */
+export const MAX_STATUS_NAME = 40;
+
+export type DownloadState = "downloading" | "saved" | "failed" | "blocked";
+
+/** What Rust says happened (checked by `statusMessage`). */
+export type StatusMessage = { kind: "download"; state: DownloadState; name: string } | { kind: "zoom"; percent: number };
+
+/** What a status action asks Rust for: the only one is "Show in folder". */
+export interface StatusAction {
+  label: string;
+  command: "reveal_download";
+}
+
+/** What the status area shows: its text (as text), a tooltip, and maybe a button. */
+export interface StatusView {
+  text: string;
+  title: string;
+  action: StatusAction | null;
+}
+
+const DOWNLOAD_STATES = ["downloading", "saved", "failed", "blocked"] as const;
+
+/** Rust's message, checked — anything else is null. A file name is text from a web server. */
+export function statusMessage(value: unknown): StatusMessage | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const raw = value as Record<string, unknown>;
+  if (raw.kind === "download") {
+    const state = DOWNLOAD_STATES.find((s) => s === raw.state);
+    const name = typeof raw.name === "string" ? raw.name : null;
+    if (!state || name === null || name.length > 1_000 || ((state === "downloading" || state === "saved") && !name)) {
+      return null;
+    }
+    return { kind: "download", state, name };
+  }
+  if (raw.kind === "zoom") {
+    const percent = raw.percent;
+    return typeof percent === "number" && Number.isInteger(percent) && percent >= 1 && percent <= 1_000 ? { kind: "zoom", percent } : null;
+  }
+  return null;
+}
+
+/** The text, tooltip and button for `message`. */
+export function statusView(message: StatusMessage): StatusView {
+  if (message.kind === "zoom") {
+    return { text: `Zoom ${message.percent} %`, title: `The page at ${message.percent} %`, action: null };
+  }
+  const name = middleEllipsis(message.name, MAX_STATUS_NAME);
+  switch (message.state) {
+    case "downloading":
+      return { text: `Downloading ${name}…`, title: `Downloading ${message.name}…`, action: null };
+    case "saved":
+      return {
+        text: `${name} saved`,
+        title: `${message.name} saved in Downloads`,
+        action: { label: "Show in folder", command: "reveal_download" },
+      };
+    case "failed":
+      return { text: "Download failed", title: message.name ? `Download failed: ${message.name}` : "Download failed", action: null };
+    case "blocked":
+      return { text: "Download blocked", title: "Extensions can't save files to Downloads", action: null };
+  }
+}
+
+/** How long `message` stays once the toolbar shows it (null: until another replaces it). */
+export function lingerFor(message: StatusMessage): number | null {
+  if (message.kind === "zoom") {
+    return ZOOM_LINGER_MS;
+  }
+  return message.state === "downloading" ? null : STATUS_LINGER_MS;
+}
+
+interface StatusEntry {
+  message: StatusMessage;
+  /** Visible milliseconds left; null = until replaced. */
+  remaining: number | null;
+}
+
+/** The statuses held (one per kind, latest last) and since when the toolbar is visible. */
+export interface StatusState {
+  entries: readonly StatusEntry[];
+  /** When the toolbar became visible; null while it isn't (the command bar is open). */
+  visibleSince: number | null;
+}
+
+/** No status yet; the toolbar visible or not (a new window opens with the command bar). */
+export function initialStatus(visible: boolean, now: number): StatusState {
+  return { entries: [], visibleSince: visible ? now : null };
+}
+
+/** The visible time since `visibleSince` taken off every entry, expired ones dropped. */
+function settle(state: StatusState, now: number): StatusState {
+  if (state.visibleSince === null) {
+    return state;
+  }
+  const elapsed = Math.max(0, now - state.visibleSince);
+  const entries = state.entries
+    .map((entry) => (entry.remaining === null ? entry : { ...entry, remaining: entry.remaining - elapsed }))
+    .filter((entry) => entry.remaining === null || entry.remaining > 0);
+  return { entries, visibleSince: now };
+}
+
+/** A new message replaces the one of its kind and shows first. */
+export function withStatus(state: StatusState, message: StatusMessage, now: number): StatusState {
+  const settled = settle(state, now);
+  const entries = settled.entries.filter((entry) => entry.message.kind !== message.kind);
+  return { ...settled, entries: [...entries, { message, remaining: lingerFor(message) }] };
+}
+
+/** The toolbar was shown or hidden (the command bar closed or opened). */
+export function withToolbarVisible(state: StatusState, visible: boolean, now: number): StatusState {
+  const settled = settle(state, now);
+  return { ...settled, visibleSince: visible ? now : null };
+}
+
+/** What the status area shows at `now`: the latest status that hasn't run out, or null. */
+export function shownStatus(state: StatusState, now: number): StatusView | null {
+  const latest = settle(state, now).entries.at(-1);
+  return latest ? statusView(latest.message) : null;
+}
+
+/** Milliseconds until what is shown changes by itself (a status runs out), or null for never. */
+export function nextStatusChange(state: StatusState, now: number): number | null {
+  if (state.visibleSince === null) {
+    return null;
+  }
+  const left = settle(state, now)
+    .entries.map((entry) => entry.remaining)
+    .filter((remaining): remaining is number => remaining !== null);
+  return left.length > 0 ? Math.min(...left) : null;
+}

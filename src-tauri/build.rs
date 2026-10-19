@@ -37,6 +37,7 @@ fn main() {
             "quick_state",
             "quick_command",
             "keymap_info",
+            "reveal_download",
         ]),
     ))
     .expect("failed to run tauri-build");

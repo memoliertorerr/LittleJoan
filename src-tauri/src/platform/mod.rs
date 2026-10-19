@@ -7,6 +7,8 @@ mod mac;
 #[cfg(windows)]
 mod win;
 
+use std::path::PathBuf;
+
 use tauri::{AppHandle, Runtime, Webview, Window};
 
 /// Windows: page keys on the bar's WebView2 controller.
@@ -60,9 +62,32 @@ pub fn set_autoresizing<R: Runtime>(_webview: &Webview<R>, _bits: usize) {}
 #[cfg(not(any(windows, target_os = "linux")))]
 pub fn install_bar<R: Runtime>(_bar: &Webview<R>) {}
 
-/// macOS: nothing to install (see `install_bar`).
+/// macOS: the app menu handles page keys and WebKit element fullscreen (see `install_bar`); the
+/// page's downloads are followed so closing the window can cancel them.
 #[cfg(not(any(windows, target_os = "linux")))]
-pub fn install_page<R: Runtime>(_page: &Webview<R>) {}
+pub fn install_page<R: Runtime>(_page: &Webview<R>) {
+    mac::follow_downloads();
+}
+
+/// Linux: cancels the page's downloads under way (the window is closing). WebKitGTK keeps its
+/// web context — and so its downloads — for the app's lifetime; it removes a cancelled
+/// download's partial file itself.
+#[cfg(target_os = "linux")]
+pub fn cancel_downloads<R: Runtime>(app: &AppHandle<R>, _partial: Vec<PathBuf>) {
+    linux::cancel_downloads(app);
+}
+
+/// macOS: cancels the WKDownloads (they would go on in WebKit's network process after the window
+/// closed, CI showed) and removes the partial files of those under way (`partial`).
+#[cfg(target_os = "macos")]
+pub fn cancel_downloads<R: Runtime>(app: &AppHandle<R>, partial: Vec<PathBuf>) {
+    mac::cancel_downloads(app, partial);
+}
+
+/// Windows: a download goes with the window's WebView2 environment (CI: the transfer stops and
+/// no file is left).
+#[cfg(windows)]
+pub fn cancel_downloads<R: Runtime>(_app: &AppHandle<R>, _partial: Vec<PathBuf>) {}
 
 /// Whether the window is fullscreen right now, however it got there. On Linux WebKitGTK
 /// fullscreens the GTK window itself for a page's fullscreen element, which tao's own state

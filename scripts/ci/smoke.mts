@@ -6,7 +6,8 @@
 // The full run: serve tests/smoke/ on 127.0.0.1, launch the app with LITTLEJOAN_SMOKE_LOG,
 // summon it with `--show` (single-instance forwarding; the command bar covers the window), load
 // the smoke page (the command bar closes: the 40 px bar above the page), click its big
-// fullscreen button, hibernate with `--hide`, summon and hibernate once more, summon again for
+// fullscreen button, resize the window (phone and desktop agents), zoom the page with Ctrl+= and
+// back with Ctrl+0 (smoke-zoom.mts), hibernate with `--hide`, summon and hibernate once more, summon again for
 // the command bar (the smoke page's site as a top site, then typing "127", then Ctrl+H — Cmd+Y on
 // macOS — for the history view, and Ctrl+Y opening nothing), turn start at login on and off (reading the OS's own login entry each
 // time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
@@ -27,7 +28,10 @@
 // quick-commands run (its own launch: "mobile" and "dark" in the command bar change and save those
 // settings, the theme rows, Copy link over the smoke page; smoke-quick.mts), then the keymap run
 // (its own launch with History on Ctrl/Cmd+Shift+K: the new key works, the old one doesn't, the
-// macOS menu shows it; smoke-keymap.mts), then the tray
+// macOS menu shows it; smoke-keymap.mts), then the downloads run (its own launch: a download named
+// by its Content-Disposition lands in the OS's Downloads folder with its exact bytes, the same one
+// again as "lj-smoke (1).bin", none while an extension's panel shows; download.png;
+// smoke-downloads.mts), then the tray
 // run (its own launches with the icon switched off: it hides, a plain second launch opens the
 // window, the command bar's "Quit Little Joan" quits, Settings → General shows the switch, and on
 // Linux a Wayland session brings the icon back; smoke-tray.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
@@ -39,7 +43,7 @@
 // xvfb-run + dbus-run-session with a window manager.
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
@@ -96,6 +100,25 @@ import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tra
 import { findApp, listProcs } from "./smoke-linux.mts";
 import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
+import { ZOOMED, zoomFailures, zoomReset, zoomSummary, zoomedViewport } from "./smoke-zoom.mts";
+import {
+  DOWNLOAD_NAME,
+  DOWNLOAD_PATH,
+  PDF_BODY,
+  PDF_NAME,
+  PDF_PATH,
+  SLOW_CHUNK,
+  SLOW_CHUNKS,
+  SLOW_EVERY_MS,
+  SLOW_NAME,
+  SLOW_PATH,
+  attachmentHeaders,
+  downloadBody,
+  downloadFailures,
+  downloadRun,
+  downloadSummary,
+  type SlowServe,
+} from "./smoke-downloads.mts";
 import {
   keyboardProblemFailures,
   keyboardProblemRun,
@@ -391,8 +414,10 @@ for code in CommandLine.arguments.dropFirst(2) {
   console.log(`pressed ${keys.join(" ")}`);
 }
 
-/** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40 };
+/** macOS virtual key codes (kVK_ANSI_*) of the keys `pressShortcut` sends. */
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40, "=": 24, "0": 29 };
+/** xdotool's names for the keys `pressShortcut` sends that aren't letters. */
+const XDOTOOL_KEYS: Record<string, string> = { "=": "equal" };
 /** The history view's key: Ctrl+H on Windows and Linux, Cmd+Y on macOS (LJ37). */
 const HISTORY_KEY = os === "darwin" ? "y" : "h";
 
@@ -434,7 +459,7 @@ usleep(60000)
     );
     run("swift", [swift, String(appPid), String(MAC_KEYS[letter] ?? 0), ...(shift ? ["shift"] : [])]);
   } else {
-    run("xdotool", ["key", `ctrl+${shift ? "shift+" : ""}${letter}`]);
+    run("xdotool", ["key", `ctrl+${shift ? "shift+" : ""}${XDOTOOL_KEYS[letter] ?? letter}`]);
   }
   console.log(`pressed ${os === "darwin" ? "Cmd" : "Ctrl"}+${shift ? "Shift+" : ""}${letter.toUpperCase()}`);
 }
@@ -551,6 +576,37 @@ async function forward(args: string[], withEnv: NodeJS.ProcessEnv = env): Promis
 /** Each request's agent headers, one JSON line each (the site-mode run reads them, LJ40). */
 const agentLogPath = join(out, "agent-headers.jsonl");
 
+/** What the server saw of the downloads run's slow download (LJ15). */
+const slowServe: SlowServe = { started: false, chunksSent: 0, aborted: false, completed: false };
+
+/** The slow download: 1 KB every SLOW_EVERY_MS until SLOW_CHUNKS, unless the client goes away. */
+function serveSlow(res: ServerResponse): void {
+  Object.assign(slowServe, { started: true, chunksSent: 0, aborted: false, completed: false });
+  res.writeHead(200, attachmentHeaders(SLOW_NAME, SLOW_CHUNKS * SLOW_CHUNK));
+  const chunk = Buffer.alloc(SLOW_CHUNK, 0x6c);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  res.on("close", () => {
+    clearTimeout(timer);
+    if (!slowServe.completed) {
+      slowServe.aborted = true;
+    }
+  });
+  const send = (): void => {
+    if (res.destroyed) {
+      return;
+    }
+    res.write(chunk);
+    slowServe.chunksSent += 1;
+    if (slowServe.chunksSent >= SLOW_CHUNKS) {
+      slowServe.completed = true;
+      res.end();
+      return;
+    }
+    timer = setTimeout(send, SLOW_EVERY_MS);
+  };
+  send();
+}
+
 function serve(): Promise<Server> {
   const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".mjs": "text/javascript" };
   rmSync(agentLogPath, { force: true });
@@ -572,6 +628,20 @@ function serve(): Promise<Server> {
         brands: header("sec-ch-ua"),
       })}\n`,
     );
+    // The downloads run's attachments (LJ15): the address names something else than the header.
+    if (name === DOWNLOAD_PATH) {
+      const body = downloadBody();
+      res.writeHead(200, attachmentHeaders(DOWNLOAD_NAME, body.length)).end(Buffer.from(body));
+      return;
+    }
+    if (name === SLOW_PATH) {
+      serveSlow(res);
+      return;
+    }
+    if (name === PDF_PATH) {
+      res.writeHead(200, { ...attachmentHeaders(PDF_NAME, Buffer.byteLength(PDF_BODY)), "content-type": "application/pdf" }).end(PDF_BODY);
+      return;
+    }
     const file = join(pageDir, name);
     if (!/^[\w.-]+$/.test(name) || !types[extname(name)] || !existsSync(file)) {
       res.writeHead(404).end();
@@ -761,6 +831,21 @@ await forward(["--size", "720x600"]);
 await waitFor("wide viewport, desktop user agent", (e) => sawViewport(e, WIDE), 30_000);
 await sleep(1000);
 screenshot("wide.png");
+
+// Page zoom (LJ16, smoke-zoom.mts): Ctrl+= (⌘= on macOS, best effort) zooms the page to 110 %,
+// so it reports a narrower viewport; Ctrl+0 brings 720 px back.
+const zoomFrom = events().length;
+pressShortcut("=", pid);
+if (await waitFor("zoom: Ctrl+= zoomed the page", (e) => count(e.slice(zoomFrom), "zoom", String(ZOOMED)) > 0, 10_000)) {
+  // The toolbar says "Zoom 110 %" for 1.5 s.
+  screenshot("zoom.png");
+  await waitFor("zoom: the page narrower", (e) => zoomedViewport(e.slice(zoomFrom), WIDE) !== undefined, 15_000);
+  await sleep(500);
+}
+pressShortcut("0", pid);
+await waitFor("zoom: Ctrl+0 brought 720 px back", (e) => zoomReset(e.slice(zoomFrom), WIDE), 15_000);
+await sleep(1000);
+const zoomEvents = events().slice(zoomFrom);
 
 await forward(["--hide"]);
 await waitFor("hibernated", (e) => count(e, "hibernated") > 0, 20_000);
@@ -1319,6 +1404,20 @@ if (os === "darwin") {
   console.log(`symbolichotkeys: ${existsSync(join(out, "symbolichotkeys.json")) ? "exported" : "none"}`);
 }
 const symbolicHotkeys = readIfThere(join(out, "symbolichotkeys.json"));
+// The downloads run (LJ15, smoke-downloads.mts): its own launch, the smoke server's attachments.
+const downloadCheck = await downloadRun({
+  pageUrl: smokePageUrl,
+  downloadUrl: `http://127.0.0.1:${port}/${DOWNLOAD_PATH}`,
+  slowUrl: `http://127.0.0.1:${port}/${SLOW_PATH}`,
+  pdfUrl: `http://127.0.0.1:${port}/${PDF_PATH}`,
+  downloadsDir: join(homedir(), "Downloads"),
+  elsewhere: [homedir(), process.cwd()],
+  launch: fullscreenLaunch,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  slowServed: () => ({ ...slowServe }),
+});
+console.log(`downloads: ${JSON.stringify(downloadSummary(downloadCheck))}`);
 server.close();
 // The tray run (LJ41, smoke-tray.mts): the icon switched off, and every way back still there.
 const trayDriver: TrayDriver = {
@@ -1427,6 +1526,8 @@ const summary = {
     rules: keyboardProblemFailures(keyboardProblem).concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os)),
   },
   trayRun: traySummary(trayCheck, os),
+  downloads: downloadSummary(downloadCheck),
+  zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1479,6 +1580,8 @@ const failures = evaluate(
   .concat(keyboardProblemFailures(keyboardProblem))
   .concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os))
   .concat(trayFailures(trayCheck, os))
+  .concat(downloadFailures(downloadCheck, os))
+  .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
@@ -1486,7 +1589,7 @@ if (failures.length > 0) {
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
   const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
-  const trayLogs = ["quick", "keymap", "keyboard-problem", "tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
+  const trayLogs = ["quick", "keymap", "keyboard-problem", "downloads", "tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }

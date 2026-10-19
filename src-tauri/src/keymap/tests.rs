@@ -92,9 +92,13 @@ fn the_defaults_are_todays_keys() {
         (KeyAction::Reload, "CommandOrControl+KeyR"),
         (KeyAction::Back, "CommandOrControl+BracketLeft"),
         (KeyAction::Forward, "CommandOrControl+BracketRight"),
+        (KeyAction::ZoomIn, "CommandOrControl+Equal"),
+        (KeyAction::ZoomOut, "CommandOrControl+Minus"),
+        (KeyAction::ZoomReset, "CommandOrControl+Digit0"),
         (KeyAction::OpenInBrowser, "CommandOrControl+Shift+KeyO"),
         (KeyAction::Close, "CommandOrControl+KeyW"),
     ];
+    assert_eq!(mac.len(), want.len());
     for ((action, got), (want_action, want_key)) in mac.iter().zip(want) {
         assert_eq!(*action, want_action);
         assert_eq!(got, &[want_key.to_owned()], "{action:?}");

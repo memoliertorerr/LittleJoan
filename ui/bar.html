@@ -27,6 +27,11 @@
         <!-- Phone or desktop for this site (LJ40): only while the phone version is shown or the site
              has a mode of its own (toolbar/logic.ts). -->
         <button id="site-pill" class="site-pill" type="button" hidden></button>
+        <!-- What just happened (LJ15: downloads), in the pill's place while it shows (toolbar/logic.ts). -->
+        <div id="toolbar-status" class="toolbar-status" role="status" hidden>
+          <span id="toolbar-status-text" class="toolbar-status-text"></span>
+          <button id="toolbar-status-action" class="toolbar-status-action" type="button" hidden></button>
+        </div>
         <button
           id="open-browser"
           class="tool"

@@ -27,19 +27,25 @@ pub enum KeyAction {
     Reload,
     Back,
     Forward,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
     OpenInBrowser,
     Close,
 }
 
 impl KeyAction {
     /// In the order Settings lists them.
-    pub const ALL: [KeyAction; 8] = [
+    pub const ALL: [KeyAction; 11] = [
         KeyAction::OpenLocation,
         KeyAction::History,
         KeyAction::Translate,
         KeyAction::Reload,
         KeyAction::Back,
         KeyAction::Forward,
+        KeyAction::ZoomIn,
+        KeyAction::ZoomOut,
+        KeyAction::ZoomReset,
         KeyAction::OpenInBrowser,
         KeyAction::Close,
     ];
@@ -52,6 +58,9 @@ impl KeyAction {
             KeyAction::Reload => "reload",
             KeyAction::Back => "back",
             KeyAction::Forward => "forward",
+            KeyAction::ZoomIn => "zoom-in",
+            KeyAction::ZoomOut => "zoom-out",
+            KeyAction::ZoomReset => "zoom-reset",
             KeyAction::OpenInBrowser => "open-in-browser",
             KeyAction::Close => "close",
         }
@@ -70,6 +79,9 @@ impl KeyAction {
             KeyAction::Reload => "Reload",
             KeyAction::Back => "Back",
             KeyAction::Forward => "Forward",
+            KeyAction::ZoomIn => "Zoom In",
+            KeyAction::ZoomOut => "Zoom Out",
+            KeyAction::ZoomReset => "Actual Size",
             KeyAction::OpenInBrowser => "Open Page in Browser",
             KeyAction::Close => "Close Window",
         }
@@ -84,6 +96,9 @@ impl KeyAction {
             KeyAction::Reload => PageAction::Reload,
             KeyAction::Back => PageAction::Back,
             KeyAction::Forward => PageAction::Forward,
+            KeyAction::ZoomIn => PageAction::ZoomIn,
+            KeyAction::ZoomOut => PageAction::ZoomOut,
+            KeyAction::ZoomReset => PageAction::ZoomReset,
             KeyAction::OpenInBrowser => PageAction::OpenInBrowser,
             KeyAction::Close => PageAction::Close,
         }
@@ -249,7 +264,9 @@ impl Binding {
 
 /// An action's default bindings on `platform`: the first is the one Settings changes, the rest
 /// fixed aliases. Windows leaves Reload, Back and Forward to WebView2's own keys, and Open in
-/// browser has no key on Windows and Linux (the toolbar and the tray have it).
+/// browser has no key on Windows and Linux (the toolbar and the tray have it). Zoom (LJ16): Ctrl+=
+/// (also Ctrl+Shift+=, i.e. Ctrl++, and the keypad's +), Ctrl+- (and the keypad's −), Ctrl+0 (and
+/// the keypad's 0); on macOS ⌘=, ⌘-, ⌘0 — one each, as the View menu's key equivalents.
 pub fn defaults(platform: Platform, action: KeyAction) -> Vec<Binding> {
     let p = |shift: bool, key: Key| Binding::primary(shift, key);
     let alt = |key: Key| Binding {
@@ -283,6 +300,16 @@ pub fn defaults(platform: Platform, action: KeyAction) -> Vec<Binding> {
         KeyAction::Back if linux => vec![alt(Key::Left)],
         KeyAction::Forward if mac => vec![p(false, Key::BracketRight)],
         KeyAction::Forward if linux => vec![alt(Key::Right)],
+        KeyAction::ZoomIn if mac => vec![p(false, Key::Equal)],
+        KeyAction::ZoomIn => vec![
+            p(false, Key::Equal),
+            p(true, Key::Equal),
+            p(false, Key::NumpadAdd),
+        ],
+        KeyAction::ZoomOut if mac => vec![p(false, Key::Minus)],
+        KeyAction::ZoomOut => vec![p(false, Key::Minus), p(false, Key::NumpadSubtract)],
+        KeyAction::ZoomReset if mac => vec![p(false, Key::Digit(0))],
+        KeyAction::ZoomReset => vec![p(false, Key::Digit(0)), p(false, Key::Numpad(0))],
         KeyAction::OpenInBrowser | KeyAction::Reload | KeyAction::Back | KeyAction::Forward => {
             Vec::new()
         }
@@ -518,3 +545,5 @@ impl Keymap {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod zoom_tests;

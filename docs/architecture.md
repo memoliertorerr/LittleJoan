@@ -120,7 +120,8 @@ ui/history/history.ts              the history view in the overlay: history_list
 ui/history/history.css             the history view's styles (linked by bar.html)
 ui/toolbar/logic.ts                the toolbar: the domain shown (or an extension's name and
                                    icon), back / open-in-browser enabled, the Phone / Desktop pill
-                                   and Rust's site info, macOS from the user agent (pure,
+                                   and Rust's site info, the status area (downloads: its text, its
+                                   button, how long it stays), macOS from the user agent (pure,
                                    unit-tested)
 ui/toolbar/toolbar.ts              the toolbar's buttons and site; DOM glue only
 ui/index.html                      the page webview's first page: a plain background, no script
@@ -178,8 +179,9 @@ src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_
                                    go_back, open_in_browser, hibernate, history_list, suggest,
                                    history_remove, history_clear, open_settings, start_info,
                                    set_start_at_login, set_theme_tokens, extensions_list,
-                                   open_extension, site_mode_info, set_site_mode, quit_app; drag the
-                                   window
+                                   open_extension, site_mode_info, set_site_mode, quit_app,
+                                   quick_state, quick_command, keymap_info, reveal_download; drag
+                                   the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, clear history, preview a theme, list / reload
                                    extensions, show their folder, close
@@ -214,6 +216,16 @@ src-tauri/src/bar/boot.rs          the bar's first paint: its theme script (chec
                                    theme pushed to it, whether its script runs yet (`Ready`)
 src-tauri/src/bar/background.rs    the bar webview's own background: the theme's `--lj-bg-0` it
                                    painted last, else white / near-black (pure part tested)
+src-tauri/src/bar/download.rs      downloads at run time: on_download (WebView2, WKWebView), the
+                                   Downloads folder, the toolbar's status, the window closing ends
+                                   them (LJ15)
+src-tauri/src/bar/status.rs        the toolbar's status area from Rust: a download's state, the zoom
+                                   level (`setStatus`), told again when the bar's script runs
+src-tauri/src/bar/zoom.rs          page zoom at run time: the window's level, `set_zoom` on the page
+src-tauri/src/zoom.rs              page zoom's levels and steps (pure, tested)
+src-tauri/src/downloads.rs         downloads: which are saved, the file's name (cleaned, capped,
+                                   unique), the window's downloads under way (pure; tests in
+                                   downloads/tests.rs)
 src-tauri/src/extensions/          extensions (experimental; below): mod.rs (the model),
                                    manifest.rs (extension.json, strict), paths.rs (plain paths,
                                    no traversal, no symlink out), urls.rs (one origin per
@@ -248,6 +260,7 @@ src-tauri/src/phone/agent.rs       Windows' phone agent with client hints: CDP
 src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the built-in sites for
                                    Settings
 src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan")
+src-tauri/src/commands/downloads.rs  the bar: reveal_download (the toolbar's "Show in folder")
 src-tauri/src/commands/keys.rs     the bar and Settings: keymap_info
 src-tauri/src/commands/quick.rs    the bar: quick_state, quick_command (a serde enum of fixed
                                    kinds, deny_unknown_fields; tested)
@@ -287,8 +300,8 @@ src-tauri/src/keymap.rs            the keymap: every Little Joan key, the defaul
                                    user's overrides, matching, validation, keymap_info's list
                                    (pure; tests in keymap/tests.rs)
 src-tauri/src/page_actions.rs      close / open location / reload / back / forward / translate /
-                                   open in browser / history; translate_target (skips the start
-                                   page)
+                                   open in browser / history / zoom in, out, reset; translate_target
+                                   (skips the start page)
 src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView) + the page items,
                                    their keys from the keymap (set again when the keys change);
                                    Cmd+Q goes through joan::quit
@@ -304,6 +317,10 @@ src-tauri/src/platform/linux.rs    Linux: GTK window key-press-event → keys.rs
                                    in the window's GtkBox (toolbar / overlay); enter/leave-
                                    fullscreen → hide the bar; element fullscreen off on WebKitGTK
                                    older than 2.52 (the runtime version)
+src-tauri/src/platform/linux/downloads.rs  Linux: the page's downloads through WebKitGTK itself (an
+                                   emission hook on decide-destination), cancelled on close
+src-tauri/src/platform/mac/downloads.rs    macOS: the page's WKDownloads noted (a wrapped
+                                   -[WKDownload setDelegate:]) and cancelled when the window closes
 src-tauri/permissions/autogenerated/  per-command permissions written by tauri-build
 src-tauri/src/tray.rs              tray icon + menu (Open, Translate Page, Open Page in Browser,
                                    Settings…, Quit); page items enabled only while a page is open;
@@ -358,6 +375,11 @@ scripts/ci/smoke-keymap.mts        CI: the keymap run (History on Ctrl/Cmd+Shift
 scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a second launch, Quit
                                    from the command bar, a Wayland session) and its rules;
                                    unit-tested
+scripts/ci/smoke-downloads.mts     CI: the downloads run (two attachments, one refused while a
+                                   panel shows, the window closed during a slow one) and its rules;
+                                   unit-tested
+scripts/ci/smoke-zoom.mts          CI: the main run's zoom check (Ctrl+= narrows the page's viewport,
+                                   Ctrl+0 brings it back) and its rules; unit-tested
 scripts/ci/smoke-linux.mts         CI: which process is the app on Linux (under gdb, in the
                                    AppImage), read from /proc (pure parts unit-tested)
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
@@ -450,7 +472,7 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `allow-keymap-info` (the bar and Settings only, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `allow-keymap-info` (the bar and Settings only, a test says), `allow-reveal-download` (the toolbar's "Show in folder"; only the bar, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `allow-keymap-info`, `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
@@ -487,6 +509,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `quick_state()` | the command bar, each time it opens (with `extensions_list`), and after a quick command | `{ page: { url, title } \| null (a web page only; the title is the window's), theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool \| null, showTrayIcon, iconForced }` — what the quick rows show (LJ42) |
 | `quick_command(command)` | the command bar's quick rows (LJ42) | one of a fixed set, `{ kind, …fields }` (a serde enum with `deny_unknown_fields`: any other kind or field is refused): `translate`, `openInBrowser`, `reload` (the page actions; refused without a web page), `setThemeMode { mode }`, `setTheme { theme }` (a preset's whole theme, checked like Save's), `setSearchEngine { id }`, `setMobileSites { on }`, `setRememberHistory { on }`, `clearHistory { range }` (as `history_clear`; returns how many pages went), `setStartAtLogin { on }`, `openSettings { tab }`, `reloadExtensions`, `setTrayIcon { on }`. Settings ones go through `settings_live::apply` (as Save) and an open settings window rebases its draft (`window.littleJoanSettings.savedChanged(<settings>, <startAtLogin \| null>)`, by `eval`). Never: the shortcut or keys, developer mode, switching extensions, custom colors — Settings only. Logs `quick-command <kind> [<value>]`, never a URL or a title |
 | `keymap_info()` | Settings' Keyboard tab (LJ44); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut, shortcutProblem, systemShortcuts }` — the last macOS's own shortcuts as read from its preferences (`[{ id, enabled, accelerator }]`, empty elsewhere; smoke log `system-shortcuts <n> keys=<k>`) — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
+| `reveal_download()` | the toolbar's **Show in folder**, after a download was saved (LJ15) | shows the last file saved in this window in the file manager, selected (`tauri_plugin_opener::reveal_item_in_dir`) — which file is Rust's, never the bar's; an error when there is none |
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) and its **Settings** row (tab `general`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
@@ -649,15 +672,19 @@ shows the error.
   | Back / Forward | Alt+Left / Alt+Right (built-in) | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate page | Ctrl+Shift+T | Ctrl+Shift+T | Cmd+Shift+T |
   | History view (the command bar's overlay) | Ctrl+H | Ctrl+H | Cmd+Y (View menu) |
+  | Zoom in (LJ16) | Ctrl+= (also Ctrl+Shift+=, keypad +) | Ctrl+= (also Ctrl+Shift+=, keypad +) | Cmd+= (View → Zoom In) |
+  | Zoom out | Ctrl+- (also keypad −) | Ctrl+- (also keypad −) | Cmd+- (View → Zoom Out) |
+  | Zoom back to 100 % | Ctrl+0 (also keypad 0) | Ctrl+0 (also keypad 0) | Cmd+0 (View → Actual Size) |
   | Open page in default browser (then hibernate) | tray menu | tray menu | Cmd+Shift+O, tray menu |
   | Copy / paste / select all | built-in | built-in | Edit menu (needed by WKWebView) |
 
   Matches are exact: Ctrl+Shift+W is not Ctrl+W, and a Ctrl+Alt press (AltGr) never matches a
   Ctrl key. On macOS the menu bar is hidden (Accessory app) but its key equivalents work; Cmd+Q
   quits for real.
-- **The keymap** (`keymap.rs`, pure; tests in `keymap/tests.rs`): actions `open-location`,
-  `history`, `translate`, `reload`, `back`, `forward`, `open-in-browser`, `close` (LJ16 adds zoom,
-  LJ49 find), each with an ordered list of default bindings per OS — the first is the one Settings
+- **The keymap** (`keymap.rs`, pure; tests in `keymap/tests.rs` and `keymap/zoom_tests.rs`):
+  actions `open-location`, `history`, `translate`, `reload`, `back`, `forward`, `zoom-in`,
+  `zoom-out`, `zoom-reset` (LJ16), `open-in-browser`, `close` (LJ49 adds find), each with an
+  ordered list of default bindings per OS — the first is the one Settings
   shows and changes, the rest are fixed aliases (Linux's F5 for reload); an action may have none
   (Windows leaves Reload, Back and Forward to WebView2, which handles Ctrl+R, F5 and Alt+← / Alt+→
   itself; Open in browser has no key on Windows and Linux). Bindings are accelerators in the global
@@ -679,6 +706,65 @@ shows the error.
   item did. `keymap_info` hands it all to Settings (LJ44).
 - The app origin is `tauri://localhost` on macOS/Linux and `http://tauri.localhost` on Windows
   (`keys::app_origin`).
+- **Page zoom** (LJ16; `zoom.rs` pure, `bar/zoom.rs`): the keymap's `zoom-in` / `zoom-out` /
+  `zoom-reset` are page actions like the others (`PageAction::ZoomIn` …: WebView2's
+  `AcceleratorKeyPressed`, the GTK key hook, the macOS View menu's Zoom In, Zoom Out, Actual Size),
+  so the Keyboard tab lists them and they can be changed. They step through 50, 67, 75, 80, 90,
+  100, 110, 125, 150, 175, 200, 250 and 300 % — the next level up or down from any value, stopping
+  at the ends; reset is 100 % — and set the page webview's zoom with `Webview::set_zoom`
+  (WebView2's controller `ZoomFactor`, which "becomes the new default zoom … across navigations";
+  WKWebView's `pageZoom` and WebKitGTK's zoom level, properties of the view) — **never Tauri's
+  zoom-hotkeys option**, which on macOS and Linux injects a script into the page that needs
+  `core:webview:allow-set-webview-zoom` (IPC for remote pages) and on Windows would switch on
+  WebView2's own zoom keys and pinch zoom (`IsZoomControlEnabled` stays off); a test reads every
+  source file for its name. **Per window:** the level lives next to the window's other state
+  (`bar/zoom.rs`), survives the window's navigations, starts at 100 % on every summon and is never
+  saved. Each change shows "Zoom 110 %" in the toolbar's status area for 1.5 s ("Zoom 100 %" once,
+  then nothing); smoke log `zoom <percent>`. Phone mode is unaffected: its 600 / 640 px are the
+  window's logical width, not the page's CSS width.
+- **Downloads** (LJ15; `downloads.rs` decides, `bar/download.rs` runs it): a page's download goes
+  to the OS Downloads folder (`PathResolver::download_dir`; without one — Linux without XDG user
+  dirs — `~/Downloads`, created when missing). Only web downloads are saved: `http` / `https`, and
+  the `blob:` / `data:` documents a web page makes — never an extension's URL in any form (`ljext:`,
+  Windows' `http://ljext.*`, a blob of either), the app's own pages, `file:` or another scheme
+  (`download-refused scheme`) — and **nothing while the page shows an extension's panel** (the
+  guard's admitted or the committed one: `download-refused panel`): extensions have no permission
+  to drop files there. **The name** is the engine's suggestion (the server's
+  `Content-Disposition`, a link's `download`), else the URL's last path segment, else `download`,
+  cleaned — path separators and the characters Windows refuses become `_`, control and format
+  characters (bidi overrides that could disguise an extension) go, no leading dots (no hidden files,
+  no `..`), no trailing dots or spaces, a Windows device name gets a `_` in front (`_nul.txt`) —,
+  capped at 200 bytes keeping its extension, and made unique: a name taken on disk or by a
+  download still under way gets ` (n)` before its extension (`report (1).pdf`, `archive (1).tar.gz`;
+  the extension is the last short plain dot part, with a `.tar` before it). The destination is
+  kept by URL until the download ends (WKWebView reports a finished download without its path),
+  and the last file saved is what **Show in folder** reveals. **Per engine:** WebView2 and WKWebView
+  report through Tauri's `on_download` (wry marks a WebView2 download handled, so WebView2's own
+  download flyout doesn't show). **WebKitGTK goes through `platform/linux/downloads.rs`:** wry
+  registers its download handler on the web context — which both webviews of every window share
+  (and Settings, in installed builds), and which Tauri keeps for the app's lifetime on Linux — once
+  per webview built, so the first webview's handler (the bar's built-in "save anywhere") would
+  decide every download, and each window would add one more `finished` report. Instead an
+  **emission hook** on `WebKitDownload::decide-destination` (added once; it runs for every download
+  in the process before any handler, whatever the context and whenever the signal comes — CI's
+  WebKitGTK 2.50.4 never ran a handler connected in the context's `download-started`) takes the
+  downloads whose `web_view` is the open window's page: it disconnects that download's other
+  `decide-destination` handlers (wry's; smoke log `download-deciders-removed <n>`), sets the
+  destination with a `file://` URI (WebKitGTK 2.50's legacy API wants one) or cancels a refused
+  download, and the class handler keeps that destination (smoke log `download-decide other` for a
+  download that isn't the page's). **A navigation that became a download** leaves the page where it
+  was: its address goes back to the page's (`PageAddress::download`; WKWebView raises no event for
+  the page that stays, WebView2 and WebKitGTK raise a `Finished` for it). **Closing the window ends
+  what is under way:** the downloads it started are forgotten (`download-closed <name>`); WebKitGTK's
+  are cancelled (and it removes the partial file); WebView2's go with the window's environment (the
+  transfer stops, no file is left); **WKWebView's would go on** in WebKit's network process after
+  the web view went (CI: still writing the file 8 s after `--hide`), so `platform/mac/downloads.rs`
+  wraps `-[WKDownload setDelegate:]` once — wry gives every download its delegate that way, and keeps
+  the WKDownload to itself — to note each download (`download-noted`), and on close cancels them
+  (`download-cancelled <n>`) and removes the partial files of those under way. Nothing keeps a
+  webview alive for a download (Ground Rule 9). **WKWebView shows an attachment it can display** (a
+  PDF, an image, text) instead of downloading it: wry's response policy looks only at
+  `canShowMIMEType`, not at `Content-Disposition` (CI's `dl-pdf`; Deferred follow-ups).
 
 ## The bar: toolbar and command bar
 
@@ -722,7 +808,15 @@ page; it is a separate webview with its own capability, and the page webview has
   shortened in the middle; `logic.ts`, tested): a click opens the command bar with the full
   address selected. On the right "open in default browser": the existing page action (the page
   goes to the default browser, the window hibernates). Commands `go_back` and
-  `open_in_browser` run the page actions Back and OpenInBrowser. The empty parts of the toolbar
+  `open_in_browser` run the page actions Back and OpenInBrowser. **The status area** (LJ15), where
+  the pill sits and in its place while it shows: what Rust pushes with
+  `window.littleJoan.setStatus(<json>)` — `{ kind: "download", state: downloading | saved | failed
+  | blocked, name }` — as text: "Downloading report.pdf…", "report.pdf saved" with a **Show in
+  folder** button (`reveal_download`), "Download failed", "Download blocked" (an extension's panel
+  showed); long names shortened in the middle; `{ kind: "zoom", percent }` as "Zoom 110 %" for 1.5 s
+  (LJ16). A finished download's status stays 8 s of the time the toolbar is visible: while the command bar covers it nothing counts down, so opening the command bar never
+  loses one (`ui/toolbar/logic.ts`, tested); Rust tells the bar its last status again when the bar's
+  script runs (`bar/status.rs`). Generic — text and an optional action — for LJ46 too. The empty parts of the toolbar
   carry `data-tauri-drag-region`, and the bar's capability has
   `core:window:allow-start-dragging`, so they drag the window (Tauri's own drag script, injected
   in every webview; the page webview's calls are denied). A double click there zooms the window
@@ -1145,7 +1239,13 @@ follows=<bool>` (macOS: a webview's autoresizing mask was set), `bar-background 
 (the bar's webview background followed a newly painted theme), `site-mode <site> <mode>`
 (`set_site_mode` kept a mode, LJ40), `ua-override <phone|desktop | fallback <reason> | no answer>`
 (Windows: the agent through the DevTools protocol), `layout-metrics content=<w> viewport=<w>` and
-`ua-reload skipped fits` (Windows: a page that fits wasn't reloaded for the phone agent), `fullscreen-off <version>`
+`ua-reload skipped fits` (Windows: a page that fits wasn't reloaded for the phone agent),
+`download-folder <dir>` / `download-started <name>` / `download-finished <name> ok|failed` /
+`download-refused <panel|scheme|folder|name>` / `download-closed <name>` (a download under way
+when the window closed) / `download-deciders-removed <n>` (Linux: wry's handlers taken off a
+download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't the page's) /
+`download-noted` / `download-cancelled <n>` (macOS: a WKDownload noted; cancelled on close),
+`zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1). Without
 the variable nothing is logged.
 
@@ -1264,7 +1364,10 @@ and pushes to `main`:
   nothing within 2 s; `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`,
   `history.png`), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
   with the desktop agent** (it reports `innerWidth`, `innerHeight`, the agent kind and
-  `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the
+  `devicePixelRatio` in its title), that **Ctrl+= then Ctrl+0** (xdotool `ctrl+equal`, SendKeys
+  `^=`; macOS a key event, required only once its `zoom` line shows it arrived) zoom the 720 px page
+  to 110 % — a narrower viewport, about 655 px; `zoom.png` shows "Zoom 110 %" in the toolbar — and
+  back to 720 (`smoke-zoom.mts`), and that none of the webview helper processes that served the page outlive the
   window (followed by process id, so other apps' WebKit helpers on the runner don't count).
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`, `narrow.png`,
   `wide.png`, `command-bar.png`, `command-typing.png`, `history.png`, `settings-general.png`,
@@ -1390,7 +1493,20 @@ and pushes to `main`:
   (`settings-keyboard-problem.png`: the problem line; log `smoke-keyboard-problem.log`). On macOS
   the runner's `com.apple.symbolichotkeys` is exported into the artifacts (`symbolichotkeys.json`,
   read-only), and what Keyboard's `keymap_info` read (`system-shortcuts <n> keys=<k>`) must match
-  it — every entry and its keys.
+  it — every entry and its keys. Then the **downloads run** (`smoke-downloads.mts`, LJ15), its own
+  launch: over the smoke page, `--show` on a smoke-server address (`dl-attachment`) that answers a
+  fixed 1 KB body as `application/octet-stream` with `Content-Disposition: attachment;
+  filename="lj-smoke.bin"` must log `download-started lj-smoke.bin`, then `download-finished
+  lj-smoke.bin ok`, in the OS's Downloads folder (`download-folder` = `~/Downloads` on every runner),
+  the file holding exactly those bytes (`download.png`: the toolbar's "lj-smoke.bin saved" with
+  Show in folder); the same again lands as `lj-smoke (1).bin`; with hello's panel shown the same
+  download must log `download-refused panel` and no file may appear. Then a slow download
+  (`lj-slow.bin`, 1 KB every half second; `download-progress.png`: "Downloading lj-slow.bin…") with
+  the window closed after 1.5 s: the server must see the engine go away before its last chunk, and
+  nothing of it may be left in Downloads (`closeFailures`; `summary.json`'s
+  `downloads.closeDuringDownload`). Informational: a PDF sent as an attachment (`dl-pdf`) — saved,
+  or shown in the page (macOS) —, and files of the run found in the home or working folder. Every
+  file is removed afterwards (log `smoke-downloads.log`).
   Then the **tray run**
   (`smoke-tray.mts`, LJ41), its own launches with `"showTrayIcon": false`: the log must have
   `tray-visible false` after `shortcut-registered` (and never `true`); a second launch without

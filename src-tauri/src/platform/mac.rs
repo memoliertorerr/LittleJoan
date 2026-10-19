@@ -1,6 +1,7 @@
 //! macOS: WKWebView's `customUserAgent` (nil = the engine's own user agent), its autoresizing
 //! mask (LJ39), WebKit's element fullscreen (`fullscreenState`), and the general pasteboard
-//! (extensions' clipboard.writeText).
+//! (extensions' clipboard.writeText); the page's downloads are followed to cancel them when the
+//! window closes (mac/downloads.rs, LJ15).
 
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
 use std::sync::mpsc;
@@ -18,6 +19,10 @@ use crate::keys::Platform;
 use crate::layout;
 use crate::phone;
 use crate::smoke;
+
+/// The page's WKDownloads, cancelled when the window closes (LJ15).
+mod downloads;
+pub use downloads::{cancel as cancel_downloads, follow as follow_downloads};
 
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     let result = page.with_webview(move |webview| {

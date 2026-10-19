@@ -8,6 +8,7 @@
 //! fullscreen is followed through WebKitGTK's `enter-fullscreen` and `leave-fullscreen`
 //! signals, to hide the bar meanwhile — and switched off on WebKitGTK older than 2.52, which
 //! aborts the process as a page enters it (LJ14.1, `fullscreen::needs_fullscreen_off`).
+//! The page's downloads go through WebKitGTK itself (linux/downloads.rs, LJ15).
 
 use gtk::glib::Propagation;
 use gtk::glib::prelude::*;
@@ -23,6 +24,10 @@ use crate::page_actions;
 use crate::phone;
 use crate::smoke;
 use crate::state;
+
+/// The page's downloads, through WebKitGTK itself (LJ15).
+mod downloads;
+pub use downloads::cancel as cancel_downloads;
 
 /// The bar: a fixed height at the top of the window's box instead of an equal share.
 ///
@@ -150,12 +155,13 @@ fn fullscreen_off_where_it_aborts(view: &webkit2gtk::WebView) {
     }
 }
 
-/// The page: page keys for the whole window, and element fullscreen.
+/// The page: page keys for the whole window, element fullscreen, and its downloads.
 pub fn install_page<R: Runtime>(page: &Webview<R>) {
     let app = page.app_handle().clone();
     let result = page.with_webview(move |webview| {
         let view = webview.inner();
         fullscreen_off_where_it_aborts(&view);
+        downloads::take(&app, &view);
         for (signal, on) in [("enter-fullscreen", true), ("leave-fullscreen", false)] {
             let app = app.clone();
             view.connect_local(signal, false, move |_| {

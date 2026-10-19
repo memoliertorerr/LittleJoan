@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { MAX_DOMAIN, displayDomain, extensionLabel, isMac, middleEllipsis, pillFor, siteFor, siteModeInfo, toolbarView, type SiteModeInfo } from "./logic.ts";
+import {
+  MAX_DOMAIN,
+  MAX_STATUS_NAME,
+  STATUS_LINGER_MS,
+  ZOOM_LINGER_MS,
+  displayDomain,
+  extensionLabel,
+  initialStatus,
+  isMac,
+  middleEllipsis,
+  nextStatusChange,
+  pillFor,
+  shownStatus,
+  siteFor,
+  siteModeInfo,
+  statusMessage,
+  statusView,
+  toolbarView,
+  withStatus,
+  withToolbarVisible,
+  type SiteModeInfo,
+  type StatusMessage,
+} from "./logic.ts";
 
 describe("the domain shown", () => {
   it("strips www.", () => {
@@ -147,5 +169,150 @@ describe("the phone / desktop pill (LJ40)", () => {
     ]) {
       expect(siteModeInfo(bad), JSON.stringify(bad)).toBeNull();
     }
+  });
+});
+
+const download = (state: "downloading" | "saved" | "failed" | "blocked", name = "lj-smoke.bin"): StatusMessage => ({
+  kind: "download",
+  state,
+  name,
+});
+
+describe("the status Rust sends", () => {
+  it("is checked", () => {
+    expect(statusMessage({ kind: "download", state: "saved", name: "a.pdf" })).toEqual(download("saved", "a.pdf"));
+    expect(statusMessage({ kind: "download", state: "failed", name: "" })).toEqual(download("failed", ""));
+    expect(statusMessage({ kind: "download", state: "blocked", name: "" })).toEqual(download("blocked", ""));
+    for (const bad of [
+      null,
+      "saved",
+      {},
+      { kind: "download", state: "exploded", name: "a" },
+      { kind: "download", state: "saved" },
+      { kind: "download", state: "saved", name: "" },
+      { kind: "download", state: "downloading", name: 3 },
+      { kind: "download", state: "saved", name: "x".repeat(1_001) },
+      { kind: "other", state: "saved", name: "a" },
+    ]) {
+      expect(statusMessage(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("reads as the plan says, with Show in folder once saved", () => {
+    expect(statusView(download("downloading"))).toEqual({ text: "Downloading lj-smoke.bin…", title: "Downloading lj-smoke.bin…", action: null });
+    expect(statusView(download("saved"))).toEqual({
+      text: "lj-smoke.bin saved",
+      title: "lj-smoke.bin saved in Downloads",
+      action: { label: "Show in folder", command: "reveal_download" },
+    });
+    expect(statusView(download("failed")).text).toBe("Download failed");
+    expect(statusView(download("failed")).title).toBe("Download failed: lj-smoke.bin");
+    expect(statusView(download("failed", "")).title).toBe("Download failed");
+    expect(statusView(download("blocked", "")).text).toBe("Download blocked");
+  });
+
+  it("shortens long names in the middle, keeping the extension in sight", () => {
+    const long = `${"quarterly-report-".repeat(5)}final.pdf`;
+    const view = statusView(download("saved", long));
+    expect(view.text.endsWith("final.pdf saved")).toBe(true);
+    expect(Array.from(view.text.replace(/ saved$/, ""))).toHaveLength(MAX_STATUS_NAME);
+    expect(view.title).toBe(`${long} saved in Downloads`);
+  });
+
+  it("keeps markup as text (it is drawn with textContent)", () => {
+    const view = statusView(download("saved", "<img src=x onerror=alert(1)>.html"));
+    expect(view.text).toBe("<img src=x onerror=alert(1)>.html saved");
+  });
+});
+
+describe("the status area over time", () => {
+  it("goes downloading → saved → cleared after 8 s", () => {
+    let state = initialStatus(true, 0);
+    expect(shownStatus(state, 0)).toBeNull();
+    state = withStatus(state, download("downloading"), 100);
+    expect(shownStatus(state, 60_000)?.text).toBe("Downloading lj-smoke.bin…");
+    expect(nextStatusChange(state, 60_000)).toBeNull();
+    state = withStatus(state, download("saved"), 60_000);
+    expect(shownStatus(state, 60_000)?.text).toBe("lj-smoke.bin saved");
+    expect(shownStatus(state, 60_000 + STATUS_LINGER_MS - 1)?.action?.label).toBe("Show in folder");
+    expect(nextStatusChange(state, 61_000)).toBe(STATUS_LINGER_MS - 1_000);
+    expect(shownStatus(state, 60_000 + STATUS_LINGER_MS)).toBeNull();
+    expect(nextStatusChange(state, 60_000 + STATUS_LINGER_MS)).toBeNull();
+  });
+
+  it("shows a failure for 8 s too", () => {
+    let state = withStatus(initialStatus(true, 0), download("downloading"), 0);
+    state = withStatus(state, download("failed"), 500);
+    expect(shownStatus(state, 500)?.text).toBe("Download failed");
+    expect(shownStatus(state, 500 + STATUS_LINGER_MS - 1)?.text).toBe("Download failed");
+    expect(shownStatus(state, 500 + STATUS_LINGER_MS)).toBeNull();
+  });
+
+  it("never loses a status while the command bar is open", () => {
+    // Saved while the toolbar shows; the command bar opens after 3 s and stays a minute.
+    let state = withStatus(initialStatus(true, 0), download("saved"), 0);
+    state = withToolbarVisible(state, false, 3_000);
+    expect(nextStatusChange(state, 3_000)).toBeNull();
+    expect(shownStatus(state, 63_000)?.text).toBe("lj-smoke.bin saved");
+    // Back to the toolbar: the 5 s it had left.
+    state = withToolbarVisible(state, true, 63_000);
+    expect(shownStatus(state, 67_999)?.text).toBe("lj-smoke.bin saved");
+    expect(nextStatusChange(state, 63_000)).toBe(5_000);
+    expect(shownStatus(state, 68_000)).toBeNull();
+  });
+
+  it("waits for the toolbar when it arrives during the command bar", () => {
+    // A new window opens with the command bar: a download finishing meanwhile waits.
+    let state = initialStatus(false, 0);
+    state = withStatus(state, download("saved"), 1_000);
+    expect(shownStatus(state, 30_000)?.text).toBe("lj-smoke.bin saved");
+    state = withToolbarVisible(state, true, 30_000);
+    expect(shownStatus(state, 30_000 + STATUS_LINGER_MS - 1)?.text).toBe("lj-smoke.bin saved");
+    expect(shownStatus(state, 30_000 + STATUS_LINGER_MS)).toBeNull();
+  });
+
+  it("shows the latest download, one at a time", () => {
+    let state = withStatus(initialStatus(true, 0), download("saved", "a.zip"), 0);
+    state = withStatus(state, download("downloading", "b.zip"), 1_000);
+    expect(shownStatus(state, 1_000)?.text).toBe("Downloading b.zip…");
+    expect(shownStatus(state, 20_000)?.text).toBe("Downloading b.zip…");
+    state = withStatus(state, download("saved", "b.zip"), 20_000);
+    expect(shownStatus(state, 20_000)?.text).toBe("b.zip saved");
+  });
+});
+
+describe("the zoom level in the status area (LJ16)", () => {
+  const zoom = (percent: number): StatusMessage => ({ kind: "zoom", percent });
+
+  it("is checked", () => {
+    expect(statusMessage({ kind: "zoom", percent: 110 })).toEqual(zoom(110));
+    for (const bad of [{ kind: "zoom" }, { kind: "zoom", percent: "110" }, { kind: "zoom", percent: 1.5 }, { kind: "zoom", percent: 0 }, { kind: "zoom", percent: 5_000 }]) {
+      expect(statusMessage(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("says the level for 1.5 s, 100 % too, then nothing", () => {
+    let state = withStatus(initialStatus(true, 0), zoom(110), 0);
+    expect(shownStatus(state, 0)).toEqual({ text: "Zoom 110 %", title: "The page at 110 %", action: null });
+    expect(shownStatus(state, ZOOM_LINGER_MS - 1)?.text).toBe("Zoom 110 %");
+    expect(shownStatus(state, ZOOM_LINGER_MS)).toBeNull();
+    state = withStatus(state, zoom(100), 10_000);
+    expect(shownStatus(state, 10_000)?.text).toBe("Zoom 100 %");
+    expect(nextStatusChange(state, 10_000)).toBe(ZOOM_LINGER_MS);
+    expect(shownStatus(state, 10_000 + ZOOM_LINGER_MS)).toBeNull();
+  });
+
+  it("each change starts the 1.5 s again", () => {
+    let state = withStatus(initialStatus(true, 0), zoom(110), 0);
+    state = withStatus(state, zoom(125), 1_000);
+    expect(shownStatus(state, 2_400)?.text).toBe("Zoom 125 %");
+    expect(shownStatus(state, 2_500)).toBeNull();
+  });
+
+  it("shows over a download under way, which comes back after it", () => {
+    let state = withStatus(initialStatus(true, 0), { kind: "download", state: "downloading", name: "big.iso" }, 0);
+    state = withStatus(state, zoom(90), 1_000);
+    expect(shownStatus(state, 1_000)?.text).toBe("Zoom 90 %");
+    expect(shownStatus(state, 1_000 + ZOOM_LINGER_MS)?.text).toBe("Downloading big.iso…");
   });
 });

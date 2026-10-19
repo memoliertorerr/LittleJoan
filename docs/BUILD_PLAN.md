@@ -81,8 +81,8 @@
 | LJ13 | *(v0.2)* AppImage built on Ubuntu 24.04 (WebKitGTK 2.52); the AppImage gets the full smoke | strong | auto | ✅ done |
 | LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⏭ stopped at its experiment: 2.50.4 aborts even when `enter-fullscreen` is handled — no app change; the Launchpad draft written (see notes) → LJ14.1 |
 | LJ14.1 | *(added mid-plan 2026-10-19)* WebKitGTK older than 2.52: element fullscreen switched off instead of the abort; an Ubuntu 22.04 smoke job | strong | auto | ✅ done |
-| LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ⬜ todo |
-| LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ⬜ todo |
+| LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ✅ done |
+| LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ✅ done |
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⬜ todo |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ todo |
@@ -183,7 +183,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Next: phase 8.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Next: phase 9.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -203,6 +203,16 @@ and the guard fixed it on every element path; YouTube gets the desktop agent on 
 opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
+
+**Phase 8 (LJ15 → LJ16, 2026-10-19)** is PR #26 on `lj/p8-downloads-zoom`, merged by the agent once
+verify, package and smoke were green on every job (the standing exception). Downloads go to the OS
+Downloads folder under a cleaned, unique name on every engine, with "Downloading …" / "… saved" +
+Show in folder / "Download failed" in the toolbar's status area; none while an extension's panel
+shows; closing the window ends a download under way (WebKitGTK cancelled through an emission hook
+— 2.50.4 needed it —, WKDownloads noted through a wrapped `-[WKDownload setDelegate:]` and
+cancelled, WebView2's end with the window). Page zoom: Ctrl/Cmd + / − / 0 as keymap actions (the
+Keyboard tab lists them, the macOS View menu has them), 50–300 %, per window, "Zoom 110 %" in the
+status area. Human checks are in PR #26; they also go into LJ19's checklist.
 
 **Phase 7 (LJ13 → LJ14.1, 2026-10-19)** is PR #25 on `lj/p7-linux-fullscreen`, merged by the agent
 once verify, package and smoke were green on every job (the standing exception). LJ13: the AppImage
@@ -2719,6 +2729,160 @@ every job is green (Ground Rule 3; two honest attempts, then stop). Look at each
 download.png.
 ```
 
+**Implementation notes (2026-10-19):**
+
+- **Disk:** 12 GiB free at the start of the phase and after verify; `.cache/target` 1.6 GB.
+- **`downloads.rs`** (pure; 13 tests in `downloads/tests.rs`): `accepts` (http / https; `data:`;
+  `blob:` whose page is http(s); never an extension URL in any form — `ljext:`, `http(s)://ljext.*`,
+  a blob of either —, the app's own origin, Windows' `http://tauri.localhost` included, `file:` or
+  another scheme), `file_name` (the engine's suggestion, else the URL's last path segment
+  percent-decoded, else `download`; WebKitGTK's payload "name" for a `data:` URL counts as none),
+  `clean` (the prompt's rules, and a little more, the restrictive choices: the characters Windows
+  refuses (`<>:"|?*`) become `_` on every OS, format characters go with the control ones — a bidi
+  override could show `…fdp.exe` as `…exe.pdf` (the manifest's `is_hidden_char`) —, leading dots go
+  too, so no hidden files and no `..`; device names get a `_` in front, `extensions::paths::DEVICES`),
+  the 200-byte cap keeping the extension at a character boundary, `split_extension` (the last dot
+  part when it is 1–10 letters or digits, with a `.tar` before it: `archive (1).tar.gz` but
+  `v1.2.3-setup (1).exe`, and `Chapter 1. Intro (1)` has none), `unique` (up to ` (9999)`, then
+  refused), and `Downloads` — the window's downloads under way keyed by URL (the earliest of a URL
+  first; reported twice → once), the last one saved, `decide` (panel → scheme → name; a name under
+  way counts as taken, case aside, so two quick downloads can't pick one name before either lands)
+  and `closed`.
+- **Runtime** (`bar/download.rs`, a child of bar.rs — which moved its tests to `bar/tests.rs` to stay
+  under 400 lines): `on_download` for WebView2 and WKWebView (Requested: the suggestion is the file
+  name of the engine's own destination; Finished: by URL), `requested` / `finished` for every engine,
+  the Downloads folder (`download_dir()`, else `~/Downloads`, created), the status pushed to the bar
+  (`setStatus({ kind: "download", state, name })`) and kept per window to tell the bar again when its
+  script runs (`tell_state`), and `window_closed` (from `joan::destroy`, before the page is
+  released). Smoke log: `download-folder`, `download-started`, `download-finished <name> ok|failed`,
+  `download-refused <reason>`, `download-closed`. "While the page shows an extension panel" is the
+  committed panel **or** the one the guard admitted and that hasn't committed yet (the more
+  restrictive reading; `--show <download>` over a panel leaves `committed` set, since a download
+  never commits). A refused download shows "Download blocked" (panel) or "Download failed" (the
+  rest) — the prompt named only the other three texts.
+- **WebKitGTK, a deviation the code forced (`platform/linux.rs`, beyond the prompt's files):** read
+  in wry 0.57 (`webkitgtk/web_context.rs`, `webkitgtk/mod.rs`, `lib.rs`) — every webview's
+  attributes default to an allow-all `download_started_handler`, and on Linux wry registers it on
+  the **web context** (`connect_download_started`, then `decide-destination` on each download) once
+  per webview built; Tauri keeps one context per data folder for the app's lifetime on Linux
+  (tauri-runtime-wry's `WebviewWrapper::drop`), shared by both webviews of every window (and
+  Settings in installed builds). WebKitGTK's `decide-destination` stops at the first handler that
+  returns TRUE (`g_signal_accumulator_true_handled`, checked in WebKit's `WebKitDownload.cpp`), and
+  wry's always do — so the bar's default handler, registered first, would have decided every page
+  download, `on_download`'s `Requested` would never have run, and each new window would have added
+  one more `finished` report, with a `failed` flag that is never reset. So on Linux the page doesn't
+  use Tauri's `on_download`: `install_page` hooks `download-started` once per context, takes only
+  downloads whose `web_view` is the open window's page, disconnects the `decide-destination`
+  handlers connected so far (`g_signal_handlers_disconnect_matched` by signal id; smoke log
+  `download-deciders-removed <n>`) and connects its own, which calls the same `requested` and sets a
+  `file://` URI (`g_filename_to_uri`: the 4.1 API's legacy form, which 22.04's 2.50 needs), with
+  per-download `failed` / `finished` handlers and a list of the page's downloads under way, cancelled
+  on the main thread when the window closes (`platform::cancel_downloads`). Landmines has it.
+- **Windows' download flyout:** nothing to add in `platform/win.rs`: wry's `DownloadStarting` handler
+  calls `SetHandled(true)` whenever `on_download` accepts (and `SetCancel(true)` when it refuses), and
+  a handled download shows no WebView2 UI — the screenshot decides.
+- **The toolbar** (`ui/toolbar/logic.ts` + `toolbar.ts`, `bar.html`, `style.css`): a generic status
+  area — `statusMessage` (checked), `statusView` (text, tooltip, an optional action: only
+  `reveal_download`), `lingerFor` (until replaced while downloading, else 8 s), and a small state
+  (`withStatus`, `withToolbarVisible`, `shownStatus`, `nextStatusChange`) that counts only the time
+  the toolbar is visible, one status per kind, the latest shown; 9 new tests in `logic.test.ts`
+  (downloading → saved → cleared after 8 s; failed; the command bar opening never loses one; a
+  status that arrives while the command bar is open waits; names shortened in the middle; markup
+  stays text). While a status shows, the pill hides. `#toolbar-status` sits between the pill and
+  open-in-browser, `max-width: 60%`, the name ellipsized, the button kept, so site and status share
+  320 px.
+- **`reveal_download()`** (`commands/downloads.rs`; build.rs's manifest; `capabilities/bar.json` gains
+  exactly `allow-reveal-download`; `capability_tests.rs`' `only_the_bar_may_reveal_downloads`): the
+  last file saved in this window, `tauri_plugin_opener::reveal_item_in_dir`.
+- **Smoke** (`scripts/ci/smoke-downloads.mts` + test, 7 tests; the smoke server's routes in
+  `smoke.mts`): its own launch after the keymap run. The address (`/dl-attachment`) names something
+  else than the header, so the name must come from `Content-Disposition`. Two more things,
+  informational in `summary.json`'s `downloads`: a PDF sent as an attachment (`/dl-pdf`) — whether
+  each engine downloads it or shows it (wry's WKWebView response policy looks only at
+  `canShowMIMEType`) —, and **closing the window during a download** (`/dl-slow`, 40 × 1 KB, one
+  every 500 ms): whether the server saw the engine stop, what is left in Downloads, the log after
+  `--hide` — the evidence for what WKWebView and WebView2 do (below, with CI).
+- Docs: README (Downloads; Privacy), CHANGELOG (Added), docs/architecture.md (file map, the page's
+  Downloads, the toolbar's status area, commands, capabilities, smoke log, CI), this plan (Deferred
+  follow-ups, Landmines).
+- `npm run verify`: 615 TS tests, 357 Rust tests, clippy clean (the Linux path compiles only in CI).
+- **CI (run 39270397918): verify ×3, package ×4 and smoke on Windows, macOS, `linux`,
+  `linux-scale-2` and `linux-appimage` green; `smoke (linux-22.04)` red — no download at all.**
+  Everywhere else both attachments landed in `~/Downloads` (Windows `C:\Users\runneradmin\Downloads`)
+  under the header's name with their exact bytes, the second as `lj-smoke (1).bin`, and hello's panel
+  refused the third (`download-refused panel`, no file). On Linux 24.04 the hook removed wry's two
+  deciders (`download-deciders-removed 2`, the bar's and the page's). **Screenshots:**
+  `download.png` — the toolbar's status "lj-smoke.bin saved" with the accent **Show in folder**
+  button in the pill's place, between the site and open-in-browser, on Windows (**no WebView2
+  download flyout**: wry's `SetHandled` is enough), macOS (traffic lights, then the status) and Linux
+  (scale 1 and 2, crisp); `download-progress.png` — "Downloading lj-slow.bin…". **Informational:**
+  the PDF attachment was downloaded on Windows and Linux, but **macOS showed it in the page** (wry's
+  WKWebView response policy asks only `canShowMIMEType`); **closing the window during the slow
+  download** stopped it on Windows (the server sent 5 of 40 chunks, then the connection closed; no
+  file left) and on Linux 24.04 (cancelled; no file), but **not on macOS**: 22 chunks at the 8 s mark
+  and still going, `lj-slow.bin` growing in Downloads — the WKDownload lives in WebKit's network
+  process, not in the closed web view. And on macOS the toolbar went on naming the download's
+  address after `--show <download>` (`bar-url …/dl-attachment` with the smoke page still shown):
+  WKWebView raises no event for the page that stays (WebView2 and WebKitGTK raise a `Finished` for it,
+  which also records one more visit — the Deferred follow-up about cancelled navigations, Linux too).
+  **linux-22.04 (WebKitGTK 2.50.4):** the hook ran (`download-deciders-removed 0` — no handler of
+  wry's was there) but the `decide-destination` handler it connected never ran, nothing was logged,
+  the server sent the slow download in full, and nothing landed in `~/Downloads` (no XDG download
+  dir on the runner: WebKitGTK's own default is the home folder).
+- **`lj-step-15-fix` (one commit for the three):** (1) **Linux decides in an emission hook** on
+  `WebKitDownload::decide-destination` (`platform/linux/downloads.rs`, moved out of `linux.rs`):
+  `g_signal_add_emission_hook`, added once, runs for every download in the process before any
+  handler — whatever the context, whenever the signal comes —, so the order of WebKitGTK 2.50's
+  signals no longer matters; for a page download it disconnects the download's other deciders (a
+  handler disconnected during an emission is skipped) and sets the destination (or cancels), and the
+  class handler keeps it (`download-decide other|no-url` logs a download that isn't the page's). The
+  context's `download-started` hook is gone. (2) **macOS cancels its WKDownloads when the window
+  closes** (`platform/mac/downloads.rs`): wry keeps the WKDownload to itself, but gives every one its
+  delegate with `-[WKDownload setDelegate:]` (a public WebKit class and selector), so that setter's
+  implementation is wrapped once (objc2's `Method::set_implementation`) to note the download and
+  then call the original; on close the noted downloads are cancelled (`-cancel:` with no resume
+  block, through `performSelector:withObject:`; on a finished one it does nothing) and the partial
+  files of those under way are removed 0.5 s later (`download-noted`, `download-cancelled <n>`).
+  `platform::cancel_downloads` now takes those paths. (3) **The address of a navigation that became
+  a download goes back** (`PageAddress::download`, tested: once, only for the app's own navigation,
+  to no address when nothing was loaded before), so the toolbar names the page that stays. The
+  smoke also lists files of the run found in the home folder or the working folder
+  (`downloads.elsewhere`, informational, tidied). `npm run verify`: 615 TS tests, 358 Rust tests,
+  clippy clean.
+- **CI for the fix (run 39275497527): macOS and Windows' downloads right, every Linux job red.**
+  macOS: the WKDownloads were noted (`download-noted` before each), **closing the window cancelled
+  the slow one** — the server saw the connection close after 4 of 40 chunks, `download-cancelled 4`,
+  nothing left in Downloads — and after each `--show <download>` the toolbar went back to the smoke
+  page (`bar-url …/smoke.html`). Linux, 24.04 and 22.04 alike: **the hook was never added** — the
+  app printed "no hook on WebKitGTK's downloads": `g_signal_lookup` finds a signal only once its
+  class has been initialised, and before the first download WebKitDownload's hadn't (GLib's docs say
+  so; the old lookup ran during a download) — so wry's handlers decided, putting the files in the
+  working folder (`downloads.elsewhere` listed them: wry falls back to the current folder without an
+  XDG download dir), which also tells what 22.04 did in the first run. macOS's smoke also failed
+  one rule of the bundled run this step doesn't touch: the QR page action's panel loaded 5 s after
+  `extension-opened qr` and never made its API calls — the same macOS symptom as LJ29's race flake
+  (Deferred follow-ups).
+- **`lj-step-15-fix2`:** `g_type_class_ref(WebKitDownload)` before the lookup (kept for the process's
+  lifetime), smoke log `download-hook decide-destination` once added; `download-decide
+  page|no-view|other` for each download; and a download without a web view counts as the page's
+  while a page window is open (nothing else of Little Joan's downloads: the bar and Settings stay on
+  the app's pages) — in case WebKitGTK 2.50 decides on a download object it hasn't tied to the view.
+  GLib's `signal_emit_unlocked_R` (2.72, 22.04's) checked: emission hooks run after a RUN_FIRST class
+  closure and before the handler list is even looked up, and a disconnected handler is skipped.
+- **CI for fix2 (run 39280858307, delayed by GitHub's Actions incident that afternoon): all thirteen
+  jobs green.** Every smoke job — Windows, macOS, `linux`, `linux-scale-2`, `linux-appimage` and
+  `linux-22.04` — saved both attachments in `~/Downloads` with their bytes, refused the panel's, and
+  **closing the window ended the slow download everywhere**: the server saw the connection go after
+  4–5 of 40 chunks and nothing was left in Downloads (macOS `download-cancelled 4`). Linux logged
+  `download-hook decide-destination` once, then `download-decide page` for each download; on 24.04
+  `download-deciders-removed 2` (wry's), on **22.04 `0` — on WebKitGTK 2.50.4 no handler of wry's is on
+  the download when `decide-destination` comes**, which is why the first design (a handler connected in
+  `download-started`) saw nothing there. The PDF attachment: saved on Windows and Linux, shown in the
+  page on macOS. Nothing turned up outside Downloads. macOS's bundled run passed this time.
+- **`lj-step-15-fix3`** (after LJ16, before the merge): closing the window during a download is a smoke
+  rule now (`closeFailures`: the slow download started, the server saw the engine go before its last
+  chunk, nothing of it left in Downloads; 1 more test), since every engine does it.
+
 ### LJ16 — Page zoom · standard · auto
 
 > *Round 3 adjustments (2026-10-18):* the zoom keys join LJ43's keymap — so they appear in the
@@ -2790,6 +2954,57 @@ check:
 These checks also go into LJ19's checklist. Once every job is green, merge the PR into main with a
 merge commit (Ground Rule 24), then stop and report.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **Disk:** 12 GiB free at the start of the step, 3.6 GiB after the last verify — other things on
+  the Mac took about 8 GiB meanwhile (`.cache/` stayed at 3.3 GB, `.cache/target` 1.6 GB); emptying
+  `.cache/npm` and `.cache/tmp` (re-created on demand) left 4.0 GiB, above the 3 GB floor.
+- **`zoom.rs`** (pure, 5 tests): `LEVELS` 50 … 300 %, `step(current, In | Out | Reset)` — the next
+  level up or down from any value, stopping at the ends; reset 100 % — and `factor`. One more test
+  reads every `.rs` file under `src-tauri/src` and fails if Tauri's zoom-hotkeys option is named
+  anywhere (the needle is built with `concat!`, so the test file doesn't hold it either).
+- **The keymap** (`keymap.rs`; 4 tests in a new `keymap/zoom_tests.rs`, since `keymap/tests.rs` was
+  already near 500 lines): `zoom-in`, `zoom-out`, `zoom-reset` (titles Zoom In, Zoom Out, Actual
+  Size; in Settings' order after Forward), `PageAction::ZoomIn / ZoomOut / ZoomReset`. Defaults:
+  Windows / Linux Ctrl+= with the aliases Ctrl+Shift+= (Ctrl++) and Ctrl+keypad +, Ctrl+- with
+  Ctrl+keypad −, Ctrl+0 with Ctrl+keypad 0; macOS ⌘=, ⌘-, ⌘0, one each (a menu item has one key
+  equivalent; muda turns `Equal` / `Minus` / `Digit0` into `=` / `-` / `0`). Tests: the defaults,
+  exact matching (Ctrl+Alt, a plain =, Ctrl+Shift+- and Ctrl+Shift+0 match nothing; GDK's `plus`,
+  `KP_Add`, `KP_0` and Windows' `VK_OEM_PLUS`, `VK_ADD`, `VK_NUMPAD0` are the keys), an override
+  replacing the first binding and dropping the aliases (`""` = no key), validation (a clash with
+  zoom-in's alias, the summon shortcut, a plain = on macOS) and `keymap_info`'s list — so Settings →
+  Keyboard shows the three with no change of its own. `keys.rs` already had every key (LJ43).
+- **Runtime** (`bar/zoom.rs`): the window's level next to its other per-window state, reset to 100 %
+  in `add_webviews`, `Webview::set_zoom(level / 100)` on the page, smoke log `zoom <percent>`, and the
+  status `{ kind: "zoom", percent }`. Not re-applied on navigation: WebView2's controller
+  `ZoomFactor` "becomes the new default zoom … across navigations", and WKWebView's `pageZoom` and
+  WebKitGTK's zoom level are properties of the view. The macOS View menu gains Zoom In, Zoom Out,
+  Actual Size from the keymap (`menu-keys zoom-in=⌘=` …). Phone mode is the window's logical width,
+  untouched (LJ39 / LJ40's notes: only the window's size and the agent change the page's bounds).
+- **The status area, shared** (`bar/status.rs`, out of `bar/download.rs`): one `Status` enum
+  (`download`, `zoom`), the last status told again when the bar's script runs. `ui/toolbar/logic.ts`:
+  "Zoom 110 %" for `ZOOM_LINGER_MS` = 1.5 s (each change starts it again; "Zoom 100 %" once, then
+  nothing); 4 more tests (checked input, the 1.5 s, a new change restarting it, a download under way
+  coming back after it).
+- **Smoke** (`scripts/ci/smoke-zoom.mts` + test, 4 tests — a file of its own rather than
+  `smoke-log.mts`, which is past 400 lines): in the main run after `wide.png`, Ctrl+= (xdotool
+  `ctrl+equal`, SendKeys `^=`, a ⌘= key event on macOS) → `zoom 110`, `zoom.png` (the status), the
+  page's next report narrower than 720 px; Ctrl+0 → `zoom 100` and 720×560 again. Required on
+  Windows and Linux; on macOS once a `zoom` line shows the key arrived.
+- Docs: README (the keys table, a line on zoom), CHANGELOG (Added), docs/architecture.md (page keys,
+  the keymap, Page zoom, the status area, file map, smoke log, CI), this plan (Later).
+- `npm run verify`: 623 TS tests, 367 Rust tests, clippy clean.
+- **CI (run 39283498532, with `lj-step-15-fix2` under it): all thirteen jobs green on the first try.**
+  The zoom check on every job: Ctrl+= (macOS ⌘=, whose key event reached the View menu) logged `zoom
+  110`, the page reported **655×509 on Windows and 654×509 on macOS and the four Linux jobs** (dpr
+  1.1 — the engines' zoom, not the window), and Ctrl+0 / ⌘0 logged `zoom 100` and brought 720×560
+  back. macOS's menu was built with `menu-keys zoom-in=⌘=`, `zoom-out=⌘-`, `zoom-reset=⌘0`. The
+  downloads run (fix2's code) passed on all six smoke jobs again. **Screenshots:** `zoom.png` — the
+  toolbar's status "Zoom 110 %" in the pill's place on Windows (the page at 655 px), macOS (654 px,
+  traffic lights in the toolbar) and Linux (scale 1 and 2); `settings-keyboard.png` — the Keyboard tab
+  as before, Zoom In / Zoom Out / Actual Size below the fold after Forward (`keymap_info`'s list, tested).
+  Disk: 6.3 GiB free with the artifacts downloaded; deleted after looking.
 
 ### LJ17 — Wayland-native global shortcut · strong · auto
 
@@ -7532,9 +7747,10 @@ and where, then stop.
 - **macOS menu page items are always enabled** (surfaced by LJ7). The menu bar is hidden
   (Accessory app), so only the key equivalents matter, and they do nothing without a page. The
   tray items do track page state.
-- **Downloads use each engine's default** (surfaced by LJ4). WebView2 saves to Downloads with its
+- ~~**Downloads use each engine's default**~~ (surfaced by LJ4). WebView2 saves to Downloads with its
   own UI; WKWebView and WebKitGTK ignore downloads unless the app handles them. Designed under
-  Later. → *Planned as LJ15.*
+  Later. → *Planned as LJ15. Handled by LJ15: every engine saves to the Downloads folder under a
+  cleaned, unique name, with the status in the toolbar.*
 - **Linux fullscreen on Ubuntu 22.04 / the AppImage** (surfaced by LJ9). WebKitGTK 2.50.4
   aborts on element fullscreen (Landmines). Options for the user: (a) build the AppImage on
   ubuntu-24.04 so it bundles WebKitGTK 2.52 (raises its glibc floor to 2.39); (b) wait for
@@ -7629,7 +7845,9 @@ and where, then stop.
   not the panel, decides when). → *Planned as LJ56 (v0.3).*
 - **A cancelled navigation counts as a second visit on Windows** (surfaced by LJ29's probe):
   WebView2 raises one more `Finished` load event for the page that stays when `NavigationStarting`
-  cancels a navigation, so history records that page twice. Option: ignore a `Finished` whose URL
+  cancels a navigation, so history records that page twice. *(LJ15)* A navigation that becomes a
+  download does the same on Windows and Linux (WebKitGTK too raises a `Finished` for the page that
+  stays). Option: ignore a `Finished` whose URL
   equals the last finished one within a short time (history_store), or track cancellations.
 - **WebRTC is open to extension panels** (security review, L2). The CSP doesn't cover
   `RTCPeerConnection`, so a panel can reach a STUN/TURN server it doesn't declare (and learn local
@@ -7791,6 +8009,12 @@ and where, then stop.
   cycle check looked (10 s), while the main sample — 2, 10, 30 and 60 s after the first hibernate —
   saw none, as in every earlier run. LJ9 measured "1 helper at 2–10 s, 0 at 30 s" on macOS. If it
   recurs, give the cycle check macOS's 30 s rather than loosen the rule.
+- **macOS shows an attachment it can display instead of downloading it** (surfaced by LJ15's CI): a
+  PDF sent with `Content-Disposition: attachment` opens in the page on macOS (wry's WKWebView
+  response policy asks only `canShowMIMEType`), while Windows and Linux save it. A link with the
+  `download` attribute does download. Options: a response-policy hook of our own (wry has none to
+  give; it would mean wrapping wry's navigation delegate as LJ15 wraps `setDelegate:`), or upstream a
+  `Content-Disposition` check to wry.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -8055,6 +8279,27 @@ Populated from real friction, not speculation:
   promise). Little Joan sets it on the page webview below 2.52 (`fullscreen-off` in the smoke log).
   **A force-cancelled job keeps no log** (`gh api …/force-cancel`): its log blob is never written,
   so the diagnostics it ran are lost — cancel normally, or let it end.
+- *(LJ15, read in wry 0.57)* **On Linux wry's download handler belongs to the web context, and the
+  first one wins.** Every webview's attributes default to an allow-all `download_started_handler`,
+  and on WebKitGTK wry registers it on the shared `WebKitWebContext` once per webview built (Tauri
+  keeps one context per data folder for the app's lifetime on Linux, shared by the bar, the page and
+  — in installed builds — Settings). WebKitGTK's `decide-destination` stops at the first handler
+  that returns TRUE, and wry's always do: the first webview ever built decides every download's
+  destination, Tauri's `on_download` on a later webview never sees `Requested`, each new webview adds
+  one more `finished` report, and wry's per-registration `failed` flag is never reset. LJ15 handles
+  the page's downloads in `platform/linux.rs` instead (one hook per context, wry's deciders
+  disconnected). On Windows and macOS `on_download` is per webview and works. Also: WebKitGTK 4.1's
+  `webkit_download_set_destination` takes a `file://` URI on 2.50 (newer versions take a path too).
+  *(LJ15's CI)* **On WebKitGTK 2.50.4 a `decide-destination` handler connected in the context's
+  `download-started` never runs** (and wry's weren't there either), while 2.52 runs it: decide in an
+  emission hook on `decide-destination` instead, which runs before every handler of every download.
+- *(LJ15's CI)* **A WKDownload outlives its WKWebView.** It lives in WebKit's network process: after
+  the window closed (web view unloaded and destroyed) a download went on writing its file. wry keeps
+  the WKDownload objects to itself; LJ15 notes them through a wrapped `-[WKDownload setDelegate:]` to
+  cancel them on close.
+- *(LJ15's CI)* **wry's WKWebView shows any attachment it can display** (a PDF, an image, text):
+  its response policy downloads only what `canShowMIMEType` refuses, `Content-Disposition:
+  attachment` aside. WebView2 and WebKitGTK download it.
 - *(LJ13)* **An AppImage without FUSE (`APPIMAGE_EXTRACT_AND_RUN=1`) deletes its extracted folder
   when it exits** — `$TMPDIR/appimage_extracted_<md5>`, shared by every launch of the same image.
   A second instance (single-instance's remote control) exiting would delete the running first
@@ -8084,7 +8329,7 @@ or round 3 picked up point at their step and stay here for the record.
 | **Start at login** → *v0.2, LJ11* | Settings checkbox → tauri-plugin-autostart (LaunchAgent / registry Run key / XDG autostart) | New dependency, settings field, per-OS human check |
 | **Keep the page after close** | Settings "Keep page for N minutes": hide instead of destroy, destroy on a timer | Breaks the "no webview at rest" invariant for N minutes — needs a measured memory budget |
 | **Downloads** → *v0.2, LJ15 (status in the URL bar, no notifications)* | `on_download` → save to the OS Downloads folder, tray notification | Handler + notification permission per OS |
-| **Find in page** (zoom → *v0.2, LJ16*) → *v0.3, LJ49* | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
+| **Find in page** (zoom → *v0.2, LJ16: done*) → *v0.3, LJ49* | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
 | **Popups inside the app (OAuth)** → *v0.3, LJ47–LJ48* | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too. Some "Sign in with …" flows break today because the popup opens in the default browser |
 | **Code signing / notarization / SmartScreen reputation** → *macOS: v0.2, LJ18* | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Windows: SignPath Foundation if the user's application is approved (Deferred follow-ups) |
 | **Auto-update and GitHub Releases** | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys, release workflow |

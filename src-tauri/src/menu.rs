@@ -94,6 +94,11 @@ pub fn create<R: Runtime>(app: &AppHandle<R>, keymap: &Keymap) -> tauri::Result<
             &item(KeyAction::Back)?,
             &item(KeyAction::Forward)?,
             &PredefinedMenuItem::separator(app)?,
+            // Page zoom (LJ16): Zoom In, Zoom Out, Actual Size — ⌘=, ⌘-, ⌘0 unless changed.
+            &item(KeyAction::ZoomIn)?,
+            &item(KeyAction::ZoomOut)?,
+            &item(KeyAction::ZoomReset)?,
+            &PredefinedMenuItem::separator(app)?,
             &item(KeyAction::History)?,
         ],
     )?;
