@@ -7,6 +7,12 @@ All notable changes to Little Joan are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Linux on ARM64:** an `arm64` `.deb` (built on Ubuntu 22.04, so it installs on Ubuntu 22.04+ and
+  Debian 12+, with the system's WebKitGTK) and an `aarch64` AppImage (built on Ubuntu 24.04, with
+  its own WebKitGTK 2.52; glibc 2.39+), for ARM machines such as Ubuntu in a virtual machine on an
+  Apple silicon Mac. Both are built on ARM and installed and tested in CI exactly like the x86_64
+  ones; on Ubuntu 22.04 the arm64 `.deb` also turns fullscreen off instead of crashing. Release
+  files: `LittleJoan-<version>-linux-arm64.deb` and `LittleJoan-<version>-linux-aarch64.AppImage`.
 - **A global shortcut on Linux under Wayland,** through the XDG GlobalShortcuts portal (KDE
   Plasma, GNOME 48 and later). The desktop owns the key: it may ask once to allow it and may pick
   another one; Settings → Keyboard and the first launch's welcome show the key it uses. Without the

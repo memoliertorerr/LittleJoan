@@ -124,6 +124,18 @@ jobs:
             os: ubuntu-24.04
             bundles: appimage
             target: ""
+          # Linux ARM64 (LJ18.1): the same two builds, natively on GitHub's arm64 runners (Tauri
+          # doesn't cross-build an AppImage). The arm64 .deb on 22.04, for the same glibc floor and
+          # the system's WebKitGTK as `linux`; the aarch64 AppImage on 24.04, for its bundled 2.52
+          # as `linux-appimage`. Each name is its own artifact and cache key.
+          - name: linux-arm64
+            os: ubuntu-22.04-arm
+            bundles: deb
+            target: ""
+          - name: linux-appimage-arm64
+            os: ubuntu-24.04-arm
+            bundles: appimage
+            target: ""
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -161,6 +173,8 @@ jobs:
       - name: Rust toolchain
         run: |
           source scripts/env.sh
+          # An image without rustup (the arm64 runners are partner images) gets it in .cache/.
+          if ! command -v rustup >/dev/null; then bash scripts/setup-rust.sh; fi
           rustup toolchain install
           if [ "${{ matrix.name }}" = macos ]; then
             rustup target add x86_64-apple-darwin aarch64-apple-darwin
@@ -197,29 +211,50 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Every .deb (amd64, arm64): its architecture must be the runner's, and its binary's newest
+      # glibc symbol version is its floor (WebKitGTK is the system's).
       - name: Inspect the .deb
-        if: matrix.name == 'linux'
+        if: matrix.bundles == 'deb'
         run: |
           deb="$(ls bundles/*.deb | head -1)"
           dpkg-deb -I "$deb"
-          # The newest glibc symbol version the binary needs: its floor (WebKitGTK is the system's).
+          arch="$(dpkg-deb -f "$deb" Architecture)"
+          if [ "$arch" != "$(dpkg --print-architecture)" ]; then
+            echo "::error::The .deb is for $arch, the runner is $(dpkg --print-architecture)"
+            exit 1
+          fi
           dir="$RUNNER_TEMP/deb" && rm -rf "$dir" && dpkg-deb -x "$deb" "$dir"
+          file "$dir/usr/bin/little-joan"
           glibc="$(grep -hoa 'GLIBC_2\.[0-9]*' "$dir/usr/bin/little-joan" | sort -uV | tail -1)"
           echo "glibc floor: $glibc"
-          echo "The .deb needs ${glibc/_/ } or later (it uses the system's WebKitGTK)." >> "$GITHUB_STEP_SUMMARY"
+          echo "The $arch .deb needs ${glibc/_/ } or later (it uses the system's WebKitGTK)." >> "$GITHUB_STEP_SUMMARY"
 
-      # What the AppImage really carries: its WebKitGTK (the bundled library asked for its own
-      # version), its glibc floor (the newest glibc symbol version any of its files needs), and
-      # how it starts (AppRun). A bundled WebKitGTK older than 2.52 fails the job: 2.50 aborts on
-      # element fullscreen.
+      # What the AppImage really carries (x86_64, aarch64): its WebKitGTK (the bundled library asked
+      # for its own version), its glibc floor (the newest glibc symbol version any of its files
+      # needs), how it starts (AppRun), and that the app is built for the runner's architecture.
+      # A bundled WebKitGTK older than 2.52 fails the job: 2.50 aborts on element fullscreen.
       - name: Inspect the AppImage
-        if: matrix.name == 'linux-appimage'
+        if: matrix.bundles == 'appimage'
         run: |
           image="$PWD/$(ls bundles/*.AppImage | head -1)"
           chmod +x "$image"
           dir="$RUNNER_TEMP/appimage" && rm -rf "$dir" && mkdir -p "$dir"
           (cd "$dir" && "$image" --appimage-extract >/dev/null)
           root="$dir/squashfs-root"
+          machine="$(uname -m)"
+          app="$(find "$root" -name little-joan -type f | head -1)"
+          test -n "$app"
+          binary="$(file "$app")"
+          echo "$binary"
+          case "$machine" in
+            x86_64) want="x86-64" ;;
+            aarch64) want="ARM aarch64" ;;
+            *) want="$machine" ;;
+          esac
+          if ! echo "$binary" | grep -q "$want"; then
+            echo "::error::The AppImage's app isn't built for $machine"
+            exit 1
+          fi
           file "$root/AppRun"
           if file "$root/AppRun" | grep -q text; then head -n 40 "$root/AppRun"; fi
           ls "$root/apprun-hooks" 2>/dev/null || true
@@ -234,7 +269,7 @@ jobs:
           echo "WebKitGTK $version (from $source_package); glibc floor $glibc"
           {
             echo
-            echo "The AppImage bundles **WebKitGTK $version** (\`$(basename "$lib")\`, from $source_package)"
+            echo "The $machine AppImage bundles **WebKitGTK $version** (\`$(basename "$lib")\`, from $source_package)"
             echo "and needs ${glibc/_/ } or later."
           } >> "$GITHUB_STEP_SUMMARY"
           minor="$(echo "$version" | cut -d. -f2)"
@@ -282,6 +317,7 @@ jobs:
           # own engine has its own job below.
           - name: linux
             artifact: linux
+            installer: deb
             os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
             screen: 1280x800x24
           # The same at scale factor 2 (GTK's GDK_SCALE on a 2560×1600 Xvfb screen = 1280×800
@@ -289,6 +325,7 @@ jobs:
           # macOS runners have no way to change their display scale.
           - name: linux-scale-2
             artifact: linux
+            installer: deb
             os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
             screen: 2560x1600x24
             app_env: GDK_SCALE=2
@@ -299,6 +336,7 @@ jobs:
           # the first still runs from it. Its glibc floor is 2.39: never on linux_runner's 22.04.
           - name: linux-appimage
             artifact: linux-appimage
+            installer: appimage
             os: ubuntu-24.04
             screen: 1280x800x24
             app_env: APPIMAGE_EXTRACT_AND_RUN=1 NO_CLEANUP=1
@@ -308,9 +346,31 @@ jobs:
           # change nothing and crash nothing (LJ_SMOKE_FULLSCREEN=off, smoke-fullscreen-off.mts).
           - name: linux-22.04
             artifact: linux
+            installer: deb
             os: ubuntu-22.04
             screen: 1280x800x24
             fullscreen: "off"
+          # Linux ARM64 (LJ18.1), each as its x86_64 twin on GitHub's arm64 runners: the arm64 .deb
+          # on 24.04 (WebKitGTK 2.52, fullscreen on) and on 22.04 (2.50.4: fullscreen off, LJ14.1),
+          # and the aarch64 AppImage on 24.04. No scale-2 job: the layout math doesn't depend on
+          # the architecture, and linux-scale-2 covers it.
+          - name: linux-arm64
+            artifact: linux-arm64
+            installer: deb
+            os: ubuntu-24.04-arm
+            screen: 1280x800x24
+          - name: linux-22.04-arm64
+            artifact: linux-arm64
+            installer: deb
+            os: ubuntu-22.04-arm
+            screen: 1280x800x24
+            fullscreen: "off"
+          - name: linux-appimage-arm64
+            artifact: linux-appimage-arm64
+            installer: appimage
+            os: ubuntu-24.04-arm
+            screen: 1280x800x24
+            app_env: APPIMAGE_EXTRACT_AND_RUN=1 NO_CLEANUP=1
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -354,7 +414,7 @@ jobs:
           echo "APP=$app/Contents/MacOS/little-joan" >> "$GITHUB_ENV"
 
       - name: Install (Linux, .deb through apt)
-        if: runner.os == 'Linux' && matrix.artifact == 'linux'
+        if: runner.os == 'Linux' && matrix.installer == 'deb'
         run: |
           sudo apt-get update
           sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11 gdb
@@ -368,12 +428,14 @@ jobs:
       # instead), so smoke.mts attaches gdb to the app once it runs: ptrace beyond a process's own
       # children must be allowed on this runner.
       - name: Install (Linux, the AppImage)
-        if: matrix.artifact == 'linux-appimage'
+        if: matrix.installer == 'appimage'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb xdotool imagemagick openbox dbus-x11 gdb \
             libegl1 libgl1 libgles2 libgbm1 libegl-mesa0 libgl1-mesa-dri libasound2t64
-          image="$RUNNER_TEMP/appimage/LittleJoan-$(node -p 'require("./package.json").version')-linux-x86_64.AppImage"
+          # x86_64 or aarch64: the release's names (LittleJoan-<v>-linux-<machine>.AppImage).
+          machine="$(uname -m)"
+          image="$RUNNER_TEMP/appimage/LittleJoan-$(node -p 'require("./package.json").version')-linux-$machine.AppImage"
           mkdir -p "$(dirname "$image")"
           cp installers/*.AppImage "$image"
           chmod +x "$image"
@@ -384,7 +446,7 @@ jobs:
           missing=""
           while IFS= read -r -d '' file; do
             if [ "$(head -c 4 "$file" | tr -d '\177\000')" = ELF ]; then
-              gaps="$(LD_LIBRARY_PATH="$root/usr/lib:$root/usr/lib/x86_64-linux-gnu" ldd "$file" 2>/dev/null | grep 'not found' | tr -s ' \t\n' ' ' || true)"
+              gaps="$(LD_LIBRARY_PATH="$root/usr/lib:$root/usr/lib/$machine-linux-gnu" ldd "$file" 2>/dev/null | grep 'not found' | tr -s ' \t\n' ' ' || true)"
               if [ -n "$gaps" ]; then missing+="${file#"$root"/}:$gaps"$'\n'; fi
             fi
           done < <(find "$root/usr" -type f -print0)
@@ -406,7 +468,7 @@ jobs:
       # fullscreened by the handler ("handled-window") — LJ14 —, and WebKitSettings'
       # `enable-fullscreen` switched off ("fullscreen-off", LJ14.1).
       - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
-        if: ${{ !cancelled() && matrix.artifact == 'linux' && inputs.linux_plain_webkit_check }}
+        if: ${{ !cancelled() && matrix.installer == 'deb' && inputs.linux_plain_webkit_check }}
         run: |
           sudo apt-get install -y python3-gi gir1.2-webkit2-4.1 xvfb xdotool openbox dbus-x11
           cat > /tmp/plain.html <<'HTML'
