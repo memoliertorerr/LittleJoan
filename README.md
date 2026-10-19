@@ -26,7 +26,8 @@ affiliated with or endorsed by The Browser Company.
 > has everything v0.2 adds so far — start at login, a first-launch welcome, the Little Arc-style
 > command bar and toolbar, logins that survive closing, local history, themes, extensions
 > (experimental) with twelve bundled ones, smooth resizing, and phone or desktop per site. Every build is smoke-tested in CI on all three systems
-> (Linux: the `.deb` on Ubuntu 24.04 and 22.04, the AppImage on 24.04); none is code-signed yet. See the known issue under Fullscreen video.
+> (Linux: the `.deb` on Ubuntu 24.04 and 22.04 and the AppImage on 24.04, on x86_64 and — from
+> v0.2.0 — ARM64); none is code-signed yet. See the known issue under Fullscreen video.
 > The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
@@ -64,6 +65,15 @@ aren't code-signed yet, so the first launch shows a warning; the steps below get
     works wherever it runs). Older systems: use the `.deb`.
   - The tray icon needs an AppIndicator host (on GNOME, the "AppIndicator and
     KStatusNotifierItem Support" extension).
+- **Linux (ARM64 / aarch64)** — new in v0.2.0 (until it is released, the `little-joan-linux-arm64`
+  and `little-joan-linux-appimage-arm64` artifacts of the CI workflow): the same two downloads,
+  built on ARM, for ARM machines such as Ubuntu in a virtual machine on an Apple silicon Mac.
+  - Debian/Ubuntu (Ubuntu 22.04 or later, Debian 12 or later):
+    `sudo apt install ./LittleJoan-<version>-linux-arm64.deb` (about 3 MB). As on x86_64, on
+    Ubuntu 22.04 a video can't go fullscreen.
+  - Elsewhere, with glibc 2.39 or later: `chmod +x LittleJoan-<version>-linux-aarch64.AppImage`
+    and run it (about 150 MB; it carries its own WebKitGTK 2.52 and media framework).
+  - The tray icon needs an AppIndicator host, as above.
 - **Check a download (optional):** each release includes `SHA256SUMS.txt`. Run
   `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` in the download folder on macOS or Linux, or
   compare against `Get-FileHash <file>` on Windows.

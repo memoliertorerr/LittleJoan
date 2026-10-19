@@ -84,7 +84,8 @@
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ✅ done |
 | LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ✅ done |
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ✅ done |
-| LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⬜ todo |
+| LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⏭ skipped — no Apple signing secrets on 2026-10-19; runs when the owner adds them (LJ18's pre-step) |
+| LJ18.1 | *(added mid-plan 2026-10-19)* Linux ARM64 builds: an `arm64` `.deb` (ubuntu-22.04-arm) and an `aarch64` AppImage (ubuntu-24.04-arm), smoke-tested on ARM runners like their x86_64 twins | strong | auto | ✅ done |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
@@ -183,7 +184,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Next: phase 10 (LJ18, only if the owner's Apple signing secrets exist), then LJ19.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Phase 10 (LJ18) ⏭ skipped: `gh secret list --repo memoliertorerr/LittleJoan` shows no Apple signing secrets (checked 2026-10-19), so the macOS build stays ad-hoc signed and LJ19's checklist keeps the README's Gatekeeper step; LJ18 runs as written once the owner adds the secrets (its pre-step). On the owner's decision (2026-10-19) phase 10 instead carries **LJ18.1, Linux ARM64 builds** (added mid-plan: the owner tests Ubuntu 22.04 ARM in Parallels on an Apple silicon Mac at LJ19's checkpoint): an `arm64` `.deb` built on ubuntu-22.04-arm and an `aarch64` AppImage built on ubuntu-24.04-arm, both smoke-tested on ARM runners like their x86_64 twins (branch `lj/p10-arm64`). Next: LJ19.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -203,6 +204,15 @@ and the guard fixed it on every element path; YouTube gets the desktop agent on 
 opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
+
+**Phase 10 (LJ18 ⏭ skipped, LJ18.1, 2026-10-19)** is PR #28 on `lj/p10-arm64`, merged by the agent
+once verify, package and smoke were green on every job (the standing exception). LJ18 is skipped —
+no Apple signing secrets —, and LJ18.1 adds Linux ARM64: an `arm64` `.deb` built on
+ubuntu-22.04-arm (3.03 MiB, glibc 2.34) and an `aarch64` AppImage built on ubuntu-24.04-arm (148.62
+MiB, WebKitGTK 2.52.6 bundled, glibc 2.39), each smoke-tested on ARM runners like its x86_64 twin
+(`linux-arm64`, `linux-22.04-arm64` with fullscreen off on 2.50.4, `linux-appimage-arm64`); all
+eighteen jobs green on the first try. The owner's check — the arm64 `.deb` in Ubuntu 22.04 ARM in
+Parallels — is in PR #28 and LJ19's checklist.
 
 **Phase 9 (LJ17, 2026-10-19)** is PR #27 on `lj/p9-wayland-shortcut`, merged by the agent once
 verify, package and smoke were green on every job (the standing exception). In a Linux Wayland
@@ -337,7 +347,11 @@ phases 7–11 keep their numbers and steps (LJ13–LJ19), adjusted where round 2
 9. **LJ17** · strong — `lj/p9-wayland-shortcut`. The portal's trigger in the Keyboard tab; a portal
    shortcut counts as working for the icon rule. Merged when green.
 10. **LJ18** · strong — `lj/p10-macos-signing`, only if the owner's Apple secrets exist (`gh secret
-    list` names only); otherwise ⏭ skipped and recorded in LJ19's PR. Merged when green.
+    list` names only); otherwise ⏭ skipped and recorded in LJ19's PR. Merged when green. *(⏭ skipped
+    2026-10-19: no secrets; recorded in phase 10's PR below, as the owner decided.)*
+    **LJ18.1** · strong — `lj/p10-arm64` *(added mid-plan 2026-10-19)*: Linux ARM64 packages and
+    their smoke jobs, with LJ18's skip as its first commit. Review: the four new jobs, the arm64
+    glibc floor and bundled WebKitGTK, the release names. Merged when green.
 11. **LJ19** · standard — `lj/release-0.2.0`. **Checkpoint:** the owner's checklist; the
     version-bump PR may be merged when green; tag and release only on the owner's word.
 21. **LJ45 → LJ46** · strong — `lj/p21-links`. **Security-sensitive (`review`):** ready and green,
@@ -471,7 +485,7 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 |---|---|---|
 | `npm run verify` (tsc, eslint, vitest, UI build, cargo fmt, clippy `-D warnings`, cargo test) | Agent, on the Mac | Clean exit; test counts in the report |
 | Windows + Linux code paths (`#[cfg(windows)]`, `#[cfg(target_os = "linux")]`) | CI (`verify` job on ubuntu-24.04, windows-latest, macos-latest) | All three jobs green on the pushed commit |
-| Installers build | CI `package` job (LJ8) | NSIS `.exe`, universal `.dmg`, `.deb`, `.AppImage` uploaded as artifacts |
+| Installers build | CI `package` job (LJ8) | NSIS `.exe`, universal `.dmg`, `.deb`, `.AppImage` uploaded as artifacts (*LJ18.1:* also the `arm64` `.deb` and the `aarch64` AppImage) |
 | Installed app launches, summons, loads a page, element fullscreen toggles the window, closing frees the webview | CI `smoke` job (LJ9), agent reads the logs and looks at the screenshots | Smoke log shows the expected events; screenshots show the start page and a loaded page |
 | **Nothing regressed** | you, in each PR | Earlier phases' behaviors in the PR's checklist still hold |
 | Global shortcut on real desktops (Windows, macOS, Linux X11; Wayland fallback) | **you** — LJ10 checkpoint | The shortcut summons and dismisses the window; focus lands in the field |
@@ -485,6 +499,7 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 | *(v0.2)* A real download (a PDF from a site), "Show in folder", zoom keys | **you** — phase 8 PR | The file is in Downloads under its own name; the folder opens with it selected; zoom steps and resets |
 | *(v0.2)* Wayland-native shortcut (GNOME 48+ or KDE Plasma, Wayland session) | **you** — LJ17 (CI has no portal backend) | The desktop asks once to allow the shortcut; it then summons and dismisses the window |
 | *(v0.2)* Gatekeeper on a DMG downloaded with a browser (notarized build) | **you** — LJ18 / LJ19 | It opens without any warning or `xattr` step |
+| *(LJ18.1)* Linux ARM64 on a real ARM machine | CI `smoke` on GitHub's arm64 runners (`linux-arm64`, `linux-22.04-arm64`, `linux-appimage-arm64`), then **you** — LJ19 (Ubuntu 22.04 ARM in Parallels) | The arm64 `.deb` installs; summon, a page and phone mode work; a video's fullscreen button does nothing and nothing crashes |
 | *(round 2)* Cookies and storage survive close, quit and relaunch | CI `smoke` (LJ20) | The smoke page reports its persistent cookie, session cookie and localStorage value back after each step, on all three OSes |
 | *(round 2)* No IPC for the page webview, ever | `cargo test` (LJ22) + smoke (LJ29) | A Rust test reads every capability file and finds no `joan-page`; the test extension reports `ipc=denied` |
 | *(round 2)* How the command bar, toolbar, history view, themes and extensions look | the agent from CI screenshots on all three OSes (each step names its screenshots), then **you** — LJ35 | Screenshots match the step's description in light and dark; at LJ35 it feels like Little Arc on your Mac |
@@ -3313,6 +3328,130 @@ either: the smoke's fullscreen, tray, quick-command and keymap runs stay green. 
 merge the PR into main with a merge commit (Ground Rule 24), then stop and report.
 ```
 
+**⏭ Skipped (2026-10-19):** `gh secret list --repo memoliertorerr/LittleJoan` listed no secrets at all,
+so none of the six Apple names exists. No `lj/p10-macos-signing` branch was made and nothing changed;
+the macOS build stays ad-hoc signed (`signingIdentity: "-"`), the README keeps its Gatekeeper
+step, and LJ19's checklist keeps it too. The owner decided to record the skip with the next phase's
+PR (phase 10's branch `lj/p10-arm64`, which carries LJ18.1) instead of LJ19's. This step runs
+unchanged once the owner has done its pre-step.
+
+### LJ18.1 — Linux ARM64 builds · strong · auto
+
+> **Added mid-plan 2026-10-19** — the owner's decision: they have an Apple silicon Mac and will test
+> Ubuntu 22.04 (ARM64) in Parallels at LJ19's checkpoint, so Little Joan needs arm64 Linux builds.
+> Phase 10's branch `lj/p10-arm64` from the latest `main` (LJ18 is skipped, its first commit records
+> that); the PR goes into `main`, and the agent merges it once every job is green (Ground Rule 24).
+
+**Verify:** `npm run verify` green. CI: two new package jobs on GitHub's arm64 runners —
+`package (linux-arm64)` on ubuntu-22.04-arm builds only the `.deb` (its architecture `arm64`, the
+runner's, and its binary's glibc floor in the summary) and `package (linux-appimage-arm64)` on
+ubuntu-24.04-arm only the AppImage (its app an aarch64 ELF, the bundled WebKitGTK ≥ 2.52 or the job
+fails, the glibc floor and the size in the summary); artifacts `little-joan-linux-arm64` and
+`little-joan-linux-appimage-arm64`, each with its own cache key. Three new smoke jobs run the whole
+`smoke.mts`, like their x86_64 twins: `linux-arm64` (the arm64 `.deb` on ubuntu-24.04-arm, WebKitGTK
+2.52, fullscreen on), `linux-22.04-arm64` (the arm64 `.deb` on ubuntu-22.04-arm, WebKitGTK 2.50.4,
+`LJ_SMOKE_FULLSCREEN=off`: `fullscreen-off <version>` and no fullscreen, as LJ14.1) and
+`linux-appimage-arm64` (the aarch64 AppImage on ubuntu-24.04-arm, under the release's name
+`LittleJoan-<v>-linux-aarch64.AppImage`, extracted and run without FUSE). No scale-2 arm64 job. The
+x86_64 jobs stay exactly as they were (their checks only gain the architecture checks).
+**Commit:** `lj-step-18.1: Linux ARM64 builds — arm64 .deb (22.04) and aarch64 AppImage (24.04), smoke-tested on ARM runners`
+
+```text
+The owner has an Apple silicon Mac and will test Ubuntu 22.04 (ARM64) in Parallels at LJ19's
+checkpoint. Build and smoke-test arm64 Linux packages natively on GitHub's arm64 runners (free for
+public repositories); never cross-build or build them locally. CI and docs only: no app code, no
+new dependencies.
+
+1. .github/workflows/ci.yml, package job: two entries — `linux-arm64` (ubuntu-22.04-arm, bundles
+   deb: the same glibc floor as `linux`, installs on Ubuntu 22.04+ / Debian 12+) and
+   `linux-appimage-arm64` (ubuntu-24.04-arm, bundles appimage: bundles WebKitGTK 2.52 like
+   `linux-appimage`). Artifacts little-joan-linux-arm64 and little-joan-linux-appimage-arm64; the
+   cache key per entry name (so per architecture). The .deb and AppImage inspections run for every
+   build of their kind (key them on `bundles`, not the name): the bundled WebKitGTK ≥ 2.52 check, the
+   glibc floor and the sizes in the summary, plus a check that each package is built for the
+   runner's architecture. If a runner image lacks rustup, install it into .cache/ with
+   scripts/setup-rust.sh.
+2. Smoke: three entries, each exactly like its x86_64 twin — `linux-arm64` (the arm64 .deb on
+   ubuntu-24.04-arm), `linux-22.04-arm64` (the arm64 .deb on ubuntu-22.04-arm, fullscreen "off":
+   LJ14.1's rules, WebKitGTK 2.50.4 there) and `linux-appimage-arm64` (the aarch64 AppImage on
+   ubuntu-24.04-arm, APPIMAGE_EXTRACT_AND_RUN=1 NO_CLEANUP=1). A field per entry says which kind of
+   installer it takes (deb / appimage), so the install steps don't list artifact names; the
+   AppImage's copy and library check use `uname -m` (its release name, `<machine>-linux-gnu`). No
+   scale-2 arm64 job.
+3. If the AppImage tooling can't build or run on aarch64 (linuxdeploy, FUSE, plugins): two honest
+   attempts, then ship the .deb only and record why under Deferred follow-ups / Landmines.
+4. Release names: LittleJoan-<ver>-linux-arm64.deb and LittleJoan-<ver>-linux-aarch64.AppImage —
+   the local CLAUDE.md "Release process" (gitignored; edit in place, never commit), LJ19's prompt.
+5. Docs: README (Install: Linux ARM64), CHANGELOG ([Unreleased] → Added), docs/architecture.md
+   (Packaging table, CI jobs), CONTRIBUTING if it lists the jobs, this plan (tracker, this section,
+   notes with CI evidence, Landmines for anything ARM-specific, Later: Linux ARM64).
+
+Run `source scripts/env.sh && npm run verify`. If green, commit "lj-step-18.1: Linux ARM64 builds —
+arm64 .deb (22.04) and aarch64 AppImage (24.04), smoke-tested on ARM runners", push, open the PR
+"Linux ARM64 builds; LJ18 skipped (no signing secrets)" as a draft, and watch CI. Look at the arm64
+smoke screenshots (test-results/ci/, then delete them). Once every job is green: fill the PR
+(Needs human check: install the arm64 .deb in Ubuntu 22.04 ARM in Parallels on the owner's Mac —
+summon, a page, phone mode, a video's fullscreen button does nothing and nothing crashes), mark it
+ready, merge it with a merge commit, check main's CI, then stop. Don't start LJ19.
+```
+
+**Implementation notes (2026-10-19):**
+
+- **Disk:** 8.2 GiB free at the start of the step and after verify; `.cache/target` 1.1 GB. Nothing
+  for ARM was built on the Mac (CI only).
+- **Package** (`.github/workflows/ci.yml`): `linux-arm64` (ubuntu-22.04-arm, `--bundles deb`) and
+  `linux-appimage-arm64` (ubuntu-24.04-arm, `--bundles appimage`), natively — Tauri doesn't
+  cross-build an AppImage. Their artifacts are `little-joan-<name>` and their cache keys
+  `package-<name>-…`, as for every entry, so per architecture. The inspections now key on the
+  entry's `bundles`, not its name, so the x86_64 and arm64 builds of a kind run the same checks; both
+  gained one: the `.deb`'s `Architecture` must be the runner's (`dpkg --print-architecture`), and the
+  AppImage's `little-joan` an ELF for the runner's machine (`file`: `x86-64` / `ARM aarch64`). The
+  summary lines name the architecture. "Rust toolchain" installs rustup into `.cache/` with
+  `scripts/setup-rust.sh` (which already knew `Linux-aarch64`) only when an image has none — the
+  arm64 runners are partner images; on every other runner nothing changes.
+- **Smoke:** each Linux entry says which installer it takes (`installer: deb` / `appimage`), and the
+  install steps and the bare-WebKitGTK diagnostics key on that instead of artifact names (the x86_64
+  entries take what they took before). The AppImage's release name and its library check use
+  `uname -m` (`LittleJoan-<v>-linux-<machine>.AppImage`, `usr/lib/<machine>-linux-gnu`) — on x86_64
+  exactly the old values. `linux-arm64`, `linux-22.04-arm64` (`fullscreen: "off"`) and
+  `linux-appimage-arm64` copy their twins' settings; no harness change was needed (`smoke.mts` and
+  `smoke-linux.mts` have nothing architecture-specific: `/proc`, xdotool, ImageMagick, gdb).
+- CONTRIBUTING doesn't list the jobs (it says CI builds and smoke-tests every installer), so it is
+  unchanged.
+- `npm run verify`: 628 TS tests, 376 Rust tests, clippy clean (no code changed).
+- **CI (run 39321011322): all eighteen jobs green on the first try** — verify ×3, package ×6, smoke
+  ×9; 20 minutes in all, the arm64 jobs no slower than their twins (cold caches: the arm64 `.deb`
+  4½ minutes, the AppImage 8½ — 3½ of them linuxdeploy —, each arm64 smoke about 7). The arm64
+  runners already have rustup (the toolchain synced as `1.99.1-aarch64-unknown-linux-gnu`), so the
+  fallback didn't run. **`package (linux-arm64)`:** `Little Joan_0.2.0-beta.3_arm64.deb`, **3.03
+  MiB** (3,181,616 bytes; the amd64 one 3.15 MiB), `Architecture: arm64`, `usr/bin/little-joan` an
+  `ELF 64-bit LSB pie executable, ARM aarch64`, glibc floor **2.34** (as amd64). **`package
+  (linux-appimage-arm64)`:** `Little Joan_0.2.0-beta.3_aarch64.AppImage`, **148.62 MiB** (155,834,888
+  bytes; x86_64's 156.92 MiB), its app an aarch64 ELF, bundling **WebKitGTK 2.52.6**
+  (`usr/lib/libwebkit2gtk-4.1.so.0`, from `libwebkit2gtk-4.1-0 2.52.6-0ubuntu0.24.04.1`), glibc floor
+  **2.39**; Tauri fetched `AppRun-aarch64` (tauri-apps/binary-releases `apprun-old`),
+  `linuxdeploy-aarch64.AppImage` (`linuxdeploy-07333c6`) and `linuxdeploy-plugin-appimage-aarch64`
+  (`continuous`), and `AppRun` is the same linuxdeploy bash script with the GStreamer and GTK hooks
+  as on x86_64. Nothing about the AppImage tooling needed a workaround on aarch64.
+- **The arm64 smoke jobs passed every rule of the full smoke**, as their twins: codecs H.264 / VP9 /
+  AV1 through MSE on all three; no WebKit helper left after hibernating (0 at 2–60 s, `[0,0,0]` per
+  cycle; 2 helpers with a page); the login entry pointing at `/usr/bin/little-joan`, or for the
+  AppImage at `…/LittleJoan-0.2.0-beta.3-linux-aarch64.AppImage` (the release's name), and gone after
+  `off`. `linux-arm64` and `linux-appimage-arm64` (WebKitGTK 2.52.6): window and page fullscreen
+  after the click, every fullscreen-run path entered, held ~2.15 s and left by the page's own Exit;
+  no `fullscreen-off`. `linux-22.04-arm64` (WebKitGTK **2.50.4**, as amd64's 22.04): `fullscreen-off
+  2.50.4` in every launch that opened a page (29 lines), no fullscreen, every path `entered=0`
+  (`no-fullscreen-api`, the phone player's `enter-error:invalidstateerror`), no abort. The AppImage's
+  library check found only the bundled fluidsynth MIDI plugin's `libjack.so.0` /
+  `libpipewire-0.3.so.0` missing — exactly as on x86_64 — and gdb attached to the app in all 21
+  launches. Own memory at rest (private dirty): the arm64 `.deb` 20.1 MB on 24.04 and 22.0 MB on
+  22.04, the AppImage 52.5 MB (the bundled libraries, as on x86_64). **Screenshots** (downloaded,
+  looked at, deleted): `fullscreen.png` — on `linux-arm64` and `linux-appimage-arm64` the green stage
+  fills the whole 1280×800 screen, the page reporting 1280×800; on `linux-22.04-arm64` the 480×600
+  window as it was, toolbar with the Phone pill above "Go fullscreen"; `fs/element-390.png` (AppImage)
+  — the element fills the screen with its Exit; `command-bar.png` (`linux-arm64`) — the command bar
+  with the smoke page as the top site; `narrow.png` (22.04 arm64) — 390×560 with the phone agent.
+
 ### LJ19 — Release v0.2.0 · standard · checkpoint
 
 > Phase 11. Branch `lj/release-0.2.0` from the latest `main`, once phases 18, 19, 20 and 7–10 are
@@ -3327,7 +3466,8 @@ lock), `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` (+ `Cargo.lock`). 
 link references at the bottom. The README points at the v0.2.0 assets. CI green on the release
 PR. **Checkpoint:** the owner ticks the checklist. Only after the owner says to release: `main`'s
 CI green for the merge commit, the assets renamed (`LittleJoan-0.2.0-windows-x64-setup.exe`,
-`-macos-universal.dmg`, `-linux-amd64.deb`, `-linux-x86_64.AppImage`), `SHA256SUMS.txt`,
+`-macos-universal.dmg`, `-linux-amd64.deb`, `-linux-x86_64.AppImage`, and since LJ18.1
+`-linux-arm64.deb`, `-linux-aarch64.AppImage`), `SHA256SUMS.txt`,
 `gh release create v0.2.0 --target <that main commit> --latest`, and then the release, its tag
 and one downloaded asset's checksum checked.
 **Human check:** the checklist below, copied into the PR.
@@ -3359,13 +3499,17 @@ Fill the PR description from the template. Needs human check (the owner's checkl
 - [ ] Linux, if you have one: the .deb on 22.04 (the fullscreen fallback), the AppImage on 24.04
       (real fullscreen), the Wayland shortcut on GNOME 48+ or KDE (or the `--toggle` hint on
       24.04), hiding the icon with the AppIndicator extension.
+- [ ] Linux ARM64 (LJ18.1), Ubuntu 22.04 ARM in Parallels on your Mac: `sudo apt install
+      ./LittleJoan-0.2.0-linux-arm64.deb`; summon, a page, phone mode in a narrow window; a video's
+      fullscreen button does nothing and nothing crashes (fullscreen is off on 22.04's WebKitGTK).
 - [ ] The must-not-disturb list.
 
 Once every CI job is green, merge the PR into main with a merge commit (the owner allowed it for
 this PR), then STOP and wait (Ground Rule 24). Tagging and releasing need the owner's word. When
 they give it: let main's CI build the installers for the merge commit, download them
 (`gh run download <run> --repo memoliertorerr/LittleJoan`; the AppImage is in
-little-joan-linux-appimage), rename them, write SHA256SUMS.txt, and run `gh release create v0.2.0
+little-joan-linux-appimage, the arm64 builds in little-joan-linux-arm64 and
+little-joan-linux-appimage-arm64), rename them, write SHA256SUMS.txt, and run `gh release create v0.2.0
 --repo memoliertorerr/LittleJoan --target <that main commit> --latest` with notes taken from the
 CHANGELOG. Then check the release, its tag, and one downloaded asset's checksum. Flip LJ19 to ✅
 and record the release in the plan's overall status in the next PR (the first v0.3 phase's first
@@ -8500,6 +8644,16 @@ Populated from real friction, not speculation:
   accelerator** (`CTRL+SHIFT+space` → `<ctrl><shift>space`, modifier names upper case, the key an
   xkb name), and its `trigger_description` is a translated sentence ("Press <ctrl><shift>space"):
   show it as the desktop wrote it, never parse it.
+- *(LJ18.1)* **Tauri names its Linux packages per architecture, but not alike:** `_amd64.deb` /
+  `_amd64.AppImage` on x86_64, `_arm64.deb` / `_aarch64.AppImage` on ARM. The release names follow
+  Debian for the `.deb` (`-linux-amd64.deb`, `-linux-arm64.deb`) and the machine for the AppImage
+  (`-linux-x86_64.AppImage`, `-linux-aarch64.AppImage`) — rename from the artifact, never by pattern
+  on Tauri's name. The AppImage smoke builds its name from `uname -m`.
+- *(LJ18.1)* **The AppImage tooling is downloaded at build time, per architecture**, from moving
+  releases: `AppRun-<arch>` (tauri-apps/binary-releases `apprun-old`), `linuxdeploy-<arch>.AppImage`
+  (`linuxdeploy-07333c6`) and `linuxdeploy-plugin-appimage-<arch>.AppImage` (linuxdeploy's
+  `continuous`). If an AppImage build breaks one day with no change here — on one architecture only,
+  say — look at those first (the package log prints each URL).
 - *(round 3 research, to watch)* **macOS 26 / 27: an `.accessory` app's element fullscreen may
   leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
   and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after
@@ -8522,7 +8676,7 @@ or round 3 picked up point at their step and stay here for the record.
 | **Code signing / notarization / SmartScreen reputation** → *macOS: v0.2, LJ18* | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Windows: SignPath Foundation if the user's application is approved (Deferred follow-ups) |
 | **Auto-update and GitHub Releases** | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys, release workflow |
 | **Wayland-native global shortcut** → *v0.2, LJ17: done* | XDG GlobalShortcuts portal (via ashpd) when `WAYLAND_DISPLAY` is set | New dependency, portal support varies by desktop |
-| **rpm package, MSI, Windows ARM64, Linux ARM64** | Extra `--bundles` / targets in the package job | CI time + smoke coverage per artifact |
+| **rpm package, MSI, Windows ARM64, ~~Linux ARM64~~** (Linux ARM64 → *LJ18.1: done* — an `arm64` `.deb` and an `aarch64` AppImage, built and smoke-tested on GitHub's arm64 runners) | Extra `--bundles` / targets in the package job | CI time + smoke coverage per artifact |
 | **Hide Tauri's IPC object from remote pages** | Remote pages can see `__TAURI_INTERNALS__` (every call is denied); a future Tauri option or a separate content webview without IPC injection | Upstream support or a multi-webview layout |
 | **Incognito mode** | `incognito(true)` on the builder for a "private" summon variant (second shortcut) | Settings + second shortcut |
 | *(v0.2)* **Zoom extras** | Ctrl+mouse wheel and pinch zoom; zoom remembered per site | Wheel/gesture hooks per engine; a per-origin store |

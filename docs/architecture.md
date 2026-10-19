@@ -1368,6 +1368,8 @@ Installers are built in CI only (`package` job), never on a developer machine:
 | macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+ |
 | Linux (`linux`) | ubuntu-22.04 | `tauri build --bundles deb` | `.deb` — depends on the system's WebKitGTK and the GStreamer plugins for video; built on 22.04, its binary needs glibc 2.34, so it installs on Ubuntu 22.04+ and Debian 12+. Two desktop files: Tauri's `Little Joan.desktop` (named after the product, for the app list) and, from `bundle.linux.deb.files`, `io.github.memoliertorerr.littlejoan.desktop` (`NoDisplay=true`), which the XDG portals' host registry needs to accept the app id (LJ17) |
 | Linux (`linux-appimage`) | ubuntu-24.04 | `tauri build --bundles appimage` | `.AppImage` — bundles the WebKitGTK of the machine that built it (24.04's 2.52: 22.04's 2.50 aborts on element fullscreen) and the media framework; glibc floor 2.39 (Ubuntu 24.04+, Debian 13, Fedora 40+) |
+| Linux ARM64 (`linux-arm64`) | ubuntu-22.04-arm | `tauri build --bundles deb` | `arm64` `.deb` (`Little Joan_<v>_arm64.deb`, ~3 MB) — the `linux` package built natively on GitHub's arm64 runner: the system's WebKitGTK, glibc floor 2.34 (Ubuntu 22.04+, Debian 12+), both desktop files (LJ18.1) |
+| Linux ARM64 (`linux-appimage-arm64`) | ubuntu-24.04-arm | `tauri build --bundles appimage` | `aarch64` `.AppImage` (`Little Joan_<v>_aarch64.AppImage`, ~149 MB) — the `linux-appimage` package built natively on arm64 (Tauri doesn't cross-build AppImages): bundles 24.04's arm64 WebKitGTK 2.52 and media framework; glibc floor 2.39 (LJ18.1) |
 
 The release profile optimizes for size (`opt-level = "s"`, LTO, one codegen unit, stripped)
 but keeps `panic = "unwind"`: on macOS, wry catches the Objective-C exception WebKit raises when
@@ -1383,11 +1385,16 @@ and pushes to `main`:
 - **verify** — `npm run verify` on Ubuntu, Windows, and macOS. It is the only compiler for the
   Windows- and Linux-specific code paths.
 - **package** — the installers above, uploaded as artifacts `little-joan-<name>` (14 days:
-  `windows`, `macos`, `linux` — the `.deb` —, `linux-appimage`), with their sizes in the job
-  summary. The Linux jobs also write the glibc floor (the newest `GLIBC_` symbol version the
-  `.deb`'s binary, or any file in the AppImage, needs), and the AppImage job the WebKitGTK it
-  bundles — the bundled library asked for its own version through `webkit_get_*_version`; older
-  than 2.52 fails the job — and how it starts (its `AppRun`).
+  `windows`, `macos`, `linux` — the `.deb` —, `linux-appimage`, and the ARM64 builds
+  `linux-arm64` and `linux-appimage-arm64`), with their sizes in the job summary; each entry has
+  its own cache key (`package-<name>-…`, so one per architecture). The Linux jobs also write the
+  glibc floor (the newest `GLIBC_` symbol version the `.deb`'s binary, or any file in the AppImage,
+  needs) and check that the package is built for the runner's architecture (the `.deb`'s
+  `Architecture`, the AppImage's app per `file`), and the AppImage jobs the WebKitGTK it bundles —
+  the bundled library asked for its own version through `webkit_get_*_version`; older than 2.52
+  fails the job — and how it starts (its `AppRun`). The `.deb` and AppImage checks run for every
+  build of their kind (keyed on `bundles`). A runner image without rustup (the arm64 runners are
+  partner images) gets it in `.cache/` from `scripts/setup-rust.sh`.
 - **smoke** — installs each installer the way a user would (NSIS `/S`; copy the `.app` out of
   the mounted `.dmg`; `apt install ./….deb`; the AppImage made executable) and runs `scripts/ci/smoke.mts` against the
   installed binary: launch with `LITTLEJOAN_SMOKE_LOG`, `--show` (the command bar covers the
@@ -1585,12 +1592,19 @@ and pushes to `main`:
   page must log `fullscreen-off` with a version older than 2.52, the main run's click and every
   fullscreen-run path must change nothing — no `fullscreen true`, no `element-fullscreen true`,
   each path's report `entered=0` — while everything else passes as on 24.04
-  (`smoke-fullscreen-off.mts`); every other job must never log `fullscreen-off`.
+  (`smoke-fullscreen-off.mts`); every other job must never log `fullscreen-off`. **ARM64** (LJ18.1):
+  three more jobs run the same whole test on GitHub's arm64 runners, each like its x86_64 twin —
+  `linux-arm64` (the arm64 `.deb` on ubuntu-24.04-arm), `linux-22.04-arm64` (the arm64 `.deb` on
+  ubuntu-22.04-arm, fullscreen off as `linux-22.04`) and `linux-appimage-arm64` (the aarch64
+  AppImage on ubuntu-24.04-arm, as `linux-appimage`); there is no scale-2 arm64 job. Each Linux
+  entry names the installer it takes (`installer: deb` / `appimage`), and the AppImage's release
+  name and library check follow `uname -m`.
 - **Smoke-only reruns** (manual `workflow_dispatch`, for diagnosing without rebuilding):
   `installers_from_run` (smoke the installers of an earlier run; skips verify and package),
-  `extra_env` (e.g. `WEBKIT_DISABLE_DMABUF_RENDERER=1`), `linux_runner` (`ubuntu-24.04`; the
-  `linux-appimage` entry stays on 24.04), `linux_window_manager` (`none`), `linux_plain_webkit_check`
-  (before the app's smoke, where the `.deb` runs: the fullscreen click in a bare WebKitGTK window
+  `extra_env` (e.g. `WEBKIT_DISABLE_DMABUF_RENDERER=1`), `linux_runner` (`ubuntu-24.04`; only for
+  `linux` and `linux-scale-2` — the AppImage and 22.04 entries and the ARM64 ones keep their
+  runners), `linux_window_manager` (`none`), `linux_plain_webkit_check`
+  (before the app's smoke, wherever a `.deb` runs: the fullscreen click in a bare WebKitGTK window
   built with PyGObject — no Tauri — to tell engine crashes from ours, in four variants: WebKitGTK's
   own handling, an `enter-fullscreen` handler returning TRUE, that handler fullscreening the
   window (LJ14), and WebKitSettings' `enable-fullscreen` off (LJ14.1); each logs `BARE WEBKITGTK
