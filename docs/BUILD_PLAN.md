@@ -202,7 +202,8 @@ first, and panels from hibernation wait for it. Human checks are in PR #21. **Ne
 (LJ39 → LJ40)**, which ends in a checkpoint.
 
 **Phase 20 (LJ41 → LJ44, 2026-10-19)** is PR #24 on `lj/p20-control`, merged by the agent once
-verify, package and smoke were green on every OS job (the standing exception). The tray / menu-bar
+verify, package and smoke were green on every OS job (the standing exception; LJ36's fullscreen
+check flaked twice on linux-scale-2 and passed on a re-run each time — Deferred follow-ups). The tray / menu-bar
 icon can be hidden and comes back by itself whenever the shortcut can't work; the command bar has
 Settings, Quit and quick commands showing their state (settings changes share one checked path
 with Save); every Little Joan key comes from one keymap and can be changed in Settings → Keyboard,
@@ -7515,6 +7516,13 @@ and where, then stop.
   quick command (copies at once) and the bundled page action of the same name (opens its panel with
   the formats). Options: drop the quick row while the extension is switched on, or rename one
   ("Copy Markdown link" for the quick row).
+- **LJ36's fullscreen run: the "Phone player" click sometimes misses on linux-scale-2** (surfaced in
+  phase 20: 2 of 8 runs — 39216324726's first attempt and 39222245523 —, each green on a re-run
+  of the failed job; the app's code was the same as in runs that passed). At scale 2 the player
+  sits low in the window (the click at 2080,1453 for 720 px, 1139 for 390 px), and the click
+  doesn't reach the page — no `LJ-FS phone` report at all. Element-fullscreen clicks (y 501) never
+  miss. Options: click the player's upper half, or wait for the page's own "ready" after each
+  exit before the next click; look at a screenshot taken right before the click.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
