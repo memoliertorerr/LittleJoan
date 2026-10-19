@@ -393,9 +393,10 @@ jobs:
       # Diagnostics: the same click in a bare WebKitGTK 4.1 window built with PyGObject (no Tauri,
       # wry, or tao), to tell an engine crash from an embedding one. The system's WebKitGTK, so only
       # where the .deb runs; before the app's smoke, which may run into the job's time limit after an
-      # abort. Three variants (LJ14): WebKitGTK's own handling ("default"), an `enter-fullscreen`
-      # handler that returns TRUE ("handled": WebKit declines the page's request), and that plus the
-      # window fullscreened by the handler ("handled-window", as Little Joan's stopgap does).
+      # abort. Four variants: WebKitGTK's own handling ("default"), an `enter-fullscreen` handler
+      # that returns TRUE ("handled": WebKit declines the page's request), that plus the window
+      # fullscreened by the handler ("handled-window") — LJ14 —, and WebKitSettings'
+      # `enable-fullscreen` switched off ("fullscreen-off", LJ14.1).
       - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
         if: ${{ !cancelled() && matrix.artifact == 'linux' && inputs.linux_plain_webkit_check }}
         run: |
@@ -421,12 +422,15 @@ jobs:
           window.set_default_size(480, 640)
           window.set_position(Gtk.WindowPosition.CENTER)
           view = WebKit2.WebView()
+          if mode == "fullscreen-off":
+              view.get_settings().set_enable_fullscreen(False)
+              print("enable-fullscreen:", view.get_settings().get_enable_fullscreen(), flush=True)
           view.connect("notify::title", lambda v, _: print("title:", v.get_title(), flush=True))
           def on_enter(_view):
               print(f"enter-fullscreen: {mode}", flush=True)
               if mode == "handled-window":
                   window.fullscreen()
-              return mode != "default"
+              return mode in ("handled", "handled-window")
           view.connect("enter-fullscreen", on_enter)
           window.connect("window-state-event", lambda _w, e: print("window fullscreen:", bool(e.new_window_state & Gdk.WindowState.FULLSCREEN), flush=True) or False)
           window.add(view)
@@ -436,7 +440,7 @@ jobs:
           Gtk.main()
           print(f"plain ({mode}): main loop ended normally", flush=True)
           PY
-          for mode in default handled handled-window; do
+          for mode in default handled handled-window fullscreen-off; do
             xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
               openbox & sleep 2
               python3 /tmp/plain.py "$0" & app=$!
