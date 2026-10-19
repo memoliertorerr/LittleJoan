@@ -183,7 +183,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Next: phase 9.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Next: phase 10 (LJ18, only if the owner's Apple signing secrets exist), then LJ19.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -203,6 +203,16 @@ and the guard fixed it on every element path; YouTube gets the desktop agent on 
 opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
+
+**Phase 9 (LJ17, 2026-10-19)** is PR #27 on `lj/p9-wayland-shortcut`, merged by the agent once
+verify, package and smoke were green on every job (the standing exception). In a Linux Wayland
+session Little Joan asks the XDG GlobalShortcuts portal for its shortcut first (ashpd, sharing the
+one zbus 5), registered with the portal's host registry under its app id — the `.deb` now also
+installs `io.github.memoliertorerr.littlejoan.desktop` for it, since Tauri's is "Little
+Joan.desktop" —; the desktop owns the key, which the welcome and Settings → Keyboard show; a
+portal shortcut counts as working for the icon rule; without the portal everything is as before
+(`--toggle`). X11, Windows and macOS are untouched. CI can't run a portal backend: its Wayland
+launch showed the fallback. The portal path is the owner's check (PR #27, LJ19's checklist).
 
 **Phase 8 (LJ15 → LJ16, 2026-10-19)** is PR #26 on `lj/p8-downloads-zoom`, merged by the agent once
 verify, package and smoke were green on every job (the standing exception). Downloads go to the OS
@@ -3183,6 +3193,26 @@ report.
   unused import fixed) — ashpd and zbus build on macOS too.
 - `npm run verify`: 628 TS tests, 376 Rust tests, clippy clean (the Linux code compiles only in
   CI's verify).
+- **CI (run 39297748893): all thirteen jobs green on the first try** — verify on Ubuntu compiled
+  and clippy-checked `platform/portal.rs`, and every smoke job's single-instance forwarding (now on
+  zbus's own tokio runtime) worked as before. **The `.deb`** (listed from the artifact):
+  `usr/share/applications/Little Joan.desktop` as before and the new
+  `io.github.memoliertorerr.littlejoan.desktop` (`NoDisplay=true`); `usr/bin/little-joan` 7.72 MB
+  (7.40 MB on `main`: ashpd and zbus on tokio). **The portal path's fallback, in the tray run's
+  Wayland launch** (`XDG_SESSION_TYPE=wayland` under Xvfb), on all four Linux jobs:
+  `tray-visible true`, then `shortcut-portal-host unregistered …`, `shortcut-portal-unavailable
+  no-portal …`, `shortcut-registered CommandOrControl+Shift+Space` (global-hotkey, as v0.1) — on
+  `linux`, `linux-scale-2` and `linux-22.04` the runner's xdg-desktop-portal answered but offers
+  neither `org.freedesktop.host.portal.Registry` nor `org.freedesktop.portal.GlobalShortcuts`
+  (ashpd's PortalNotFound); on `linux-appimage` (no `.deb` dependencies installed) there is no
+  portal at all (`org.freedesktop.portal.Desktop was not provided by any .service files`). No
+  other launch on any job logged a portal line; X11, Windows and macOS logged
+  `shortcut-registered CommandOrControl+Shift+Space` as before. **Screenshots** (no new ones; the
+  ones this step could touch): `settings-keyboard.png` — the summon recorder (Ctrl+Shift+Space,
+  ⌘⇧Space) and the keys as before; `settings-general.png` / `settings-general-tray.png` — the
+  shortcut line with **Change…** and the icon note naming the shortcut; `welcome.png` — "Ctrl+Shift+Space
+  summons and dismisses this window." (Linux scale 2). Disk: 9.2 GiB free with the artifacts
+  downloaded; deleted after looking.
 
 ### LJ18 — macOS Developer ID signing and notarization · strong · auto
 
@@ -8137,7 +8167,8 @@ and where, then stop.
 - **CI doesn't require the portal path's fallback line** (LJ17): the tray run's Wayland launch
   (`XDG_SESSION_TYPE=wayland` under Xvfb) asks the portal and must fall back, but `smoke-tray.mts`
   (not in LJ17's files) only checks `tray-visible true` there. Option: also require
-  `shortcut-portal-unavailable` and then `shortcut-registered <accel>` in that launch.
+  `shortcut-portal-unavailable` and then `shortcut-registered <accel>` in that launch (run
+  39297748893 logged exactly that on all four Linux jobs).
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
