@@ -12,6 +12,7 @@ use crate::history_store::OpenHistory;
 use crate::keymap::Keymap;
 use crate::keys::Platform;
 use crate::settings::{self, SETTINGS_FILE, Settings, Theme};
+use crate::shortcut::backend::PortalState;
 
 /// Development builds point this at `.cache/dev-data` (see scripts/env.sh). Shipped builds never
 /// set it, so settings live in the OS config folder and browsing data where Tauri puts it (see
@@ -35,6 +36,11 @@ pub struct AppState {
     pub shortcut_problem: Option<crate::shortcut::Problem>,
     /// True while the settings window is recording a new shortcut (the active one is paused).
     pub shortcut_suspended: bool,
+    /// The XDG GlobalShortcuts portal's side of the shortcut (LJ17): asked at launch in a Linux
+    /// Wayland session; when it holds the shortcut, `active_shortcut` stays `None`.
+    pub portal: PortalState,
+    /// A first launch's welcome waits for the portal's answer (shortcut::welcome_now).
+    pub welcome_after_portal: bool,
     /// A first run (no settings.json at launch) whose welcome the start page hasn't shown yet.
     /// Setup clears it when the first launch had flags; `start_info` clears it once read.
     pub first_run: bool,
@@ -66,6 +72,8 @@ impl AppState {
             active_shortcut: None,
             shortcut_problem: None,
             shortcut_suspended: false,
+            portal: PortalState::None,
+            welcome_after_portal: false,
             first_run: false,
             session_cookies: SessionCookies::default(),
             history: None,
@@ -106,6 +114,8 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         active_shortcut: None,
         shortcut_problem: None,
         shortcut_suspended: false,
+        portal: PortalState::None,
+        welcome_after_portal: false,
         first_run,
         session_cookies: SessionCookies::default(),
         history: None,

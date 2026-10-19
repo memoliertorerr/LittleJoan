@@ -1,0 +1,13 @@
+# Little Joan under its app id (LJ17), for the XDG portals: their host registry takes an app id
+# only when a desktop file of that name exists, and GNOME's GlobalShortcuts portal wants an app id.
+# The app list shows Tauri's "Little Joan.desktop"; this one stays out of it (NoDisplay).
+[Desktop Entry]
+Type=Application
+Name=Little Joan
+Comment=A tiny pop-up browser that hibernates until you call it.
+Exec=little-joan
+Icon=little-joan
+Categories=Utility;
+StartupWMClass=little-joan
+Terminal=false
+NoDisplay=true

@@ -9,6 +9,7 @@ const mac: StartInfo = {
   trayHint: "Little Joan's icon is in the menu bar at the top of the screen.",
   startAtLogin: false,
   waylandNoShortcut: false,
+  portalShortcut: null,
   theme: DEFAULT_THEME,
 };
 
@@ -31,6 +32,18 @@ describe("the welcome", () => {
     expect(line?.kind).toBe("command");
     expect(line?.code).toBe("little-joan --toggle");
     expect(line && lineText(line)).toContain("Bind little-joan --toggle to a key in your keyboard settings");
+  });
+
+  it("names the desktop's key when the portal holds the shortcut (LJ17)", () => {
+    const portal = { ...mac, platform: "linux", shortcut: null, portalShortcut: { trigger: "Press <ctrl><shift>space" } };
+    const line = welcome(portal)?.shortcut;
+    expect(line?.kind).toBe("keys");
+    expect(line?.code).toBe("Press <ctrl><shift>space");
+    expect(line && lineText(line)).toBe("Your desktop's shortcut summons and dismisses this window: Press <ctrl><shift>space.");
+    const keyless = welcome({ ...portal, portalShortcut: { trigger: null } })?.shortcut;
+    expect(keyless?.kind).toBe("none");
+    expect(keyless && lineText(keyless)).toContain("in your desktop's keyboard settings");
+    expect(keyless && lineText(keyless)).not.toContain("--toggle");
   });
 
   it("points at Settings when no shortcut could be registered", () => {

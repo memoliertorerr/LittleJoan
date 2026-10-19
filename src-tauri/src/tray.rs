@@ -15,6 +15,7 @@ use crate::joan;
 use crate::keys::PageAction;
 use crate::page_actions;
 use crate::settings_window;
+use crate::shortcut::backend::{self, PortalState};
 use crate::smoke;
 use crate::state;
 use crate::toggle::Command;
@@ -106,29 +107,37 @@ pub fn icon_visible(show_icon: bool, shortcut_works: bool) -> bool {
     show_icon || !shortcut_works
 }
 
-/// Whether the global shortcut can summon Little Joan: one is registered (`active_shortcut`: the
-/// saved one or the default; `None` when both failed), and this isn't a Linux Wayland session,
-/// where the X11 grab never fires (welcome::wayland_no_shortcut). A shortcut paused while
+/// Whether the global shortcut can summon Little Joan: one is registered with global-hotkey
+/// (`active_shortcut`: the saved one or the default; `None` when both failed) outside a Linux
+/// Wayland session, where the X11 grab never fires (welcome::wayland_session) — or the XDG
+/// GlobalShortcuts portal holds it and the desktop gave it a key (LJ17). A shortcut paused while
 /// Settings records a new one stays the active one, so it still counts — the icon doesn't blink.
-pub fn shortcut_works(active_shortcut: Option<&str>, wayland_no_shortcut: bool) -> bool {
-    active_shortcut.is_some() && !wayland_no_shortcut
+pub fn shortcut_works(
+    active_shortcut: Option<&str>,
+    wayland_session: bool,
+    portal: &PortalState,
+) -> bool {
+    backend::backend(wayland_session, portal).works(active_shortcut.is_some(), portal)
 }
 
 /// What the icon was last set to: 0 nothing yet (it is built visible), 1 shown, 2 hidden.
 static APPLIED: AtomicU8 = AtomicU8::new(0);
 
 /// Shows or hides the icon by the rule above, from the settings and the active shortcut. Called
-/// after the shortcut is registered at startup and after every settings save; logs
-/// `tray-visible <bool>` the first time and on each change. Takes the state lock only to read;
-/// the tray's own call runs on the main thread (from another thread it waits for it).
+/// after the shortcut is registered at startup, when the portal answers (LJ17), and after every
+/// settings save; logs `tray-visible <bool>` the first time and on each change. Takes the state
+/// lock only to read; the tray's own call runs on the main thread (from another thread it waits
+/// for it).
 pub fn apply_visibility<R: Runtime>(app: &AppHandle<R>) {
-    let (show, active) = state::with(app, |s| {
-        (s.settings.show_tray_icon, s.active_shortcut.clone())
+    let (show, active, portal) = state::with(app, |s| {
+        (
+            s.settings.show_tray_icon,
+            s.active_shortcut.clone(),
+            s.portal.clone(),
+        )
     });
-    let visible = icon_visible(
-        show,
-        shortcut_works(active.as_deref(), welcome::wayland_no_shortcut_here()),
-    );
+    let works = shortcut_works(active.as_deref(), welcome::wayland_session_here(), &portal);
+    let visible = icon_visible(show, works);
     let wanted = if visible { 1 } else { 2 };
     if APPLIED.load(Ordering::SeqCst) == wanted {
         return;
@@ -161,16 +170,44 @@ mod tests {
 
     #[test]
     fn the_shortcut_works_only_when_registered_outside_wayland() {
-        assert!(shortcut_works(Some("CommandOrControl+Shift+Space"), false));
+        let none = PortalState::None;
+        assert!(shortcut_works(
+            Some("CommandOrControl+Shift+Space"),
+            false,
+            &none
+        ));
         assert!(
-            !shortcut_works(None, false),
+            !shortcut_works(None, false, &none),
             "the saved shortcut and the default both failed"
         );
         assert!(
-            !shortcut_works(Some("CommandOrControl+Shift+Space"), true),
+            !shortcut_works(Some("CommandOrControl+Shift+Space"), true, &none),
             "on Wayland the X11 grab never fires"
         );
-        assert!(!shortcut_works(None, true));
+        assert!(!shortcut_works(None, true, &none));
+        assert!(
+            !shortcut_works(
+                Some("CommandOrControl+Shift+Space"),
+                true,
+                &PortalState::Asking
+            ),
+            "nothing holds it while the portal is asked"
+        );
+    }
+
+    #[test]
+    fn a_portal_shortcut_with_a_key_works() {
+        let keyed = PortalState::Registered {
+            trigger: Some("Press <ctrl><shift>space".into()),
+        };
+        assert!(shortcut_works(None, true, &keyed), "GNOME 48+ / KDE");
+        assert!(!icon_visible(false, shortcut_works(None, true, &keyed)));
+        let keyless = PortalState::Registered { trigger: None };
+        assert!(
+            !shortcut_works(None, true, &keyless),
+            "the desktop gave it no key"
+        );
+        assert!(icon_visible(false, shortcut_works(None, true, &keyless)));
     }
 
     #[test]
@@ -181,7 +218,7 @@ mod tests {
         state.settings.show_tray_icon = false;
         state.active_shortcut = Some("Alt+KeyJ".into());
         state.shortcut_suspended = true;
-        let works = shortcut_works(state.active_shortcut.as_deref(), false);
+        let works = shortcut_works(state.active_shortcut.as_deref(), false, &state.portal);
         assert!(works);
         assert!(!icon_visible(state.settings.show_tray_icon, works));
     }

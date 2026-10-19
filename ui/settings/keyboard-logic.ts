@@ -163,14 +163,31 @@ export interface SystemShortcut {
   accelerator: string | null;
 }
 
+/** The XDG GlobalShortcuts portal holds the summon shortcut (LJ17; Rust's portalShortcut). */
+export interface PortalShortcut {
+  /** The desktop's own words for its key ("Press <ctrl><shift>space" on GNOME); null: none yet. */
+  trigger: string | null;
+}
+
+/** Under the summon row and General's line while the portal holds the shortcut. */
+export const PORTAL_NOTE = "Change it in your desktop's keyboard settings.";
+
+/** What the summon row and General's line show while the portal holds it: the desktop's words. */
+export function portalText(portal: PortalShortcut): string {
+  return portal.trigger ?? "No key yet";
+}
+
 /** The draft: the user's keys (`overrides`), the actions, the shortcut that summons Little Joan. */
 export interface KeyboardDraft {
   os: Os;
   actions: readonly KeyActionInfo[];
   overrides: Readonly<Record<string, string>>;
+  /** The saved summon shortcut — while the portal holds it, only the trigger Little Joan prefers. */
   summon: string;
   /** macOS's own shortcuts as read (empty elsewhere, or when nothing could be read). */
   system?: readonly SystemShortcut[];
+  /** The portal holds the summon shortcut: the desktop owns its key, so the row isn't edited here. */
+  portal?: PortalShortcut | null;
 }
 
 /** The action's key in the draft: its override (null for ""), else its first default. */
@@ -299,7 +316,8 @@ export function summonProblems(accelerator: string, draft: KeyboardDraft): Probl
 
 /** Every action's problems and the summon row's, by row ("summon" or the action id). */
 export function allProblems(draft: KeyboardDraft): Record<string, Problem[]> {
-  const rows: Record<string, Problem[]> = { summon: summonProblems(draft.summon, draft) };
+  // The desktop's key isn't Little Joan's to judge (nor to fix, so it can never block Save).
+  const rows: Record<string, Problem[]> = { summon: draft.portal ? [] : summonProblems(draft.summon, draft) };
   for (const action of draft.actions) {
     const binding = bindingOf(action, draft.overrides);
     rows[action.id] = binding === null || draft.overrides[action.id] === undefined ? [] : actionProblems(action.id, binding, draft);
@@ -344,9 +362,15 @@ export function resetKey(draft: KeyboardDraft, actionId: string): KeyboardDraft 
 /** The default shortcut that summons Little Joan (settings.rs). */
 export const DEFAULT_SUMMON = "CommandOrControl+Shift+Space";
 
-/** Reset all: every key and the summon shortcut back to their defaults. */
+/** Reset all: every key and the summon shortcut back to their defaults (the summon shortcut stays
+ * while the portal holds it: the desktop owns that key). */
 export function resetAll(draft: KeyboardDraft): KeyboardDraft {
-  return { ...draft, overrides: {}, summon: DEFAULT_SUMMON };
+  return { ...draft, overrides: {}, summon: draft.portal ? draft.summon : DEFAULT_SUMMON };
+}
+
+/** Whether Reset all would change anything. */
+export function canResetAll(draft: KeyboardDraft): boolean {
+  return Object.keys(draft.overrides).length > 0 || (!draft.portal && draft.summon !== DEFAULT_SUMMON);
 }
 
 /** Whether the action's key isn't its default (Reset shows then). */

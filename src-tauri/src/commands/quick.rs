@@ -169,8 +169,14 @@ fn word(text: &str) -> &str {
 #[tauri::command]
 pub async fn quick_state<R: Runtime>(app: AppHandle<R>) -> QuickState {
     let page = web_page(&app);
-    let (settings, active) = state::with(&app, |s| (s.settings.clone(), s.active_shortcut.clone()));
-    let works = tray::shortcut_works(active.as_deref(), welcome::wayland_no_shortcut_here());
+    let (settings, active, portal) = state::with(&app, |s| {
+        (
+            s.settings.clone(),
+            s.active_shortcut.clone(),
+            s.portal.clone(),
+        )
+    });
+    let works = tray::shortcut_works(active.as_deref(), welcome::wayland_session_here(), &portal);
     QuickState {
         page,
         theme: settings.theme,

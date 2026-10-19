@@ -50,7 +50,10 @@
           "gstreamer1.0-plugins-good",
           "gstreamer1.0-plugins-bad",
           "gstreamer1.0-libav"
-        ]
+        ],
+        "files": {
+          "/usr/share/applications/io.github.memoliertorerr.littlejoan.desktop": "linux/io.github.memoliertorerr.littlejoan.desktop"
+        }
       },
       "appimage": {
         "bundleMediaFramework": true

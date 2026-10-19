@@ -3,8 +3,14 @@
 import { displayShortcut } from "../lib/shortcut.ts";
 import type { Theme } from "../lib/theme.ts";
 
+/** The XDG GlobalShortcuts portal holds the shortcut (LJ17): the desktop's own words for its key. */
+export interface PortalShortcut {
+  /** As the desktop says it ("Press <ctrl><shift>space" on GNOME); null while it gave no key. */
+  trigger: string | null;
+}
+
 export interface StartInfo {
-  /** The registered global shortcut (accelerator syntax), if any. */
+  /** The global shortcut registered with global-hotkey (accelerator syntax), if any. */
   shortcut: string | null;
   platform: string;
   /** The first launch: the command bar shows the welcome (only the first summon does). */
@@ -13,8 +19,10 @@ export interface StartInfo {
   trayHint: string;
   /** Whether the OS login entry exists; `null` when it can't be read. */
   startAtLogin: boolean | null;
-  /** A Linux Wayland session, where the global shortcut can't fire. */
+  /** A Linux Wayland session whose portal didn't take the shortcut: it can't fire. */
   waylandNoShortcut: boolean;
+  /** The portal holds the shortcut (a Wayland session on GNOME 48+, KDE Plasma), or null. */
+  portalShortcut: PortalShortcut | null;
   /** The theme (settings.json's `theme`), applied as the bar loads. */
   theme: Theme;
 }
@@ -51,6 +59,18 @@ export function welcome(info: StartInfo): Welcome | null {
 }
 
 function shortcutLine(info: StartInfo): ShortcutLine {
+  if (info.portalShortcut) {
+    // The desktop's own words for its key, as they come (the desktop owns it).
+    const trigger = info.portalShortcut.trigger;
+    return trigger
+      ? { kind: "keys", before: "Your desktop's shortcut summons and dismisses this window: ", code: trigger, after: "." }
+      : {
+          kind: "none",
+          before: "Choose a key for “Summon or dismiss Little Joan” in your desktop's keyboard settings: it summons and dismisses this window.",
+          code: "",
+          after: "",
+        };
+  }
   if (info.waylandNoShortcut) {
     return {
       kind: "command",

@@ -7,6 +7,13 @@ All notable changes to Little Joan are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **A global shortcut on Linux under Wayland,** through the XDG GlobalShortcuts portal (KDE
+  Plasma, GNOME 48 and later). The desktop owns the key: it may ask once to allow it and may pick
+  another one; Settings → Keyboard and the first launch's welcome show the key it uses. Without the
+  portal, Little Joan does what it did before (bind `little-joan --toggle` in your desktop's
+  keyboard settings), and the tray icon stays the way back in. The `.deb` installs Little Joan's
+  desktop file a second time under its app id (`io.github.memoliertorerr.littlejoan.desktop`,
+  hidden from the app list), which the portal needs to know the app. X11 is unchanged.
 - **Page zoom:** Ctrl+= / Ctrl+- / Ctrl+0 (also Ctrl++ and the keypad's + − 0) on Windows and
   Linux, ⌘= / ⌘- / ⌘0 on macOS (View → Zoom In, Zoom Out, Actual Size), from 50 % to 300 %. The
   toolbar shows the level for a moment. Zoom holds while you browse in the window and starts at

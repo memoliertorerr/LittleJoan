@@ -197,14 +197,24 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   `little-joan --size 390x844` (resize the open window, in logical pixels),
   `little-joan --start-at-login on|off`, `little-joan --settings [general|keyboard|appearance|extensions|privacy|about]`
   (open Settings on a tab), `little-joan --extension <id>` (open an extension's first command,
-  e.g. `snake` — page actions open from the command bar, on a page; experimental), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
-  bind `little-joan --toggle` to a key in your desktop's keyboard settings.
+  e.g. `snake` — page actions open from the command bar, on a page; experimental), and `little-joan --quit` talk to the running app.
+- **Linux on Wayland:** Little Joan asks the desktop for its shortcut through the XDG
+  GlobalShortcuts portal — KDE Plasma has it, and GNOME from 48 (Ubuntu 25.04 and later). The
+  desktop owns the key: the first time it may ask you to allow the shortcut (and may pick another
+  key); it then summons and dismisses the window like anywhere else, and Settings → Keyboard shows
+  the key your desktop uses — change it in your desktop's keyboard settings. Without the portal
+  (GNOME 46 on Ubuntu 24.04, for one), global shortcuts can't be heard under Wayland: bind
+  `little-joan --toggle` to a key in your desktop's keyboard settings instead (the welcome and
+  Settings say so). The portal needs Little Joan's desktop file under its app id, which the `.deb`
+  installs; the AppImage doesn't install one, so GNOME may not give it the shortcut (then
+  `--toggle` it is). X11 sessions work as before.
 - **No icon, if you prefer:** switch off **Show the icon in the menu bar** (macOS) / **in the
   system tray** (Windows, Linux) in Settings → General. Little Joan then lives on the shortcut
   alone; opening it again from your apps (or `little-joan` with no flags) also brings up the
   window, and the command bar has **Settings** and **Quit Little Joan**. The icon comes back by
   itself whenever the shortcut can't work — when neither yours nor the default could be
-  registered, or on a Linux Wayland session — so Little Joan is never out of reach.
+  registered, or on a Linux Wayland session without the portal (above) — so Little Joan is never
+  out of reach.
 - **Quit:** tray menu → **Quit Little Joan**, the command bar's **Quit Little Joan** (type
   "quit"), `little-joan --quit`, or Cmd+Q on macOS while it's in front.
 
@@ -235,7 +245,9 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
 - **Keyboard** — **Summon Little Joan**: click it, then press the new combination. It needs a
   modifier (Ctrl, Alt, Cmd, or Super; Shift alone doesn't count). If another app already owns it,
   Little Joan says so and keeps the old one; if the saved one couldn't be registered when Little
-  Joan started, both Keyboard and General say which one it uses instead. Then **Little Joan's
+  Joan started, both Keyboard and General say which one it uses instead. On Linux under Wayland,
+  when the desktop holds the shortcut through its portal, this row (and General's line) shows the
+  desktop's key instead — change it in your desktop's keyboard settings. Then **Little Joan's
   keys** — Open Location, History, Translate, Reload, Back, Forward, Open in browser, Close —, each
   with its key: click it and press the new one (Backspace for no key, Esc to cancel), **Reset**
   brings the default back, **Reset all** every one. Little Joan refuses keys that would type text,

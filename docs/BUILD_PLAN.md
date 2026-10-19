@@ -83,7 +83,7 @@
 | LJ14.1 | *(added mid-plan 2026-10-19)* WebKitGTK older than 2.52: element fullscreen switched off instead of the abort; an Ubuntu 22.04 smoke job | strong | auto | ✅ done |
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ✅ done |
 | LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ✅ done |
-| LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
+| LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ✅ done |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⬜ todo |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
@@ -3083,6 +3083,106 @@ attempts, then stop). This ends phase 9. Needs human check (they also go into LJ
 Once every job is green, merge the PR into main with a merge commit (Ground Rule 24), then stop and
 report.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **Disk:** 6.1 GiB free at the start of the phase (other activity on the owner's Mac), 5.5 GiB
+  after verify; `.cache/target` 2.1 GB (ashpd and zbus built once for macOS by the type-check
+  below), then `cargo clean`.
+- **`ashpd` 0.13.13** (the current version; default features off, `tokio` and — new in 0.13 —
+  `global_shortcuts`), Linux only. Cargo.lock gains only `ashpd`; its dependencies were all there
+  (enumflags2, futures-util, getrandom 0.4, serde, tokio, zbus), tokio picks up two more edges to
+  crates already locked (signal-hook-registry, tracing). **`cargo tree -i zbus --target all`: one
+  `zbus v5.13.2`, used by ashpd, tauri-plugin-opener and tauri-plugin-single-instance.** ashpd's
+  `tokio` feature turns on zbus's, which then holds for those plugins too — read in zbus 5.13.2:
+  with `tokio` its tasks go to `tokio::spawn` and its blocking API (single-instance's, opener's)
+  runs inside a multi-threaded tokio runtime of zbus's own (`utils::block_on`), so the
+  single-instance callback now runs on that runtime's threads. Nothing on that path calls
+  `block_on` (Little Joan's callback only dispatches to tauri's runtime); the opener already moves
+  its blocking calls to a thread of their own for this reason. Landmines has it. ashpd 0.13 says
+  `rust-version = "1.87"` (Cargo's MSRV-aware resolver would have picked 0.12.3 for the crate's
+  1.85; tauri 2.12.4 already needs 1.90, so nothing changes for the pinned 1.99.1).
+- **The pure part** (`src-tauri/src/shortcut/backend.rs`, 7 tests): `Backend` — `Hotkey` (not
+  Linux, or an X11 session), `Portal` (a Wayland session whose portal took the shortcut),
+  `HotkeyOnXwayland` (a Wayland session without it: global-hotkey on XWayland as before, plus the
+  `--toggle` hint) — from `backend(wayland_session, &PortalState)`; `PortalState` (`None`,
+  `Asking`, `Registered { trigger }`); `works` (the icon rule: global-hotkey with a shortcut outside
+  Wayland, the portal once the desktop gave it a key); `trigger(accelerator)` — the XDG shortcuts
+  spec's syntax, read as Linux reads it (`CommandOrControl+Shift+Space` → `CTRL+SHIFT+space`, Alt →
+  `ALT`, Super → `LOGO`), the key from the same parser registration uses and its xkb name
+  (`keysym`: letters, digits, F1–F35, the keypad, punctuation, navigation, media keys); `None` for
+  what the spec can't name (Caps Lock and Num Lock, which are its modifiers; Fn, the Intl keys) or
+  an accelerator that doesn't parse — the portal is then asked without a preference; the smoke-log
+  lines `shortcut-registered <trigger> portal` and `shortcut-portal-unavailable <why> [<error>]`
+  (tested through `smoke::format_line`). The welcome rule (`welcome_waits`) too. `shortcut.rs`
+  moved its tests to `shortcut/tests.rs` to stay under 400 lines.
+- **The portal** (`src-tauri/src/platform/portal.rs`, Linux only): in a Wayland session
+  `shortcut::register_at_launch` sets `PortalState::Asking` and spawns it on tauri's runtime. It
+  opens its own session-bus connection, registers it as `io.github.memoliertorerr.littlejoan` with
+  the portal's host registry (`ashpd::register_host_app_with_connection`, before any other portal
+  call, as the registry wants; on failure it logs `shortcut-portal-host unregistered <error>` and
+  takes a fresh connection, so a refused registration can't stick to the one it uses), makes the
+  GlobalShortcuts proxy and a session (all within 15 s: D-Bus activation of a portal that hangs
+  must not leave the app without a shortcut), subscribes to `Activated` and `ShortcutsChanged`,
+  then binds `toggle` / "Summon or dismiss Little Joan" with the preferred trigger — without a time
+  limit, since GNOME and KDE may ask the user. Registered: `shortcut-registered <trigger> portal`,
+  `Activated` for `toggle` → `joan::dispatch(Command::Toggle)`, `ShortcutsChanged` →
+  `shortcut-portal-changed <trigger>` and the icon rule again; the session lives as long as the
+  process. Anything else — `no-bus`, `no-portal` (`PortalNotFound`, or D-Bus's ServiceUnknown /
+  UnknownInterface / UnknownMethod / UnknownObject), `refused`, `cancelled`, `timeout`,
+  `no-shortcut`, `ended` (a signal stream ended later), `failed` (including a panic: the work runs in
+  a task of its own, since ashpd asserts on some answers) — logs `shortcut-portal-unavailable` and
+  goes through `shortcut::portal_answered(None)`: global-hotkey registers exactly as v0.1 did
+  (`shortcut-registered <accel>`), the icon rule runs. No timer crate: the 15 s limit is a sleeping
+  thread of tauri's blocking pool, raced with `poll_fn`; streams are read through
+  `zbus::export::futures_core::Stream` (no new dependency for `StreamExt`).
+- **The desktop file id — what the `.deb` installs** (`Little Joan_0.2.0-beta.3_amd64.deb` of
+  `main`'s run 39290492192, listed with `ar` + `tar` on the Mac): `/usr/share/applications/Little
+  Joan.desktop` (Tauri names it after the product), `usr/bin/little-joan`, three icons. Read in
+  xdg-desktop-portal's source (main): a host app's id comes from its systemd unit
+  (`app-gnome-Little\x20Joan-<n>.scope` → "Little Joan" when the desktop started it; nothing from a
+  terminal), GlobalShortcuts' CreateSession refuses an app without one ("An app id is required"),
+  and the host registry's `Register` creates the app info with `REQUIRE_GAPPINFO` — the app id
+  needs a desktop file of that name (its docs: it "must be able to match the basename of a .desktop
+  file"). So the `.deb` now also installs `src-tauri/linux/io.github.memoliertorerr.littlejoan.desktop`
+  (`bundle.linux.deb.files`; the same entry with `NoDisplay=true`, so the app list keeps one Little
+  Joan), and the portal registers that id. Tauri's own file and its name are unchanged (renaming
+  the product would orphan the login entries, Landmines). The AppImage installs no desktop file, so
+  there registration fails and GNOME may refuse; KDE and an AppImage started from a desktop entry
+  may still work. Landmines has it.
+- **The rest of the app:** `AppState` gains `portal` and `welcome_after_portal`; `tray::shortcut_works`
+  now takes the session and the portal state (a portal shortcut with a key counts as working, so a
+  hidden icon stays hidden on GNOME 48+ / KDE and comes back where the portal is missing), as do
+  the quick commands' `iconForced`; `StartInfo.waylandNoShortcut` and `get_settings`'s are
+  `Backend::toggle_hint` (false once the portal holds the shortcut); `start_info` and `keymap_info`
+  report `portalShortcut: { trigger } | null` (`commands/keys.rs`); `save_settings` swaps nothing
+  while the portal holds (or is asked for) the shortcut; `welcome.rs`'s detection is named for what
+  it detects (`wayland_session`). **A first launch's welcome in a Wayland session waits for the
+  portal's answer** (`shortcut::welcome_now` / `portal_answered`, race-free under the state lock),
+  so on GNOME 48 it opens after the desktop's dialog and names its key — an addition the prompt
+  didn't ask for; without it the welcome would have shown the `--toggle` hint while the dialog was
+  up. X11, Windows and macOS: nothing waits.
+- **UI:** the welcome (`ui/command/welcome.ts`, where LJ22 moved the start page's hint): "Your
+  desktop's shortcut summons and dismisses this window: <trigger>." (the desktop's words in a
+  `<kbd>`), or, with no key yet, to choose one in the desktop's keyboard settings. Settings →
+  Keyboard (`keyboard.ts`, `keyboard-logic.ts` + 3 tests): with `portalShortcut` the summon row
+  shows the desktop's key as text instead of the recorder, no Reset, the note "Change it in your
+  desktop's keyboard settings."; its problems aren't judged (the desktop's key can never block
+  Save — a saved shortcut that doesn't parse would otherwise have, with no recorder to fix it), and
+  Reset all leaves the preferred trigger alone; General's line shows the key with the same note
+  instead of **Change…**; the icon note says "press your shortcut". Other paths: nothing changes.
+- **Files beyond the prompt's list** (each needed by what the prompt asks): `state.rs` (the two
+  fields), `platform/mod.rs` (the module and `ask_portal`), `commands/quick.rs` (the icon rule's
+  new input), `ui/command/welcome.ts` + test (the start page's hint lives there since LJ22),
+  `ui/settings.html` (a span for the desktop's key, General's note), `src-tauri/linux/…desktop`.
+  `smoke.rs` needed no change (the events are `backend.rs`' constants). No CI workflow or smoke
+  harness change: the portal path can't run in CI (no portal backend under Xvfb).
+- **Checked on the Mac without launching anything:** `platform/portal.rs` compiles only on Linux, so
+  with `ashpd` made a dependency for every target and the module enabled on macOS for a moment
+  (then restored from copies), `cargo check` and `cargo clippy --all-targets` passed on it (one
+  unused import fixed) — ashpd and zbus build on macOS too.
+- `npm run verify`: 628 TS tests, 376 Rust tests, clippy clean (the Linux code compiles only in
+  CI's verify).
 
 ### LJ18 — macOS Developer ID signing and notarization · strong · auto
 
@@ -8015,6 +8115,29 @@ and where, then stop.
   `download` attribute does download. Options: a response-policy hook of our own (wry has none to
   give; it would mean wrapping wry's navigation delegate as LJ15 wraps `setDelegate:`), or upstream a
   `Content-Disposition` check to wry.
+- **A window summoned through the portal may open without the keyboard focus on GNOME** (surfaced by
+  LJ17, from reading the spec; not seen — CI has no portal). GlobalShortcuts v2's `Activated`
+  carries an `activation_token` in its options, which a Wayland app must hand to the compositor to
+  take the focus past its focus-stealing prevention; Little Joan only dispatches `Toggle`. If the
+  owner sees the window open unfocused (then a second press focuses instead of dismissing): hand
+  the token to GDK (`gdk_wayland_display_set_startup_notification_id` before the window is
+  presented, on the main thread) — Linux FFI in `platform/linux.rs`.
+- **The portal isn't asked again after it restarts** (LJ17). The host registry's docs ask apps to
+  watch the portal's `NameOwnerChanged` and register again; Little Joan, when its session's signals
+  end, logs `shortcut-portal-unavailable ended` and falls back to global-hotkey (the icon comes
+  back) until the next launch. Option: wait for the portal's name to come back and run the whole
+  setup again.
+- **The AppImage has no desktop file under the app id** (LJ17), so the portal's host registry
+  refuses it and GNOME may refuse the shortcut (then `--toggle`). Options: install one on first run
+  into `~/.local/share/applications/` (an AppImage writes nothing outside its own files today), or
+  leave it to the user's AppImage integration tool.
+- **Settings could open the desktop's own shortcut dialog** (LJ17): GlobalShortcuts v2 has
+  `ConfigureShortcuts`, which a "Change…" button on the portal path could call instead of the note
+  "Change it in your desktop's keyboard settings."
+- **CI doesn't require the portal path's fallback line** (LJ17): the tray run's Wayland launch
+  (`XDG_SESSION_TYPE=wayland` under Xvfb) asks the portal and must fall back, but `smoke-tray.mts`
+  (not in LJ17's files) only checks `tray-visible true` there. Option: also require
+  `shortcut-portal-unavailable` and then `shortcut-registered <accel>` in that launch.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -8035,7 +8158,9 @@ Populated from real friction, not speculation:
   never the resolved modifier.
 - **Linux global shortcuts are X11-only.** global-hotkey 0.8's Linux backend is x11rb; under
   Wayland it grabs keys on XWayland, which only sees them when an X11 window has focus. The
-  `--toggle` CLI flag (forwarded by single-instance) is the Wayland path.
+  `--toggle` CLI flag (forwarded by single-instance) is the Wayland path. *(LJ17)* Where the XDG
+  GlobalShortcuts portal exists (KDE Plasma, GNOME 48+) Little Joan asks it first; `--toggle`
+  stays the path without it.
 - **tauri-plugin-single-instance differs per OS:** macOS uses a Unix socket at
   `/tmp/<identifier>_si.sock`; Linux uses the D-Bus session bus and, if there is none, logs a
   warning and "launches normally" — a second `--show` would then start a second app instead of
@@ -8312,6 +8437,28 @@ Populated from real friction, not speculation:
   excludelist). GitHub's `ubuntu-24.04` image has no `libEGL.so.1`, so the AppImage didn't start
   there (`error while loading shared libraries`, exit 127) until the job installed `libegl1` & co.
   Every desktop has them; a minimal container wouldn't.
+- *(LJ17, read in the `.deb` and xdg-desktop-portal's source)* **The portal can't place "Little
+  Joan.desktop".** Tauri's `.deb` names its desktop file after the product (`/usr/share/applications/
+  Little Joan.desktop`). xdg-desktop-portal gives a host app an id only from its systemd unit
+  (`app-gnome-Little\x20Joan-<n>.scope` → "Little Joan" when the desktop started it; none from a
+  terminal), and GlobalShortcuts' CreateSession refuses an app without one ("An app id is
+  required"). The host registry (`org.freedesktop.host.portal.Registry.Register`, x-d-p 1.19.1+)
+  sets one, but only when a desktop file of that name exists (`REQUIRE_GAPPINFO`), only before any
+  other portal call on the connection, and only once. So the `.deb` also installs
+  `io.github.memoliertorerr.littlejoan.desktop` (`NoDisplay=true`), and the portal code registers on
+  its own connection, taking a fresh one if the registry refuses. The AppImage installs no desktop
+  file. Don't rename the product to fix the name: the login entries are named after it (LJ11).
+- *(LJ17, read in zbus 5.13.2)* **ashpd's `tokio` feature switches zbus to tokio for every user of
+  it** (Cargo features unify: tauri-plugin-single-instance and -opener share the one zbus). zbus's
+  blocking API then runs on a tokio runtime of its own (`utils::block_on`), which panics ("Cannot
+  start a runtime from within a runtime") when called inside another tokio runtime, and
+  single-instance's callback runs on that runtime's threads: never call zbus's blocking API or
+  `tauri::async_runtime::block_on` from the callback, or from an async command (the opener already
+  puts its blocking zbus calls on a thread of their own).
+- *(LJ17, read in xdg-desktop-portal-gnome)* **GNOME's preferred trigger is turned into a GTK
+  accelerator** (`CTRL+SHIFT+space` → `<ctrl><shift>space`, modifier names upper case, the key an
+  xkb name), and its `trigger_description` is a translated sentence ("Press <ctrl><shift>space"):
+  show it as the desktop wrote it, never parse it.
 - *(round 3 research, to watch)* **macOS 26 / 27: an `.accessory` app's element fullscreen may
   leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
   and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after
@@ -8333,7 +8480,7 @@ or round 3 picked up point at their step and stay here for the record.
 | **Popups inside the app (OAuth)** → *v0.3, LJ47–LJ48* | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too. Some "Sign in with …" flows break today because the popup opens in the default browser |
 | **Code signing / notarization / SmartScreen reputation** → *macOS: v0.2, LJ18* | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Windows: SignPath Foundation if the user's application is approved (Deferred follow-ups) |
 | **Auto-update and GitHub Releases** | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys, release workflow |
-| **Wayland-native global shortcut** → *v0.2, LJ17* | XDG GlobalShortcuts portal (via ashpd) when `WAYLAND_DISPLAY` is set | New dependency, portal support varies by desktop |
+| **Wayland-native global shortcut** → *v0.2, LJ17: done* | XDG GlobalShortcuts portal (via ashpd) when `WAYLAND_DISPLAY` is set | New dependency, portal support varies by desktop |
 | **rpm package, MSI, Windows ARM64, Linux ARM64** | Extra `--bundles` / targets in the package job | CI time + smoke coverage per artifact |
 | **Hide Tauri's IPC object from remote pages** | Remote pages can see `__TAURI_INTERNALS__` (every call is denied); a future Tauri option or a separate content webview without IPC injection | Upstream support or a multi-webview layout |
 | **Incognito mode** | `incognito(true)` on the builder for a "private" summon variant (second shortcut) | Settings + second shortcut |
