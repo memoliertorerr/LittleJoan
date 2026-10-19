@@ -4,6 +4,7 @@ import { CLEAR_CHOICES, clearChoice, clearedText, type ClearRange } from "./hist
 import type { Theme } from "./lib/theme.ts";
 import { sameTheme } from "./settings/appearance-logic.ts";
 import { sameSites, type BuiltInSite, type SiteMode } from "./settings/sites-logic.ts";
+import { sameOverrides, type ShortcutProblem } from "./settings/keyboard-logic.ts";
 
 export interface Choice {
   id: string;
@@ -29,6 +30,8 @@ export interface Settings {
   siteModes: Record<string, SiteMode>;
   /** The tray / menu-bar icon; off, it hides while the shortcut works (General, LJ41). */
   showTrayIcon: boolean;
+  /** The user's own keys (Keyboard, LJ43/44): action id → accelerator, "" for no key. */
+  keys: Record<string, string>;
 }
 
 /** Where Little Joan keeps things (Rust's get_settings), for the Privacy tab. */
@@ -50,6 +53,10 @@ export interface SettingsView {
   version: string;
   /** The sites built in on this OS (YouTube on the desktop site on macOS and Linux). */
   builtInSiteModes: BuiltInSite[];
+  /** The saved shortcut couldn't be registered at launch (LJ44). */
+  shortcutProblem: ShortcutProblem | null;
+  /** A Linux Wayland session: the global shortcut can't fire. */
+  waylandNoShortcut: boolean;
 }
 
 export interface SettingsInput {
@@ -67,6 +74,8 @@ export interface SettingsInput {
   siteModes?: Record<string, SiteMode>;
   /** General's icon switch; left out, Rust keeps the saved one. */
   showTrayIcon?: boolean;
+  /** Keyboard's keys; left out (not edited), Rust keeps the saved ones. */
+  keys?: Record<string, string>;
 }
 
 /** The Extensions tab's part of Save (settings/extensions-logic.ts's draft). */
@@ -89,6 +98,7 @@ export function trayText(shortcut: string): string {
 /** The tabs, in the sidebar's order. */
 export const TABS = [
   { id: "general", label: "General" },
+  { id: "keyboard", label: "Keyboard" },
   { id: "appearance", label: "Appearance" },
   { id: "extensions", label: "Extensions" },
   { id: "privacy", label: "Privacy" },
@@ -131,6 +141,7 @@ export function toInput(
   extensions?: ExtensionsInput,
   siteModes?: Record<string, SiteMode>,
   showTrayIcon?: boolean,
+  keys?: Record<string, string>,
 ): SettingsInput {
   return {
     shortcut,
@@ -142,6 +153,7 @@ export function toInput(
     ...(extensions ?? {}),
     ...(siteModes ? { siteModes } : {}),
     ...(showTrayIcon === undefined ? {} : { showTrayIcon }),
+    ...(keys ? { keys } : {}),
   };
 }
 
@@ -163,7 +175,8 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     (input.developerMode !== undefined && input.developerMode !== saved.developerMode) ||
     (input.disabledExtensions !== undefined && !sameIds(saved.disabledExtensions, input.disabledExtensions)) ||
     (input.siteModes !== undefined && !sameSites(saved.siteModes, input.siteModes)) ||
-    (input.showTrayIcon !== undefined && input.showTrayIcon !== saved.showTrayIcon)
+    (input.showTrayIcon !== undefined && input.showTrayIcon !== saved.showTrayIcon) ||
+    (input.keys !== undefined && !sameOverrides(saved.keys, input.keys))
   );
 }
 
@@ -187,6 +200,7 @@ export function rebase(draft: Settings, oldSaved: Settings, newSaved: Settings):
     theme: follow("theme", sameTheme),
     disabledExtensions: follow("disabledExtensions", sameIds),
     siteModes: follow("siteModes", sameSites),
+    keys: follow("keys", sameOverrides),
   };
 }
 

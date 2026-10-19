@@ -171,6 +171,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | History | Ctrl+H | Cmd+Y |
   | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |
 
+  These are the defaults: change any of them in **Settings → Keyboard**.
+
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,
   `gstreamer1.0-libav` on Debian/Ubuntu); the `.deb` installs them.
@@ -180,7 +182,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),
-  `little-joan --start-at-login on|off`, `little-joan --settings [general|appearance|extensions|privacy|about]`
+  `little-joan --start-at-login on|off`, `little-joan --settings [general|keyboard|appearance|extensions|privacy|about]`
   (open Settings on a tab), `little-joan --extension <id>` (open an extension's first command,
   e.g. `snake` — page actions open from the command bar, on a page; experimental), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
@@ -206,9 +208,7 @@ command bar (or type "settings" there), Cmd+, on macOS while Little Joan is in f
 tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover all of them.
 
 - **General**
-  - **Shortcut** — click it, then press the new combination. It needs a modifier (Ctrl, Alt,
-    Cmd, or Super; Shift alone doesn't count). If another app already owns it, Little Joan says
-    so and keeps the old one.
+  - **Shortcut** — the one that summons Little Joan; **Change…** takes you to the Keyboard tab.
   - **Show the icon in the menu bar / system tray** — on by default; off, the icon hides while
     the shortcut works (above).
   - **Search with** — Google, DuckDuckGo, Bing, or Brave.
@@ -219,6 +219,18 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
     Windows (the registry's Run key), `~/.config/autostart/Little Joan.desktop` on Linux. Little
     Joan keeps no copy of this setting, so if you remove it in your system's settings, it shows
     as off here too.
+- **Keyboard** — **Summon Little Joan**: click it, then press the new combination. It needs a
+  modifier (Ctrl, Alt, Cmd, or Super; Shift alone doesn't count). If another app already owns it,
+  Little Joan says so and keeps the old one; if the saved one couldn't be registered when Little
+  Joan started, both Keyboard and General say which one it uses instead. Then **Little Joan's
+  keys** — Open Location, History, Translate, Reload, Back, Forward, Open in browser, Close —, each
+  with its key: click it and press the new one (Backspace for no key, Esc to cancel), **Reset**
+  brings the default back, **Reset all** every one. Little Joan refuses keys that would type text,
+  a key two actions share, the summon shortcut, and the editing keys pages need (Ctrl/Cmd + C, V,
+  X, A, Z); it warns — without refusing — about keys the system uses ("macOS uses ⌘Space for
+  Spotlight") and about Ctrl+Alt on Windows and Linux (AltGr). On Windows, WebView2's own Ctrl+R,
+  F5 and Alt+← / Alt+→ keep working beside your keys. They're stored in `settings.json` as
+  `"keys"`.
 - **Appearance** — the theme editor. **System / Light / Dark** at the top; a live preview of the
   toolbar and the command bar; **presets** (Mist, Sand, Sage, Lagoon, Dusk, Ember, Orchid,
   Glacier, Meadow, Berry, Graphite) that apply in one click; up to three **color pads** — hue

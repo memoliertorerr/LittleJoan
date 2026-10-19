@@ -1,5 +1,5 @@
 //! The settings window: created on demand, destroyed on close, like the page window. A sidebar
-//! of tabs (General, Appearance, Extensions, Privacy, About) — the "advanced settings" that sit
+//! of tabs (General, Keyboard, Appearance, Extensions, Privacy, About) — the "advanced settings" that sit
 //! where Little Arc has "Contact the Team" (the command bar's "Settings & extensions" row). It
 //! opens on a tab from `--settings [tab]`, `open_settings(tab)`, the tray and Cmd+,; an open
 //! window is focused and switched to the tab asked for.
@@ -24,6 +24,8 @@ const SIZE: (f64, f64) = (600.0, 480.0);
 pub enum SettingsTab {
     #[default]
     General,
+    /// Every key of Little Joan's own and the global shortcut (LJ44).
+    Keyboard,
     Appearance,
     Extensions,
     Privacy,
@@ -31,8 +33,9 @@ pub enum SettingsTab {
 }
 
 impl SettingsTab {
-    pub const ALL: [SettingsTab; 5] = [
+    pub const ALL: [SettingsTab; 6] = [
         SettingsTab::General,
+        SettingsTab::Keyboard,
         SettingsTab::Appearance,
         SettingsTab::Extensions,
         SettingsTab::Privacy,
@@ -43,6 +46,7 @@ impl SettingsTab {
     pub fn name(self) -> &'static str {
         match self {
             SettingsTab::General => "general",
+            SettingsTab::Keyboard => "keyboard",
             SettingsTab::Appearance => "appearance",
             SettingsTab::Extensions => "extensions",
             SettingsTab::Privacy => "privacy",
@@ -212,6 +216,15 @@ mod tests {
         assert_eq!(
             SettingsTab::from_name(" Privacy "),
             Some(SettingsTab::Privacy)
+        );
+        assert_eq!(
+            SettingsTab::from_name("Keyboard"),
+            Some(SettingsTab::Keyboard)
+        );
+        assert_eq!(
+            SettingsTab::ALL[1],
+            SettingsTab::Keyboard,
+            "between General and Appearance"
         );
         for bad in ["", "advanced", "privacy-tab", "--quit"] {
             assert_eq!(SettingsTab::from_name(bad), None, "{bad}");

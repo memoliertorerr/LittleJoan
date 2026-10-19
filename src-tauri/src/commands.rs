@@ -201,6 +201,10 @@ pub struct SettingsView {
     /// The sites built in on this OS (General's "Phone or desktop per site"): `[{ host, mode }]`
     /// — YouTube on the desktop agent on macOS and Linux, nothing on Windows.
     built_in_site_modes: Vec<site::BuiltInSite>,
+    /// The saved shortcut couldn't be registered at launch (LJ44): `{ wanted, active, reason }`.
+    shortcut_problem: Option<shortcut::Problem>,
+    /// A Linux Wayland session, where the X11 shortcut can't fire (Keyboard explains --toggle).
+    wayland_no_shortcut: bool,
 }
 
 /// Where the web engine keeps cookies and site data (docs/architecture.md, "Where data lives"):
@@ -221,11 +225,12 @@ fn site_data<R: Runtime>(app: &AppHandle<R>, webview_dir: Option<&Path>) -> Stri
 
 #[tauri::command]
 pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
-    let (settings, folder, webview_dir) = state::with(&app, |s| {
+    let (settings, folder, webview_dir, shortcut_problem) = state::with(&app, |s| {
         (
             s.settings.clone(),
             s.data_dir.clone(),
             s.webview_data_dir.clone(),
+            s.shortcut_problem.clone(),
         )
     });
     smoke::log("settings-loaded", "");
@@ -247,6 +252,8 @@ pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
         },
         version: app.package_info().version.to_string(),
         built_in_site_modes: site::built_in_sites(),
+        shortcut_problem,
+        wayland_no_shortcut: welcome::wayland_no_shortcut_here(),
     }
 }
 
@@ -324,7 +331,11 @@ pub async fn save_settings<R: Runtime>(
         return Err(err.message);
     }
     smoke::log("shortcut-registered", &wanted);
-    state::with(&app, |s| s.active_shortcut = Some(wanted));
+    state::with(&app, |s| {
+        s.active_shortcut = Some(wanted);
+        // The saved shortcut works now: the launch's problem is over.
+        s.shortcut_problem = None;
+    });
     let updated = settings_live::apply(&app, &change)?;
     settings_window::set_theme(&app, &updated.theme);
     Ok(updated)

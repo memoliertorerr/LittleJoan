@@ -1,0 +1,85 @@
+/* Settings → Keyboard (LJ44): the summon shortcut, then one row per Little Joan key — its title,
+   its key as a recorder button, "No key" and "Reset" — with its problems under it. */
+.kb-current {
+  color: var(--lj-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-problem {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--lj-fg);
+  background: var(--lj-field);
+  border-left: 3px solid var(--lj-accent);
+  border-radius: 6px;
+}
+
+.kb-actions {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--lj-hairline);
+  border-radius: 8px;
+}
+
+.kb-action {
+  padding: 4px 6px 4px 10px;
+}
+
+.kb-action + .kb-action {
+  border-top: 1px solid var(--lj-hairline);
+}
+
+.kb-action-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  font-size: 13px;
+}
+
+.kb-action-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kb-action-buttons {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+}
+
+.settings-body .kb-action .recorder {
+  min-width: 110px;
+}
+
+.settings-body .kb-action-buttons button:not(.recorder) {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.kb-problems {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kb-problems li {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--lj-fg-muted);
+}
+
+.kb-problems li.kb-error {
+  color: var(--lj-fg);
+  font-weight: 600;
+}
+
+.kb-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 6px;
+}

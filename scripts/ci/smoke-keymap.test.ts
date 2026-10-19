@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { keymapFailures, keymapSummary, menuKeys, type KeymapRun } from "./smoke-keymap.mts";
+import { BAD_SHORTCUT, keyboardProblemFailures, keymapFailures, keymapSummary, menuKeys, type KeymapRun } from "./smoke-keymap.mts";
 
 const log = (rows: string[]) => parseLog(rows.map((row, i) => `${1000 + i} ${row}`).join("\n") + "\n");
 
@@ -35,5 +35,13 @@ describe("the keymap run's rules (LJ43)", () => {
   it("reads the menu's keys and summarises", () => {
     expect(menuKeys(log(MAC_MENU))).toEqual({ "open-location": "⌘L", history: "⌘⇧K", close: "⌘W" });
     expect(keymapSummary(run({ events: log(MAC_MENU) }), "darwin")).toMatchObject({ newKeyOpened: true, afterOldKey: ["overlay"], rules: [] });
+  });
+
+  it("wants the problem launch to fall back to the default and open Keyboard (LJ44)", () => {
+    const good = log([`shortcut-failed ${BAD_SHORTCUT}: invalid`, "shortcut-registered CommandOrControl+Shift+Space", "settings-window keyboard", "settings-loaded"]);
+    expect(keyboardProblemFailures(good)).toEqual([]);
+    expect(keyboardProblemFailures(log(["shortcut-registered CommandOrControl+Shift+Space", "settings-window keyboard", "settings-loaded"])).join()).toContain("no shortcut-failed");
+    expect(keyboardProblemFailures(log([`shortcut-failed ${BAD_SHORTCUT}: invalid`, "settings-window keyboard", "settings-loaded"])).join()).toContain("default shortcut");
+    expect(keyboardProblemFailures(log([`shortcut-failed ${BAD_SHORTCUT}: invalid`, "shortcut-registered CommandOrControl+Shift+Space", "settings-window general", "settings-loaded"])).join()).toContain("Keyboard");
   });
 });

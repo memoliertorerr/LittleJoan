@@ -21,9 +21,15 @@ All notable changes to Little Joan are recorded here. The format follows
   are saved at once, and an open Settings window keeps up.
 - **Little Joan's own keys can be changed** — Ctrl/Cmd+L, history, translate, reload, back,
   forward, open in browser, close — in `settings.json` for now (`"keys": { "history":
-  "CommandOrControl+Shift+KeyK" }`; `""` for no key); Settings gets a Keyboard tab next. Keys
-  that type text, two actions on one key and the shortcut that summons Little Joan are refused.
-  On Windows, WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ keep working beside your keys.
+  "CommandOrControl+Shift+KeyK" }`; `""` for no key). Keys that type text, two actions on one
+  key and the shortcut that summons Little Joan are refused. On Windows, WebView2's own Ctrl+R,
+  F5 and Alt+← / Alt+→ keep working beside your keys.
+- **Settings → Keyboard:** the shortcut that summons Little Joan (moved here from General, which
+  keeps a line with it and **Change…**) and every one of Little Joan's own keys, each recorded
+  with a click, with **Reset** and **Reset all**. Clashes are refused; keys the system uses —
+  Spotlight's ⌘Space, Windows' Win+…, screenshots, input sources — and Ctrl+Alt (AltGr) are
+  warned about. When the saved shortcut couldn't be registered (another app has it), Keyboard and
+  General say so, and which one Little Joan uses instead.
 
 ### Changed
 - The command bar's rows for phone or desktop per site are now **Desktop site**, **Phone site**

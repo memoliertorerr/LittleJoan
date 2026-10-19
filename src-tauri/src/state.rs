@@ -30,6 +30,9 @@ pub struct AppState {
     pub webview_data_dir: Option<PathBuf>,
     /// The accelerator currently registered as the global shortcut, if any.
     pub active_shortcut: Option<String>,
+    /// What went wrong with the saved shortcut at launch (shortcut.rs), until a save makes one
+    /// work: Settings says so (LJ44).
+    pub shortcut_problem: Option<crate::shortcut::Problem>,
     /// True while the settings window is recording a new shortcut (the active one is paused).
     pub shortcut_suspended: bool,
     /// A first run (no settings.json at launch) whose welcome the start page hasn't shown yet.
@@ -61,6 +64,7 @@ impl AppState {
             data_dir: std::env::temp_dir().join("little-joan-test-state"),
             webview_data_dir: None,
             active_shortcut: None,
+            shortcut_problem: None,
             shortcut_suspended: false,
             first_run: false,
             session_cookies: SessionCookies::default(),
@@ -100,6 +104,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         data_dir,
         webview_data_dir,
         active_shortcut: None,
+        shortcut_problem: None,
         shortcut_suspended: false,
         first_run,
         session_cookies: SessionCookies::default(),

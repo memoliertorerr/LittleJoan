@@ -109,7 +109,7 @@
 | LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ✅ done |
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ✅ done |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ✅ done |
-| LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ⬜ todo |
+| LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ⬜ todo |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ⬜ todo |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ⬜ todo |
@@ -6109,6 +6109,16 @@ two honest fix attempts, then stop). Look at both screenshots on every OS.
   switch.
 - `npm run verify`: 561 TS tests, 327 Rust tests, clippy clean. Disk: 9.2 GiB free at the start of
   the step, 8.9 GiB after verify; `.cache/target` 1.6 GB.
+- **CI (run 39212735555): all ten jobs green.** The quick-commands run, every OS (macOS typed too):
+  "mobile" logged `quick-command setMobileSites false` and saved `"mobileSites": false`; "dark"
+  logged `quick-command setThemeMode dark`, handed the bar `theme dark colors=1` and saved the mode;
+  Copy link put the smoke page's address on the clipboard on Windows and macOS (Linux's runner has
+  no clipboard tool: informational). LJ40's site-mode run, typing the same words, passed with the
+  renamed rows. **Screenshots:** `quick-theme.png` — after "dark", the dark command bar with Theme:
+  System / Light / Dark ✓ / Mist ✓ / Sand / Sage / Lagoon (the ✓ in the accent colour), on every OS;
+  `quick-page.png` — over the smoke page, "Copy link" and "Copy as Markdown link" with the copy
+  symbol, then the bundled Clean link and Copy as Markdown link page actions (Deferred follow-ups:
+  the quick row and the page action of the same name both show).
 
 ### LJ43 — One keymap: every key of Little Joan's own, configurable (engine side) · strong · auto
 
@@ -6341,6 +6351,49 @@ This ends phase 20. Fill the PR description from the template. Needs human check
 Once verify, package and smoke are green on every OS job, merge the PR into main with a merge
 commit, then stop and report.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **Rust:** `SettingsTab::Keyboard` between General and Appearance (`--settings keyboard`, any
+  case; tests). `shortcut::settle(registrar, wanted)` (pure, tested with the fake registrar):
+  registers the saved shortcut, else the default, and returns what went wrong — `Problem { wanted,
+  active, reason: taken | invalid }` (`invalid` when it doesn't parse) —, kept as
+  `AppState::shortcut_problem` until a Save registers a shortcut; `get_settings` and `keymap_info`
+  report it as `shortcutProblem`, and `get_settings` also `waylandNoShortcut`. `shortcut::TAKEN`
+  reads "Another app or the system already uses that shortcut. Try another one." (a test).
+- **The tab** (`ui/settings/keyboard.ts` glue, `keyboard-logic.ts` pure + 13 tests,
+  `reserved-shortcuts.ts` data + 2 tests, `keyboard.css`): "Summon Little Joan" — the global
+  shortcut's recorder moved here from General with its suspend / resume unchanged (General keeps a
+  line with the shortcut and **Change…**, which switches here) —, then every keymap action from
+  `keymap_info` as a recorder button with **No key** and **Reset**, its problems under it as text,
+  **Reset all** at the bottom (the keys and the summon shortcut). Recording takes the next key with
+  a modifier (Shift counts, then the rules judge it) or an F-key; Esc cancels; Backspace means no
+  key; **a letter is the one the key types in the user's layout** (`KeyboardEvent.key`, so the
+  recorded `KeyA` is what Windows' virtual keys, GDK's names and macOS's key equivalents match —
+  `code` alone would record AZERTY's A as `KeyQ`), other keys by `code`. The recorder buttons are
+  updated in place while listening (rebuilding the rows would have dropped the focus and its blur
+  rule). The rules mirror `keymap::validate` — duplicates (aliases included), the summon shortcut,
+  typing keys, macOS without ⌘ or ⌃ — as errors that disable Save; the editing keys (Ctrl/Cmd + C,
+  V, X, A, Z, Shift+Z) are errors on every OS ("used for editing in pages"); the OSes' reserved
+  shortcuts and Ctrl+Alt on Windows / Linux are warnings. The summon recorder gets the same: one of
+  Little Joan's keys → error, a reserved one → warning. Save sends `keys` only when edited
+  (`isChanged` and `rebase` know them).
+- **The reserved table** is curated from the OSes' documentation (Apple's Mac keyboard shortcuts,
+  Microsoft's Windows keyboard shortcuts, GNOME's / KDE's / Ubuntu's defaults): the Verify's
+  entries plus ⌘⌥Space, ⌘⇧Q, ⌘⌥H, ⌘⌥D, ⌃⌘F, ⌃↑ / ⌃↓ / ⌃← / ⌃→ on macOS, Ctrl+Alt+Delete on
+  Windows and Linux, Print Screen on Linux. `Super+*` matches Super with any key.
+- `ui/lib/shortcut.ts`' `keyName` now shows punctuation and arrows by their labels (`[`, `←`), so
+  "⌘[" reads as it does in macOS's menus.
+- **Smoke:** the history-off run's Settings sequence opens Keyboard after Appearance
+  (`settings-keyboard.png`; `settingsFailures` wants `settings-window keyboard` after Appearance,
+  tests); a short launch whose settings.json says `"shortcut": "Hyper+Nope"` must log
+  `shortcut-failed`, register the default, and open Keyboard (`settings-keyboard-problem.png`;
+  `keyboardProblemFailures`, tests). On macOS the runner's `com.apple.symbolichotkeys` is exported
+  into the artifacts (read-only, informational) — the evidence for the read below.
+- **Reading macOS's own shortcuts — decided by the runner's export** (this commit's CI); see the
+  follow-up note below.
+- `npm run verify`: 581 TS tests, 339 Rust tests, clippy clean. Disk: 8.8 GiB free at the start of
+  the step and after verify; `.cache/target` 1.6 GB.
 
 ---
 
@@ -7396,6 +7449,10 @@ and where, then stop.
   do nothing. Options: say so in the pill's tooltip, hide the pill for hosts where both agents gave
   the same page (Windows can compare `Page.getLayoutMetrics`; WebKit can't without page script),
   or offer page zoom (phase 8) as the way to get a "desktop" layout in a narrow window.
+- **"Copy as Markdown link" shows twice when typing "copy"** (surfaced by LJ42's CI screenshot): the
+  quick command (copies at once) and the bundled page action of the same name (opens its panel with
+  the formats). Options: drop the quick row while the extension is switched on, or rename one
+  ("Copy Markdown link" for the quick row).
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

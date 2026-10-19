@@ -7,8 +7,8 @@
 //! - `--hide`          close the window (hibernate)
 //! - `--size WxH`      resize the open window to W×H logical pixels (scripts, tests)
 //! - `--start-at-login on|off`  add or remove the OS login entry; never touches the window
-//! - `--settings [tab]`  open (or focus) Settings on a tab: general, appearance, extensions,
-//!   privacy, about (General without one, or with a name it doesn't know); never touches the
+//! - `--settings [tab]`  open (or focus) Settings on a tab: general, keyboard, appearance,
+//!   extensions, privacy, about (General without one, or with a name it doesn't know); never touches the
 //!   page window
 //! - `--extension <id>`  open an extension's panel (opens the window if needed; an unknown id
 //!   does nothing)
@@ -326,6 +326,8 @@ mod tests {
         );
         for (value, tab) in [
             ("general", SettingsTab::General),
+            ("keyboard", SettingsTab::Keyboard),
+            ("KEYBOARD", SettingsTab::Keyboard),
             ("appearance", SettingsTab::Appearance),
             ("Extensions", SettingsTab::Extensions),
             ("PRIVACY", SettingsTab::Privacy),

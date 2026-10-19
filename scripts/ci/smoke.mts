@@ -94,7 +94,7 @@ import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
-import { keymapFailures, keymapRun, keymapSummary, type KeymapDriver } from "./smoke-keymap.mts";
+import { keyboardProblemFailures, keyboardProblemRun, keymapFailures, keymapRun, keymapSummary, type KeymapDriver } from "./smoke-keymap.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -891,6 +891,11 @@ await forward(["--settings", "appearance"], historyOffEnv);
 await waitFor("settings: Appearance", (e) => settingsTabs(e.slice(settingsFrom)).includes("appearance"), 15_000, historyOffLogPath);
 await sleep(1000);
 screenshot("settings-appearance.png");
+// The Keyboard tab (LJ44): the summon shortcut and every Little Joan key.
+await forward(["--settings", "keyboard"], historyOffEnv);
+await waitFor("settings: Keyboard", (e) => settingsTabs(e.slice(settingsFrom)).includes("keyboard"), 15_000, historyOffLogPath);
+await sleep(1000);
+screenshot("settings-keyboard.png");
 // The extensions (LJ30): Hello, the developer copy, and the broken one's reason.
 await forward(["--settings", "extensions"], historyOffEnv);
 await waitFor(
@@ -1239,6 +1244,18 @@ const keymapDriver: KeymapDriver = {
 };
 const keymapCheck = await keymapRun(keymapDriver);
 console.log(`keymap: ${JSON.stringify(keymapSummary(keymapCheck, os))}`);
+// Settings → Keyboard with a saved shortcut that can't be used (LJ44): the problem line.
+const keyboardProblem = await keyboardProblemRun({ launch: fullscreenLaunch, screenshot, sleep: (ms) => sleep(ms).then(() => undefined) });
+if (os === "darwin") {
+  // Evidence for reading macOS's own shortcuts (LJ44; informational, read-only): what this
+  // runner's com.apple.symbolichotkeys holds — a CI runner holds nothing personal.
+  const plist = join(out, "symbolichotkeys.plist");
+  run("defaults", ["export", "com.apple.symbolichotkeys", plist]);
+  if (existsSync(plist)) {
+    run("plutil", ["-convert", "json", "-o", join(out, "symbolichotkeys.json"), plist]);
+  }
+  console.log(`symbolichotkeys: ${existsSync(join(out, "symbolichotkeys.json")) ? "exported" : "none"}`);
+}
 server.close();
 // The tray run (LJ41, smoke-tray.mts): the icon switched off, and every way back still there.
 const trayDriver: TrayDriver = {
@@ -1340,6 +1357,7 @@ const summary = {
   siteModeRun: siteModeSummary(siteModeCheck, os),
   quickRun: quickSummary(quickCheck, os),
   keymapRun: keymapSummary(keymapCheck, os),
+  keyboardProblem: { events: keyboardProblem.map((e) => `${e.event} ${e.detail}`.trim()).filter((line) => /^(shortcut|settings)/.test(line)), rules: keyboardProblemFailures(keyboardProblem) },
   trayRun: traySummary(trayCheck, os),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
@@ -1389,6 +1407,7 @@ const failures = evaluate(
   .concat(siteModeFailures(siteModeCheck, os))
   .concat(quickFailures(quickCheck, os))
   .concat(keymapFailures(keymapCheck, os))
+  .concat(keyboardProblemFailures(keyboardProblem))
   .concat(trayFailures(trayCheck, os))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
@@ -1397,7 +1416,7 @@ if (failures.length > 0) {
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
   const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
-  const trayLogs = ["quick", "keymap", "tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
+  const trayLogs = ["quick", "keymap", "keyboard-problem", "tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }

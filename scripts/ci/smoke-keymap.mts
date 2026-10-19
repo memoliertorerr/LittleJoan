@@ -103,6 +103,52 @@ export async function keymapRun(d: KeymapDriver): Promise<KeymapRun> {
   return { events: app.events(), newKeyOpened, ...(afterOldKey ? { afterOldKey } : {}) };
 }
 
+/** What the problem-line launch needs from smoke.mts. */
+export interface ProblemDriver {
+  launch(name: string, settings: Record<string, unknown>): Promise<SiteApp>;
+  screenshot(name: string): void;
+  sleep(ms: number): Promise<void>;
+}
+
+/** A saved shortcut that can't be one (it doesn't parse). */
+export const BAD_SHORTCUT = "Hyper+Nope";
+
+/**
+ * Settings → Keyboard (LJ44) with a saved shortcut that can't be used: its own short launch;
+ * Little Joan falls back to the default and Keyboard shows the problem line
+ * (`settings-keyboard-problem.png`).
+ */
+export async function keyboardProblemRun(d: ProblemDriver): Promise<LogEvent[]> {
+  const app = await d.launch("keyboard-problem", { shortcut: BAD_SHORTCUT });
+  await app.waitFor("keyboard problem: started", (e) => e.some((x) => x.event === "shortcut-registered" || x.event === "shortcut-failed"), 30_000);
+  await d.sleep(1000);
+  await app.forward(["--settings", "keyboard"]);
+  await app.waitFor("keyboard problem: Settings → Keyboard", (e) => e.some((x) => x.event === "settings-loaded"), 20_000);
+  await d.sleep(1500);
+  d.screenshot("settings-keyboard-problem.png");
+  await app.quit();
+  return app.events();
+}
+
+/**
+ * The problem launch's rules: the saved shortcut failed, the default was registered instead, and
+ * Settings opened on Keyboard and loaded.
+ */
+export function keyboardProblemFailures(events: LogEvent[]): string[] {
+  const failures: string[] = [];
+  const failed = events.findIndex((e) => e.event === "shortcut-failed" && e.detail.startsWith(BAD_SHORTCUT));
+  if (failed < 0) {
+    failures.push(`keyboard problem: no shortcut-failed for ${BAD_SHORTCUT}`);
+  } else if (!events.slice(failed).some((e) => e.event === "shortcut-registered" && e.detail === "CommandOrControl+Shift+Space")) {
+    failures.push("keyboard problem: the default shortcut wasn't registered instead");
+  }
+  const opened = events.findIndex((e) => e.event === "settings-window" && e.detail === "keyboard");
+  if (opened < 0 || !events.slice(opened).some((e) => e.event === "settings-loaded")) {
+    failures.push("keyboard problem: --settings keyboard never opened Settings on Keyboard");
+  }
+  return failures;
+}
+
 /** What summary.json records of the run. */
 export function keymapSummary(run: KeymapRun, os: string) {
   return {

@@ -1,5 +1,6 @@
-// The settings window: tabs in a sidebar (General, Appearance, Extensions, Privacy, About), a
-// shortcut recorder, lists and switches, and Save / Cancel for every tab. All validation happens
+// The settings window: tabs in a sidebar (General, Keyboard, Appearance, Extensions, Privacy,
+// About), lists and switches, and Save / Cancel for every tab. The Keyboard tab
+// (settings/keyboard.ts) records the summon shortcut and every Little Joan key. All validation happens
 // in Rust; this page shows what it says. Rust picks the first tab (window.__littleJoanSettingsTab,
 // set before this script runs) and switches an open window with window.littleJoanSettings.showTab.
 // The window wears the saved theme; the Appearance tab (settings/appearance.ts) edits it, the
@@ -8,7 +9,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeFrom } from "./lib/theme.ts";
-import { acceleratorFromEvent, displayShortcut } from "./lib/shortcut.ts";
+import { displayShortcut } from "./lib/shortcut.ts";
+import { keyboardTab, type KeymapInfo } from "./settings/keyboard.ts";
 import { appearance } from "./settings/appearance.ts";
 import { extensionsTab } from "./settings/extensions.ts";
 import { sitesList } from "./settings/sites.ts";
@@ -57,8 +59,6 @@ function element<T extends HTMLElement>(selector: string): T {
   return found;
 }
 
-const recorder = element<HTMLButtonElement>("#shortcut");
-const note = element<HTMLElement>("#shortcut-note");
 const tray = element<HTMLInputElement>("#tray");
 const trayLabel = element<HTMLElement>("#tray-label");
 const trayNote = element<HTMLElement>("#tray-note");
@@ -82,18 +82,15 @@ const error = element<HTMLElement>("#error");
 const save = element<HTMLButtonElement>("#save");
 const cancel = element<HTMLButtonElement>("#cancel");
 
-const NOTE = "Click, then press the keys you want to use.";
-
 const look = appearance(element<HTMLElement>("#panel-appearance"), refresh);
 const extensionsPanel = extensionsTab(element<HTMLElement>("#panel-extensions"), refresh, BUILT_INS);
 const sites = sitesList(element<HTMLElement>("#site-modes"), element<HTMLElement>("#site-modes-empty"), refresh);
+const keyboard = keyboardTab(refresh, () => showTab("keyboard", true));
 
 let saved: Settings | null = null;
 let savedLogin: boolean | null = null;
 let builtInSites: ReturnType<typeof builtInsFrom> = [];
 let isMac = false;
-let shortcut = "";
-let recording = false;
 let tab: Tab = tabFrom(window.__littleJoanSettingsTab);
 let clearing = CLEAR_START;
 
@@ -116,6 +113,9 @@ function showError(message: string): void {
 
 /** Shows `next` in the sidebar and its panel; `focus` moves the keyboard to its tab button. */
 function showTab(next: Tab, focus = false): void {
+  if (next !== "keyboard") {
+    keyboard.stopRecording();
+  }
   tab = next;
   for (const { id } of TABS) {
     const button = element<HTMLButtonElement>(`#tab-${id}`);
@@ -132,16 +132,14 @@ function showTab(next: Tab, focus = false): void {
 }
 
 function refresh(): void {
-  recorder.textContent = recording ? "Press keys…" : displayShortcut(shortcut, isMac) || "None";
-  recorder.classList.toggle("recording", recording);
-  note.textContent = recording ? "Esc cancels." : NOTE;
-  trayNote.textContent = trayText(displayShortcut(shortcut, isMac));
-  save.disabled = saved === null || !hasChanges(pending(saved));
+  trayNote.textContent = trayText(displayShortcut(keyboard.shortcut(), isMac));
+  // Errors in the Keyboard tab block Save (warnings don't).
+  save.disabled = saved === null || !hasChanges(pending(saved)) || keyboard.hasErrors();
 }
 
 function input(): SettingsInput {
   return toInput(
-    shortcut,
+    keyboard.shortcut(),
     engine.value,
     language.value,
     mobile.checked,
@@ -150,6 +148,7 @@ function input(): SettingsInput {
     extensionsPanel.draft(),
     sites.draft(),
     tray.checked,
+    keyboard.keys(),
   );
 }
 
@@ -158,7 +157,8 @@ function shownSettings(from: Settings): Settings {
   const extensions = extensionsPanel.draft();
   return {
     ...from,
-    shortcut,
+    shortcut: keyboard.shortcut(),
+    keys: keyboard.overrides(),
     searchEngine: engine.value,
     translateTo: language.value,
     mobileSites: mobile.checked,
@@ -179,6 +179,7 @@ function pending(from: Settings): Changes {
 async function apply(todo: Changes, wanted: SettingsInput, wantedLogin: boolean): Promise<void> {
   if (todo.settings) {
     saved = await invoke<Settings>("save_settings", { settings: wanted });
+    keyboard.saved(saved.shortcut, saved.keys);
   }
   if (todo.startAtLogin) {
     savedLogin = await invoke<boolean>("set_start_at_login", { enabled: wantedLogin });
@@ -187,15 +188,6 @@ async function apply(todo: Changes, wanted: SettingsInput, wantedLogin: boolean)
       throw new Error("Your system didn't keep the change. Try again, or check its login items.");
     }
   }
-}
-
-function stopRecording(): void {
-  if (!recording) {
-    return;
-  }
-  recording = false;
-  void invoke("suspend_shortcut", { suspended: false });
-  refresh();
 }
 
 /** The Privacy tab's "Clear history" (it acts at once; Save and Cancel don't cover it). */
@@ -235,40 +227,6 @@ for (const { id } of TABS) {
   });
 }
 
-recorder.addEventListener("click", () => {
-  if (recording) {
-    stopRecording();
-    return;
-  }
-  recording = true;
-  showError("");
-  void invoke("suspend_shortcut", { suspended: true });
-  refresh();
-});
-
-recorder.addEventListener("blur", stopRecording);
-
-window.addEventListener(
-  "keydown",
-  (event) => {
-    if (!recording) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.code === "Escape" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-      stopRecording();
-      return;
-    }
-    const accelerator = acceleratorFromEvent(event, isMac);
-    if (accelerator) {
-      shortcut = accelerator;
-      stopRecording();
-    }
-  },
-  true,
-);
-
 for (const control of [engine, language, mobile, tray, login, remember]) {
   control.addEventListener("change", refresh);
 }
@@ -289,7 +247,7 @@ clearCancel.addEventListener("click", () => onClear({ kind: "cancel" }));
 clearGo.addEventListener("click", () => onClear({ kind: "confirm" }));
 
 save.addEventListener("click", () => {
-  stopRecording();
+  keyboard.stopRecording();
   showError("");
   if (saved === null) {
     return;
@@ -305,7 +263,7 @@ save.addEventListener("click", () => {
 });
 
 cancel.addEventListener("click", () => {
-  stopRecording();
+  keyboard.stopRecording();
   void getCurrentWindow().close();
 });
 
@@ -326,9 +284,7 @@ window.littleJoanSettings = {
     const draft = rebase(shown, saved, next);
     const editedSites = sites.draft() !== undefined;
     saved = next;
-    if (!recording) {
-      shortcut = draft.shortcut;
-    }
+    // The shortcut and the keys never change from the command bar (Settings only).
     engine.value = draft.searchEngine;
     language.value = draft.translateTo;
     mobile.checked = draft.mobileSites;
@@ -361,7 +317,6 @@ invoke<SettingsView>("get_settings")
     saved = view.settings;
     look.load(themeFrom(view.settings.theme));
     isMac = view.platform === "macos";
-    shortcut = view.settings.shortcut;
     fill(engine, view.engines, view.settings.searchEngine);
     fill(language, view.languages, view.settings.translateTo);
     mobile.checked = view.settings.mobileSites;
@@ -380,6 +335,10 @@ invoke<SettingsView>("get_settings")
     storeFolder.textContent = view.storage.folder;
     storeSite.textContent = view.storage.siteData;
     aboutVersion.textContent = `Version ${view.version}`;
-    refresh();
+    const waylandNoShortcut = view.waylandNoShortcut;
+    return invoke<KeymapInfo>("keymap_info").then((info) => {
+      keyboard.load(info, { shortcut: view.settings.shortcut, keys: view.settings.keys }, waylandNoShortcut);
+      refresh();
+    });
   })
   .catch((err: unknown) => showError(String(err)));

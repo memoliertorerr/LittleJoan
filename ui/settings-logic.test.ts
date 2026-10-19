@@ -31,6 +31,7 @@ const saved: Settings = {
   disabledExtensions: ["hello"],
   siteModes: { "127.0.0.1": "desktop" },
   showTrayIcon: true,
+  keys: {},
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -116,6 +117,18 @@ describe("settings logic", () => {
     expect(toInput(rebased.shortcut, rebased.searchEngine, rebased.translateTo, rebased.mobileSites, rebased.rememberHistory).mobileSites).toBe(false);
   });
 
+  it("counts the keys as a change only when they differ (LJ44)", () => {
+    const withKeys = (keys: Record<string, string>) =>
+      toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory, undefined, undefined, undefined, undefined, keys);
+    expect(isChanged(saved, withKeys({}))).toBe(false);
+    expect(isChanged(saved, withKeys({ history: "CommandOrControl+Shift+KeyK" }))).toBe(true);
+    expect(isChanged({ ...saved, keys: { close: "" } }, withKeys({ close: "" }))).toBe(false);
+    expect(withKeys({ close: "" }).keys).toEqual({ close: "" });
+    expect("keys" in same()).toBe(false);
+    expect(TABS.map((tab) => tab.id)).toEqual(["general", "keyboard", "appearance", "extensions", "privacy", "about"]);
+    expect(tabFrom("Keyboard")).toBe("keyboard");
+  });
+
   it("sends only the edited fields", () => {
     expect(toInput("Alt+KeyJ", "brave", "tr", false, false)).toEqual({
       shortcut: "Alt+KeyJ",
@@ -164,8 +177,8 @@ describe("settings logic", () => {
 });
 
 describe("tabs", () => {
-  it("are General, Appearance, Extensions, Privacy and About", () => {
-    expect(TABS.map((tab) => tab.label)).toEqual(["General", "Appearance", "Extensions", "Privacy", "About"]);
+  it("are General, Keyboard, Appearance, Extensions, Privacy and About", () => {
+    expect(TABS.map((tab) => tab.label)).toEqual(["General", "Keyboard", "Appearance", "Extensions", "Privacy", "About"]);
   });
 
   it("open by name, General for anything else", () => {
@@ -178,7 +191,8 @@ describe("tabs", () => {
   });
 
   it("move with ↑/↓, Home and End, without wrapping", () => {
-    expect(tabForKey("general", "ArrowDown")).toBe("appearance");
+    expect(tabForKey("general", "ArrowDown")).toBe("keyboard");
+    expect(tabForKey("keyboard", "ArrowDown")).toBe("appearance");
     expect(tabForKey("about", "ArrowDown")).toBe("about");
     expect(tabForKey("privacy", "ArrowUp")).toBe("extensions");
     expect(tabForKey("general", "ArrowUp")).toBe("general");

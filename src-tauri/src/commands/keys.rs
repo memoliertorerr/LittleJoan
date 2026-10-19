@@ -5,6 +5,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 
 use crate::keymap::ActionInfo;
+use crate::shortcut::Problem;
 use crate::state;
 
 /// Every action with its key now and its defaults, and the global shortcut beside them.
@@ -17,15 +18,23 @@ pub struct KeymapInfo {
     actions: Vec<ActionInfo>,
     /// The saved global shortcut (accelerator syntax).
     global_shortcut: String,
+    /// It couldn't be registered at launch (LJ44): `{ wanted, active, reason: taken | invalid }`.
+    shortcut_problem: Option<Problem>,
 }
 
 #[tauri::command]
 pub async fn keymap_info<R: Runtime>(app: AppHandle<R>) -> KeymapInfo {
-    let (actions, global_shortcut) =
-        state::with(&app, |s| (s.keymap.info(), s.settings.shortcut.clone()));
+    let (actions, global_shortcut, shortcut_problem) = state::with(&app, |s| {
+        (
+            s.keymap.info(),
+            s.settings.shortcut.clone(),
+            s.shortcut_problem.clone(),
+        )
+    });
     KeymapInfo {
         platform: std::env::consts::OS,
         actions,
         global_shortcut,
+        shortcut_problem,
     }
 }
