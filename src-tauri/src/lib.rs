@@ -90,7 +90,8 @@ pub fn run() {
             commands::open_extensions_folder,
             commands::open_extension,
             commands::site::site_mode_info,
-            commands::site::set_site_mode
+            commands::site::set_site_mode,
+            commands::app::quit_app
         ])
         // Extension panels and their API (extensions/protocol.rs). Registered for every
         // webview; each request is checked (extensions/api.rs), and only the page webview's
@@ -121,6 +122,8 @@ pub fn run() {
             state::init(handle)?;
             tray::create(handle)?;
             shortcut::register_from_settings(handle);
+            // Hidden only while the shortcut works (tray.rs, LJ41).
+            tray::apply_visibility(handle);
 
             // A first launch with flags (e.g. `--show <url>`, `--start-at-login on`, `--settings`) acts on
             // them; without flags Little Joan starts hibernating — except on the very first run

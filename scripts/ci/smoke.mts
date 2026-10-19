@@ -23,7 +23,10 @@
 // 380 ↔ 820 px 30 ms apart and the phone-mode hysteresis, screenshots resize-380.png and
 // resize-820.png; smoke-resize.mts), then the site-mode run (its own launch: the toolbar's phone
 // pill, the command bar's "Request desktop site" and "Automatic for this site", Settings' list,
-// Windows' client hints from the server's agent-headers.jsonl; smoke-sitemode.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
+// Windows' client hints from the server's agent-headers.jsonl; smoke-sitemode.mts), then the tray
+// run (its own launches with the icon switched off: it hides, a plain second launch opens the
+// window, the command bar's "Quit Little Joan" quits, Settings → General shows the switch, and on
+// Linux a Wayland session brings the icon back; smoke-tray.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
 // smoke-theme.mts) and the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
@@ -85,6 +88,7 @@ import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionF
 import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } from "./smoke-fullscreen.mts";
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
+import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -1157,13 +1161,14 @@ for (const run of THEME_RUNS) {
 
 /**
  * The fullscreen run (LJ36, smoke-fullscreen.mts): its own launches, driven through clicks only.
- * `name` names the data folder and the log (`smoke-<name>.log`).
+ * `name` names the data folder and the log (`smoke-<name>.log`); `extra` adds to the app's
+ * environment (the tray run's Wayland session).
  */
-function fullscreenLaunch(name: string, settings: Record<string, unknown>): Promise<SiteApp> {
+function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra: Record<string, string> = {}): Promise<SiteApp> {
   const logFile = join(out, `smoke-${name}.log`);
   rmSync(logFile, { force: true });
   const runDir = dataDir(name, true, settings);
-  const runEnv = { ...env, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
+  const runEnv = { ...env, ...extra, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
   const runChild = launch(runEnv);
   return Promise.resolve({
     pid: () => appPid(runChild),
@@ -1202,6 +1207,18 @@ const siteDriver: SiteDriver = {
 const siteModeCheck = await siteModeRun(siteDriver);
 console.log(`site mode: ${JSON.stringify(siteModeSummary(siteModeCheck, os))}`);
 server.close();
+// The tray run (LJ41, smoke-tray.mts): the icon switched off, and every way back still there.
+const trayDriver: TrayDriver = {
+  os,
+  launch: fullscreenLaunch,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  typeText,
+  pressKeys,
+  exited,
+};
+const trayCheck = await trayRun(trayDriver);
+console.log(`tray: ${JSON.stringify(traySummary(trayCheck, os))}`);
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
 // and the default settings are saved; the next launch on the same folder hibernates.
@@ -1288,6 +1305,7 @@ const summary = {
   fullscreenRun: fullscreenSummary(fullscreenCheck, os),
   resizeRun: { steps: resizeSummary(resizeCheck.results), rules: resizeFailures(RESIZE_STEPS, resizeCheck.results) },
   siteModeRun: siteModeSummary(siteModeCheck, os),
+  trayRun: traySummary(trayCheck, os),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1334,6 +1352,7 @@ const failures = evaluate(
   .concat(fullscreenFailures(fullscreenCheck, os))
   .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(siteModeFailures(siteModeCheck, os))
+  .concat(trayFailures(trayCheck, os))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));
@@ -1341,7 +1360,8 @@ if (failures.length > 0) {
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
   const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
-  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, firstLogPath, relaunchLogPath]) {
+  const trayLogs = ["tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
+  for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }
   process.exit(1);

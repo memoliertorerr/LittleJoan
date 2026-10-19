@@ -232,6 +232,23 @@ fn only_the_bar_may_read_and_set_site_modes() {
 }
 
 #[test]
+fn only_the_bar_may_quit() {
+    // The command bar's "Quit Little Joan" (LJ41): the trusted bar only — never the page.
+    let mut bar_has_it = false;
+    for (place, capability) in all_capabilities() {
+        if !permissions(&capability).contains(&"allow-quit-app") {
+            continue;
+        }
+        let only_the_bar = capability.get("identifier").and_then(Value::as_str) == Some("bar")
+            && scopes(&capability, "webviews") == [bar::BAR]
+            && scopes(&capability, "windows").is_empty();
+        assert!(only_the_bar, "{place}: only the bar's capability may quit");
+        bar_has_it = true;
+    }
+    assert!(bar_has_it, "the bar lost allow-quit-app");
+}
+
+#[test]
 fn no_capability_is_added_at_runtime() {
     // A capability added in code (Manager::add_capability) would escape the checks above.
     for path in files(&manifest_dir().join("src")) {

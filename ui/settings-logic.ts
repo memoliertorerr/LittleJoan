@@ -27,6 +27,8 @@ export interface Settings {
   disabledExtensions: string[];
   /** Phone or desktop per site (General; settings/site_modes.rs checks every entry). */
   siteModes: Record<string, SiteMode>;
+  /** The tray / menu-bar icon; off, it hides while the shortcut works (General, LJ41). */
+  showTrayIcon: boolean;
 }
 
 /** Where Little Joan keeps things (Rust's get_settings), for the Privacy tab. */
@@ -63,12 +65,25 @@ export interface SettingsInput {
   developerMode?: boolean;
   /** General's per-site list; left out (not edited), Rust keeps the saved one. */
   siteModes?: Record<string, SiteMode>;
+  /** General's icon switch; left out, Rust keeps the saved one. */
+  showTrayIcon?: boolean;
 }
 
 /** The Extensions tab's part of Save (settings/extensions-logic.ts's draft). */
 export interface ExtensionsInput {
   disabledExtensions: string[];
   developerMode: boolean;
+}
+
+/** General's icon switch: the menu bar on macOS, the system tray elsewhere. */
+export function trayLabelFor(platform: string): string {
+  return platform === "macos" ? "Show the icon in the menu bar" : "Show the icon in the system tray";
+}
+
+/** The note under the icon switch, naming the shortcut as Settings shows it ("" = none yet). */
+export function trayText(shortcut: string): string {
+  const press = shortcut ? `press ${shortcut}` : "press your shortcut";
+  return `Without it, ${press} or open Little Joan again from your apps. The icon comes back by itself whenever the shortcut can't work.`;
 }
 
 /** The tabs, in the sidebar's order. */
@@ -115,6 +130,7 @@ export function toInput(
   theme?: Theme,
   extensions?: ExtensionsInput,
   siteModes?: Record<string, SiteMode>,
+  showTrayIcon?: boolean,
 ): SettingsInput {
   return {
     shortcut,
@@ -125,6 +141,7 @@ export function toInput(
     ...(theme ? { theme } : {}),
     ...(extensions ?? {}),
     ...(siteModes ? { siteModes } : {}),
+    ...(showTrayIcon === undefined ? {} : { showTrayIcon }),
   };
 }
 
@@ -145,7 +162,8 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     (input.theme !== undefined && !sameTheme(saved.theme, input.theme)) ||
     (input.developerMode !== undefined && input.developerMode !== saved.developerMode) ||
     (input.disabledExtensions !== undefined && !sameIds(saved.disabledExtensions, input.disabledExtensions)) ||
-    (input.siteModes !== undefined && !sameSites(saved.siteModes, input.siteModes))
+    (input.siteModes !== undefined && !sameSites(saved.siteModes, input.siteModes)) ||
+    (input.showTrayIcon !== undefined && input.showTrayIcon !== saved.showTrayIcon)
   );
 }
 

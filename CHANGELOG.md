@@ -6,6 +6,15 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Hide the tray / menu-bar icon** (Settings → General → "Show the icon in the menu bar" on
+  macOS, "… in the system tray" on Windows and Linux). Little Joan then lives on its shortcut;
+  opening it again from your apps also opens the window. The icon comes back by itself whenever
+  the shortcut can't work (none could be registered, or a Linux Wayland session), so Little Joan
+  is never out of reach.
+- **Settings and Quit in the command bar:** type "settings" (or "preferences", "options") for
+  **Settings**, "quit" (or "exit") for **Quit Little Joan**.
+
 ## [0.2.0-beta.3] — 2026-10-18
 
 A third pre-release of v0.2: smoother resizing, phone or desktop per site, and fixes — YouTube's

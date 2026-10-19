@@ -11,6 +11,8 @@ import {
   tabForKey,
   tabFrom,
   toInput,
+  trayLabelFor,
+  trayText,
   type Settings,
 } from "./settings-logic.ts";
 
@@ -27,6 +29,7 @@ const saved: Settings = {
   developerMode: false,
   disabledExtensions: ["hello"],
   siteModes: { "127.0.0.1": "desktop" },
+  showTrayIcon: true,
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -67,6 +70,27 @@ describe("settings logic", () => {
     expect(isChanged(saved, withSites({ "127.0.0.1": "desktop", "youtube.com": "auto" }))).toBe(true);
     expect(withSites({}).siteModes).toEqual({});
     expect("siteModes" in same()).toBe(false);
+  });
+
+  it("counts the icon switch as a change only when it differs", () => {
+    const withIcon = (showTrayIcon: boolean) =>
+      toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory, undefined, undefined, undefined, showTrayIcon);
+    expect(isChanged(saved, withIcon(true))).toBe(false);
+    expect(isChanged(saved, withIcon(false))).toBe(true);
+    expect(isChanged({ ...saved, showTrayIcon: false }, withIcon(false))).toBe(false);
+    expect(withIcon(false).showTrayIcon).toBe(false);
+    expect("showTrayIcon" in same()).toBe(false);
+    expect(hasChanges(changes(saved, true, withIcon(false), true))).toBe(true);
+  });
+
+  it("names the menu bar on macOS and the system tray elsewhere, and the shortcut in the note", () => {
+    expect(trayLabelFor("macos")).toBe("Show the icon in the menu bar");
+    expect(trayLabelFor("windows")).toBe("Show the icon in the system tray");
+    expect(trayLabelFor("linux")).toBe("Show the icon in the system tray");
+    expect(trayText("⌘⇧Space")).toBe(
+      "Without it, press ⌘⇧Space or open Little Joan again from your apps. The icon comes back by itself whenever the shortcut can't work.",
+    );
+    expect(trayText("")).toContain("press your shortcut");
   });
 
   it("sends only the edited fields", () => {

@@ -31,7 +31,9 @@ export type Action =
   /** A quick answer's text, to copy (LJ31). */
   | { kind: "copy"; text: string }
   /** Phone or desktop for the open web page's site (LJ40: set_site_mode). */
-  | { kind: "siteMode"; mode: "auto" | "phone" | "desktop" };
+  | { kind: "siteMode"; mode: "auto" | "phone" | "desktop" }
+  /** Quit Little Joan (LJ41: quit_app — the way out when the tray icon is hidden). */
+  | { kind: "quit" };
 
 export interface Row {
   kind: RowKind;
@@ -93,7 +95,42 @@ export const HISTORY_ROW: Row = {
   action: { kind: "history" },
 };
 
-const HISTORY_WORD = "history";
+const HISTORY_WORDS = ["history"] as const;
+
+/** The built-in "Settings" command (LJ41): Settings on General — reachable without the icon. */
+export const SETTINGS_COMMAND_ROW: Row = {
+  kind: "command",
+  title: "Settings",
+  domain: "",
+  host: "",
+  icon: "settings",
+  action: { kind: "settings", tab: "general" },
+};
+
+const SETTINGS_WORDS = ["settings", "preferences", "options"] as const;
+
+/** The built-in "Quit Little Joan" command (LJ41): the tray's Quit, for when the icon is hidden. */
+export const QUIT_ROW: Row = {
+  kind: "command",
+  title: "Quit Little Joan",
+  domain: "",
+  host: "",
+  icon: "power",
+  action: { kind: "quit" },
+};
+
+const QUIT_WORDS = ["quit", "exit"] as const;
+
+/**
+ * Whether what is typed names a built-in command: it starts one of the command's words (two
+ * letters or more: "hi", "pref", "qu"), or one of the typed words is one of them ("clear
+ * history", "open settings").
+ */
+function names(typed: string, words: readonly string[]): boolean {
+  const starts = typed.length >= 2 && words.some((word) => word.startsWith(typed));
+  const typedWords = typed.split(/\s+/);
+  return starts || words.some((word) => typedWords.includes(word));
+}
 
 /** Says which of the site-mode rows is the site's mode now (in the row's muted part). */
 export const CURRENT_MODE = "current";
@@ -127,14 +164,18 @@ export function siteModeRows(query: string, site: SiteModeInfo | null): Row[] {
 
 /**
  * The built-in commands for what is typed: "History" when the text starts the word (two letters
- * or more: "hi", "hist") or contains it ("history", "clear history"); with a web page open, the
- * site-mode rows (`siteModeRows`).
+ * or more: "hi", "hist") or contains it ("history", "clear history"); "Settings" the same way for
+ * "settings", "preferences" or "options", and "Quit Little Joan" for "quit" or "exit" (LJ41); with
+ * a web page open, the site-mode rows (`siteModeRows`).
  */
 export function builtInCommands(query: string, site: SiteModeInfo | null = null): Row[] {
   const typed = query.trim().toLowerCase();
-  const starts = typed.length >= 2 && HISTORY_WORD.startsWith(typed);
-  const names = typed.split(/\s+/).includes(HISTORY_WORD);
-  return [...(starts || names ? [HISTORY_ROW] : []), ...siteModeRows(query, site)];
+  return [
+    ...(names(typed, HISTORY_WORDS) ? [HISTORY_ROW] : []),
+    ...(names(typed, SETTINGS_WORDS) ? [SETTINGS_COMMAND_ROW] : []),
+    ...(names(typed, QUIT_WORDS) ? [QUIT_ROW] : []),
+    ...siteModeRows(query, site),
+  ];
 }
 
 function rowFor(suggestion: Suggestion): Row {

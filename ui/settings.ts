@@ -25,6 +25,8 @@ import {
   tabForKey,
   tabFrom,
   toInput,
+  trayLabelFor,
+  trayText,
   type Changes,
   type Choice,
   type ClearEvent,
@@ -51,6 +53,9 @@ function element<T extends HTMLElement>(selector: string): T {
 
 const recorder = element<HTMLButtonElement>("#shortcut");
 const note = element<HTMLElement>("#shortcut-note");
+const tray = element<HTMLInputElement>("#tray");
+const trayLabel = element<HTMLElement>("#tray-label");
+const trayNote = element<HTMLElement>("#tray-note");
 const login = element<HTMLInputElement>("#login");
 const loginNote = element<HTMLElement>("#login-note");
 const engine = element<HTMLSelectElement>("#engine");
@@ -123,6 +128,7 @@ function refresh(): void {
   recorder.textContent = recording ? "Press keys…" : displayShortcut(shortcut, isMac) || "None";
   recorder.classList.toggle("recording", recording);
   note.textContent = recording ? "Esc cancels." : NOTE;
+  trayNote.textContent = trayText(displayShortcut(shortcut, isMac));
   save.disabled = saved === null || !hasChanges(pending(saved));
 }
 
@@ -136,6 +142,7 @@ function input(): SettingsInput {
     look.draft(),
     extensionsPanel.draft(),
     sites.draft(),
+    tray.checked,
   );
 }
 
@@ -237,7 +244,7 @@ window.addEventListener(
   true,
 );
 
-for (const control of [engine, language, mobile, login, remember]) {
+for (const control of [engine, language, mobile, tray, login, remember]) {
   control.addEventListener("change", refresh);
 }
 
@@ -299,6 +306,8 @@ invoke<SettingsView>("get_settings")
     fill(language, view.languages, view.settings.translateTo);
     mobile.checked = view.settings.mobileSites;
     remember.checked = view.settings.rememberHistory;
+    tray.checked = view.settings.showTrayIcon;
+    trayLabel.textContent = trayLabelFor(view.platform);
     extensionsPanel.load({ disabledExtensions: view.settings.disabledExtensions, developerMode: view.settings.developerMode });
     sites.load(siteModesFrom(view.settings.siteModes), builtInsFrom(view.builtInSiteModes));
     savedLogin = view.startAtLogin;

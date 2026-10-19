@@ -48,6 +48,23 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// A state with the default settings and nothing open, for tests.
+    #[cfg(test)]
+    pub fn for_tests() -> AppState {
+        AppState {
+            settings: Settings::default(),
+            data_dir: std::env::temp_dir().join("little-joan-test-state"),
+            webview_data_dir: None,
+            active_shortcut: None,
+            shortcut_suspended: false,
+            first_run: false,
+            session_cookies: SessionCookies::default(),
+            history: None,
+            theme_preview: None,
+            painted_background: None,
+        }
+    }
+
     /// The theme the bar shows: the preview while Settings edits one, else the saved theme.
     pub fn shown_theme(&self) -> Theme {
         self.theme_preview
@@ -127,18 +144,7 @@ mod tests {
 
     #[test]
     fn the_bar_shows_the_preview_while_settings_edits_one() {
-        let mut state = AppState {
-            settings: Settings::default(),
-            data_dir: temp_dir("preview"),
-            webview_data_dir: None,
-            active_shortcut: None,
-            shortcut_suspended: false,
-            first_run: false,
-            session_cookies: SessionCookies::default(),
-            history: None,
-            theme_preview: None,
-            painted_background: None,
-        };
+        let mut state = AppState::for_tests();
         assert_eq!(state.shown_theme(), Theme::default());
         let preview = Theme {
             colors: vec!["#9d8fd0".into()],

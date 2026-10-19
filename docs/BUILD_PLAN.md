@@ -106,7 +106,7 @@
 | LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ✅ done |
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ✅ done (the bar's background only — see notes) |
 | LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ✅ done — the owner's check passed 2026-10-18 (see LJ40's notes); `v0.2.0-beta.3` released |
-| LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
+| LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ✅ done |
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ⬜ todo |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ⬜ todo |
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ⬜ todo |
@@ -5909,6 +5909,54 @@ notes (with df -h), and commit everything as one commit: "lj-step-41: hide the t
 phase-20 PR into main as a draft, and watch CI until every job is green (Ground Rule 3; two honest
 fix attempts, then stop). Look at the screenshot on every OS.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **The rule** (`tray.rs`, pure and tested): `icon_visible(show_icon, shortcut_works)` = shown unless
+  the setting is off and the shortcut works; `shortcut_works(active_shortcut, wayland_no_shortcut)`
+  — no registered shortcut (`AppState::active_shortcut` `None`: the saved one and the default both
+  failed) or a Linux Wayland session (`welcome::wayland_no_shortcut_here`) → false; a shortcut
+  paused while Settings records one stays the active one, so it still counts (a test builds that
+  state). `apply_visibility` reads the setting and the active shortcut, calls the tray's own
+  `set_visible` only when the answer changed (an `AtomicU8`: nothing yet / shown / hidden — the
+  icon is built visible), and logs `tray-visible <bool>` the first time and on each change. It
+  runs after `shortcut::register_from_settings` in setup and after every `save_settings`.
+- **What `set_visible` does** (tray-icon 0.25.1, read in the registry): macOS removes the
+  `NSStatusItem` and builds it again from its kept attributes (icon, menu, tooltip) when shown;
+  Windows sends the tray's hidden window `WM_USER_SHOW_TRAYICON`, which hides or shows the
+  notification icon; **Linux sets the AppIndicator's status to `Passive` (hidden) or `Active`**.
+  Tauri runs it on the main thread (`run_item_main_thread!`: inline on the main thread, else it
+  waits for it), so it is never called with the state lock held. At startup the icon is created
+  visible and hidden in the same main-thread turn of setup, before the event loop runs.
+- **A swap that left no shortcut** (a small change to `shortcut::swap`, which the prompt's "one
+  that left no shortcut brings the icon back" needs): its error is now `SwapError { message,
+  old_kept }` — `old_kept` false when there was none, or the old one couldn't be registered again
+  after the new one was refused (another app took it in that moment; a test). `save_settings`
+  then forgets the active shortcut and applies the rule before returning the message, so the icon
+  comes back; a failed swap that restored the old one changes nothing.
+- **Settings:** `showTrayIcon` (default true; a wrong type falls back; tests). General: "Show the
+  icon in the menu bar" (macOS) / "… in the system tray" (`trayLabelFor`), right under the shortcut,
+  with the note from the prompt naming the shortcut as the recorder shows it (`trayText`, both
+  tested); `toInput` sends `showTrayIcon` and `isChanged` counts it (tests); `save_settings` takes
+  it as an optional field (left out, the saved one stays), like Developer mode.
+- **The command bar:** `builtInCommands` gains **Settings** (`settings`, `preferences`, `options`:
+  Settings on General through `open_settings`, the gear) and **Quit Little Joan** (`quit`, `exit`:
+  the new `quit_app`, a power symbol as a CSS mask), matched like History (one shared `names`: the
+  typed text starts a word, two letters or more, or a typed word is one); both always find room
+  among the 8 rows (a test with 12 history matches and a quick answer). "Settings & extensions"
+  stays the last row. `quit_app` (`src-tauri/src/commands/app.rs`) is `joan::quit`; build.rs's
+  manifest and `capabilities/bar.json` gain exactly `allow-quit-app`, and
+  `capability_tests.rs`' `only_the_bar_may_quit` fails if any other capability grants it.
+- `cli.rs`' `a_plain_second_launch_shows_the_window` already pins `forwarded_command()` →
+  `Show(None)` for a launch without flags: kept as it is.
+- **Smoke** (`scripts/ci/smoke-tray.mts` + test, after the site-mode run): its own launches through
+  `fullscreenLaunch` (which now takes extra environment variables). In the command bar "quit" is
+  the second row (the search row comes first), so the run presses ↓ ↓ Enter as the site-mode run
+  does; `command-quit.png` shows the typed command bar. The Settings screenshot is a relaunch of
+  its own (`tray-settings`), because Settings open beside the page window could take the
+  keyboard from the command bar's typing.
+- `npm run verify`: 545 TS tests, 317 Rust tests, clippy clean. Disk: 10 GiB free at the start of
+  the phase, 9.2 GiB after verify; `.cache/target` 1.6 GB.
 
 ### LJ42 — Quick commands in the command bar, each showing its state · standard · auto
 

@@ -61,12 +61,24 @@ impl<R: Runtime> Registrar for PluginRegistrar<'_, R> {
 pub const TAKEN: &str = "That shortcut is taken by another app or the system. Try another one.";
 pub const INVALID: &str = "That shortcut can't be used. Try another one.";
 
+/// Why a swap failed: the message for the user, and whether the old shortcut still works (it
+/// was put back, or never touched). `false` when there was none, or it couldn't come back — then
+/// no shortcut works, and the tray icon must show (tray.rs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwapError {
+    pub message: String,
+    pub old_kept: bool,
+}
+
 /// Replaces the active shortcut `old` with `new`. On failure the old shortcut is registered
 /// again and a message for the user is returned, so there is always a working shortcut if there
-/// was one before.
-pub fn swap(registrar: &impl Registrar, old: Option<&str>, new: &str) -> Result<(), String> {
+/// was one before — unless the old one can't come back either (`SwapError::old_kept`).
+pub fn swap(registrar: &impl Registrar, old: Option<&str>, new: &str) -> Result<(), SwapError> {
     if parse(new).is_err() {
-        return Err(INVALID.to_owned());
+        return Err(SwapError {
+            message: INVALID.to_owned(),
+            old_kept: old.is_some(),
+        });
     }
     if old == Some(new) {
         return Ok(());
@@ -80,12 +92,17 @@ pub fn swap(registrar: &impl Registrar, old: Option<&str>, new: &str) -> Result<
         Ok(()) => Ok(()),
         Err(err) => {
             eprintln!("little-joan: could not register the new shortcut: {err}");
-            if let Some(old) = old
-                && let Err(err) = registrar.register(old)
-            {
-                eprintln!("little-joan: could not restore the old shortcut: {err}");
-            }
-            Err(TAKEN.to_owned())
+            let old_kept = old.is_some_and(|old| match registrar.register(old) {
+                Ok(()) => true,
+                Err(err) => {
+                    eprintln!("little-joan: could not restore the old shortcut: {err}");
+                    false
+                }
+            });
+            Err(SwapError {
+                message: TAKEN.to_owned(),
+                old_kept,
+            })
         }
     }
 }
@@ -193,9 +210,38 @@ mod tests {
         fake.register("Alt+KeyJ").expect("free");
         assert_eq!(
             swap(&fake, Some("Alt+KeyJ"), "Alt+KeyK"),
-            Err(TAKEN.to_owned())
+            Err(SwapError {
+                message: TAKEN.to_owned(),
+                old_kept: true
+            })
         );
         assert_eq!(registered(&fake), ["Alt+KeyJ"]);
+    }
+
+    #[test]
+    fn swap_says_when_the_old_shortcut_couldnt_come_back() {
+        // Another app took the old one in the moment it was free.
+        let fake = Fake {
+            taken: BTreeSet::from(["Alt+KeyK".to_owned(), "Alt+KeyJ".to_owned()]),
+            ..Fake::default()
+        };
+        fake.registered.borrow_mut().insert("Alt+KeyJ".to_owned());
+        assert_eq!(
+            swap(&fake, Some("Alt+KeyJ"), "Alt+KeyK"),
+            Err(SwapError {
+                message: TAKEN.to_owned(),
+                old_kept: false
+            })
+        );
+        assert!(registered(&fake).is_empty());
+        let none = Fake {
+            taken: BTreeSet::from(["Alt+KeyK".to_owned()]),
+            ..Fake::default()
+        };
+        assert_eq!(
+            swap(&none, None, "Alt+KeyK").map_err(|err| err.old_kept),
+            Err(false)
+        );
     }
 
     #[test]
@@ -204,7 +250,10 @@ mod tests {
         fake.register("Alt+KeyJ").expect("free");
         assert_eq!(
             swap(&fake, Some("Alt+KeyJ"), "Ctrl+Nope"),
-            Err(INVALID.to_owned())
+            Err(SwapError {
+                message: INVALID.to_owned(),
+                old_kept: true
+            })
         );
         assert_eq!(registered(&fake), ["Alt+KeyJ"]);
     }

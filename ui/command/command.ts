@@ -192,6 +192,9 @@ export function commandBar(
         // command bar closes so the page shows.
         void invoke("set_site_mode", { mode: action.mode }).then(() => invoke("set_overlay", { on: false }));
         break;
+      case "quit":
+        void invoke("quit_app");
+        break;
     }
   };
 

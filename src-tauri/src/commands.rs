@@ -30,6 +30,8 @@ use crate::toggle::Command;
 use crate::translate::{LANGUAGES, is_valid_lang};
 use crate::welcome;
 
+/// The app itself from the command bar (LJ41): `quit_app`.
+pub mod app;
 /// Phone or desktop per site (LJ40): `site_mode_info`, `set_site_mode`.
 pub mod site;
 
@@ -262,6 +264,9 @@ pub struct SettingsInput {
     /// changed it while Settings was open).
     #[serde(default)]
     site_modes: Option<Value>,
+    /// Settings → General's tray / menu-bar icon switch. Left out, the saved one stays.
+    #[serde(default)]
+    show_tray_icon: Option<bool>,
 }
 
 /// Validates and applies new settings: the shortcut is swapped live (the old one comes back if
@@ -279,7 +284,14 @@ pub async fn save_settings<R: Runtime>(
     // state.
     shortcut::set_suspended(&app, false);
     let old = state::with(&app, |s| s.active_shortcut.clone());
-    shortcut::swap(&PluginRegistrar(&app), old.as_deref(), &wanted)?;
+    if let Err(err) = shortcut::swap(&PluginRegistrar(&app), old.as_deref(), &wanted) {
+        if !err.old_kept {
+            // Neither the new shortcut nor the old one works now: the icon comes back.
+            state::with(&app, |s| s.active_shortcut = None);
+            crate::tray::apply_visibility(&app);
+        }
+        return Err(err.message);
+    }
     smoke::log("shortcut-registered", &wanted);
     let (dir, updated, theme_changed) = state::with(&app, |s| {
         let before = s.shown_theme();
@@ -305,6 +317,7 @@ pub async fn save_settings<R: Runtime>(
                 || s.settings.site_modes.clone(),
                 |v| settings::site_modes::parse(Some(v)),
             ),
+            show_tray_icon: settings.show_tray_icon.unwrap_or(s.settings.show_tray_icon),
             ..s.settings.clone()
         };
         (
@@ -316,6 +329,8 @@ pub async fn save_settings<R: Runtime>(
     if theme_changed {
         bar::forget_painted(&app);
     }
+    // The icon shown or hidden (LJ41): by the switch, and whether the new shortcut works.
+    crate::tray::apply_visibility(&app);
     // Switched-off extensions and Developer mode take effect with the next read.
     extensions::registry::forget();
     // Phone mode on or off takes effect on the open page at once, and so does the theme.

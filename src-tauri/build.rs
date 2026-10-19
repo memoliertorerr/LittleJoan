@@ -33,6 +33,7 @@ fn main() {
             "open_extension",
             "site_mode_info",
             "set_site_mode",
+            "quit_app",
         ]),
     ))
     .expect("failed to run tauri-build");

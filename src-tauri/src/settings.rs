@@ -57,6 +57,9 @@ pub struct Settings {
     /// Per site: the phone or the desktop user agent whatever the width, or `auto`
     /// (settings/site_modes.rs; phone.rs adds a built-in list for the WebKit engines).
     pub site_modes: BTreeMap<String, SiteMode>,
+    /// The tray / menu-bar icon (on by default). Off, it is hidden — unless the global shortcut
+    /// can't work, when it comes back by itself (tray.rs).
+    pub show_tray_icon: bool,
 }
 
 impl Default for Settings {
@@ -74,6 +77,7 @@ impl Default for Settings {
             developer_mode: false,
             disabled_extensions: Vec::new(),
             site_modes: BTreeMap::new(),
+            show_tray_icon: true,
         }
     }
 }
@@ -132,6 +136,10 @@ pub fn parse(json: &str) -> Settings {
         .get("developerMode")
         .and_then(Value::as_bool)
         .unwrap_or(defaults.developer_mode);
+    let show_tray_icon = map
+        .get("showTrayIcon")
+        .and_then(Value::as_bool)
+        .unwrap_or(defaults.show_tray_icon);
 
     Settings {
         version: SETTINGS_VERSION,
@@ -146,6 +154,7 @@ pub fn parse(json: &str) -> Settings {
         developer_mode,
         disabled_extensions: disabled_extensions(map.get("disabledExtensions")),
         site_modes: site_modes::parse(map.get("siteModes")),
+        show_tray_icon,
     }
 }
 
@@ -255,6 +264,7 @@ mod tests {
             developer_mode: true,
             disabled_extensions: vec!["hello".into(), "builtin:calc".into()],
             site_modes: BTreeMap::from([("youtube.com".to_owned(), SiteMode::Phone)]),
+            show_tray_icon: false,
             theme: Theme {
                 mode: ThemeMode::Dark,
                 colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],
@@ -372,6 +382,22 @@ mod tests {
             json.contains(r#""siteModes":{"youtube.com":"phone"}"#),
             "{json}"
         );
+    }
+
+    #[test]
+    fn the_tray_icon_shows_unless_switched_off() {
+        assert!(Settings::default().show_tray_icon);
+        assert!(
+            parse("{}").show_tray_icon,
+            "settings from before the option existed"
+        );
+        assert!(!parse(r#"{"showTrayIcon": false}"#).show_tray_icon);
+        assert!(
+            parse(r#"{"showTrayIcon": "no"}"#).show_tray_icon,
+            "a wrong type falls back"
+        );
+        let json = serde_json::to_string(&Settings::default()).expect("json");
+        assert!(json.contains(r#""showTrayIcon":true"#), "{json}");
     }
 
     #[test]

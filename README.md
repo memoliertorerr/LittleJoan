@@ -84,8 +84,9 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   completed in the field (Tab accepts it) —, a search with your search engine, then more matches.
   ↑/↓ choose a row, Enter opens it (with no row chosen, Enter opens what you typed), Shift+Delete
   removes a page from your history, × or Esc closes the command bar. Typing "history" (or just
-  "hi") offers **History**. The last row, **Settings & extensions**, opens Settings on its
-  Extensions tab.
+  "hi") offers **History**; "settings" (or "preferences", "options") offers **Settings**; "quit"
+  (or "exit") offers **Quit Little Joan**. The last row, **Settings & extensions**, opens Settings
+  on its Extensions tab.
 - **Quick answers** come first in the command bar as you type; Enter copies the answer:
   - calculator: `= 12*7`, `(1+2)^3`, `sqrt(2)`, `50% * 30`, `2pi`;
   - units: `10 km in mi`, `72f to c`, `5 kg in lb`, `1 gallon to liters`, `100 km/h in mph`,
@@ -171,8 +172,14 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   (open Settings on a tab), `little-joan --extension <id>` (open an extension's first command,
   e.g. `snake` — page actions open from the command bar, on a page; experimental), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
-- **Quit:** tray menu → **Quit Little Joan**, `little-joan --quit`, or Cmd+Q on macOS while
-  it's in front.
+- **No icon, if you prefer:** switch off **Show the icon in the menu bar** (macOS) / **in the
+  system tray** (Windows, Linux) in Settings → General. Little Joan then lives on the shortcut
+  alone; opening it again from your apps (or `little-joan` with no flags) also brings up the
+  window, and the command bar has **Settings** and **Quit Little Joan**. The icon comes back by
+  itself whenever the shortcut can't work — when neither yours nor the default could be
+  registered, or on a Linux Wayland session — so Little Joan is never out of reach.
+- **Quit:** tray menu → **Quit Little Joan**, the command bar's **Quit Little Joan** (type
+  "quit"), `little-joan --quit`, or Cmd+Q on macOS while it's in front.
 
 ## Translate
 
@@ -183,13 +190,15 @@ you to be signed in usually can't be translated this way.
 ## Settings
 
 Open **Settings…** from the tray / menu-bar icon, **Settings & extensions** at the bottom of the
-command bar, Cmd+, on macOS while Little Joan is in front, or `little-joan --settings [tab]`. Its
+command bar (or type "settings" there), Cmd+, on macOS while Little Joan is in front, or `little-joan --settings [tab]`. Its
 tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover all of them.
 
 - **General**
   - **Shortcut** — click it, then press the new combination. It needs a modifier (Ctrl, Alt,
     Cmd, or Super; Shift alone doesn't count). If another app already owns it, Little Joan says
     so and keeps the old one.
+  - **Show the icon in the menu bar / system tray** — on by default; off, the icon hides while
+    the shortcut works (above).
   - **Search with** — Google, DuckDuckGo, Bing, or Brave.
   - **Translate pages to** — the language for "Translate Page".
   - **Mobile sites in a narrow window** — phone mode (above).

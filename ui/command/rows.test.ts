@@ -3,6 +3,8 @@ import type { SiteModeInfo } from "../toolbar/logic.ts";
 import {
   CURRENT_MODE,
   HISTORY_ROW,
+  QUIT_ROW,
+  SETTINGS_COMMAND_ROW,
   MAX_SUGGESTIONS,
   SETTINGS_ROW,
   autofillFor,
@@ -140,6 +142,40 @@ describe("rows while typing", () => {
       expect(builtInCommands(query), query).toEqual([]);
     }
     expect(buildRows("", [], {}).rows).not.toContainEqual(HISTORY_ROW);
+  });
+
+  it("offers Settings and Quit for their names, two letters or more (LJ41)", () => {
+    for (const query of ["settings", "SET", "se", "preferences", "pref", "options", "opt", "open settings"]) {
+      expect(builtInCommands(query), query).toEqual([SETTINGS_COMMAND_ROW]);
+    }
+    for (const query of ["quit", "qu", "QUIT", "exit", "ex", "quit little joan"]) {
+      expect(builtInCommands(query), query).toEqual([QUIT_ROW]);
+    }
+    for (const query of ["s", "q", "e", "o", "p", "settingsx", "quitter", "exits"]) {
+      expect(builtInCommands(query), query).toEqual([]);
+    }
+    expect(SETTINGS_COMMAND_ROW.action).toEqual({ kind: "settings", tab: "general" });
+    expect(SETTINGS_COMMAND_ROW.icon).toBe("settings");
+    expect(QUIT_ROW.action).toEqual({ kind: "quit" });
+    expect(QUIT_ROW.icon).toBe("power");
+    expect(buildRows("", [], {}).rows).not.toContainEqual(QUIT_ROW);
+    // "Settings & extensions" stays the last row.
+    expect(buildRows("settings", [GOOGLE]).rows.at(-1)).toEqual(SETTINGS_ROW);
+  });
+
+  it("keeps room for Settings and Quit among many matches", () => {
+    for (const [query, row] of [
+      ["settings", SETTINGS_COMMAND_ROW],
+      ["quit", QUIT_ROW],
+      ["exit", QUIT_ROW],
+      ["preferences", SETTINGS_COMMAND_ROW],
+    ] as const) {
+      const many = Array.from({ length: 12 }, (_, i): Suggestion => ({ ...EXAMPLE, url: `https://${query}${i}.test/`, host: `${query}${i}.test` }));
+      const { rows } = buildRows(query, [...many, GOOGLE], { quickAnswer: () => ({ ...SETTINGS_ROW, kind: "answer" }) });
+      expect(rows, query).toHaveLength(MAX_SUGGESTIONS + 1);
+      expect(rows.at(-2), query).toEqual(row);
+      expect(rows.at(-1), query).toEqual(SETTINGS_ROW);
+    }
   });
 
   it("only history rows can be removed", () => {
