@@ -2839,6 +2839,26 @@ download.png.
   smoke also lists files of the run found in the home folder or the working folder
   (`downloads.elsewhere`, informational, tidied). `npm run verify`: 615 TS tests, 358 Rust tests,
   clippy clean.
+- **CI for the fix (run 39275497527): macOS and Windows' downloads right, every Linux job red.**
+  macOS: the WKDownloads were noted (`download-noted` before each), **closing the window cancelled
+  the slow one** — the server saw the connection close after 4 of 40 chunks, `download-cancelled 4`,
+  nothing left in Downloads — and after each `--show <download>` the toolbar went back to the smoke
+  page (`bar-url …/smoke.html`). Linux, 24.04 and 22.04 alike: **the hook was never added** — the
+  app printed "no hook on WebKitGTK's downloads": `g_signal_lookup` finds a signal only once its
+  class has been initialised, and before the first download WebKitDownload's hadn't (GLib's docs say
+  so; the old lookup ran during a download) — so wry's handlers decided, putting the files in the
+  working folder (`downloads.elsewhere` listed them: wry falls back to the current folder without an
+  XDG download dir), which also tells what 22.04 did in the first run. macOS's smoke also failed
+  one rule of the bundled run this step doesn't touch: the QR page action's panel loaded 5 s after
+  `extension-opened qr` and never made its API calls — the same macOS symptom as LJ29's race flake
+  (Deferred follow-ups).
+- **`lj-step-15-fix2`:** `g_type_class_ref(WebKitDownload)` before the lookup (kept for the process's
+  lifetime), smoke log `download-hook decide-destination` once added; `download-decide
+  page|no-view|other` for each download; and a download without a web view counts as the page's
+  while a page window is open (nothing else of Little Joan's downloads: the bar and Settings stay on
+  the app's pages) — in case WebKitGTK 2.50 decides on a download object it hasn't tied to the view.
+  GLib's `signal_emit_unlocked_R` (2.72, 22.04's) checked: emission hooks run after a RUN_FIRST class
+  closure and before the handler list is even looked up, and a disconnected handler is skipped.
 
 ### LJ16 — Page zoom · standard · auto
 

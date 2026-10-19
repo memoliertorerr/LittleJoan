@@ -10,7 +10,8 @@
 //! So Little Joan decides in an **emission hook** on `WebKitDownload::decide-destination`: it runs
 //! for every download in the process, before any handler, whatever the context and whenever the
 //! signal comes (CI's Ubuntu 22.04 — WebKitGTK 2.50.4 — never ran a handler connected in the
-//! context's `download-started`; 2.52 did). For a download from the open window's page webview it
+//! context's `download-started`; 2.52 did). For a download from the open window's page webview (or
+//! one with no web view while that window is open: nothing else of Little Joan's downloads) it
 //! disconnects that download's other `decide-destination` handlers (wry's: a handler disconnected
 //! during an emission is skipped), sets the destination itself (bar/download.rs decides; a
 //! `file://` URI, which WebKitGTK 4.1's legacy API wants on 2.50), or cancels a refused one; the
@@ -64,13 +65,15 @@ pub fn take<R: Runtime>(app: &AppHandle<R>, view: &webkit2gtk::WebView) {
         }
     });
     HOOK.call_once(|| {
-        // SAFETY: the signal is looked up on WebKitDownload's own (registered) type, and the hook
-        // is a plain function that lives as long as the process; no data is passed to it.
+        // SAFETY: WebKitDownload's class is referenced first — a signal exists only once its class
+        // was initialised (`g_signal_lookup` finds nothing before the first download otherwise; the
+        // reference is kept for the process's lifetime) —, the signal is looked up on that type,
+        // and the hook is a plain function that lives as long as the process; no data is passed.
         let hooked = unsafe {
-            let signal = gobject_ffi::g_signal_lookup(
-                c"decide-destination".as_ptr(),
-                webkit2gtk::Download::static_type().into_glib(),
-            );
+            let download_type = webkit2gtk::Download::static_type().into_glib();
+            let _class = gobject_ffi::g_type_class_ref(download_type);
+            let signal =
+                gobject_ffi::g_signal_lookup(c"decide-destination".as_ptr(), download_type);
             signal != 0
                 && gobject_ffi::g_signal_add_emission_hook(
                     signal,
@@ -80,7 +83,9 @@ pub fn take<R: Runtime>(app: &AppHandle<R>, view: &webkit2gtk::WebView) {
                     None,
                 ) != 0
         };
-        if !hooked {
+        if hooked {
+            smoke::log("download-hook", "decide-destination");
+        } else {
             eprintln!("little-joan: no hook on WebKitGTK's downloads; they are WebKitGTK's own");
         }
     });
@@ -122,17 +127,26 @@ unsafe extern "C" fn on_decide_destination(
     gtk::glib::ffi::GTRUE
 }
 
-/// Whether `download` comes from the open window's page webview.
-fn from_page(download: &webkit2gtk::Download) -> bool {
-    let Some(from) = download.web_view() else {
-        return false;
-    };
-    PAGE_VIEW.with(|page| {
-        page.borrow()
-            .as_ref()
-            .and_then(gtk::glib::WeakRef::upgrade)
-            .is_some_and(|page| page == from)
-    })
+/// Where a download comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    /// The open window's page webview.
+    Page,
+    /// No web view (none of Little Joan's starts one so; taken as the page's while a page
+    /// window is open — the bar and Settings never leave the app's own pages).
+    NoView,
+    /// Another web view, or no page window: left to WebKitGTK (and wry).
+    Other,
+}
+
+fn source_of(download: &webkit2gtk::Download) -> Source {
+    let page = PAGE_VIEW.with(|page| page.borrow().as_ref().and_then(gtk::glib::WeakRef::upgrade));
+    match (download.web_view(), page) {
+        (_, None) => Source::Other,
+        (None, Some(_)) => Source::NoView,
+        (Some(view), Some(page)) if view == page => Source::Page,
+        (Some(_), Some(_)) => Source::Other,
+    }
 }
 
 fn decide_destination<R: Runtime>(
@@ -140,8 +154,16 @@ fn decide_destination<R: Runtime>(
     download: &webkit2gtk::Download,
     suggested: Option<&str>,
 ) {
-    if !from_page(download) {
-        smoke::log("download-decide", "other");
+    let source = source_of(download);
+    smoke::log(
+        "download-decide",
+        match source {
+            Source::Page => "page",
+            Source::NoView => "no-view",
+            Source::Other => "other",
+        },
+    );
+    if source == Source::Other {
         return;
     }
     let Some(url) = download
