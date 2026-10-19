@@ -8176,9 +8176,9 @@ and where, then stop.
   39297748893 logged exactly that on all four Linux jobs).
 - **Windows CI: a synthetic Ctrl+0 can miss the app** (phase 9, run 39301164697; green on a re-run):
   in the main run's zoom check SendKeys' Ctrl+= reached the page and Ctrl+0 3 s later didn't — the
-  first miss of that check in eight Windows runs. If it recurs, look at where the keyboard focus is
-  after the zoom status shows (the toolbar's status area changes), or send the key twice, rather
-  than loosen the rule.
+  first miss of that check in the five Windows runs that had it. If it recurs, look at where the
+  keyboard focus is after the zoom status shows (the toolbar's status area changes), or send the
+  key twice, rather than loosen the rule.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
