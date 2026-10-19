@@ -180,7 +180,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). Next: phase 20.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Next: phase 7.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -200,6 +200,15 @@ and the guard fixed it on every element path; YouTube gets the desktop agent on 
 opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
+
+**Phase 20 (LJ41 → LJ44, 2026-10-19)** is PR #24 on `lj/p20-control`, merged by the agent once
+verify, package and smoke were green on every OS job (the standing exception). The tray / menu-bar
+icon can be hidden and comes back by itself whenever the shortcut can't work; the command bar has
+Settings, Quit and quick commands showing their state (settings changes share one checked path
+with Save); every Little Joan key comes from one keymap and can be changed in Settings → Keyboard,
+with clashes refused and the OSes' reserved shortcuts warned about (on macOS refined by its own
+preferences, read-only). Human checks are in PR #24. **Next: phase 7 (LJ13 → LJ14)** — on the
+owner's go.
 
 **Phase 19 (LJ39 → LJ40, 2026-10-18)** is PR #22 on `lj/p19-resizing`, merged by the agent once
 verify, package and smoke were green on every OS job (the standing exception). Resizing applies
@@ -6442,6 +6451,11 @@ commit, then stop and report.
   README said so, the tab didn't); Rust's `Binding::display` shows punctuation and arrows as
   Settings does (⌘[, Alt+←), so the menu log and Rust's refusals read like the tab.
 - `npm run verify`: 585 TS tests, 342 Rust tests, clippy clean. Disk: 14 GiB free.
+- **CI for the fix (run 39219919487): all ten jobs green.** macOS's Keyboard tab read
+  `system-shortcuts 19 keys=2` — exactly the runner's export (`systemShortcutFailures` passed);
+  `settings-keyboard-problem.png` now shows "Hyper+Nope" as written with "That isn't a shortcut
+  Little Joan can use: record another one, or Reset." under it (Save off). Windows' note about
+  WebView2's own keys sits under the list, below the fold of the screenshot.
 
 ---
 
