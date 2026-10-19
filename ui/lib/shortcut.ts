@@ -104,6 +104,11 @@ const MODIFIER_CODES = new Set([
 const SHORTCUT_KEY =
   /^(Key[A-Z]|Digit[0-9]|F([1-9]|1[0-9]|2[0-4])|Space|Enter|Tab|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(Up|Down|Left|Right)|Backquote|Backslash|BracketLeft|BracketRight|Comma|Equal|Minus|Period|Quote|Semicolon|Slash|Numpad[0-9]|Numpad(Add|Subtract|Multiply|Divide|Decimal|Enter))$/;
 
+/** Whether a global shortcut may end in `code` (the recorder's keys). */
+export function isShortcutKey(code: string): boolean {
+  return SHORTCUT_KEY.test(code);
+}
+
 /** F13–F24 exist on few keyboards, so they may be used without a modifier. */
 const LONE_KEY = /^F(1[3-9]|2[0-4])$/;
 

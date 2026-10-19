@@ -23,6 +23,7 @@ import {
   type Os,
   type Problem,
   type ShortcutProblem,
+  type SystemShortcut,
 } from "./keyboard-logic.ts";
 
 /** What Rust's keymap_info() says. */
@@ -31,6 +32,8 @@ export interface KeymapInfo {
   actions: KeyActionInfo[];
   globalShortcut: string;
   shortcutProblem: ShortcutProblem | null;
+  /** macOS's own shortcuts as read from its preferences (empty elsewhere). */
+  systemShortcuts: SystemShortcut[];
 }
 
 export interface KeyboardTab {
@@ -73,6 +76,7 @@ export function keyboardTab(changed: () => void, showKeyboard: () => void): Keyb
   const current = find<HTMLElement>("#shortcut-current");
   const generalProblem = find<HTMLElement>("#general-problem");
   const change = find<HTMLButtonElement>("#shortcut-change");
+  const engineNote = find<HTMLElement>("#kb-engine-note");
 
   let os: Os = "linux";
   let draft: KeyboardDraft = { os, actions: [], overrides: {}, summon: DEFAULT_SUMMON };
@@ -237,7 +241,8 @@ export function keyboardTab(changed: () => void, showKeyboard: () => void): Keyb
     load(info, saved, waylandNoShortcut) {
       os = info.platform === "macos" ? "macos" : info.platform === "windows" ? "windows" : "linux";
       savedKeys = { ...saved.keys };
-      draft = { os, actions: info.actions, overrides: { ...saved.keys }, summon: saved.shortcut };
+      draft = { os, actions: info.actions, overrides: { ...saved.keys }, summon: saved.shortcut, system: info.systemShortcuts };
+      engineNote.hidden = os !== "windows";
       const problem = info.shortcutProblem ? problemText(info.shortcutProblem, os) : "";
       for (const line of [problemLine, generalProblem]) {
         line.textContent = problem;

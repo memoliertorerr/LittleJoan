@@ -6261,6 +6261,10 @@ Joan key, configurable in settings (engine side)". Push and watch CI until every
   learned Shift (SendKeys `^+k`, xdotool `ctrl+shift+k`, the Swift script's Command + Shift flags).
 - `npm run verify`: 565 TS tests, 338 Rust tests, clippy clean. Disk: 8.9 GiB free at the start of
   the step, 8.8 GiB after verify; `.cache/target` 1.6 GB.
+- **CI (run 39214438496): all ten jobs green.** The keymap run, every OS: Ctrl+Shift+K (macOS ⌘⇧K,
+  through the menu) opened the history view and the old key (Ctrl+H; ⌘Y) then opened nothing;
+  macOS logged `menu-keys history=⌘⇧K` and `open-location=⌘L`. The main run's default history key
+  and LJ40's site-mode and LJ42's quick runs passed as before.
 
 ### LJ44 — Settings → Keyboard: record every key; clashes and the system's reserved shortcuts · standard · auto
 
@@ -6394,6 +6398,50 @@ commit, then stop and report.
   follow-up note below.
 - `npm run verify`: 581 TS tests, 339 Rust tests, clippy clean. Disk: 8.8 GiB free at the start of
   the step and after verify; `.cache/target` 1.6 GB.
+- **CI (run 39216324726): all ten jobs green after one re-run.** The first attempt's linux-scale-2
+  smoke failed one rule of LJ36's fullscreen run — both "Phone player" clicks (at 2080,1453) never
+  reached the page (no report at 390 or 720 px) — a synthetic click that didn't arrive, in a run
+  this phase doesn't touch (LJ41–LJ43's CI passed it on that job); `gh run rerun --failed` once:
+  green. The Settings sequence logged `settings-window keyboard` after Appearance everywhere; the
+  problem launch logged `shortcut-failed Hyper+Nope: invalid`, registered the default and opened
+  Keyboard on every OS. **Screenshots:** `settings-keyboard.png` — the Keyboard tab between General
+  and Appearance: "Summon Little Joan" (⌘⇧Space / Ctrl+Shift+Space), then Little Joan's keys with
+  their recorders, "No key" and no Reset (all defaults): macOS ⌘L, ⌘Y, ⌘⇧T, ⌘R, ⌘[; Windows Ctrl+L,
+  Ctrl+H, Ctrl+Shift+T and "No key" for Reload / Back / Forward; Linux (scale 1 and 2) Ctrl+R, Alt+←,
+  Alt+→ too; `settings-keyboard-problem.png` — the problem line ("“Hyper+Nope” couldn't be
+  registered: it isn't a shortcut Little Joan can use. Little Joan is using ⌘⇧Space instead.") on
+  every OS, but the summon row read "HyperNope" on macOS (the display joined text that isn't a
+  shortcut), and nothing stopped saving that shortcut again — fixed below; General shows "Shortcut
+  Ctrl+Shift+Space [Change…]".
+
+**`lj-step-44-fix` — macOS's own shortcuts read (decided), and what the screenshots showed:**
+
+- **The decision, by the runner's export** (`symbolichotkeys.json` from run 39216324726, kept as
+  test data in `src-tauri/src/system_shortcuts/macos-runner.json` — a runner holds nothing
+  personal): 19 entries; 12 say only `enabled: false` (no key), Mission Control's space moves
+  (79–82) only `enabled: true`, the input sources (60, 61) are switched off **with their keys**
+  (`[32, 49, 262144]` → ⌃Space, `[32, 49, 786432]` → ⌃⌥Space: exactly the curated table's), and 164
+  is a `modifier` entry (a lone modifier, no key). So the domain is not empty and the mapping is
+  trustworthy where an entry has a key; entries without one say nothing — which the plan's design
+  already handles: **shipped**, with the curated table as the base. `system_shortcuts::parse`
+  (pure; tests on the export and on decoded flags — ⇧⌘3, ⌃← with the function-key flag, unknown
+  codes) and `platform/mac.rs`' `symbolic_hotkeys()` (NSUserDefaults `persistentDomainForName:`,
+  the property list walked into JSON through `msg_send`, in an autorelease pool; no new crate);
+  `keymap_info` adds `systemShortcuts` (empty on Windows and Linux). Curated macOS entries carry
+  their domain ids (Spotlight 64, Finder search 65, input sources 60 / 61, screenshots 28 / 30 /
+  184, ⌘` 27, ⌥⌘D 52, ⌃↑ 32, ⌃↓ 33, ⌃← 79, ⌃→ 81); in `reservedProblems` an entry switched off — or
+  moved to another key — drops its curated warning, and one that is on with a key warns there
+  ("macOS uses ⌥Space for Spotlight", else "one of its keyboard shortcuts"). It reads only; nothing
+  is ever written (Ground Rule 21). The read wasn't run on the development Mac (it would read the
+  owner's own preferences): CI's macOS smoke compares what `keymap_info` read (`system-shortcuts
+  <n> keys=<k>`) with the runner's export (`systemShortcutFailures`, tests).
+- **Fixes from the screenshots:** a summon shortcut that isn't one shows as written ("Hyper+Nope",
+  `show`) and is an error ("That isn't a shortcut Little Joan can use: record another one, or
+  Reset.") so Save can't store it again (`isShortcutKey`, exported from `ui/lib/shortcut.ts`);
+  Windows gets a note that WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these keys (the
+  README said so, the tab didn't); Rust's `Binding::display` shows punctuation and arrows as
+  Settings does (⌘[, Alt+←), so the menu log and Rust's refusals read like the tab.
+- `npm run verify`: 585 TS tests, 342 Rust tests, clippy clean. Disk: 14 GiB free.
 
 ---
 

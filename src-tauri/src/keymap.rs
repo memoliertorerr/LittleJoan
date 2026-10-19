@@ -211,11 +211,33 @@ impl Binding {
             }
         }
         let code = self.key.code().unwrap_or_default();
-        let key = code
-            .strip_prefix("Key")
-            .or_else(|| code.strip_prefix("Digit"))
-            .unwrap_or(&code)
-            .to_owned();
+        let symbol = match self.key {
+            Key::Equal => Some("="),
+            Key::Minus => Some("-"),
+            Key::BracketLeft => Some("["),
+            Key::BracketRight => Some("]"),
+            Key::Comma => Some(","),
+            Key::Period => Some("."),
+            Key::Slash => Some("/"),
+            Key::Semicolon => Some(";"),
+            Key::Quote => Some("'"),
+            Key::Backquote => Some("`"),
+            Key::Backslash => Some("\\"),
+            Key::Left => Some("←"),
+            Key::Right => Some("→"),
+            Key::Up => Some("↑"),
+            Key::Down => Some("↓"),
+            _ => None,
+        };
+        let key = symbol.map_or_else(
+            || {
+                code.strip_prefix("Key")
+                    .or_else(|| code.strip_prefix("Digit"))
+                    .unwrap_or(&code)
+                    .to_owned()
+            },
+            str::to_owned,
+        );
         if mac {
             format!("{}{key}", names.concat())
         } else {

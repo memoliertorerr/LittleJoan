@@ -213,7 +213,14 @@ fn bindings_display_like_settings() {
         Binding::parse("Alt+ArrowLeft")
             .expect("parses")
             .display(LINUX),
-        "Alt+ArrowLeft"
+        "Alt+←"
+    );
+    assert_eq!(
+        Binding::parse("CommandOrControl+BracketLeft")
+            .expect("parses")
+            .display(MAC),
+        "⌘[",
+        "as ui/lib/shortcut.ts shows it"
     );
     assert_eq!(
         Binding::parse("CommandOrControl+Digit1")

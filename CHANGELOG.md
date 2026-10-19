@@ -28,7 +28,8 @@ All notable changes to Little Joan are recorded here. The format follows
   keeps a line with it and **Change…**) and every one of Little Joan's own keys, each recorded
   with a click, with **Reset** and **Reset all**. Clashes are refused; keys the system uses —
   Spotlight's ⌘Space, Windows' Win+…, screenshots, input sources — and Ctrl+Alt (AltGr) are
-  warned about. When the saved shortcut couldn't be registered (another app has it), Keyboard and
+  warned about; on macOS the system shortcuts you turned off or moved in System Settings are taken
+  into account (read only, never changed). When the saved shortcut couldn't be registered (another app has it), Keyboard and
   General say so, and which one Little Joan uses instead.
 
 ### Changed

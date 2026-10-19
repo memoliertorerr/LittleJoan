@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { BAD_SHORTCUT, keyboardProblemFailures, keymapFailures, keymapSummary, menuKeys, type KeymapRun } from "./smoke-keymap.mts";
+import {
+  BAD_SHORTCUT,
+  exportCounts,
+  keyboardProblemFailures,
+  keymapFailures,
+  keymapSummary,
+  menuKeys,
+  systemShortcutFailures,
+  type KeymapRun,
+} from "./smoke-keymap.mts";
 
 const log = (rows: string[]) => parseLog(rows.map((row, i) => `${1000 + i} ${row}`).join("\n") + "\n");
 
@@ -43,5 +52,23 @@ describe("the keymap run's rules (LJ43)", () => {
     expect(keyboardProblemFailures(log(["shortcut-registered CommandOrControl+Shift+Space", "settings-window keyboard", "settings-loaded"])).join()).toContain("no shortcut-failed");
     expect(keyboardProblemFailures(log([`shortcut-failed ${BAD_SHORTCUT}: invalid`, "settings-window keyboard", "settings-loaded"])).join()).toContain("default shortcut");
     expect(keyboardProblemFailures(log([`shortcut-failed ${BAD_SHORTCUT}: invalid`, "shortcut-registered CommandOrControl+Shift+Space", "settings-window general", "settings-loaded"])).join()).toContain("Keyboard");
+  });
+
+  it("wants macOS's read to match the runner's own export of its shortcuts (LJ44)", () => {
+    const exported = JSON.stringify({
+      AppleSymbolicHotKeys: {
+        "15": { enabled: false },
+        "60": { enabled: false, value: { type: "standard", parameters: [32, 49, 262144] } },
+        "164": { enabled: true, value: { type: "modifier", parameters: [262144, 1] } },
+      },
+    });
+    expect(exportCounts(exported)).toEqual({ entries: 3, keys: 1 });
+    expect(exportCounts("nope")).toBeNull();
+    expect(exportCounts(undefined)).toBeNull();
+    expect(systemShortcutFailures(log(["system-shortcuts 3 keys=1"]), exported, "darwin")).toEqual([]);
+    expect(systemShortcutFailures(log(["system-shortcuts 2 keys=1"]), exported, "darwin").join()).toContain("export has 3");
+    expect(systemShortcutFailures(log([]), exported, "darwin").join()).toContain("never logged");
+    expect(systemShortcutFailures(log(["system-shortcuts 0 keys=0"]), undefined, "darwin")).toEqual([]);
+    expect(systemShortcutFailures(log([]), exported, "linux")).toEqual([]);
   });
 });

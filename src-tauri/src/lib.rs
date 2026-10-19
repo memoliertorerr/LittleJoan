@@ -31,6 +31,7 @@ pub mod shortcut;
 pub mod smoke;
 pub mod state;
 pub mod suggest;
+pub mod system_shortcuts;
 pub mod toggle;
 pub mod translate;
 pub mod welcome;

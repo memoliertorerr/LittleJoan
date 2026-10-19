@@ -12,8 +12,10 @@ import {
   resetAll,
   resetKey,
   sameKeys,
+  reservedProblems,
   sameOverrides,
   setKey,
+  show,
   summonProblems,
   writeAccelerator,
   type KeyActionInfo,
@@ -169,5 +171,50 @@ describe("the draft", () => {
       "“Hyper+Nope” couldn't be registered: it isn't a shortcut Little Joan can use. Little Joan is using Ctrl+Shift+Space instead.",
     );
     expect(problemText({ wanted: "Alt+KeyJ", active: null, reason: "taken" }, "windows")).toContain("Little Joan has no shortcut now.");
+  });
+});
+
+describe("macOS's own shortcuts, read from its preferences (LJ44)", () => {
+  // The CI runner's export (system_shortcuts.rs' test data): the input sources switched off.
+  const RUNNER = [
+    { id: 60, enabled: false, accelerator: "Control+Space" },
+    { id: 61, enabled: false, accelerator: "Control+Alt+Space" },
+    { id: 79, enabled: true, accelerator: null },
+    { id: 81, enabled: true, accelerator: null },
+  ];
+
+  it("drops a curated warning the user switched off, and keeps the rest", () => {
+    expect(messages(reservedProblems("Control+Space", "macos"))).toEqual(["macOS uses ⌃Space for switching input sources."]);
+    expect(reservedProblems("Control+Space", "macos", RUNNER)).toEqual([]);
+    expect(reservedProblems("Control+Alt+Space", "macos", RUNNER)).toEqual([]);
+    expect(messages(reservedProblems("Control+ArrowLeft", "macos", RUNNER))).toEqual(["macOS uses ⌃← for moving between spaces."]);
+    expect(messages(summonProblems("Control+Space", { ...draft("macos"), system: RUNNER }))).toEqual([]);
+  });
+
+  it("follows a shortcut the user moved, and warns about one the table doesn't know", () => {
+    const moved = [{ id: 64, enabled: true, accelerator: "Alt+Space" }];
+    expect(reservedProblems("CommandOrControl+Space", "macos", moved)).toEqual([]);
+    expect(messages(reservedProblems("Alt+Space", "macos", moved))).toEqual(["macOS uses ⌥Space for Spotlight."]);
+    const other = [{ id: 190, enabled: true, accelerator: "CommandOrControl+Shift+KeyK" }];
+    expect(messages(actionProblems("history", "CommandOrControl+Shift+KeyK", { ...draft("macos"), system: other }))).toEqual([
+      "macOS uses ⌘⇧K for one of its keyboard shortcuts.",
+    ]);
+    expect(reservedProblems("CommandOrControl+Shift+KeyK", "macos", [{ id: 190, enabled: false, accelerator: "CommandOrControl+Shift+KeyK" }])).toEqual([]);
+    // The same key warned once, and nothing read counts off macOS.
+    expect(messages(reservedProblems("CommandOrControl+Space", "macos", [{ id: 64, enabled: true, accelerator: "CommandOrControl+Space" }]))).toEqual([
+      "macOS uses ⌘Space for Spotlight.",
+    ]);
+    expect(reservedProblems("CommandOrControl+Shift+KeyK", "windows", other)).toEqual([]);
+  });
+});
+
+describe("a saved summon shortcut that can't be one", () => {
+  it("shows as written and must be replaced before Save", () => {
+    expect(show("Hyper+Nope", "macos")).toBe("Hyper+Nope");
+    expect(show("CommandOrControl+Shift+Space", "macos")).toBe("⌘⇧Space");
+    expect(summonProblems("Hyper+Nope", draft("macos"))[0]?.level).toBe("error");
+    expect(summonProblems("CommandOrControl+Nope", draft("linux"))[0]?.level).toBe("error");
+    expect(hasErrors(draft("linux", {}, "Hyper+Nope"))).toBe(true);
+    expect(summonProblems(DEFAULT_SUMMON, draft("linux"))).toEqual([]);
   });
 });

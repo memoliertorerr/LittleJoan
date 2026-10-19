@@ -2,7 +2,9 @@
 // shortcut that summons Little Joan — is one the system uses, and refuses the editing keys pages
 // need. From the OSes' own documentation: Apple's "Mac keyboard shortcuts" (support.apple.com
 // HT201236), Microsoft's "Keyboard shortcuts in Windows", GNOME's and KDE Plasma's default
-// shortcuts and Ubuntu's. Accelerators use Little Joan's syntax (keymap.rs): on macOS
+// shortcuts and Ubuntu's. On macOS the user's own changes refine it: Rust reads them
+// (keymap_info's systemShortcuts) — one switched off drops its warning, one on another key warns
+// there instead. Accelerators use Little Joan's syntax (keymap.rs): on macOS
 // `CommandOrControl` is ⌘, `Control` ⌃, `Alt` ⌥; `Super+*` matches Super with any key. Nothing is
 // fetched at runtime; nothing here is ever changed on the system.
 
@@ -16,9 +18,20 @@ export interface Reserved {
   name: string;
   /** `error`: never allowed (the editing keys); a warning otherwise. */
   level: "error" | "warning";
+  /**
+   * macOS: its number in the `com.apple.symbolichotkeys` preferences, where the user may have
+   * switched it off or given it another key (Rust reads them: system_shortcuts.rs).
+   */
+  appleId?: number;
 }
 
-const mac = (accelerator: string, name: string): Reserved => ({ os: "macos", accelerator, name, level: "warning" });
+const mac = (accelerator: string, name: string, appleId?: number): Reserved => ({
+  os: "macos",
+  accelerator,
+  name,
+  level: "warning",
+  ...(appleId === undefined ? {} : { appleId }),
+});
 const win = (accelerator: string, name: string): Reserved => ({ os: "windows", accelerator, name, level: "warning" });
 const linux = (accelerator: string, name: string): Reserved => ({ os: "linux", accelerator, name, level: "warning" });
 const editing = (accelerator: string): Reserved => ({ os: "all", accelerator, name: "editing in pages", level: "error" });
@@ -32,28 +45,28 @@ export const RESERVED: readonly Reserved[] = [
   editing("CommandOrControl+KeyZ"),
   editing("CommandOrControl+Shift+KeyZ"),
   // macOS.
-  mac("CommandOrControl+Space", "Spotlight"),
-  mac("CommandOrControl+Alt+Space", "a Finder search window"),
-  mac("Control+Space", "switching input sources"),
-  mac("Control+Alt+Space", "switching input sources"),
+  mac("CommandOrControl+Space", "Spotlight", 64),
+  mac("CommandOrControl+Alt+Space", "a Finder search window", 65),
+  mac("Control+Space", "switching input sources", 60),
+  mac("Control+Alt+Space", "switching input sources", 61),
   mac("CommandOrControl+Control+Space", "the emoji and symbols viewer"),
-  mac("CommandOrControl+Shift+Digit3", "screenshots"),
-  mac("CommandOrControl+Shift+Digit4", "screenshots"),
-  mac("CommandOrControl+Shift+Digit5", "screenshots and recording"),
+  mac("CommandOrControl+Shift+Digit3", "screenshots", 28),
+  mac("CommandOrControl+Shift+Digit4", "screenshots", 30),
+  mac("CommandOrControl+Shift+Digit5", "screenshots and recording", 184),
   mac("CommandOrControl+Tab", "switching apps"),
-  mac("CommandOrControl+Backquote", "switching windows"),
+  mac("CommandOrControl+Backquote", "switching windows", 27),
   mac("CommandOrControl+Control+KeyQ", "locking the screen"),
   mac("CommandOrControl+Shift+KeyQ", "logging out"),
   mac("CommandOrControl+Alt+Escape", "Force Quit"),
   mac("CommandOrControl+KeyH", "hiding the app in front"),
   mac("CommandOrControl+Alt+KeyH", "hiding other apps"),
   mac("CommandOrControl+KeyM", "minimizing a window"),
-  mac("CommandOrControl+Alt+KeyD", "showing or hiding the Dock"),
+  mac("CommandOrControl+Alt+KeyD", "showing or hiding the Dock", 52),
   mac("CommandOrControl+Control+KeyF", "full screen"),
-  mac("Control+ArrowUp", "Mission Control"),
-  mac("Control+ArrowDown", "app windows"),
-  mac("Control+ArrowLeft", "moving between spaces"),
-  mac("Control+ArrowRight", "moving between spaces"),
+  mac("Control+ArrowUp", "Mission Control", 32),
+  mac("Control+ArrowDown", "app windows", 33),
+  mac("Control+ArrowLeft", "moving between spaces", 79),
+  mac("Control+ArrowRight", "moving between spaces", 81),
   // Windows.
   win("Super+*", "Windows shortcuts (the Windows key)"),
   win("Alt+Tab", "switching windows"),

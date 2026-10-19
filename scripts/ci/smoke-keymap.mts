@@ -149,6 +149,46 @@ export function keyboardProblemFailures(events: LogEvent[]): string[] {
   return failures;
 }
 
+/** What the domain export says: entries that say whether they are on, and those with a key. */
+export function exportCounts(json: string | undefined): { entries: number; keys: number } | null {
+  if (json === undefined) {
+    return null;
+  }
+  try {
+    const raw = (JSON.parse(json) as Record<string, unknown>).AppleSymbolicHotKeys;
+    const entries = typeof raw === "object" && raw !== null ? Object.entries(raw as Record<string, Record<string, unknown>>) : [];
+    const valid = entries.filter(([id, entry]) => /^\d+$/.test(id) && typeof entry === "object" && entry !== null && "enabled" in entry);
+    const keys = valid.filter(([, entry]) => {
+      const value = entry.value as Record<string, unknown> | undefined;
+      return value?.type === "standard" && Array.isArray(value.parameters) && value.parameters.length >= 3;
+    });
+    return { entries: valid.length, keys: keys.length };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * macOS (LJ44): what keymap_info read from the system's shortcuts (`system-shortcuts <n>
+ * keys=<k>`, logged when Settings → Keyboard opened) must match the runner's own export of the
+ * domain — every entry, and its keys.
+ */
+export function systemShortcutFailures(events: LogEvent[], exportJson: string | undefined, os: string): string[] {
+  if (os !== "darwin") {
+    return [];
+  }
+  const line = events.find((e) => e.event === "system-shortcuts")?.detail;
+  const read = /^(\d+) keys=(\d+)$/.exec(line ?? "");
+  const want = exportCounts(exportJson) ?? { entries: 0, keys: 0 };
+  if (!read) {
+    return ["system shortcuts: Settings → Keyboard never logged what it read (system-shortcuts)"];
+  }
+  const [entries, keys] = [Number(read[1]), Number(read[2])];
+  return entries === want.entries && keys === want.keys
+    ? []
+    : [`system shortcuts: read ${entries} entries (${keys} with keys), the runner's export has ${want.entries} (${want.keys})`];
+}
+
 /** What summary.json records of the run. */
 export function keymapSummary(run: KeymapRun, os: string) {
   return {

@@ -3,7 +3,7 @@
 // reserved shortcuts (reserved-shortcuts.ts) as warnings, and the draft of the user's own keys
 // (settings' `keys`: action id → accelerator, "" for no key; an action not named keeps its
 // default). Accelerators use the global shortcut's syntax with KeyboardEvent.code key names.
-import { displayShortcut } from "../lib/shortcut.ts";
+import { displayShortcut, isShortcutKey } from "../lib/shortcut.ts";
 import { RESERVED, type Reserved } from "./reserved-shortcuts.ts";
 
 export type Os = "macos" | "windows" | "linux";
@@ -99,9 +99,9 @@ export function sameKeys(a: string, b: string, os: Os): boolean {
   return rx.ctrl === ry.ctrl && rx.shift === ry.shift && rx.alt === ry.alt && rx.meta === ry.meta;
 }
 
-/** For people: "⌘⇧K", "Ctrl+Shift+K" (ui/lib/shortcut.ts). */
+/** For people: "⌘⇧K", "Ctrl+Shift+K" (ui/lib/shortcut.ts); text that isn't one, as it is. */
 export function show(accelerator: string, os: Os): string {
-  return displayShortcut(accelerator, os === "macos");
+  return parseAccelerator(accelerator) ? displayShortcut(accelerator, os === "macos") : accelerator;
 }
 
 /** The fields of a KeyboardEvent recording needs. */
@@ -155,12 +155,22 @@ export interface Problem {
   message: string;
 }
 
+/** One of macOS's own shortcuts as Rust read it (system_shortcuts.rs). */
+export interface SystemShortcut {
+  id: number;
+  enabled: boolean;
+  /** Its key, when its entry says one. */
+  accelerator: string | null;
+}
+
 /** The draft: the user's keys (`overrides`), the actions, the shortcut that summons Little Joan. */
 export interface KeyboardDraft {
   os: Os;
   actions: readonly KeyActionInfo[];
   overrides: Readonly<Record<string, string>>;
   summon: string;
+  /** macOS's own shortcuts as read (empty elsewhere, or when nothing could be read). */
+  system?: readonly SystemShortcut[];
 }
 
 /** The action's key in the draft: its override (null for ""), else its first default. */
@@ -210,14 +220,31 @@ export function reservedMatch(entry: Reserved, accelerator: string, os: Os): boo
   return sameKeys(entry.accelerator, accelerator, os);
 }
 
-/** The reserved shortcuts `accelerator` is: the editing keys as errors, the system's as warnings. */
-export function reservedProblems(accelerator: string, os: Os): Problem[] {
+/**
+ * The reserved shortcuts `accelerator` is: the editing keys as errors, the system's as warnings.
+ * On macOS `system` (what Rust read from its preferences) refines the curated table: an entry
+ * switched off — or moved to another key — drops that warning; an entry that is on with this key
+ * warns (under the curated name when its id is known).
+ */
+export function reservedProblems(accelerator: string, os: Os, system: readonly SystemShortcut[] = []): Problem[] {
   const shown = show(accelerator, os);
-  return RESERVED.filter((entry) => reservedMatch(entry, accelerator, os)).map((entry) =>
+  const read = new Map((os === "macos" ? system : []).map((entry) => [entry.id, entry]));
+  const moved = (entry: Reserved): boolean => {
+    const own = entry.appleId === undefined ? undefined : read.get(entry.appleId);
+    return own !== undefined && (!own.enabled || (own.accelerator !== null && !sameKeys(own.accelerator, entry.accelerator, os)));
+  };
+  const problems: Problem[] = RESERVED.filter((entry) => reservedMatch(entry, accelerator, os) && !moved(entry)).map((entry) =>
     entry.os === "all"
       ? { level: entry.level, message: `${shown} is used for editing in pages.` }
       : { level: entry.level, message: `${OS_NAMES[entry.os]} use${entry.os === "linux" ? "" : "s"} ${shown} for ${entry.name}.` },
   );
+  for (const entry of read.values()) {
+    if (entry.enabled && entry.accelerator !== null && sameKeys(entry.accelerator, accelerator, os)) {
+      const name = RESERVED.find((r) => r.appleId === entry.id)?.name ?? "one of its keyboard shortcuts";
+      problems.push({ level: "warning", message: `macOS uses ${shown} for ${name}.` });
+    }
+  }
+  return problems.filter((problem, index) => problems.findIndex((p) => p.message === problem.message) === index);
 }
 
 /** Ctrl+Alt on Windows and Linux: AltGr types characters on many layouts. */
@@ -252,7 +279,7 @@ export function actionProblems(actionId: string, accelerator: string, draft: Key
   if (sameKeys(draft.summon, accelerator, os)) {
     problems.push({ level: "error", message: "That's the shortcut that summons Little Joan." });
   }
-  return [...problems, ...reservedProblems(accelerator, os), ...altGr(accelerator, os)];
+  return [...problems, ...reservedProblems(accelerator, os, draft.system), ...altGr(accelerator, os)];
 }
 
 /** What's wrong with `accelerator` as the shortcut that summons Little Joan. */
@@ -262,7 +289,12 @@ export function summonProblems(accelerator: string, draft: KeyboardDraft): Probl
   const taken = draft.actions
     .filter((action) => bindingsOf(action, draft.overrides).some((b) => sameKeys(b, accelerator, os)))
     .map((action): Problem => ({ level: "error", message: `${shown} is already ${plain(action.title)}.` }));
-  return [...taken, ...reservedProblems(accelerator, os), ...altGr(accelerator, os)];
+  const usable = parseAccelerator(accelerator);
+  const broken: Problem[] =
+    usable && isShortcutKey(usable.code)
+      ? []
+      : [{ level: "error", message: "That isn't a shortcut Little Joan can use: record another one, or Reset." }];
+  return [...broken, ...taken, ...reservedProblems(accelerator, os, draft.system), ...altGr(accelerator, os)];
 }
 
 /** Every action's problems and the summon row's, by row ("summon" or the action id). */

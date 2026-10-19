@@ -122,6 +122,20 @@ pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     mac::set_mobile(page, mobile);
 }
 
+/// macOS's own shortcuts (LJ44, read-only; system_shortcuts.rs): the parsed
+/// `com.apple.symbolichotkeys` domain. Nothing on Windows and Linux (the curated table alone).
+#[cfg(target_os = "macos")]
+pub fn system_shortcuts() -> Vec<crate::system_shortcuts::SystemShortcut> {
+    mac::symbolic_hotkeys()
+        .map(|domain| crate::system_shortcuts::parse(&domain))
+        .unwrap_or_default()
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn system_shortcuts() -> Vec<crate::system_shortcuts::SystemShortcut> {
+    Vec::new()
+}
+
 /// macOS, smoke mode only (CI): logs WebKit's element-fullscreen state (`wk-fullscreen …`) while
 /// the page window exists. Nothing elsewhere: Windows and Linux report fullscreen through their
 /// hooks.

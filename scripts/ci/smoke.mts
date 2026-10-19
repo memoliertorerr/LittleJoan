@@ -94,7 +94,15 @@ import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
-import { keyboardProblemFailures, keyboardProblemRun, keymapFailures, keymapRun, keymapSummary, type KeymapDriver } from "./smoke-keymap.mts";
+import {
+  keyboardProblemFailures,
+  keyboardProblemRun,
+  keymapFailures,
+  keymapRun,
+  keymapSummary,
+  systemShortcutFailures,
+  type KeymapDriver,
+} from "./smoke-keymap.mts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const pageDir = join(root, "tests", "smoke");
@@ -1256,6 +1264,7 @@ if (os === "darwin") {
   }
   console.log(`symbolichotkeys: ${existsSync(join(out, "symbolichotkeys.json")) ? "exported" : "none"}`);
 }
+const symbolicHotkeys = readIfThere(join(out, "symbolichotkeys.json"));
 server.close();
 // The tray run (LJ41, smoke-tray.mts): the icon switched off, and every way back still there.
 const trayDriver: TrayDriver = {
@@ -1357,7 +1366,10 @@ const summary = {
   siteModeRun: siteModeSummary(siteModeCheck, os),
   quickRun: quickSummary(quickCheck, os),
   keymapRun: keymapSummary(keymapCheck, os),
-  keyboardProblem: { events: keyboardProblem.map((e) => `${e.event} ${e.detail}`.trim()).filter((line) => /^(shortcut|settings)/.test(line)), rules: keyboardProblemFailures(keyboardProblem) },
+  keyboardProblem: {
+    events: keyboardProblem.map((e) => `${e.event} ${e.detail}`.trim()).filter((line) => /^(shortcut|settings|system-shortcuts)/.test(line)),
+    rules: keyboardProblemFailures(keyboardProblem).concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os)),
+  },
   trayRun: traySummary(trayCheck, os),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
@@ -1408,6 +1420,7 @@ const failures = evaluate(
   .concat(quickFailures(quickCheck, os))
   .concat(keymapFailures(keymapCheck, os))
   .concat(keyboardProblemFailures(keyboardProblem))
+  .concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os))
   .concat(trayFailures(trayCheck, os))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {

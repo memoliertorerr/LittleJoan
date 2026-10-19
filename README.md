@@ -228,7 +228,9 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
   brings the default back, **Reset all** every one. Little Joan refuses keys that would type text,
   a key two actions share, the summon shortcut, and the editing keys pages need (Ctrl/Cmd + C, V,
   X, A, Z); it warns — without refusing — about keys the system uses ("macOS uses ⌘Space for
-  Spotlight") and about Ctrl+Alt on Windows and Linux (AltGr). On Windows, WebView2's own Ctrl+R,
+  Spotlight"; on macOS it also reads your own changes in System Settings → Keyboard → Keyboard
+  Shortcuts, read-only, so a system shortcut you turned off isn't warned about) and about Ctrl+Alt
+  on Windows and Linux (AltGr). On Windows, WebView2's own Ctrl+R,
   F5 and Alt+← / Alt+→ keep working beside your keys. They're stored in `settings.json` as
   `"keys"`.
 - **Appearance** — the theme editor. **System / Light / Dark** at the top; a live preview of the
