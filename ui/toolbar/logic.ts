@@ -188,21 +188,23 @@ export function isMac(userAgent: string): boolean {
 }
 
 // The status area (LJ15): a short line where the pill sits — "Downloading report.pdf…", then
-// "report.pdf saved" with "Show in folder", or "Download failed" — pushed by Rust
-// (window.littleJoan.setStatus). While it shows, the pill makes way. A finished status stays
-// STATUS_LINGER_MS of the time the toolbar is visible: opening the command bar never loses one,
-// it shows when the toolbar comes back. Generic — text and an optional action — so later steps
-// add their own kinds (LJ16 the zoom level).
+// "report.pdf saved" with "Show in folder", or "Download failed"; the page's zoom level, "Zoom
+// 110 %" (LJ16) — pushed by Rust (window.littleJoan.setStatus). While it shows, the pill makes way.
+// A finished download stays STATUS_LINGER_MS of the time the toolbar is visible, a zoom level
+// ZOOM_LINGER_MS: opening the command bar never loses one, it shows when the toolbar comes back.
+// Generic — text and an optional action — so later steps add their own kinds.
 
 /** How long a finished status stays, in milliseconds the toolbar is visible. */
 export const STATUS_LINGER_MS = 8_000;
+/** How long a zoom level shows (LJ16). */
+export const ZOOM_LINGER_MS = 1_500;
 /** The longest file name shown in full (longer ones are shortened in the middle). */
 export const MAX_STATUS_NAME = 40;
 
 export type DownloadState = "downloading" | "saved" | "failed" | "blocked";
 
 /** What Rust says happened (checked by `statusMessage`). */
-export type StatusMessage = { kind: "download"; state: DownloadState; name: string };
+export type StatusMessage = { kind: "download"; state: DownloadState; name: string } | { kind: "zoom"; percent: number };
 
 /** What a status action asks Rust for: the only one is "Show in folder". */
 export interface StatusAction {
@@ -233,11 +235,18 @@ export function statusMessage(value: unknown): StatusMessage | null {
     }
     return { kind: "download", state, name };
   }
+  if (raw.kind === "zoom") {
+    const percent = raw.percent;
+    return typeof percent === "number" && Number.isInteger(percent) && percent >= 1 && percent <= 1_000 ? { kind: "zoom", percent } : null;
+  }
   return null;
 }
 
 /** The text, tooltip and button for `message`. */
 export function statusView(message: StatusMessage): StatusView {
+  if (message.kind === "zoom") {
+    return { text: `Zoom ${message.percent} %`, title: `The page at ${message.percent} %`, action: null };
+  }
   const name = middleEllipsis(message.name, MAX_STATUS_NAME);
   switch (message.state) {
     case "downloading":
@@ -257,6 +266,9 @@ export function statusView(message: StatusMessage): StatusView {
 
 /** How long `message` stays once the toolbar shows it (null: until another replaces it). */
 export function lingerFor(message: StatusMessage): number | null {
+  if (message.kind === "zoom") {
+    return ZOOM_LINGER_MS;
+  }
   return message.state === "downloading" ? null : STATUS_LINGER_MS;
 }
 

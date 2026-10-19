@@ -171,9 +171,13 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
   | History | Ctrl+H | Cmd+Y |
+  | Zoom in / out | Ctrl+= (or Ctrl++, keypad +) / Ctrl+- (keypad −) | Cmd+= / Cmd+- |
+  | Actual size (100 %) | Ctrl+0 (keypad 0) | Cmd+0 |
   | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |
 
-  These are the defaults: change any of them in **Settings → Keyboard**.
+  These are the defaults: change any of them in **Settings → Keyboard**. Zoom steps through 50 %
+  to 300 %, shows the level in the toolbar for a moment ("Zoom 110 %"), holds while you browse in
+  the window, and is back at 100 % the next time you summon Little Joan.
 
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,

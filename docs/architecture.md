@@ -219,6 +219,10 @@ src-tauri/src/bar/background.rs    the bar webview's own background: the theme's
 src-tauri/src/bar/download.rs      downloads at run time: on_download (WebView2, WKWebView), the
                                    Downloads folder, the toolbar's status, the window closing ends
                                    them (LJ15)
+src-tauri/src/bar/status.rs        the toolbar's status area from Rust: a download's state, the zoom
+                                   level (`setStatus`), told again when the bar's script runs
+src-tauri/src/bar/zoom.rs          page zoom at run time: the window's level, `set_zoom` on the page
+src-tauri/src/zoom.rs              page zoom's levels and steps (pure, tested)
 src-tauri/src/downloads.rs         downloads: which are saved, the file's name (cleaned, capped,
                                    unique), the window's downloads under way (pure; tests in
                                    downloads/tests.rs)
@@ -296,8 +300,8 @@ src-tauri/src/keymap.rs            the keymap: every Little Joan key, the defaul
                                    user's overrides, matching, validation, keymap_info's list
                                    (pure; tests in keymap/tests.rs)
 src-tauri/src/page_actions.rs      close / open location / reload / back / forward / translate /
-                                   open in browser / history; translate_target (skips the start
-                                   page)
+                                   open in browser / history / zoom in, out, reset; translate_target
+                                   (skips the start page)
 src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView) + the page items,
                                    their keys from the keymap (set again when the keys change);
                                    Cmd+Q goes through joan::quit
@@ -374,6 +378,8 @@ scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a se
 scripts/ci/smoke-downloads.mts     CI: the downloads run (two attachments, one refused while a
                                    panel shows, the window closed during a slow one) and its rules;
                                    unit-tested
+scripts/ci/smoke-zoom.mts          CI: the main run's zoom check (Ctrl+= narrows the page's viewport,
+                                   Ctrl+0 brings it back) and its rules; unit-tested
 scripts/ci/smoke-linux.mts         CI: which process is the app on Linux (under gdb, in the
                                    AppImage), read from /proc (pure parts unit-tested)
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
@@ -666,15 +672,19 @@ shows the error.
   | Back / Forward | Alt+Left / Alt+Right (built-in) | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate page | Ctrl+Shift+T | Ctrl+Shift+T | Cmd+Shift+T |
   | History view (the command bar's overlay) | Ctrl+H | Ctrl+H | Cmd+Y (View menu) |
+  | Zoom in (LJ16) | Ctrl+= (also Ctrl+Shift+=, keypad +) | Ctrl+= (also Ctrl+Shift+=, keypad +) | Cmd+= (View → Zoom In) |
+  | Zoom out | Ctrl+- (also keypad −) | Ctrl+- (also keypad −) | Cmd+- (View → Zoom Out) |
+  | Zoom back to 100 % | Ctrl+0 (also keypad 0) | Ctrl+0 (also keypad 0) | Cmd+0 (View → Actual Size) |
   | Open page in default browser (then hibernate) | tray menu | tray menu | Cmd+Shift+O, tray menu |
   | Copy / paste / select all | built-in | built-in | Edit menu (needed by WKWebView) |
 
   Matches are exact: Ctrl+Shift+W is not Ctrl+W, and a Ctrl+Alt press (AltGr) never matches a
   Ctrl key. On macOS the menu bar is hidden (Accessory app) but its key equivalents work; Cmd+Q
   quits for real.
-- **The keymap** (`keymap.rs`, pure; tests in `keymap/tests.rs`): actions `open-location`,
-  `history`, `translate`, `reload`, `back`, `forward`, `open-in-browser`, `close` (LJ16 adds zoom,
-  LJ49 find), each with an ordered list of default bindings per OS — the first is the one Settings
+- **The keymap** (`keymap.rs`, pure; tests in `keymap/tests.rs` and `keymap/zoom_tests.rs`):
+  actions `open-location`, `history`, `translate`, `reload`, `back`, `forward`, `zoom-in`,
+  `zoom-out`, `zoom-reset` (LJ16), `open-in-browser`, `close` (LJ49 adds find), each with an
+  ordered list of default bindings per OS — the first is the one Settings
   shows and changes, the rest are fixed aliases (Linux's F5 for reload); an action may have none
   (Windows leaves Reload, Back and Forward to WebView2, which handles Ctrl+R, F5 and Alt+← / Alt+→
   itself; Open in browser has no key on Windows and Linux). Bindings are accelerators in the global
@@ -696,6 +706,22 @@ shows the error.
   item did. `keymap_info` hands it all to Settings (LJ44).
 - The app origin is `tauri://localhost` on macOS/Linux and `http://tauri.localhost` on Windows
   (`keys::app_origin`).
+- **Page zoom** (LJ16; `zoom.rs` pure, `bar/zoom.rs`): the keymap's `zoom-in` / `zoom-out` /
+  `zoom-reset` are page actions like the others (`PageAction::ZoomIn` …: WebView2's
+  `AcceleratorKeyPressed`, the GTK key hook, the macOS View menu's Zoom In, Zoom Out, Actual Size),
+  so the Keyboard tab lists them and they can be changed. They step through 50, 67, 75, 80, 90,
+  100, 110, 125, 150, 175, 200, 250 and 300 % — the next level up or down from any value, stopping
+  at the ends; reset is 100 % — and set the page webview's zoom with `Webview::set_zoom`
+  (WebView2's controller `ZoomFactor`, which "becomes the new default zoom … across navigations";
+  WKWebView's `pageZoom` and WebKitGTK's zoom level, properties of the view) — **never Tauri's
+  zoom-hotkeys option**, which on macOS and Linux injects a script into the page that needs
+  `core:webview:allow-set-webview-zoom` (IPC for remote pages) and on Windows would switch on
+  WebView2's own zoom keys and pinch zoom (`IsZoomControlEnabled` stays off); a test reads every
+  source file for its name. **Per window:** the level lives next to the window's other state
+  (`bar/zoom.rs`), survives the window's navigations, starts at 100 % on every summon and is never
+  saved. Each change shows "Zoom 110 %" in the toolbar's status area for 1.5 s ("Zoom 100 %" once,
+  then nothing); smoke log `zoom <percent>`. Phone mode is unaffected: its 600 / 640 px are the
+  window's logical width, not the page's CSS width.
 - **Downloads** (LJ15; `downloads.rs` decides, `bar/download.rs` runs it): a page's download goes
   to the OS Downloads folder (`PathResolver::download_dir`; without one — Linux without XDG user
   dirs — `~/Downloads`, created when missing). Only web downloads are saved: `http` / `https`, and
@@ -787,10 +813,10 @@ page; it is a separate webview with its own capability, and the page webview has
   `window.littleJoan.setStatus(<json>)` — `{ kind: "download", state: downloading | saved | failed
   | blocked, name }` — as text: "Downloading report.pdf…", "report.pdf saved" with a **Show in
   folder** button (`reveal_download`), "Download failed", "Download blocked" (an extension's panel
-  showed); long names shortened in the middle. A finished status stays 8 s of the time the toolbar
-  is visible: while the command bar covers it nothing counts down, so opening the command bar never
+  showed); long names shortened in the middle; `{ kind: "zoom", percent }` as "Zoom 110 %" for 1.5 s
+  (LJ16). A finished download's status stays 8 s of the time the toolbar is visible: while the command bar covers it nothing counts down, so opening the command bar never
   loses one (`ui/toolbar/logic.ts`, tested); Rust tells the bar its last status again when the bar's
-  script runs. Generic — text and an optional action — for LJ16's zoom level and LJ46. The empty parts of the toolbar
+  script runs (`bar/status.rs`). Generic — text and an optional action — for LJ46 too. The empty parts of the toolbar
   carry `data-tauri-drag-region`, and the bar's capability has
   `core:window:allow-start-dragging`, so they drag the window (Tauri's own drag script, injected
   in every webview; the page webview's calls are denied). A double click there zooms the window
@@ -1219,7 +1245,7 @@ follows=<bool>` (macOS: a webview's autoresizing mask was set), `bar-background 
 when the window closed) / `download-deciders-removed <n>` (Linux: wry's handlers taken off a
 download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't the page's) /
 `download-noted` / `download-cancelled <n>` (macOS: a WKDownload noted; cancelled on close),
-`fullscreen-off <version>`
+`zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1). Without
 the variable nothing is logged.
 
@@ -1338,7 +1364,10 @@ and pushes to `main`:
   nothing within 2 s; `smoke-command.mts`, screenshots `command-bar.png`, `command-typing.png`,
   `history.png`), that the page saw a **390×560 viewport with a phone user agent and a 720×560 one
   with the desktop agent** (it reports `innerWidth`, `innerHeight`, the agent kind and
-  `devicePixelRatio` in its title), and that none of the webview helper processes that served the page outlive the
+  `devicePixelRatio` in its title), that **Ctrl+= then Ctrl+0** (xdotool `ctrl+equal`, SendKeys
+  `^=`; macOS a key event, required only once its `zoom` line shows it arrived) zoom the 720 px page
+  to 110 % — a narrower viewport, about 655 px; `zoom.png` shows "Zoom 110 %" in the toolbar — and
+  back to 720 (`smoke-zoom.mts`), and that none of the webview helper processes that served the page outlive the
   window (followed by process id, so other apps' WebKit helpers on the runner don't count).
   Screenshots (`hibernating.png`, `start.png`, `page.png`, `fullscreen.png`, `narrow.png`,
   `wide.png`, `command-bar.png`, `command-typing.png`, `history.png`, `settings-general.png`,

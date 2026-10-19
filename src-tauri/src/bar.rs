@@ -24,8 +24,10 @@ use url::Url;
 mod background;
 mod boot;
 pub mod download;
+mod status;
 mod view;
 mod watch;
+mod zoom;
 
 pub use background::{forget_painted, painted};
 pub use boot::{BAR_READY, Ready, early_theme, mark_ready, set_theme, theme_script};
@@ -34,6 +36,7 @@ pub use view::{
     page_in_webkit_fullscreen, set_element_fullscreen, set_overlay,
 };
 pub use watch::watch_url;
+pub use zoom::zoom_page;
 
 use crate::back_stack::BackStack;
 use crate::extensions;
@@ -91,7 +94,9 @@ pub fn add_webviews<R: Runtime>(
     let theme = crate::state::with(window.app_handle(), |s| s.shown_theme());
     boot::set_early_theme(theme.clone());
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
-    download::new_window();
+    // No status yet, and every summon starts at 100 % (LJ16).
+    status::forget();
+    zoom::new_window();
     let whole = Rect {
         x: 0.0,
         y: 0.0,
@@ -236,7 +241,7 @@ pub fn tell_state<R: Runtime>(app: &AppHandle<R>) {
     }
     extensions::session::publish_label(app, true);
     phone_mode::republish(app);
-    download::retell(app);
+    status::retell(app);
 }
 
 fn tell_back<R: Runtime>(bar: &Webview<R>, on: bool) {

@@ -3,6 +3,7 @@ import {
   MAX_DOMAIN,
   MAX_STATUS_NAME,
   STATUS_LINGER_MS,
+  ZOOM_LINGER_MS,
   displayDomain,
   extensionLabel,
   initialStatus,
@@ -277,5 +278,41 @@ describe("the status area over time", () => {
     expect(shownStatus(state, 20_000)?.text).toBe("Downloading b.zip…");
     state = withStatus(state, download("saved", "b.zip"), 20_000);
     expect(shownStatus(state, 20_000)?.text).toBe("b.zip saved");
+  });
+});
+
+describe("the zoom level in the status area (LJ16)", () => {
+  const zoom = (percent: number): StatusMessage => ({ kind: "zoom", percent });
+
+  it("is checked", () => {
+    expect(statusMessage({ kind: "zoom", percent: 110 })).toEqual(zoom(110));
+    for (const bad of [{ kind: "zoom" }, { kind: "zoom", percent: "110" }, { kind: "zoom", percent: 1.5 }, { kind: "zoom", percent: 0 }, { kind: "zoom", percent: 5_000 }]) {
+      expect(statusMessage(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("says the level for 1.5 s, 100 % too, then nothing", () => {
+    let state = withStatus(initialStatus(true, 0), zoom(110), 0);
+    expect(shownStatus(state, 0)).toEqual({ text: "Zoom 110 %", title: "The page at 110 %", action: null });
+    expect(shownStatus(state, ZOOM_LINGER_MS - 1)?.text).toBe("Zoom 110 %");
+    expect(shownStatus(state, ZOOM_LINGER_MS)).toBeNull();
+    state = withStatus(state, zoom(100), 10_000);
+    expect(shownStatus(state, 10_000)?.text).toBe("Zoom 100 %");
+    expect(nextStatusChange(state, 10_000)).toBe(ZOOM_LINGER_MS);
+    expect(shownStatus(state, 10_000 + ZOOM_LINGER_MS)).toBeNull();
+  });
+
+  it("each change starts the 1.5 s again", () => {
+    let state = withStatus(initialStatus(true, 0), zoom(110), 0);
+    state = withStatus(state, zoom(125), 1_000);
+    expect(shownStatus(state, 2_400)?.text).toBe("Zoom 125 %");
+    expect(shownStatus(state, 2_500)).toBeNull();
+  });
+
+  it("shows over a download under way, which comes back after it", () => {
+    let state = withStatus(initialStatus(true, 0), { kind: "download", state: "downloading", name: "big.iso" }, 0);
+    state = withStatus(state, zoom(90), 1_000);
+    expect(shownStatus(state, 1_000)?.text).toBe("Zoom 90 %");
+    expect(shownStatus(state, 1_000 + ZOOM_LINGER_MS)?.text).toBe("Downloading big.iso…");
   });
 });

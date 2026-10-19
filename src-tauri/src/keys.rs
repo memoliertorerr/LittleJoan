@@ -25,6 +25,10 @@ pub enum PageAction {
     OpenInBrowser,
     /// Open the command bar's overlay in its history view.
     History,
+    /// Zoom the page in, out, or back to 100 % (zoom.rs).
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

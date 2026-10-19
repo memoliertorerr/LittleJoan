@@ -13,6 +13,7 @@ use crate::navigation;
 use crate::state;
 use crate::toggle::Command;
 use crate::translate;
+use crate::zoom::Step;
 
 /// Performs `action` on the page window, off the main thread (callers are native key and menu
 /// handlers running on it).
@@ -50,6 +51,9 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
                 bar::show_history(&app);
                 Ok(())
             }
+            PageAction::ZoomIn => bar::zoom_page(&app, Step::In),
+            PageAction::ZoomOut => bar::zoom_page(&app, Step::Out),
+            PageAction::ZoomReset => bar::zoom_page(&app, Step::Reset),
             PageAction::Close => Ok(()),
         };
         if let Err(err) = result {

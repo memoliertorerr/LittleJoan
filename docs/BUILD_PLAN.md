@@ -82,7 +82,7 @@
 | LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⏭ stopped at its experiment: 2.50.4 aborts even when `enter-fullscreen` is handled — no app change; the Launchpad draft written (see notes) → LJ14.1 |
 | LJ14.1 | *(added mid-plan 2026-10-19)* WebKitGTK older than 2.52: element fullscreen switched off instead of the abort; an Ubuntu 22.04 smoke job | strong | auto | ✅ done |
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ✅ done |
-| LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ⬜ todo |
+| LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ✅ done |
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⬜ todo |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ todo |
@@ -2931,6 +2931,47 @@ check:
 These checks also go into LJ19's checklist. Once every job is green, merge the PR into main with a
 merge commit (Ground Rule 24), then stop and report.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **Disk:** 12 GiB free at the start of the step, 3.6 GiB after the last verify — other things on
+  the Mac took about 8 GiB meanwhile (`.cache/` stayed at 3.3 GB, `.cache/target` 1.6 GB); emptying
+  `.cache/npm` and `.cache/tmp` (re-created on demand) left 4.0 GiB, above the 3 GB floor.
+- **`zoom.rs`** (pure, 5 tests): `LEVELS` 50 … 300 %, `step(current, In | Out | Reset)` — the next
+  level up or down from any value, stopping at the ends; reset 100 % — and `factor`. One more test
+  reads every `.rs` file under `src-tauri/src` and fails if Tauri's zoom-hotkeys option is named
+  anywhere (the needle is built with `concat!`, so the test file doesn't hold it either).
+- **The keymap** (`keymap.rs`; 4 tests in a new `keymap/zoom_tests.rs`, since `keymap/tests.rs` was
+  already near 500 lines): `zoom-in`, `zoom-out`, `zoom-reset` (titles Zoom In, Zoom Out, Actual
+  Size; in Settings' order after Forward), `PageAction::ZoomIn / ZoomOut / ZoomReset`. Defaults:
+  Windows / Linux Ctrl+= with the aliases Ctrl+Shift+= (Ctrl++) and Ctrl+keypad +, Ctrl+- with
+  Ctrl+keypad −, Ctrl+0 with Ctrl+keypad 0; macOS ⌘=, ⌘-, ⌘0, one each (a menu item has one key
+  equivalent; muda turns `Equal` / `Minus` / `Digit0` into `=` / `-` / `0`). Tests: the defaults,
+  exact matching (Ctrl+Alt, a plain =, Ctrl+Shift+- and Ctrl+Shift+0 match nothing; GDK's `plus`,
+  `KP_Add`, `KP_0` and Windows' `VK_OEM_PLUS`, `VK_ADD`, `VK_NUMPAD0` are the keys), an override
+  replacing the first binding and dropping the aliases (`""` = no key), validation (a clash with
+  zoom-in's alias, the summon shortcut, a plain = on macOS) and `keymap_info`'s list — so Settings →
+  Keyboard shows the three with no change of its own. `keys.rs` already had every key (LJ43).
+- **Runtime** (`bar/zoom.rs`): the window's level next to its other per-window state, reset to 100 %
+  in `add_webviews`, `Webview::set_zoom(level / 100)` on the page, smoke log `zoom <percent>`, and the
+  status `{ kind: "zoom", percent }`. Not re-applied on navigation: WebView2's controller
+  `ZoomFactor` "becomes the new default zoom … across navigations", and WKWebView's `pageZoom` and
+  WebKitGTK's zoom level are properties of the view. The macOS View menu gains Zoom In, Zoom Out,
+  Actual Size from the keymap (`menu-keys zoom-in=⌘=` …). Phone mode is the window's logical width,
+  untouched (LJ39 / LJ40's notes: only the window's size and the agent change the page's bounds).
+- **The status area, shared** (`bar/status.rs`, out of `bar/download.rs`): one `Status` enum
+  (`download`, `zoom`), the last status told again when the bar's script runs. `ui/toolbar/logic.ts`:
+  "Zoom 110 %" for `ZOOM_LINGER_MS` = 1.5 s (each change starts it again; "Zoom 100 %" once, then
+  nothing); 4 more tests (checked input, the 1.5 s, a new change restarting it, a download under way
+  coming back after it).
+- **Smoke** (`scripts/ci/smoke-zoom.mts` + test, 4 tests — a file of its own rather than
+  `smoke-log.mts`, which is past 400 lines): in the main run after `wide.png`, Ctrl+= (xdotool
+  `ctrl+equal`, SendKeys `^=`, a ⌘= key event on macOS) → `zoom 110`, `zoom.png` (the status), the
+  page's next report narrower than 720 px; Ctrl+0 → `zoom 100` and 720×560 again. Required on
+  Windows and Linux; on macOS once a `zoom` line shows the key arrived.
+- Docs: README (the keys table, a line on zoom), CHANGELOG (Added), docs/architecture.md (page keys,
+  the keymap, Page zoom, the status area, file map, smoke log, CI), this plan (Later).
+- `npm run verify`: 623 TS tests, 367 Rust tests, clippy clean.
 
 ### LJ17 — Wayland-native global shortcut · strong · auto
 
@@ -8255,7 +8296,7 @@ or round 3 picked up point at their step and stay here for the record.
 | **Start at login** → *v0.2, LJ11* | Settings checkbox → tauri-plugin-autostart (LaunchAgent / registry Run key / XDG autostart) | New dependency, settings field, per-OS human check |
 | **Keep the page after close** | Settings "Keep page for N minutes": hide instead of destroy, destroy on a timer | Breaks the "no webview at rest" invariant for N minutes — needs a measured memory budget |
 | **Downloads** → *v0.2, LJ15 (status in the URL bar, no notifications)* | `on_download` → save to the OS Downloads folder, tray notification | Handler + notification permission per OS |
-| **Find in page** (zoom → *v0.2, LJ16*) → *v0.3, LJ49* | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
+| **Find in page** (zoom → *v0.2, LJ16: done*) → *v0.3, LJ49* | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
 | **Popups inside the app (OAuth)** → *v0.3, LJ47–LJ48* | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too. Some "Sign in with …" flows break today because the popup opens in the default browser |
 | **Code signing / notarization / SmartScreen reputation** → *macOS: v0.2, LJ18* | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Windows: SignPath Foundation if the user's application is approved (Deferred follow-ups) |
 | **Auto-update and GitHub Releases** | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys, release workflow |

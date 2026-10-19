@@ -6,7 +6,8 @@
 // The full run: serve tests/smoke/ on 127.0.0.1, launch the app with LITTLEJOAN_SMOKE_LOG,
 // summon it with `--show` (single-instance forwarding; the command bar covers the window), load
 // the smoke page (the command bar closes: the 40 px bar above the page), click its big
-// fullscreen button, hibernate with `--hide`, summon and hibernate once more, summon again for
+// fullscreen button, resize the window (phone and desktop agents), zoom the page with Ctrl+= and
+// back with Ctrl+0 (smoke-zoom.mts), hibernate with `--hide`, summon and hibernate once more, summon again for
 // the command bar (the smoke page's site as a top site, then typing "127", then Ctrl+H — Cmd+Y on
 // macOS — for the history view, and Ctrl+Y opening nothing), turn start at login on and off (reading the OS's own login entry each
 // time), check that cookies and localStorage outlive closing the window and quitting (`--quit`,
@@ -99,6 +100,7 @@ import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tra
 import { findApp, listProcs } from "./smoke-linux.mts";
 import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
+import { ZOOMED, zoomFailures, zoomReset, zoomSummary, zoomedViewport } from "./smoke-zoom.mts";
 import {
   DOWNLOAD_NAME,
   DOWNLOAD_PATH,
@@ -412,8 +414,10 @@ for code in CommandLine.arguments.dropFirst(2) {
   console.log(`pressed ${keys.join(" ")}`);
 }
 
-/** macOS virtual key codes (kVK_ANSI_*) of the letters `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40 };
+/** macOS virtual key codes (kVK_ANSI_*) of the keys `pressShortcut` sends. */
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40, "=": 24, "0": 29 };
+/** xdotool's names for the keys `pressShortcut` sends that aren't letters. */
+const XDOTOOL_KEYS: Record<string, string> = { "=": "equal" };
 /** The history view's key: Ctrl+H on Windows and Linux, Cmd+Y on macOS (LJ37). */
 const HISTORY_KEY = os === "darwin" ? "y" : "h";
 
@@ -455,7 +459,7 @@ usleep(60000)
     );
     run("swift", [swift, String(appPid), String(MAC_KEYS[letter] ?? 0), ...(shift ? ["shift"] : [])]);
   } else {
-    run("xdotool", ["key", `ctrl+${shift ? "shift+" : ""}${letter}`]);
+    run("xdotool", ["key", `ctrl+${shift ? "shift+" : ""}${XDOTOOL_KEYS[letter] ?? letter}`]);
   }
   console.log(`pressed ${os === "darwin" ? "Cmd" : "Ctrl"}+${shift ? "Shift+" : ""}${letter.toUpperCase()}`);
 }
@@ -827,6 +831,21 @@ await forward(["--size", "720x600"]);
 await waitFor("wide viewport, desktop user agent", (e) => sawViewport(e, WIDE), 30_000);
 await sleep(1000);
 screenshot("wide.png");
+
+// Page zoom (LJ16, smoke-zoom.mts): Ctrl+= (⌘= on macOS, best effort) zooms the page to 110 %,
+// so it reports a narrower viewport; Ctrl+0 brings 720 px back.
+const zoomFrom = events().length;
+pressShortcut("=", pid);
+if (await waitFor("zoom: Ctrl+= zoomed the page", (e) => count(e.slice(zoomFrom), "zoom", String(ZOOMED)) > 0, 10_000)) {
+  // The toolbar says "Zoom 110 %" for 1.5 s.
+  screenshot("zoom.png");
+  await waitFor("zoom: the page narrower", (e) => zoomedViewport(e.slice(zoomFrom), WIDE) !== undefined, 15_000);
+  await sleep(500);
+}
+pressShortcut("0", pid);
+await waitFor("zoom: Ctrl+0 brought 720 px back", (e) => zoomReset(e.slice(zoomFrom), WIDE), 15_000);
+await sleep(1000);
+const zoomEvents = events().slice(zoomFrom);
 
 await forward(["--hide"]);
 await waitFor("hibernated", (e) => count(e, "hibernated") > 0, 20_000);
@@ -1508,6 +1527,7 @@ const summary = {
   },
   trayRun: traySummary(trayCheck, os),
   downloads: downloadSummary(downloadCheck),
+  zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -1561,6 +1581,7 @@ const failures = evaluate(
   .concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os))
   .concat(trayFailures(trayCheck, os))
   .concat(downloadFailures(downloadCheck, os))
+  .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
   console.log("\nSMOKE FAILED:\n- " + failures.join("\n- "));

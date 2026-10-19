@@ -13,7 +13,6 @@
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 
-use serde::Serialize;
 #[cfg(not(target_os = "linux"))]
 use tauri::Webview;
 #[cfg(not(target_os = "linux"))]
@@ -21,7 +20,7 @@ use tauri::webview::DownloadEvent;
 use tauri::{AppHandle, Manager, Runtime};
 use url::Url;
 
-use super::BAR;
+use super::status::{self, Status};
 use crate::downloads::{self, Downloads, Refusal};
 use crate::extensions;
 use crate::keys;
@@ -30,8 +29,6 @@ use crate::smoke;
 
 /// The open window's downloads (downloads.rs).
 static DOWNLOADS: Mutex<Downloads> = Mutex::new(Downloads::new());
-/// The status the toolbar was last told in this window, told again when the bar's script runs.
-static LAST_STATUS: Mutex<Option<String>> = Mutex::new(None);
 
 fn downloads() -> std::sync::MutexGuard<'static, Downloads> {
     DOWNLOADS.lock().unwrap_or_else(PoisonError::into_inner)
@@ -42,13 +39,6 @@ fn downloads() -> std::sync::MutexGuard<'static, Downloads> {
 pub enum Outcome {
     Saved,
     Failed,
-}
-
-/// What the toolbar's status area says about downloads (ui/toolbar/logic.ts turns it into text).
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-enum Status {
-    Download { state: &'static str, name: String },
 }
 
 /// The page webview's download handler (WebView2, WKWebView). `Requested`: where the file goes,
@@ -179,29 +169,13 @@ pub fn window_closed<R: Runtime>(app: &AppHandle<R>) {
     for download in &open {
         smoke::log("download-closed", &download.name());
     }
-    *LAST_STATUS.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    status::forget();
     platform::cancel_downloads(app, open.into_iter().map(|d| d.path).collect());
-}
-
-/// A new window: no status yet.
-pub fn new_window() {
-    *LAST_STATUS.lock().unwrap_or_else(PoisonError::into_inner) = None;
 }
 
 /// The last file saved in this window ("Show in folder").
 pub fn last_saved() -> Option<PathBuf> {
     downloads().last_saved().map(PathBuf::from)
-}
-
-/// Tells the bar its last status again (its script runs now: `start_info`).
-pub fn retell<R: Runtime>(app: &AppHandle<R>) {
-    let last = LAST_STATUS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
-    if let Some(json) = last {
-        eval_status(app, &json);
-    }
 }
 
 fn file_name(path: &std::path::Path) -> String {
@@ -227,18 +201,5 @@ fn folder<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 }
 
 fn tell<R: Runtime>(app: &AppHandle<R>, state: &'static str, name: String) {
-    let status = Status::Download { state, name };
-    let Ok(json) = serde_json::to_string(&status) else {
-        return;
-    };
-    *LAST_STATUS.lock().unwrap_or_else(PoisonError::into_inner) = Some(json.clone());
-    eval_status(app, &json);
-}
-
-fn eval_status<R: Runtime>(app: &AppHandle<R>, json: &str) {
-    if let Some(bar) = app.get_webview(BAR) {
-        let _ = bar.eval(format!(
-            "window.littleJoan && window.littleJoan.setStatus({json})"
-        ));
-    }
+    status::tell(app, &Status::Download { state, name });
 }

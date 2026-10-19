@@ -36,6 +36,7 @@ pub mod system_shortcuts;
 pub mod toggle;
 pub mod translate;
 pub mod welcome;
+pub mod zoom;
 
 #[cfg(test)]
 mod capability_tests;
