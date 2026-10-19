@@ -91,6 +91,9 @@ pub fn requested<R: Runtime>(
     url: &Url,
     suggested: Option<&str>,
 ) -> Option<PathBuf> {
+    // A navigation that became a download leaves the page where it was (WKWebView says nothing
+    // about the page that stays): the toolbar goes back to its address.
+    page_stays(app, url);
     let panel =
         extensions::session::committed().is_some() || extensions::session::showing().is_some();
     let decided = match folder(app) {
@@ -129,6 +132,26 @@ pub fn requested<R: Runtime>(
     }
 }
 
+/// The app's navigation to `url` turned into a download: the page and its address stay as they
+/// were (page_address.rs), and the toolbar says so.
+fn page_stays<R: Runtime>(app: &AppHandle<R>, url: &Url) {
+    if !super::address().download(url) {
+        return;
+    }
+    if super::page_url(app).is_some() {
+        super::publish_url(app);
+        return;
+    }
+    // Nothing loaded before it (the window opened for the download): the start page's empty bar.
+    *super::LAST_SHOWN
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(None);
+    if let Some(bar) = app.get_webview(super::BAR) {
+        let _ = bar.eval("window.littleJoan && window.littleJoan.setUrl(null)");
+    }
+    smoke::log("bar-url", "start");
+}
+
 /// A download of `url` ended. Only one that started in this window counts, once (an engine may
 /// report twice; one under way when the window closed was ended with it).
 pub fn finished<R: Runtime>(app: &AppHandle<R>, url: &Url, outcome: Outcome) {
@@ -148,14 +171,16 @@ pub fn finished<R: Runtime>(app: &AppHandle<R>, url: &Url, outcome: Outcome) {
     }
 }
 
-/// The window is closing: what is under way ends with it (WebKitGTK's downloads are cancelled
-/// here; WebView2's and WKWebView's go with their webview), and nothing is kept.
+/// The window is closing: what is under way ends with it, and nothing is kept. WebKitGTK's and
+/// WKWebView's downloads are cancelled (WKWebView's would go on in WebKit's network process, CI
+/// showed, and a partial file it leaves goes too); WebView2's go with the window's environment.
 pub fn window_closed<R: Runtime>(app: &AppHandle<R>) {
-    for open in downloads().closed() {
-        smoke::log("download-closed", &open.name());
+    let open = downloads().closed();
+    for download in &open {
+        smoke::log("download-closed", &download.name());
     }
     *LAST_STATUS.lock().unwrap_or_else(PoisonError::into_inner) = None;
-    platform::cancel_downloads(app);
+    platform::cancel_downloads(app, open.into_iter().map(|d| d.path).collect());
 }
 
 /// A new window: no status yet.

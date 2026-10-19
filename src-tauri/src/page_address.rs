@@ -6,7 +6,9 @@
 //! (`Started` and `Finished` carry it) and from the navigations the app starts itself. The
 //! engine is asked only for in-page changes that raise no event (history.pushState, #anchors),
 //! and only while the last event was `Finished` — so never before the first page loaded, and
-//! never in the middle of a navigation.
+//! never in the middle of a navigation. A navigation of the app's that turns into a download
+//! (LJ15) leaves the page where it was, so its address goes back to what it was before (WKWebView
+//! raises no event for the page that stays).
 
 use url::Url;
 
@@ -27,6 +29,8 @@ pub struct PageAddress {
     load: Load,
     /// Bumped by every event, so an engine read that raced with a new navigation is dropped.
     seq: u64,
+    /// What the address was before the app's last navigation (`navigating`), until an event.
+    before: Option<(Option<Url>, Load)>,
 }
 
 /// Permission to ask the engine for the address once (see [`PageAddress::read_token`]).
@@ -46,6 +50,7 @@ impl PageAddress {
             url: None,
             load: Load::None,
             seq: 0,
+            before: None,
         }
     }
 
@@ -53,6 +58,7 @@ impl PageAddress {
         self.url = Some(url);
         self.load = load;
         self.seq = self.seq.wrapping_add(1);
+        self.before = None;
     }
 
     /// The page started loading `url` (the `Started` event).
@@ -68,7 +74,24 @@ impl PageAddress {
     /// The app is about to load `url` in the page: it is the address from now on, and the
     /// engine isn't asked until that load finished.
     pub fn navigating(&mut self, url: Url) {
+        let before = (self.url.clone(), self.load);
         self.event(url, Load::Loading);
+        self.before = Some(before);
+    }
+
+    /// `url` turned out to be a download (LJ15): if it is the address the app just navigated to,
+    /// the page stayed where it was, and so does the address. Returns whether it changed.
+    pub fn download(&mut self, url: &Url) -> bool {
+        if self.load != Load::Loading || self.url.as_ref() != Some(url) {
+            return false;
+        }
+        let Some((before, load)) = self.before.take() else {
+            return false;
+        };
+        self.url = before;
+        self.load = load;
+        self.seq = self.seq.wrapping_add(1);
+        true
     }
 
     /// The app started a navigation whose URL isn't the address until the page's own events say
@@ -77,6 +100,7 @@ impl PageAddress {
     pub fn pending(&mut self) {
         self.load = Load::Loading;
         self.seq = self.seq.wrapping_add(1);
+        self.before = None;
     }
 
     /// The page's address, or `None` before anything loaded.
@@ -199,5 +223,28 @@ mod tests {
             page.current().map(Url::as_str),
             Some("ljext://hello.localhost/index.html?lj-open=1")
         );
+    }
+
+    #[test]
+    fn a_navigation_that_became_a_download_leaves_the_address_where_it_was() {
+        let mut page = PageAddress::new();
+        page.finished(url("https://a.test/page"));
+        page.navigating(url("https://files.test/report.pdf"));
+        assert_eq!(page.current(), Some(&url("https://files.test/report.pdf")));
+        assert!(!page.download(&url("https://files.test/other.pdf")));
+        assert!(page.download(&url("https://files.test/report.pdf")));
+        assert_eq!(page.current(), Some(&url("https://a.test/page")));
+        assert!(page.read_token().is_some(), "the page is finished again");
+        // Once only, and never after the page's own events moved on.
+        assert!(!page.download(&url("https://files.test/report.pdf")));
+        page.navigating(url("https://files.test/b.zip"));
+        page.started(url("https://files.test/b.zip"));
+        assert!(!page.download(&url("https://files.test/b.zip")));
+        // A download from the start page goes back to no address.
+        let mut fresh = PageAddress::new();
+        fresh.navigating(url("https://files.test/c.zip"));
+        assert!(fresh.download(&url("https://files.test/c.zip")));
+        assert_eq!(fresh.current(), None);
+        assert!(!fresh.started_any());
     }
 }

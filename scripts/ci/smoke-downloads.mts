@@ -67,6 +67,9 @@ export interface DownloadDriver {
   pdfUrl: string;
   /** The OS's Downloads folder, where the files must land. */
   downloadsDir: string;
+  /** Other folders an engine's own default could have used (home, the working folder): listed if
+   * a file of this run turns up there, and tidied. */
+  elsewhere: string[];
   launch(name: string, settings: Record<string, unknown>): Promise<SiteApp>;
   screenshot(name: string): void;
   sleep(ms: number): Promise<void>;
@@ -87,6 +90,8 @@ export interface DownloadRun {
   panelFile: boolean;
   /** Informational: a PDF sent as an attachment was downloaded (else the page showed it). */
   pdf: { downloaded: boolean; shownInPage: boolean };
+  /** This run's files found outside the Downloads folder (diagnostics). */
+  strays: string[];
   /** Informational: closing the window during the slow download. */
   slow: { started: boolean; served: SlowServe; leftInDownloads: { name: string; bytes: number }[]; afterHide: string[] };
 }
@@ -122,6 +127,9 @@ function tidy(dir: string): void {
 export async function downloadRun(driver: DownloadDriver): Promise<DownloadRun> {
   const dir = driver.downloadsDir;
   tidy(dir);
+  for (const other of driver.elsewhere) {
+    tidy(other);
+  }
   const app = await driver.launch("downloads", {});
   await app.waitFor("downloads: started", (e) => count(e, "started") > 0, 30_000);
   await driver.sleep(1500);
@@ -194,8 +202,12 @@ export async function downloadRun(driver: DownloadDriver): Promise<DownloadRun> 
     .map((e) => `${e.event} ${e.detail}`.trim());
   await app.quit();
   const events = app.events();
+  const strays = driver.elsewhere.flatMap((other) => listOurs(other).map((file) => `${join(other, file.name)} (${file.bytes} bytes)`));
   tidy(dir);
-  return { events, downloadsDir: dir, first, second, panelFrom, panelFile, pdf, slow: { started, served, leftInDownloads, afterHide } };
+  for (const other of driver.elsewhere) {
+    tidy(other);
+  }
+  return { events, downloadsDir: dir, first, second, panelFrom, panelFile, pdf, strays, slow: { started, served, leftInDownloads, afterHide } };
 }
 
 /** Whether `event` with exactly `detail` comes after the first `before` event with `beforeDetail`. */
@@ -269,6 +281,7 @@ export function downloadSummary(run: DownloadRun): Record<string, unknown> {
     secondBytes: run.second?.length ?? null,
     panelFile: run.panelFile,
     pdfAttachment: run.pdf,
+    elsewhere: run.strays,
     closeDuringDownload: {
       started: run.slow.started,
       serverSentChunks: run.slow.served.chunksSent,

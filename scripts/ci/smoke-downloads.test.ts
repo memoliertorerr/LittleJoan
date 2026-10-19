@@ -39,6 +39,7 @@ function good(over: Partial<DownloadRun> = {}, rows: string[] = [...WEB, ...PANE
     panelFrom: WEB.length,
     panelFile: false,
     pdf: { downloaded: true, shownInPage: false },
+    strays: [],
     slow: { started: true, served: { started: true, chunksSent: 4, aborted: true, completed: false }, leftInDownloads: [], afterHide: [] },
     ...over,
   };

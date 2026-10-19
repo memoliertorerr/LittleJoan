@@ -1392,6 +1392,7 @@ const downloadCheck = await downloadRun({
   slowUrl: `http://127.0.0.1:${port}/${SLOW_PATH}`,
   pdfUrl: `http://127.0.0.1:${port}/${PDF_PATH}`,
   downloadsDir: join(homedir(), "Downloads"),
+  elsewhere: [homedir(), process.cwd()],
   launch: fullscreenLaunch,
   screenshot,
   sleep: (ms) => sleep(ms).then(() => undefined),

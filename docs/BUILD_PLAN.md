@@ -2796,6 +2796,49 @@ download.png.
   Downloads, the toolbar's status area, commands, capabilities, smoke log, CI), this plan (Deferred
   follow-ups, Landmines).
 - `npm run verify`: 615 TS tests, 357 Rust tests, clippy clean (the Linux path compiles only in CI).
+- **CI (run 39270397918): verify ×3, package ×4 and smoke on Windows, macOS, `linux`,
+  `linux-scale-2` and `linux-appimage` green; `smoke (linux-22.04)` red — no download at all.**
+  Everywhere else both attachments landed in `~/Downloads` (Windows `C:\Users\runneradmin\Downloads`)
+  under the header's name with their exact bytes, the second as `lj-smoke (1).bin`, and hello's panel
+  refused the third (`download-refused panel`, no file). On Linux 24.04 the hook removed wry's two
+  deciders (`download-deciders-removed 2`, the bar's and the page's). **Screenshots:**
+  `download.png` — the toolbar's status "lj-smoke.bin saved" with the accent **Show in folder**
+  button in the pill's place, between the site and open-in-browser, on Windows (**no WebView2
+  download flyout**: wry's `SetHandled` is enough), macOS (traffic lights, then the status) and Linux
+  (scale 1 and 2, crisp); `download-progress.png` — "Downloading lj-slow.bin…". **Informational:**
+  the PDF attachment was downloaded on Windows and Linux, but **macOS showed it in the page** (wry's
+  WKWebView response policy asks only `canShowMIMEType`); **closing the window during the slow
+  download** stopped it on Windows (the server sent 5 of 40 chunks, then the connection closed; no
+  file left) and on Linux 24.04 (cancelled; no file), but **not on macOS**: 22 chunks at the 8 s mark
+  and still going, `lj-slow.bin` growing in Downloads — the WKDownload lives in WebKit's network
+  process, not in the closed web view. And on macOS the toolbar went on naming the download's
+  address after `--show <download>` (`bar-url …/dl-attachment` with the smoke page still shown):
+  WKWebView raises no event for the page that stays (WebView2 and WebKitGTK raise a `Finished` for it,
+  which also records one more visit — the Deferred follow-up about cancelled navigations, Linux too).
+  **linux-22.04 (WebKitGTK 2.50.4):** the hook ran (`download-deciders-removed 0` — no handler of
+  wry's was there) but the `decide-destination` handler it connected never ran, nothing was logged,
+  the server sent the slow download in full, and nothing landed in `~/Downloads` (no XDG download
+  dir on the runner: WebKitGTK's own default is the home folder).
+- **`lj-step-15-fix` (one commit for the three):** (1) **Linux decides in an emission hook** on
+  `WebKitDownload::decide-destination` (`platform/linux/downloads.rs`, moved out of `linux.rs`):
+  `g_signal_add_emission_hook`, added once, runs for every download in the process before any
+  handler — whatever the context, whenever the signal comes —, so the order of WebKitGTK 2.50's
+  signals no longer matters; for a page download it disconnects the download's other deciders (a
+  handler disconnected during an emission is skipped) and sets the destination (or cancels), and the
+  class handler keeps it (`download-decide other|no-url` logs a download that isn't the page's). The
+  context's `download-started` hook is gone. (2) **macOS cancels its WKDownloads when the window
+  closes** (`platform/mac/downloads.rs`): wry keeps the WKDownload to itself, but gives every one its
+  delegate with `-[WKDownload setDelegate:]` (a public WebKit class and selector), so that setter's
+  implementation is wrapped once (objc2's `Method::set_implementation`) to note the download and
+  then call the original; on close the noted downloads are cancelled (`-cancel:` with no resume
+  block, through `performSelector:withObject:`; on a finished one it does nothing) and the partial
+  files of those under way are removed 0.5 s later (`download-noted`, `download-cancelled <n>`).
+  `platform::cancel_downloads` now takes those paths. (3) **The address of a navigation that became
+  a download goes back** (`PageAddress::download`, tested: once, only for the app's own navigation,
+  to no address when nothing was loaded before), so the toolbar names the page that stays. The
+  smoke also lists files of the run found in the home folder or the working folder
+  (`downloads.elsewhere`, informational, tidied). `npm run verify`: 615 TS tests, 358 Rust tests,
+  clippy clean.
 
 ### LJ16 — Page zoom · standard · auto
 
@@ -7708,7 +7751,9 @@ and where, then stop.
   not the panel, decides when). → *Planned as LJ56 (v0.3).*
 - **A cancelled navigation counts as a second visit on Windows** (surfaced by LJ29's probe):
   WebView2 raises one more `Finished` load event for the page that stays when `NavigationStarting`
-  cancels a navigation, so history records that page twice. Option: ignore a `Finished` whose URL
+  cancels a navigation, so history records that page twice. *(LJ15)* A navigation that becomes a
+  download does the same on Windows and Linux (WebKitGTK too raises a `Finished` for the page that
+  stays). Option: ignore a `Finished` whose URL
   equals the last finished one within a short time (history_store), or track cancellations.
 - **WebRTC is open to extension panels** (security review, L2). The CSP doesn't cover
   `RTCPeerConnection`, so a panel can reach a STUN/TURN server it doesn't declare (and learn local
@@ -7870,6 +7915,12 @@ and where, then stop.
   cycle check looked (10 s), while the main sample — 2, 10, 30 and 60 s after the first hibernate —
   saw none, as in every earlier run. LJ9 measured "1 helper at 2–10 s, 0 at 30 s" on macOS. If it
   recurs, give the cycle check macOS's 30 s rather than loosen the rule.
+- **macOS shows an attachment it can display instead of downloading it** (surfaced by LJ15's CI): a
+  PDF sent with `Content-Disposition: attachment` opens in the page on macOS (wry's WKWebView
+  response policy asks only `canShowMIMEType`), while Windows and Linux save it. A link with the
+  `download` attribute does download. Options: a response-policy hook of our own (wry has none to
+  give; it would mean wrapping wry's navigation delegate as LJ15 wraps `setDelegate:`), or upstream a
+  `Content-Disposition` check to wry.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -8145,6 +8196,16 @@ Populated from real friction, not speculation:
   the page's downloads in `platform/linux.rs` instead (one hook per context, wry's deciders
   disconnected). On Windows and macOS `on_download` is per webview and works. Also: WebKitGTK 4.1's
   `webkit_download_set_destination` takes a `file://` URI on 2.50 (newer versions take a path too).
+  *(LJ15's CI)* **On WebKitGTK 2.50.4 a `decide-destination` handler connected in the context's
+  `download-started` never runs** (and wry's weren't there either), while 2.52 runs it: decide in an
+  emission hook on `decide-destination` instead, which runs before every handler of every download.
+- *(LJ15's CI)* **A WKDownload outlives its WKWebView.** It lives in WebKit's network process: after
+  the window closed (web view unloaded and destroyed) a download went on writing its file. wry keeps
+  the WKDownload objects to itself; LJ15 notes them through a wrapped `-[WKDownload setDelegate:]` to
+  cancel them on close.
+- *(LJ15's CI)* **wry's WKWebView shows any attachment it can display** (a PDF, an image, text):
+  its response policy downloads only what `canShowMIMEType` refuses, `Content-Disposition:
+  attachment` aside. WebView2 and WebKitGTK download it.
 - *(LJ13)* **An AppImage without FUSE (`APPIMAGE_EXTRACT_AND_RUN=1`) deletes its extracted folder
   when it exits** — `$TMPDIR/appimage_extracted_<md5>`, shared by every launch of the same image.
   A second instance (single-instance's remote control) exiting would delete the running first
