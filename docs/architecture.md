@@ -15,11 +15,13 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
   `joan::quit`), and Cmd+Q on macOS (the app menu's standard Quit item), exit.
 - **The icon can be hidden** (settings' `showTrayIcon`, Settings → General; LJ41), never so that
   Little Joan is out of reach: `tray::icon_visible` shows it unless the setting is off **and** the
-  global shortcut works (`tray::shortcut_works`: one is registered — the saved one or the default —
-  and this isn't a Linux Wayland session, where the X11 grab never fires; a shortcut paused while
-  Settings records one still counts, so the icon doesn't blink). `tray::apply_visibility` runs
-  after the shortcut is registered at startup and after every settings save (a swap that left no
-  shortcut working brings the icon back) and logs `tray-visible <bool>` the first time and on each
+  global shortcut works (`tray::shortcut_works`, from `shortcut/backend.rs`: global-hotkey has one
+  registered — the saved one or the default — and this isn't a Linux Wayland session, where the X11
+  grab never fires; or the XDG GlobalShortcuts portal holds it and the desktop gave it a key, LJ17;
+  a shortcut paused while Settings records one still counts, so the icon doesn't blink).
+  `tray::apply_visibility` runs after the shortcut is registered at startup, when the portal
+  answers or its trigger changes, and after every settings save (a swap that left no shortcut
+  working brings the icon back) and logs `tray-visible <bool>` the first time and on each
   change. It uses the tray's own `set_visible` — macOS removes the status item and builds it again,
   Windows hides the notification icon, Linux sets the AppIndicator's status to Passive /
   Active (tray-icon 0.25.1). Hiding creates nothing; at rest it is the same single process.
@@ -204,7 +206,8 @@ src-tauri/src/history_store.rs     history.json on disk and in AppState while th
                                    with no window straight on disk), the list, the suggestions
 src-tauri/src/suggest.rs           what the command bar suggests: top sites or the starters,
                                    history matches and a search row (pure, tested)
-src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is, Wayland (pure)
+src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is; a Linux Wayland
+                                   session (pure)
 src-tauri/src/joan.rs              the page window: create / focus / destroy, window events
 src-tauri/src/bar.rs               its two webviews (bar + page): build, pushing the page's
                                    address to the bar, focus, navigation
@@ -261,7 +264,8 @@ src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the b
                                    Settings
 src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan")
 src-tauri/src/commands/downloads.rs  the bar: reveal_download (the toolbar's "Show in folder")
-src-tauri/src/commands/keys.rs     the bar and Settings: keymap_info
+src-tauri/src/commands/keys.rs     the bar and Settings: keymap_info; the portal's shortcut as they
+                                   show it (PortalShortcut)
 src-tauri/src/commands/quick.rs    the bar: quick_state, quick_command (a serde enum of fixed
                                    kinds, deny_unknown_fields; tested)
 src-tauri/src/settings_live.rs     a settings change at runtime: AppState, the bar's theme, the tray
@@ -277,7 +281,13 @@ src-tauri/src/system_shortcuts.rs  macOS's own shortcuts from its com.apple.symb
                                    gives one (pure; tested on a CI runner's export,
                                    system_shortcuts/macos-runner.json)
 src-tauri/src/shortcut.rs          global-shortcut plugin, registration with fallback, live swap
-                                   with rollback (Registrar trait), suspend while recording
+                                   with rollback (Registrar trait), suspend while recording; at
+                                   launch the portal first in a Wayland session (LJ17), its answer
+                                   and trigger changes (tests in shortcut/tests.rs)
+src-tauri/src/shortcut/backend.rs  who holds the summon shortcut (global-hotkey, the portal, or
+                                   global-hotkey on XWayland with the --toggle hint), the XDG
+                                   shortcuts spec's trigger for an accelerator, the portal's smoke-
+                                   log lines (pure, tested)
 src-tauri/src/commands.rs          bar: open_input, page_url, focus_page, set_overlay, go_back,
                                    open_in_browser, hibernate, start_info, history_list, suggest,
                                    history_remove, open_settings, set_theme_tokens; settings:
@@ -321,6 +331,11 @@ src-tauri/src/platform/linux/downloads.rs  Linux: the page's downloads through W
                                    emission hook on decide-destination), cancelled on close
 src-tauri/src/platform/mac/downloads.rs    macOS: the page's WKDownloads noted (a wrapped
                                    -[WKDownload setDelegate:]) and cancelled when the window closes
+src-tauri/src/platform/portal.rs   Linux: the summon shortcut through the XDG GlobalShortcuts portal
+                                   (ashpd): the host registry, a session, BindShortcuts, Activated
+                                   → toggle, ShortcutsChanged (LJ17)
+src-tauri/linux/io.github.memoliertorerr.littlejoan.desktop  the .deb's second desktop file, under
+                                   the app id (NoDisplay): the portals' host registry needs one
 src-tauri/permissions/autogenerated/  per-command permissions written by tauri-build
 src-tauri/src/tray.rs              tray icon + menu (Open, Translate Page, Open Page in Browser,
                                    Settings…, Quit); page items enabled only while a page is open;
@@ -412,7 +427,9 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
 - **First launch:** when `settings.json` doesn't exist as `state::init` runs (a file that exists
   but can't be read or parsed doesn't count), setup registers the shortcut as usual, logs
   `first-run`, saves the default settings at once (so the welcome appears only once, even if the
-  user quits straight away), and opens the window with `--show`'s path. The command bar (in the
+  user quits straight away), and opens the window with `--show`'s path — in a Linux Wayland
+  session once the portal answered (LJ17; `shortcut::welcome_now`), so the welcome names the
+  desktop's key or explains `--toggle`. The command bar (in the
   bar webview) asks `start_info`, gets `firstRun: true` once (reading it clears it), and shows
   the welcome under its field: what the shortcut does (on a Linux Wayland session: bind
   `little-joan --toggle`), where the icon is (`welcome::tray_hint`), a "Start Little Joan at
@@ -450,9 +467,31 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   takes the tray's Quit path (`joan::quit`) and wins over any window flag; a `--quit` launch with
   nothing running just ends.
 - **Global shortcut:** registered from settings; if it fails to parse or is taken, the default
-  (`CommandOrControl+Shift+Space`) is tried; if that fails too, the app still runs. Linux
-  global shortcuts work on X11 only — on Wayland, bind `little-joan --toggle` in the desktop's
-  keyboard settings.
+  (`CommandOrControl+Shift+Space`) is tried; if that fails too, the app still runs. global-hotkey's
+  Linux backend grabs keys on X11, so in a Wayland session it hears them only while an X11 window
+  has the focus. **In a Linux Wayland session** (`XDG_SESSION_TYPE=wayland` or `WAYLAND_DISPLAY`
+  set, `welcome::wayland_session`) `shortcut::register_at_launch` asks the **XDG GlobalShortcuts
+  portal** first (LJ17; `platform/portal.rs`, ashpd on tauri's tokio runtime): on its own session-bus
+  connection it registers as `io.github.memoliertorerr.littlejoan` with the portal's host registry
+  (`org.freedesktop.host.portal.Registry`, x-d-p 1.19.1+; it needs a desktop file of that name,
+  which the `.deb` installs; if it refuses, a fresh connection, which the portal identifies by
+  itself from the app's systemd unit), creates a session (15 s limit, D-Bus activation included),
+  listens for `Activated` and `ShortcutsChanged`, and binds one shortcut — id `toggle`, "Summon or
+  dismiss Little Joan", the preferred trigger converted from the settings' accelerator into the
+  XDG shortcuts spec (`CommandOrControl+Shift+Space` → `CTRL+SHIFT+space`; no preference for a key
+  the spec can't name) — with no time limit, since the desktop may ask the user first. The desktop
+  owns the key and may pick another: the trigger it reports (GNOME: "Press <ctrl><shift>space") is
+  what the welcome and Settings show. Meanwhile (`PortalState::Asking`) nothing holds the
+  shortcut. Registered: `Activated` for `toggle` dispatches `Command::Toggle`, the session lives as
+  long as the process, `ShortcutsChanged` updates the trigger, `active_shortcut` stays `None`, and
+  Save swaps nothing (the saved accelerator is only the preferred trigger for the next launch).
+  Anything else — no session bus, no portal or none with GlobalShortcuts (GNOME 46), a refusal,
+  the user declining, a timeout, a panic in ashpd, or the session ending later — logs
+  `shortcut-portal-unavailable <why>` and does what v0.1 did: global-hotkey on XWayland, the
+  `--toggle` hint (`StartInfo.waylandNoShortcut`, Settings → Keyboard) and the icon back
+  (`shortcut::portal_answered`). zbus runs on tokio for this (ashpd's `tokio` feature, shared with
+  the single-instance and opener plugins' zbus 5): its blocking API, which those plugins use, runs
+  on a tokio runtime of zbus's own. X11 sessions, Windows and macOS never ask the portal.
 
 ## Commands and capabilities
 
@@ -489,9 +528,9 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `go_back()` | the toolbar's back button | the page action Back (`history.back()` in the page, as Alt+Left / Cmd+[) |
 | `open_in_browser()` | the toolbar's "open in default browser" | the page action OpenInBrowser: the page goes to the default browser, the window hibernates |
 | `hibernate()` | the bar, Esc with no page | close the window (same path as `--hide`) |
-| `start_info()` | the bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut, theme }`: the theme the bar applies, and the welcome's facts; `firstRun` is true once; logs `theme <mode> colors=<n>` |
+| `start_info()` | the bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut, portalShortcut, theme }`: the theme the bar applies, and the welcome's facts; `firstRun` is true once; `waylandNoShortcut` is a Wayland session whose portal doesn't hold the shortcut, `portalShortcut` `{ trigger }` while it does (LJ17; `shortcut` is then `null`); logs `theme <mode> colors=<n>` |
 | `get_settings()` | settings window, on load | settings + engine and language lists + platform + `shortcutProblem` (the saved shortcut failed at launch, LJ44) + `waylandNoShortcut` + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version` + `builtInSiteModes` (`[{ host, mode }]`: YouTube on desktop on macOS and Linux, none on Windows); logs `settings-loaded` |
-| `save_settings(settings)` | settings window, Save | check every part first (`settings::apply_change`: a bad engine id, language, theme mode or color refuses the whole Save, nothing changed); swap the shortcut live (old one restored if the new one is taken); then `settings_live::apply` — the path the quick commands take too — and save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` and optionally `theme` (valid as it stands — `parse_strict`; left out, the saved one stays), `showTrayIcon` and `siteModes` (General's list, only when it was edited — so a pill click while Settings is open isn't undone). A new theme goes at once to the open window's bar (`window.littleJoan.setTheme`) and to the settings window (`window.littleJoanSettings.setTheme`), both by `eval` |
+| `save_settings(settings)` | settings window, Save | check every part first (`settings::apply_change`: a bad engine id, language, theme mode or color refuses the whole Save, nothing changed); swap the shortcut live (old one restored if the new one is taken) — not while the portal holds or is asked for it (LJ17): the desktop owns that key; then `settings_live::apply` — the path the quick commands take too — and save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` and optionally `theme` (valid as it stands — `parse_strict`; left out, the saved one stays), `showTrayIcon` and `siteModes` (General's list, only when it was edited — so a pill click while Settings is open isn't undone). A new theme goes at once to the open window's bar (`window.littleJoan.setTheme`) and to the settings window (`window.littleJoanSettings.setTheme`), both by `eval` |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 | `history_list()` | the history view, when it opens and after a change | every record, latest visit first: `[{ url, title, host, lastVisit, visitCount }]` (empty with no window); the view searches, groups and draws them; logs `history-list <n>` |
@@ -508,7 +547,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `set_site_mode(mode)` | the toolbar's pill, the command bar's site rows ("Desktop site" / "Phone site" / "Automatic", LJ42's quick rows) | keeps `mode` for the open web page's site in `siteModes` — the site is Rust's (`bar::page_url`), the bar sends only the mode; `auto` removes the entry, or keeps `"auto"` when a built-in or a parent's entry would still decide —, saves the settings and applies it at once: the agent switches and the page loads again only when it really changed (going to desktop on a known phone host: its desktop address). Refused without a web page, or with 500 sites already. Logs `site-mode <site> <mode>`; returns the new info |
 | `quick_state()` | the command bar, each time it opens (with `extensions_list`), and after a quick command | `{ page: { url, title } \| null (a web page only; the title is the window's), theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool \| null, showTrayIcon, iconForced }` — what the quick rows show (LJ42) |
 | `quick_command(command)` | the command bar's quick rows (LJ42) | one of a fixed set, `{ kind, …fields }` (a serde enum with `deny_unknown_fields`: any other kind or field is refused): `translate`, `openInBrowser`, `reload` (the page actions; refused without a web page), `setThemeMode { mode }`, `setTheme { theme }` (a preset's whole theme, checked like Save's), `setSearchEngine { id }`, `setMobileSites { on }`, `setRememberHistory { on }`, `clearHistory { range }` (as `history_clear`; returns how many pages went), `setStartAtLogin { on }`, `openSettings { tab }`, `reloadExtensions`, `setTrayIcon { on }`. Settings ones go through `settings_live::apply` (as Save) and an open settings window rebases its draft (`window.littleJoanSettings.savedChanged(<settings>, <startAtLogin \| null>)`, by `eval`). Never: the shortcut or keys, developer mode, switching extensions, custom colors — Settings only. Logs `quick-command <kind> [<value>]`, never a URL or a title |
-| `keymap_info()` | Settings' Keyboard tab (LJ44); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut, shortcutProblem, systemShortcuts }` — the last macOS's own shortcuts as read from its preferences (`[{ id, enabled, accelerator }]`, empty elsewhere; smoke log `system-shortcuts <n> keys=<k>`) — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
+| `keymap_info()` | Settings' Keyboard tab (LJ44); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut, shortcutProblem, portalShortcut, systemShortcuts }` — `portalShortcut` `{ trigger }` while the XDG GlobalShortcuts portal holds the summon shortcut (LJ17), else `null` — — the last macOS's own shortcuts as read from its preferences (`[{ id, enabled, accelerator }]`, empty elsewhere; smoke log `system-shortcuts <n> keys=<k>`) — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
 | `reveal_download()` | the toolbar's **Show in folder**, after a download was saved (LJ15) | shows the last file saved in this window in the file manager, selected (`tauri_plugin_opener::reveal_item_in_dir`) — which file is Rust's, never the bar's; an error when there is none |
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) and its **Settings** row (tab `general`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
@@ -627,7 +666,7 @@ all fields, whichever tab they are on):
 | Tab | Holds |
 |---|---|
 | General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login |
-| Keyboard | **Summon Little Joan** — the global shortcut's recorder (moved here from General; it pauses the shortcut while it listens, as before), Reset when it isn't the default; on a Linux Wayland session a note to bind `little-joan --toggle` instead — then **Little Joan's keys**: every keymap action (`keymap_info`) with its key as a recorder button (the next key with a modifier, or an F-key; a letter is the one the key types in the user's layout; Esc cancels, Backspace means no key), **No key**, **Reset** when it isn't the default, its problems under it; **Reset all** at the bottom (every key and the summon shortcut). Problems (`keyboard-logic.ts`, the keymap's own rules): errors block Save and say why — "⌘L is already Open Location", "That's the shortcut that summons Little Joan", "Plain keys type text — add ⌘ or ⌃", "On macOS a key needs ⌘ or ⌃", the editing keys ("⌘C is used for editing in pages") —; warnings don't — the OSes' reserved shortcuts ("macOS uses ⌘Space for Spotlight", `reserved-shortcuts.ts`, curated from the OSes' documentation; `Super+*` on Windows and Linux), "Ctrl+Alt is AltGr on many keyboards". **On macOS the user's own changes refine the curated table** (decided by a CI runner's export, LJ44): Rust reads the `com.apple.symbolichotkeys` domain (NSUserDefaults, read-only; `system_shortcuts.rs`), which lists only entries that were written — an entry switched off (or moved to another key) drops that curated warning (curated macOS entries carry their domain id: Spotlight 64, input sources 60 / 61, screenshots 28 / 30 / 184, …), and an entry that is on with a key warns there (under the curated name when its id is known, else "one of its keyboard shortcuts"); entries without a key say nothing, so the curated defaults stay. A saved summon shortcut that isn't one shows as written and is an error until it is recorded again or Reset. On Windows a note says WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these. The summon recorder gets the same rules (one of Little Joan's keys → error, a reserved one → warning). When the saved shortcut couldn't be registered at launch (`shortcut::settle` keeps `AppState::shortcut_problem`: what was wanted, what is active instead, `taken` or `invalid`; `get_settings` and `keymap_info` report it), Keyboard and General say so: "⌘⇧K couldn't be registered: another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little Joan has no shortcut now."); a Save whose shortcut registers clears it. Save sends `keys` only when they were edited |
+| Keyboard | **Summon Little Joan** — the global shortcut's recorder (moved here from General; it pauses the shortcut while it listens, as before), Reset when it isn't the default; on a Linux Wayland session without the portal a note to bind `little-joan --toggle` instead; while the portal holds the shortcut (LJ17) the desktop's key as text instead of the recorder (no Reset, no problems: the desktop's key is never judged, so it can't block Save, and Reset all leaves the preferred trigger alone), with "Change it in your desktop's keyboard settings." — and General's line shows that key with the same note instead of **Change…** — then **Little Joan's keys**: every keymap action (`keymap_info`) with its key as a recorder button (the next key with a modifier, or an F-key; a letter is the one the key types in the user's layout; Esc cancels, Backspace means no key), **No key**, **Reset** when it isn't the default, its problems under it; **Reset all** at the bottom (every key and the summon shortcut). Problems (`keyboard-logic.ts`, the keymap's own rules): errors block Save and say why — "⌘L is already Open Location", "That's the shortcut that summons Little Joan", "Plain keys type text — add ⌘ or ⌃", "On macOS a key needs ⌘ or ⌃", the editing keys ("⌘C is used for editing in pages") —; warnings don't — the OSes' reserved shortcuts ("macOS uses ⌘Space for Spotlight", `reserved-shortcuts.ts`, curated from the OSes' documentation; `Super+*` on Windows and Linux), "Ctrl+Alt is AltGr on many keyboards". **On macOS the user's own changes refine the curated table** (decided by a CI runner's export, LJ44): Rust reads the `com.apple.symbolichotkeys` domain (NSUserDefaults, read-only; `system_shortcuts.rs`), which lists only entries that were written — an entry switched off (or moved to another key) drops that curated warning (curated macOS entries carry their domain id: Spotlight 64, input sources 60 / 61, screenshots 28 / 30 / 184, …), and an entry that is on with a key warns there (under the curated name when its id is known, else "one of its keyboard shortcuts"); entries without a key say nothing, so the curated defaults stay. A saved summon shortcut that isn't one shows as written and is an error until it is recorded again or Reset. On Windows a note says WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these. The summon recorder gets the same rules (one of Little Joan's keys → error, a reserved one → warning). When the saved shortcut couldn't be registered at launch (`shortcut::settle` keeps `AppState::shortcut_problem`: what was wanted, what is active instead, `taken` or `invalid`; `get_settings` and `keymap_info` report it), Keyboard and General say so: "⌘⇧K couldn't be registered: another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little Joan has no shortcut now."); a Save whose shortcut registers clears it. Save sends `keys` only when they were edited |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
 | Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
 | Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
@@ -1193,7 +1232,12 @@ supports (`LJ-SMOKE ready h264=… vp9=… av1=…` in the title).
 ## Smoke log
 
 When `LITTLEJOAN_SMOKE_LOG` names a file, the app appends `<unix millis> <event>[ <detail>]`
-lines: `started`, `shortcut-registered <accel>`, `shortcut-failed <reason>`, `tray-visible <bool>`
+lines: `started`, `shortcut-registered <accel>` (global-hotkey; `shortcut-registered <trigger>
+portal` when the XDG GlobalShortcuts portal took it, `none` for a trigger the desktop didn't give,
+LJ17), `shortcut-portal-unavailable <no-bus | no-portal | refused | cancelled | timeout |
+no-shortcut | ended | failed> [<error>]` (then global-hotkey takes it), `shortcut-portal-host
+registered | unregistered <error>` (the portal's host registry and Little Joan's app id),
+`shortcut-portal-changed <trigger | none>` (the desktop changed the key), `shortcut-failed <reason>`, `tray-visible <bool>`
 (the icon shown or hidden: at startup and on each change, LJ41),
 `window-created`, `suggestions <rows> first=<site> typed=<characters>` (each `suggest` call:
 counts and the first row's site, never the typed text), `overlay <true|false>` (the command bar opened or closed; once right after
@@ -1322,7 +1366,7 @@ Installers are built in CI only (`package` job), never on a developer machine:
 |---|---|---|---|
 | Windows | windows-latest | `tauri build --bundles nsis` | `Little Joan_<v>_x64-setup.exe` — per-user install (no admin), downloads the WebView2 runtime if missing |
 | macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+ |
-| Linux (`linux`) | ubuntu-22.04 | `tauri build --bundles deb` | `.deb` — depends on the system's WebKitGTK and the GStreamer plugins for video; built on 22.04, its binary needs glibc 2.34, so it installs on Ubuntu 22.04+ and Debian 12+ |
+| Linux (`linux`) | ubuntu-22.04 | `tauri build --bundles deb` | `.deb` — depends on the system's WebKitGTK and the GStreamer plugins for video; built on 22.04, its binary needs glibc 2.34, so it installs on Ubuntu 22.04+ and Debian 12+. Two desktop files: Tauri's `Little Joan.desktop` (named after the product, for the app list) and, from `bundle.linux.deb.files`, `io.github.memoliertorerr.littlejoan.desktop` (`NoDisplay=true`), which the XDG portals' host registry needs to accept the app id (LJ17) |
 | Linux (`linux-appimage`) | ubuntu-24.04 | `tauri build --bundles appimage` | `.AppImage` — bundles the WebKitGTK of the machine that built it (24.04's 2.52: 22.04's 2.50 aborts on element fullscreen) and the media framework; glibc floor 2.39 (Ubuntu 24.04+, Debian 13, Fedora 40+) |
 
 The release profile optimizes for size (`opt-level = "s"`, LTO, one codegen unit, stripped)

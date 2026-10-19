@@ -1,15 +1,32 @@
-//! Per-OS native hooks installed on the page window's two webviews (bar.rs).
+//! Per-OS native hooks installed on the page window's two webviews (bar.rs), and the Linux
+//! portal that holds the summon shortcut in a Wayland session (portal.rs, LJ17).
 
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(target_os = "linux")]
+mod portal;
 #[cfg(windows)]
 mod win;
 
 use std::path::PathBuf;
 
 use tauri::{AppHandle, Runtime, Webview, Window};
+
+/// Linux: asks the XDG GlobalShortcuts portal for the summon shortcut (a Wayland session, LJ17);
+/// it answers later, through shortcut::portal_answered.
+#[cfg(target_os = "linux")]
+pub fn ask_portal<R: Runtime>(app: &AppHandle<R>) -> bool {
+    portal::start(app);
+    true
+}
+
+/// Windows and macOS have no portal to ask: global-hotkey holds the shortcut.
+#[cfg(not(target_os = "linux"))]
+pub fn ask_portal<R: Runtime>(_app: &AppHandle<R>) -> bool {
+    false
+}
 
 /// Windows: page keys on the bar's WebView2 controller.
 #[cfg(windows)]

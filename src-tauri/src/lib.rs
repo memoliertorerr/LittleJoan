@@ -132,7 +132,9 @@ pub fn run() {
                 app.on_menu_event(menu::on_menu_event);
             }
             tray::create(handle)?;
-            shortcut::register_from_settings(handle);
+            // In a Linux Wayland session the XDG GlobalShortcuts portal is asked first; it answers
+            // later (LJ17), and the icon's rule runs again then.
+            shortcut::register_at_launch(handle);
             // Hidden only while the shortcut works (tray.rs, LJ41).
             tray::apply_visibility(handle);
 
@@ -158,8 +160,12 @@ pub fn run() {
             if args.quit {
                 // `little-joan --quit` with nothing running: nothing to quit, so this one ends.
                 joan::quit(handle);
-            } else if let Some(command) = args.command.or(welcome.then_some(Command::Show(None))) {
+            } else if let Some(command) = args.command {
                 joan::dispatch(handle, command);
+            } else if welcome && shortcut::welcome_now(handle) {
+                // While the portal is asked, the welcome waits for its answer (shortcut.rs), so it
+                // names the desktop's key — or explains `--toggle` when there is none.
+                joan::dispatch(handle, Command::Show(None));
             }
             Ok(())
         })

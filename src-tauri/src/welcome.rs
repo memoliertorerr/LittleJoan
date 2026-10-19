@@ -1,5 +1,5 @@
 //! What the one-time welcome on the first launch says about this desktop (pure, tested). The
-//! start page shows it (ui/start.ts); commands::start_info hands it over.
+//! command bar shows it (ui/command/welcome.ts); commands::start_info hands it over.
 
 /// Where the tray / menu-bar icon is on `os` (`std::env::consts::OS`).
 pub fn tray_hint(os: &str) -> &'static str {
@@ -17,9 +17,10 @@ pub fn tray_hint(os: &str) -> &'static str {
 }
 
 /// A Linux Wayland session, where the X11 global shortcut can't fire (it only sees keys while
-/// an X11 window has the focus). `session_type` is `XDG_SESSION_TYPE`, `wayland_display`
-/// `WAYLAND_DISPLAY`. An app forced onto XWayland is still in a Wayland session.
-pub fn wayland_no_shortcut(
+/// an X11 window has the focus), so the portal is asked (shortcut/backend.rs). `session_type` is
+/// `XDG_SESSION_TYPE`, `wayland_display` `WAYLAND_DISPLAY`. An app forced onto XWayland is still
+/// in a Wayland session.
+pub fn wayland_session(
     os: &str,
     session_type: Option<&str>,
     wayland_display: Option<&str>,
@@ -29,10 +30,10 @@ pub fn wayland_no_shortcut(
             || wayland_display.is_some_and(|display| !display.is_empty()))
 }
 
-/// [`wayland_no_shortcut`] for this process.
-pub fn wayland_no_shortcut_here() -> bool {
+/// [`wayland_session`] for this process.
+pub fn wayland_session_here() -> bool {
     let var = |name: &str| std::env::var(name).ok();
-    wayland_no_shortcut(
+    wayland_session(
         std::env::consts::OS,
         var("XDG_SESSION_TYPE").as_deref(),
         var("WAYLAND_DISPLAY").as_deref(),
@@ -67,18 +68,18 @@ mod tests {
 
     #[test]
     fn wayland_is_a_linux_session_with_wayland() {
-        assert!(wayland_no_shortcut("linux", Some("wayland"), None));
-        assert!(wayland_no_shortcut("linux", Some("Wayland"), None));
-        assert!(wayland_no_shortcut("linux", None, Some("wayland-0")));
-        assert!(wayland_no_shortcut("linux", Some("x11"), Some("wayland-0")));
-        assert!(!wayland_no_shortcut("linux", Some("x11"), None));
-        assert!(!wayland_no_shortcut("linux", None, Some("")));
-        assert!(!wayland_no_shortcut("linux", None, None));
-        assert!(!wayland_no_shortcut(
+        assert!(wayland_session("linux", Some("wayland"), None));
+        assert!(wayland_session("linux", Some("Wayland"), None));
+        assert!(wayland_session("linux", None, Some("wayland-0")));
+        assert!(wayland_session("linux", Some("x11"), Some("wayland-0")));
+        assert!(!wayland_session("linux", Some("x11"), None));
+        assert!(!wayland_session("linux", None, Some("")));
+        assert!(!wayland_session("linux", None, None));
+        assert!(!wayland_session(
             "macos",
             Some("wayland"),
             Some("wayland-0")
         ));
-        assert!(!wayland_no_shortcut("windows", None, Some("wayland-0")));
+        assert!(!wayland_session("windows", None, Some("wayland-0")));
     }
 }

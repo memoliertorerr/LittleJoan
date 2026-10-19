@@ -29,6 +29,7 @@ use crate::suggest::Suggestion;
 use crate::toggle::Command;
 use crate::translate::LANGUAGES;
 use crate::welcome;
+use keys::PortalShortcut;
 
 /// The app itself from the command bar (LJ41): `quit_app`.
 pub mod app;
@@ -114,8 +115,12 @@ pub struct StartInfo {
     tray_hint: &'static str,
     /// Whether the OS login entry exists (`null` when it can't be read).
     start_at_login: Option<bool>,
-    /// A Linux Wayland session, where the X11 global shortcut can't fire.
+    /// A Linux Wayland session whose portal didn't take the shortcut, where the X11 shortcut
+    /// can't fire: the welcome explains `--toggle`.
     wayland_no_shortcut: bool,
+    /// The XDG GlobalShortcuts portal holds the shortcut (LJ17): `{ trigger }`, the desktop's own
+    /// words for the key (`null` while it gave none). `shortcut` is then `null`.
+    portal_shortcut: Option<PortalShortcut>,
     /// The theme, which the bar applies as it loads (ui/lib/theme.ts makes the colors).
     theme: Theme,
 }
@@ -124,11 +129,12 @@ pub struct StartInfo {
 /// launch the facts it shows.
 #[tauri::command]
 pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
-    let (shortcut, first_run, theme) = state::with(&app, |s| {
+    let (shortcut, first_run, theme, portal) = state::with(&app, |s| {
         (
             s.active_shortcut.clone(),
             std::mem::take(&mut s.first_run),
             s.shown_theme(),
+            s.portal.clone(),
         )
     });
     if first_run {
@@ -145,7 +151,8 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
         first_run,
         tray_hint: welcome::tray_hint(std::env::consts::OS),
         start_at_login: autostart::is_enabled(&app),
-        wayland_no_shortcut: welcome::wayland_no_shortcut_here(),
+        wayland_no_shortcut: shortcut::backend_now(&app).toggle_hint(),
+        portal_shortcut: PortalShortcut::from_state(&portal),
         theme,
     }
 }
@@ -205,7 +212,8 @@ pub struct SettingsView {
     built_in_site_modes: Vec<site::BuiltInSite>,
     /// The saved shortcut couldn't be registered at launch (LJ44): `{ wanted, active, reason }`.
     shortcut_problem: Option<shortcut::Problem>,
-    /// A Linux Wayland session, where the X11 shortcut can't fire (Keyboard explains --toggle).
+    /// A Linux Wayland session whose portal didn't take the shortcut, where the X11 shortcut
+    /// can't fire (Keyboard explains --toggle).
     wayland_no_shortcut: bool,
 }
 
@@ -255,7 +263,7 @@ pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
         version: app.package_info().version.to_string(),
         built_in_site_modes: site::built_in_sites(),
         shortcut_problem,
-        wayland_no_shortcut: welcome::wayland_no_shortcut_here(),
+        wayland_no_shortcut: shortcut::backend_now(&app).toggle_hint(),
     }
 }
 
@@ -295,8 +303,10 @@ pub struct SettingsInput {
 }
 
 /// Validates and applies new settings: every part is checked first (settings::apply_change), the
-/// shortcut is swapped live (the old one comes back if the new one is taken), then the rest takes
-/// effect and is saved through the path the quick commands use too (settings_live.rs).
+/// shortcut is swapped live (the old one comes back if the new one is taken) — unless the portal
+/// holds it (LJ17): the desktop owns that key, so the saved accelerator is only the trigger
+/// Little Joan prefers next time —, then the rest takes effect and is saved through the path the
+/// quick commands use too (settings_live.rs).
 #[tauri::command]
 pub async fn save_settings<R: Runtime>(
     app: AppHandle<R>,
@@ -320,27 +330,35 @@ pub async fn save_settings<R: Runtime>(
     // A refused part changes nothing — not even the shortcut.
     let current = state::with(&app, |s| s.settings.clone());
     settings::apply_change(&current, &change)?;
+    if !shortcut::portal_holds(&app) {
+        swap_shortcut(&app, wanted)?;
+    }
+    let updated = settings_live::apply(&app, &change)?;
+    settings_window::set_theme(&app, &updated.theme);
+    Ok(updated)
+}
+
+/// Save's live swap of the global-hotkey shortcut (`shortcut::swap`).
+fn swap_shortcut<R: Runtime>(app: &AppHandle<R>, wanted: String) -> Result<(), String> {
     // Recording may have paused the active shortcut; resume it so the swap starts from a known
     // state.
-    shortcut::set_suspended(&app, false);
-    let old = state::with(&app, |s| s.active_shortcut.clone());
-    if let Err(err) = shortcut::swap(&PluginRegistrar(&app), old.as_deref(), &wanted) {
+    shortcut::set_suspended(app, false);
+    let old = state::with(app, |s| s.active_shortcut.clone());
+    if let Err(err) = shortcut::swap(&PluginRegistrar(app), old.as_deref(), &wanted) {
         if !err.old_kept {
             // Neither the new shortcut nor the old one works now: the icon comes back.
-            state::with(&app, |s| s.active_shortcut = None);
-            crate::tray::apply_visibility(&app);
+            state::with(app, |s| s.active_shortcut = None);
+            crate::tray::apply_visibility(app);
         }
         return Err(err.message);
     }
     smoke::log("shortcut-registered", &wanted);
-    state::with(&app, |s| {
+    state::with(app, |s| {
         s.active_shortcut = Some(wanted);
         // The saved shortcut works now: the launch's problem is over.
         s.shortcut_problem = None;
     });
-    let updated = settings_live::apply(&app, &change)?;
-    settings_window::set_theme(&app, &updated.theme);
-    Ok(updated)
+    Ok(())
 }
 
 /// Settings' Appearance tab previews `theme` in the open page window while it is edited (not

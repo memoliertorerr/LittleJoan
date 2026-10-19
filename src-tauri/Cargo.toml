@@ -53,6 +53,11 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 gtk = "0.18"
 # Phone mode sets WebKitSettings' user agent (same version as wry uses; nothing new to fetch).
 webkit2gtk = "2.0"
+# The Wayland-native global shortcut (LJ17): the XDG GlobalShortcuts portal. Default features
+# off; tokio, the runtime of tauri::async_runtime. It shares the zbus 5 the single-instance and
+# opener plugins already use — zbus then runs on tokio too, its blocking API on a runtime of its
+# own (see the plan's Landmines).
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "global_shortcuts"] }
 
 [profile.dev]
 # No debug info: it would multiply the size of target/ on a tight local disk.

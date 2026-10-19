@@ -132,7 +132,8 @@ function showTab(next: Tab, focus = false): void {
 }
 
 function refresh(): void {
-  trayNote.textContent = trayText(displayShortcut(keyboard.shortcut(), isMac));
+  // While the portal holds it (LJ17) the desktop names its key: "press your shortcut".
+  trayNote.textContent = trayText(keyboard.portal() ? "" : displayShortcut(keyboard.shortcut(), isMac));
   // Errors in the Keyboard tab block Save (warnings don't).
   save.disabled = saved === null || !hasChanges(pending(saved)) || keyboard.hasErrors();
 }

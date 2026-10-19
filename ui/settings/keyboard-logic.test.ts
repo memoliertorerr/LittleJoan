@@ -4,9 +4,12 @@ import {
   actionProblems,
   allProblems,
   bindingOf,
+  canResetAll,
   hasErrors,
   isCustom,
   parseAccelerator,
+  portalText,
+  PORTAL_NOTE,
   problemText,
   recordAction,
   resetAll,
@@ -216,5 +219,37 @@ describe("a saved summon shortcut that can't be one", () => {
     expect(summonProblems("CommandOrControl+Nope", draft("linux"))[0]?.level).toBe("error");
     expect(hasErrors(draft("linux", {}, "Hyper+Nope"))).toBe(true);
     expect(summonProblems(DEFAULT_SUMMON, draft("linux"))).toEqual([]);
+  });
+});
+
+describe("the portal's shortcut (LJ17)", () => {
+  const portalDraft = (summon: string): KeyboardDraft => ({
+    os: "linux",
+    actions: actions("linux"),
+    overrides: {},
+    summon,
+    portal: { trigger: "Press <ctrl><shift>space" },
+  });
+
+  it("shows the desktop's own words for its key, and where to change it", () => {
+    expect(portalText({ trigger: "Press <ctrl><shift>space" })).toBe("Press <ctrl><shift>space");
+    expect(portalText({ trigger: null })).toBe("No key yet");
+    expect(PORTAL_NOTE).toBe("Change it in your desktop's keyboard settings.");
+  });
+
+  it("never judges the desktop's key, so it can't block Save", () => {
+    const broken = portalDraft("Hyper+Nope");
+    expect(allProblems(broken)["summon"]).toEqual([]);
+    expect(hasErrors(broken)).toBe(false);
+    expect(hasErrors({ ...broken, portal: null })).toBe(true);
+  });
+
+  it("keeps the preferred trigger on Reset all, which then resets the keys only", () => {
+    const draft = { ...portalDraft("Alt+KeyJ"), overrides: { history: "CommandOrControl+Shift+KeyK" } };
+    expect(resetAll(draft)).toEqual({ ...draft, overrides: {} });
+    expect(canResetAll(draft)).toBe(true);
+    expect(canResetAll(resetAll(draft))).toBe(false);
+    expect(canResetAll({ ...portalDraft("Alt+KeyJ"), portal: null })).toBe(true);
+    expect(resetAll({ ...draft, portal: null }).summon).toBe(DEFAULT_SUMMON);
   });
 });

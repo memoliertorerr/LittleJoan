@@ -2,15 +2,20 @@
 // here from General, pausing the shortcut while it listens as before — and every Little Joan key
 // from Rust's keymap_info(), each a recorder button with "No key" and "Reset", its problems under
 // it (keyboard-logic.ts: errors block Save, warnings don't), "Reset all" at the bottom. General
-// keeps a line with the shortcut and a "Change…" button. Everything is drawn as text.
+// keeps a line with the shortcut and a "Change…" button. While the XDG GlobalShortcuts portal holds
+// the shortcut (a Wayland session, LJ17), both show the desktop's key instead of the recorder and
+// say to change it in the desktop's settings. Everything is drawn as text.
 import { invoke } from "@tauri-apps/api/core";
 import { acceleratorFromEvent } from "../lib/shortcut.ts";
 import {
   DEFAULT_SUMMON,
+  PORTAL_NOTE,
   allProblems,
   bindingOf,
+  canResetAll,
   hasErrors,
   isCustom,
+  portalText,
   problemText,
   recordAction,
   resetAll,
@@ -21,6 +26,7 @@ import {
   type KeyActionInfo,
   type KeyboardDraft,
   type Os,
+  type PortalShortcut,
   type Problem,
   type ShortcutProblem,
   type SystemShortcut,
@@ -32,6 +38,8 @@ export interface KeymapInfo {
   actions: KeyActionInfo[];
   globalShortcut: string;
   shortcutProblem: ShortcutProblem | null;
+  /** The portal holds the shortcut (LJ17): the desktop's key, or null. */
+  portalShortcut: PortalShortcut | null;
   /** macOS's own shortcuts as read from its preferences (empty elsewhere). */
   systemShortcuts: SystemShortcut[];
 }
@@ -45,6 +53,8 @@ export interface KeyboardTab {
   keys(): Record<string, string> | undefined;
   /** The keys as edited, always. */
   overrides(): Record<string, string>;
+  /** The portal holds the summon shortcut (the desktop owns its key). */
+  portal(): boolean;
   /** A row has an error: Save is refused. */
   hasErrors(): boolean;
   /** Stops listening (Save, Cancel, another tab). */
@@ -66,6 +76,7 @@ const NOTE = "Click, then press the keys you want to use.";
 /** `changed` runs after every edit (Save's state); `showKeyboard` switches to this tab. */
 export function keyboardTab(changed: () => void, showKeyboard: () => void): KeyboardTab {
   const summon = find<HTMLButtonElement>("#shortcut");
+  const summonPortal = find<HTMLElement>("#shortcut-portal");
   const summonReset = find<HTMLButtonElement>("#shortcut-reset");
   const note = find<HTMLElement>("#shortcut-note");
   const summonProblems = find<HTMLElement>("#summon-problems");
@@ -76,6 +87,7 @@ export function keyboardTab(changed: () => void, showKeyboard: () => void): Keyb
   const current = find<HTMLElement>("#shortcut-current");
   const generalProblem = find<HTMLElement>("#general-problem");
   const change = find<HTMLButtonElement>("#shortcut-change");
+  const generalPortal = find<HTMLElement>("#general-portal-note");
   const engineNote = find<HTMLElement>("#kb-engine-note");
 
   let os: Os = "linux";
@@ -107,7 +119,7 @@ export function keyboardTab(changed: () => void, showKeyboard: () => void): Keyb
   const drawRecording = (): void => {
     summon.textContent = recording === "summon" ? "Press keys…" : show(draft.summon, os) || "None";
     summon.classList.toggle("recording", recording === "summon");
-    note.textContent = recording === null ? NOTE : "Esc cancels.";
+    note.textContent = draft.portal ? PORTAL_NOTE : recording === null ? NOTE : "Esc cancels.";
     for (const recorder of Array.from(list.querySelectorAll<HTMLButtonElement>("button[data-action]"))) {
       const id = recorder.dataset["action"] ?? "";
       const action = draft.actions.find((a) => a.id === id);
@@ -146,9 +158,16 @@ export function keyboardTab(changed: () => void, showKeyboard: () => void): Keyb
 
   const draw = (): void => {
     const rows = allProblems(draft);
-    summonReset.hidden = draft.summon === DEFAULT_SUMMON;
+    const portal = draft.portal ?? null;
+    summon.hidden = portal !== null;
+    summonPortal.hidden = portal === null;
+    summonPortal.textContent = portal ? portalText(portal) : "";
+    summonReset.hidden = portal !== null || draft.summon === DEFAULT_SUMMON;
+    change.hidden = portal !== null;
+    generalPortal.hidden = portal === null;
+    generalPortal.textContent = PORTAL_NOTE;
     problemsInto(summonProblems, rows["summon"] ?? []);
-    current.textContent = show(draft.summon, os) || "None";
+    current.textContent = portal ? portalText(portal) : show(draft.summon, os) || "None";
     list.replaceChildren(
       ...draft.actions.map((action) => {
         const item = document.createElement("li");
@@ -185,7 +204,7 @@ export function keyboardTab(changed: () => void, showKeyboard: () => void): Keyb
         return item;
       }),
     );
-    resetAllButton.disabled = draft.summon === DEFAULT_SUMMON && Object.keys(draft.overrides).length === 0;
+    resetAllButton.disabled = !canResetAll(draft);
     drawRecording();
   };
 
@@ -241,7 +260,14 @@ export function keyboardTab(changed: () => void, showKeyboard: () => void): Keyb
     load(info, saved, waylandNoShortcut) {
       os = info.platform === "macos" ? "macos" : info.platform === "windows" ? "windows" : "linux";
       savedKeys = { ...saved.keys };
-      draft = { os, actions: info.actions, overrides: { ...saved.keys }, summon: saved.shortcut, system: info.systemShortcuts };
+      draft = {
+        os,
+        actions: info.actions,
+        overrides: { ...saved.keys },
+        summon: saved.shortcut,
+        system: info.systemShortcuts,
+        portal: info.portalShortcut,
+      };
       engineNote.hidden = os !== "windows";
       const problem = info.shortcutProblem ? problemText(info.shortcutProblem, os) : "";
       for (const line of [problemLine, generalProblem]) {
@@ -254,6 +280,7 @@ export function keyboardTab(changed: () => void, showKeyboard: () => void): Keyb
     shortcut: () => draft.summon,
     keys: () => (sameOverrides(savedKeys, draft.overrides) ? undefined : { ...draft.overrides }),
     overrides: () => ({ ...draft.overrides }),
+    portal: () => Boolean(draft.portal),
     hasErrors: () => hasErrors(draft),
     stopRecording: stop,
     saved(shortcut, keys) {
