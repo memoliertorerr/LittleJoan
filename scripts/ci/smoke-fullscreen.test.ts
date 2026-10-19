@@ -168,6 +168,29 @@ describe("fullscreenFailures", () => {
     expect(fullscreenFailures({ main: parseLog(missing) }, "win32")).toEqual(["fullscreen: element at 720: the page never reported (the click didn't reach it)"]);
   });
 
+  it("with fullscreen off (WebKitGTK < 2.52, LJ14.1): every element path reports, none entered", () => {
+    const refused = (path: string, width: number, ua: string) =>
+      `title LJ-FS ${path} width=${width} ua=${ua} entered=0 held_ms=0 exited_by_page=0 events=click,request,no-fullscreen-api,timeout`;
+    const off = mainLog({
+      element390: refused("element", 390, "phone"),
+      element720: refused("element", 720, "desktop"),
+      phone720: refused("phone", 720, "desktop"),
+    });
+    const site = parseLog(`1 started\n2 title LJ-FS ready width=390 ua=desktop\n3 ${refused("phone", 390, "desktop")}\n`);
+    expect(fullscreenFailures({ main: parseLog(off), site }, "linux", true)).toEqual([]);
+    // The same reports where fullscreen must work: every path failed.
+    expect(fullscreenFailures({ main: parseLog(off), site }, "linux")).toHaveLength(4);
+    // A path that entered anyway, or never reported (the click didn't land, or the app died).
+    expect(fullscreenFailures({ main: parseLog(mainLog({ element720: refused("element", 720, "desktop") })) }, "linux", true)).toEqual([
+      "fullscreen: element at 390: entered fullscreen, which is off on this WebKitGTK (events click,request,on:fullscreenchange,exit,exit-call,off:fullscreenchange)",
+      "fullscreen: phone at 720: entered fullscreen, which is off on this WebKitGTK (events click,request,on:fullscreenchange,exit,exit-call,off:fullscreenchange)",
+    ]);
+    const missing = off.replace(/^.*LJ-FS element width=720.*\n/m, "");
+    expect(fullscreenFailures({ main: parseLog(missing) }, "linux", true)).toEqual([
+      "fullscreen: element at 720: the page never reported (the click didn't reach it)",
+    ]);
+  });
+
   it("need the desktop agent at 390 in the siteModes launch", () => {
     const run = { main: parseLog(mainLog({})), site: siteLog("phone") };
     expect(fullscreenFailures(run, "win32")).toContain(`siteModes: the page never reported the desktop agent at ${SITE_SIZE.width}`);

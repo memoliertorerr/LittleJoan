@@ -93,6 +93,8 @@ import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } f
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
+import { findApp, listProcs } from "./smoke-linux.mts";
+import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
 import {
   keyboardProblemFailures,
@@ -133,6 +135,10 @@ const extraEnv = Object.fromEntries(
     .filter((pair) => pair.includes("="))
     .map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]),
 );
+// LJ_SMOKE_FULLSCREEN=off: this job's engine has element fullscreen switched off (WebKitGTK older
+// than 2.52, which aborts on it: LJ14.1), so a page's request must change nothing — and crash
+// nothing (smoke-fullscreen-off.mts).
+const fullscreenOff = process.env.LJ_SMOKE_FULLSCREEN === "off";
 // Data folders live outside <out>, which is uploaded (WebView2 keeps its profile there).
 const dataRoot = process.env.RUNNER_TEMP ?? tmpdir();
 /**
@@ -576,20 +582,47 @@ function serve(): Promise<Server> {
   return new Promise((done) => server.listen(0, "127.0.0.1", () => done(server)));
 }
 
-/** Launches the app; with LJ_SMOKE_GDB=1 (Linux) it runs under gdb so a crash prints a backtrace. */
+/** The AppImage (LJ13): its runtime starts the app as a child (smoke-linux.mts). */
+const appImage = os === "linux" && app.endsWith(".AppImage");
+/** gdb's commands once the app runs: a crash prints a backtrace. */
+const GDB_AFTER = ["-ex", "bt 40", "-ex", "thread apply all bt 8"];
+
+/**
+ * Launches the app; with LJ_SMOKE_GDB=1 (Linux) it runs under gdb so a crash prints a backtrace —
+ * the AppImage's app gets gdb attached once it runs (attachGdb).
+ */
 function launch(withEnv: NodeJS.ProcessEnv = env): ChildProcess {
   const underGdb = os === "linux" && process.env.LJ_SMOKE_GDB === "1";
-  const [command, args] = underGdb
-    ? [
-        "gdb",
-        ["-q", "-batch", "-ex", "run", "-ex", "bt 40", "-ex", "thread apply all bt 8", "--args", app as string],
-      ]
-    : [app as string, []];
+  const [command, args] =
+    underGdb && !appImage ? ["gdb", ["-q", "-batch", "-ex", "run", ...GDB_AFTER, "--args", app as string]] : [app as string, []];
   const child = spawn(command, args, { env: withEnv, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
   child.stderr?.on("data", (chunk: Buffer) => process.stdout.write(`[app] ${chunk.toString()}`));
   child.on("exit", (code, signal) => console.log(`app exited with code ${code} signal ${signal}`));
+  if (underGdb && appImage) {
+    void attachGdb(child);
+  }
   return child;
+}
+
+/**
+ * The AppImage under gdb: gdb can't follow its runtime into the app (AppRun's subshells come
+ * first), so it attaches to the app once that runs (CI allows ptrace beyond a process's children
+ * for this, ci.yml). A crash before that has no backtrace; the runtime's exit status still shows it.
+ */
+async function attachGdb(runtime: ChildProcess): Promise<void> {
+  for (let waited = 0; waited < 30_000 && runtime.exitCode === null && runtime.signalCode === null; waited += 100) {
+    const pid = runtime.pid === undefined ? undefined : findApp(listProcs(), runtime.pid);
+    if (pid !== undefined) {
+      const gdb = spawn("gdb", ["-q", "-batch", "-p", String(pid), "-ex", "continue", ...GDB_AFTER], { stdio: ["ignore", "pipe", "pipe"] });
+      gdb.stdout.on("data", (chunk: Buffer) => process.stdout.write(`[gdb] ${chunk.toString()}`));
+      gdb.stderr.on("data", (chunk: Buffer) => process.stdout.write(`[gdb] ${chunk.toString()}`));
+      console.log(`gdb attached to the AppImage's app (pid ${pid})`);
+      return;
+    }
+    await sleep(100);
+  }
+  console.log("(gdb: the AppImage's app never showed up)");
 }
 
 function alive(pid: number): boolean {
@@ -635,11 +668,13 @@ async function exited(pid: number, timeoutMs: number): Promise<boolean> {
   return gone;
 }
 
-/** The pid of the app itself (under gdb, the debuggee is gdb's child). */
+/**
+ * The pid of the app itself: on Linux the newest little-joan in the launched process's tree (gdb's
+ * child; the AppImage runtime's — smoke-linux.mts), elsewhere the launched process.
+ */
 function appPid(child: ChildProcess): number {
-  if (os === "linux" && process.env.LJ_SMOKE_GDB === "1") {
-    const found = run("pgrep", ["-n", "-x", "little-joan"]).trim();
-    return Number(found) || -1;
+  if (os === "linux" && child.pid !== undefined) {
+    return findApp(listProcs(), child.pid) ?? -1;
   }
   return child.pid ?? -1;
 }
@@ -656,6 +691,11 @@ const port = (server.address() as AddressInfo).port;
 const child = launch();
 
 await waitFor("started + shortcut", (e) => count(e, "started") > 0 && (count(e, "shortcut-registered") > 0 || count(e, "shortcut-failed") > 0));
+if (count(events(), "started") === 0 && (child.exitCode !== null || child.signalCode !== null)) {
+  // Every later step would only time out (CI's AppImage job once spent its 45 minutes so).
+  console.log("\nSMOKE FAILED:\n- the app ended before it started (its output is above)");
+  process.exit(1);
+}
 await sleep(3000);
 const pid = appPid(child);
 const idleMb = memoryMb(pid);
@@ -685,13 +725,19 @@ writeFileSync(join(out, "helpers-with-page.txt"), helperListing());
 screenshot("page.png");
 
 clickCentre();
-const windowWanted = os !== "darwin";
-await waitFor(
-  "fullscreen",
-  (e) => lastTitle(e, "LJ-SMOKE fullscreen=on") !== undefined && (!windowWanted || count(e, "fullscreen", "true") > 0),
-  15_000,
-);
-await sleep(2000);
+const windowWanted = os !== "darwin" && !fullscreenOff;
+if (fullscreenOff) {
+  // Fullscreen is off on this engine: the click must leave the window as it is (and the app alive,
+  // which the page's next load shows).
+  await sleep(4000);
+} else {
+  await waitFor(
+    "fullscreen",
+    (e) => lastTitle(e, "LJ-SMOKE fullscreen=on") !== undefined && (!windowWanted || count(e, "fullscreen", "true") > 0),
+    15_000,
+  );
+  await sleep(2000);
+}
 screenshot("fullscreen.png");
 
 // Leave fullscreen by loading the page again, then resize the window: the page must reflow to
@@ -1206,7 +1252,15 @@ function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra
     },
   });
 }
-const fullscreenDriver: FsDriver = { os, pageUrl: smokePageUrl, launch: fullscreenLaunch, clickAt, screenshot, sleep: (ms) => sleep(ms).then(() => undefined) };
+const fullscreenDriver: FsDriver = {
+  os,
+  pageUrl: smokePageUrl,
+  launch: fullscreenLaunch,
+  clickAt,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  fullscreenOff,
+};
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
 const fullscreenCheck = await fullscreenRun(fullscreenDriver, true);
@@ -1361,7 +1415,9 @@ const summary = {
     up: [...BUNDLED_PANELS, ...PAGE_ACTIONS].filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
     keysReached: bundledCheck.keys,
   },
-  fullscreenRun: fullscreenSummary(fullscreenCheck, os),
+  fullscreenRun: fullscreenSummary(fullscreenCheck, os, fullscreenOff),
+  // LJ14.1: element fullscreen switched off (expected on WebKitGTK older than 2.52 only).
+  fullscreenOff: { expected: fullscreenOff, versions: fullscreenOffVersions(log) },
   resizeRun: { steps: resizeSummary(resizeCheck.results), rules: resizeFailures(RESIZE_STEPS, resizeCheck.results) },
   siteModeRun: siteModeSummary(siteModeCheck, os),
   quickRun: quickSummary(quickCheck, os),
@@ -1414,7 +1470,8 @@ const failures = evaluate(
   .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
-  .concat(fullscreenFailures(fullscreenCheck, os))
+  .concat(fullscreenFailures(fullscreenCheck, os, fullscreenOff))
+  .concat(fullscreenOffFailures(fullscreenOff, { main: log, fullscreen: fullscreenCheck }))
   .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(siteModeFailures(siteModeCheck, os))
   .concat(quickFailures(quickCheck, os))

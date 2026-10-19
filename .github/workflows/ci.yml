@@ -111,11 +111,18 @@ jobs:
             os: macos-latest
             bundles: app,dmg
             target: universal-apple-darwin
-          # The oldest supported Ubuntu runner: an older glibc makes the .deb and AppImage run
-          # on more distributions.
+          # The .deb on the oldest supported Ubuntu runner (its binary needs glibc 2.34), so it
+          # installs on Ubuntu 22.04+ and Debian 12+, where it uses the system's WebKitGTK.
           - name: linux
             os: ubuntu-22.04
-            bundles: deb,appimage
+            bundles: deb
+            target: ""
+          # The AppImage carries the WebKitGTK of the machine that built it. 22.04's (2.50.4)
+          # aborts on element fullscreen (the plan's Landmines), 24.04's (2.52) doesn't — so it is
+          # built here, and its glibc floor rises to 2.39 (Ubuntu 24.04+, Debian 13, Fedora 40+).
+          - name: linux-appimage
+            os: ubuntu-24.04
+            bundles: appimage
             target: ""
     runs-on: ${{ matrix.os }}
     defaults:
@@ -191,8 +198,50 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Inspect the .deb
-        if: runner.os == 'Linux'
-        run: dpkg-deb -I bundles/*.deb
+        if: matrix.name == 'linux'
+        run: |
+          deb="$(ls bundles/*.deb | head -1)"
+          dpkg-deb -I "$deb"
+          # The newest glibc symbol version the binary needs: its floor (WebKitGTK is the system's).
+          dir="$RUNNER_TEMP/deb" && rm -rf "$dir" && dpkg-deb -x "$deb" "$dir"
+          glibc="$(grep -hoa 'GLIBC_2\.[0-9]*' "$dir/usr/bin/little-joan" | sort -uV | tail -1)"
+          echo "glibc floor: $glibc"
+          echo "The .deb needs ${glibc/_/ } or later (it uses the system's WebKitGTK)." >> "$GITHUB_STEP_SUMMARY"
+
+      # What the AppImage really carries: its WebKitGTK (the bundled library asked for its own
+      # version), its glibc floor (the newest glibc symbol version any of its files needs), and
+      # how it starts (AppRun). A bundled WebKitGTK older than 2.52 fails the job: 2.50 aborts on
+      # element fullscreen.
+      - name: Inspect the AppImage
+        if: matrix.name == 'linux-appimage'
+        run: |
+          image="$PWD/$(ls bundles/*.AppImage | head -1)"
+          chmod +x "$image"
+          dir="$RUNNER_TEMP/appimage" && rm -rf "$dir" && mkdir -p "$dir"
+          (cd "$dir" && "$image" --appimage-extract >/dev/null)
+          root="$dir/squashfs-root"
+          file "$root/AppRun"
+          if file "$root/AppRun" | grep -q text; then head -n 40 "$root/AppRun"; fi
+          ls "$root/apprun-hooks" 2>/dev/null || true
+          lib="$(find "$root" -name 'libwebkit2gtk-4.1.so.*' -type f | head -1)"
+          test -n "$lib"
+          echo "bundled: ${lib#"$root"/}"
+          version="$(python3 -I -c 'import ctypes, sys
+          lib = ctypes.CDLL(sys.argv[1])
+          print(f"{lib.webkit_get_major_version()}.{lib.webkit_get_minor_version()}.{lib.webkit_get_micro_version()}")' "$lib")"
+          source_package="$(dpkg-query -W -f='${Package} ${Version}' libwebkit2gtk-4.1-0)"
+          glibc="$(grep -rhoa 'GLIBC_2\.[0-9]*' "$root" | sort -uV | tail -1)"
+          echo "WebKitGTK $version (from $source_package); glibc floor $glibc"
+          {
+            echo
+            echo "The AppImage bundles **WebKitGTK $version** (\`$(basename "$lib")\`, from $source_package)"
+            echo "and needs ${glibc/_/ } or later."
+          } >> "$GITHUB_STEP_SUMMARY"
+          minor="$(echo "$version" | cut -d. -f2)"
+          if [ "$(echo "$version" | cut -d. -f1)" -lt 2 ] || { [ "$(echo "$version" | cut -d. -f1)" -eq 2 ] && [ "$minor" -lt 52 ]; }; then
+            echo "::error::The AppImage bundles WebKitGTK $version; older than 2.52 aborts on element fullscreen"
+            exit 1
+          fi
 
       - name: Inspect the macOS app
         if: runner.os == 'macOS'
@@ -229,9 +278,8 @@ jobs:
           - name: macos
             artifact: macos
             os: macos-latest
-          # Ubuntu 22.04's current WebKitGTK (2.50.4) aborts when any page enters element
-          # fullscreen — reproduced with a bare WebKitGTK window, no Tauri involved (see the plan's
-          # Landmines) — so the installed .deb is smoke-tested on 24.04 (WebKitGTK 2.52).
+          # The installed .deb on 24.04 (WebKitGTK 2.52), where element fullscreen works; 22.04's
+          # own engine has its own job below.
           - name: linux
             artifact: linux
             os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
@@ -244,6 +292,25 @@ jobs:
             os: ${{ inputs.linux_runner || 'ubuntu-24.04' }}
             screen: 2560x1600x24
             app_env: GDK_SCALE=2
+          # The AppImage (built on 24.04, with its own WebKitGTK 2.52), through the same smoke as
+          # `linux`. The runners have no FUSE, so it extracts itself and runs from there
+          # (APPIMAGE_EXTRACT_AND_RUN); every launch, the smoke's second instances included, shares
+          # that folder, and NO_CLEANUP stops a second instance from deleting it as it exits while
+          # the first still runs from it. Its glibc floor is 2.39: never on linux_runner's 22.04.
+          - name: linux-appimage
+            artifact: linux-appimage
+            os: ubuntu-24.04
+            screen: 1280x800x24
+            app_env: APPIMAGE_EXTRACT_AND_RUN=1 NO_CLEANUP=1
+          # The .deb on Ubuntu 22.04, with its own WebKitGTK 2.50.4: it aborts when a page enters
+          # element fullscreen, whatever the app answers (the plan's Landmines), so Little Joan
+          # switches fullscreen off there (LJ14.1). The whole smoke runs, and a page's request must
+          # change nothing and crash nothing (LJ_SMOKE_FULLSCREEN=off, smoke-fullscreen-off.mts).
+          - name: linux-22.04
+            artifact: linux
+            os: ubuntu-22.04
+            screen: 1280x800x24
+            fullscreen: "off"
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -287,11 +354,111 @@ jobs:
           echo "APP=$app/Contents/MacOS/little-joan" >> "$GITHUB_ENV"
 
       - name: Install (Linux, .deb through apt)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.artifact == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11 gdb
           echo "APP=$(command -v little-joan)" >> "$GITHUB_ENV"
+
+      # As a user gets it: the release's file name (no space), made executable. An AppImage leaves
+      # some libraries to the system — every desktop has them (linuxdeploy's excludelist: EGL and
+      # GL with Mesa's drivers, GBM, ALSA, X11, fonts …); this runner lacks EGL, so those are
+      # installed (no WebKitGTK), and anything still missing is listed. gdb can't follow the
+      # AppImage's runtime into the app (AppRun is a shell script whose subshells it would follow
+      # instead), so smoke.mts attaches gdb to the app once it runs: ptrace beyond a process's own
+      # children must be allowed on this runner.
+      - name: Install (Linux, the AppImage)
+        if: matrix.artifact == 'linux-appimage'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xdotool imagemagick openbox dbus-x11 gdb \
+            libegl1 libgl1 libgles2 libgbm1 libegl-mesa0 libgl1-mesa-dri libasound2t64
+          image="$RUNNER_TEMP/appimage/LittleJoan-$(node -p 'require("./package.json").version')-linux-x86_64.AppImage"
+          mkdir -p "$(dirname "$image")"
+          cp installers/*.AppImage "$image"
+          chmod +x "$image"
+          ls -l "$image"
+          check="$RUNNER_TEMP/appimage-check" && rm -rf "$check" && mkdir -p "$check"
+          (cd "$check" && "$image" --appimage-extract >/dev/null)
+          root="$check/squashfs-root"
+          missing=""
+          while IFS= read -r -d '' file; do
+            if [ "$(head -c 4 "$file" | tr -d '\177\000')" = ELF ]; then
+              gaps="$(LD_LIBRARY_PATH="$root/usr/lib:$root/usr/lib/x86_64-linux-gnu" ldd "$file" 2>/dev/null | grep 'not found' | tr -s ' \t\n' ' ' || true)"
+              if [ -n "$gaps" ]; then missing+="${file#"$root"/}:$gaps"$'\n'; fi
+            fi
+          done < <(find "$root/usr" -type f -print0)
+          if [ -n "$missing" ]; then
+            printf 'Not in the AppImage nor on this runner:\n%s' "$missing"
+            echo "::warning::The AppImage needs libraries this runner lacks (the step's log lists them)"
+          else
+            echo "Every library the AppImage's files need is in it or on this runner."
+          fi
+          rm -rf "$check"
+          if [ -e /proc/sys/kernel/yama/ptrace_scope ]; then sudo sysctl -w kernel.yama.ptrace_scope=0; fi
+          echo "APP=$image" >> "$GITHUB_ENV"
+
+      # Diagnostics: the same click in a bare WebKitGTK 4.1 window built with PyGObject (no Tauri,
+      # wry, or tao), to tell an engine crash from an embedding one. The system's WebKitGTK, so only
+      # where the .deb runs; before the app's smoke, which may run into the job's time limit after an
+      # abort. Four variants: WebKitGTK's own handling ("default"), an `enter-fullscreen` handler
+      # that returns TRUE ("handled": WebKit declines the page's request), that plus the window
+      # fullscreened by the handler ("handled-window") — LJ14 —, and WebKitSettings'
+      # `enable-fullscreen` switched off ("fullscreen-off", LJ14.1).
+      - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
+        if: ${{ !cancelled() && matrix.artifact == 'linux' && inputs.linux_plain_webkit_check }}
+        run: |
+          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1 xvfb xdotool openbox dbus-x11
+          cat > /tmp/plain.html <<'HTML'
+          <!doctype html><title>plain ready</title>
+          <div id="s" style="position:fixed;inset:0;background:#f7c948" onclick="this.requestFullscreen().catch((e) => { document.title = 'plain request refused: ' + e.name; })"></div>
+          <script>
+          document.addEventListener("fullscreenchange", () => { document.title = "plain fullscreen=" + (document.fullscreenElement ? "on" : "off"); });
+          document.addEventListener("fullscreenerror", () => { document.title = "plain fullscreenerror"; });
+          </script>
+          HTML
+          cat > /tmp/plain.py <<'PY'
+          import sys
+          import gi
+          gi.require_version("Gtk", "3.0")
+          gi.require_version("Gdk", "3.0")
+          gi.require_version("WebKit2", "4.1")
+          from gi.repository import Gdk, GLib, Gtk, WebKit2
+          mode = sys.argv[1] if len(sys.argv) > 1 else "default"
+          print(f"plain ({mode}): WebKitGTK {WebKit2.get_major_version()}.{WebKit2.get_minor_version()}.{WebKit2.get_micro_version()}", flush=True)
+          window = Gtk.Window()
+          window.set_default_size(480, 640)
+          window.set_position(Gtk.WindowPosition.CENTER)
+          view = WebKit2.WebView()
+          if mode == "fullscreen-off":
+              view.get_settings().set_enable_fullscreen(False)
+              print("enable-fullscreen:", view.get_settings().get_enable_fullscreen(), flush=True)
+          view.connect("notify::title", lambda v, _: print("title:", v.get_title(), flush=True))
+          def on_enter(_view):
+              print(f"enter-fullscreen: {mode}", flush=True)
+              if mode == "handled-window":
+                  window.fullscreen()
+              return mode in ("handled", "handled-window")
+          view.connect("enter-fullscreen", on_enter)
+          window.connect("window-state-event", lambda _w, e: print("window fullscreen:", bool(e.new_window_state & Gdk.WindowState.FULLSCREEN), flush=True) or False)
+          window.add(view)
+          view.load_uri("file:///tmp/plain.html")
+          window.show_all()
+          GLib.timeout_add_seconds(30, Gtk.main_quit)
+          Gtk.main()
+          print(f"plain ({mode}): main loop ended normally", flush=True)
+          PY
+          for mode in default handled handled-window fullscreen-off; do
+            xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
+              openbox & sleep 2
+              python3 /tmp/plain.py "$0" & app=$!
+              sleep 8
+              xdotool mousemove 640 400 click 1
+              sleep 8
+              if kill -0 "$app" 2>/dev/null; then echo "BARE WEBKITGTK ($0): still running after the click"; kill "$app"; else wait "$app"; echo "BARE WEBKITGTK ($0): exited with status $?"; fi
+              wait "$app" 2>/dev/null || true
+            ' "$mode"
+          done
 
       - name: Smoke test (Windows, macOS)
         if: runner.os != 'Linux'
@@ -306,58 +473,12 @@ jobs:
           # debuginfod downloads time out, and Ubuntu's ddebs have no symbols for WebKitGTK 2.50.4.)
           LJ_SMOKE_GDB: "1"
           LJ_SMOKE_EXTRA_ENV: ${{ inputs.extra_env }} ${{ matrix.app_env }}
+          LJ_SMOKE_FULLSCREEN: ${{ matrix.fullscreen }}
           LJ_WM: ${{ inputs.linux_window_manager || 'openbox' }}
           LJ_SCREEN: ${{ matrix.screen }}
         run: |
           xvfb-run -a -s "-screen 0 $LJ_SCREEN" dbus-run-session -- bash -c \
             'if [ "$LJ_WM" != none ]; then openbox & sleep 2; fi; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
-
-      # Diagnostics: the same click in a bare WebKitGTK 4.1 window built with PyGObject (no Tauri,
-      # wry, or tao), to tell an engine crash from an embedding one.
-      - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
-        if: ${{ !cancelled() && runner.os == 'Linux' && inputs.linux_plain_webkit_check }}
-        run: |
-          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1
-          cat > /tmp/plain.html <<'HTML'
-          <!doctype html><title>plain ready</title>
-          <div id="s" style="position:fixed;inset:0;background:#f7c948" onclick="this.requestFullscreen()"></div>
-          <script>document.addEventListener("fullscreenchange", () => { document.title = "plain fullscreen=" + (document.fullscreenElement ? "on" : "off"); });</script>
-          HTML
-          cat > /tmp/plain.py <<'PY'
-          import gi
-          gi.require_version("Gtk", "3.0")
-          gi.require_version("WebKit2", "4.1")
-          from gi.repository import GLib, Gtk, WebKit2
-          window = Gtk.Window()
-          window.set_default_size(480, 640)
-          window.set_position(Gtk.WindowPosition.CENTER)
-          view = WebKit2.WebView()
-          view.connect("notify::title", lambda v, _: print("title:", v.get_title(), flush=True))
-          window.add(view)
-          view.load_uri("file:///tmp/plain.html")
-          window.show_all()
-          GLib.timeout_add_seconds(30, Gtk.main_quit)
-          Gtk.main()
-          print("plain: main loop ended normally", flush=True)
-          PY
-          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
-            openbox & sleep 2
-            python3 /tmp/plain.py & app=$!
-            sleep 8
-            xdotool mousemove 640 400 click 1
-            sleep 8
-            if kill -0 "$app" 2>/dev/null; then echo "BARE WEBKITGTK: still running after the click"; else wait "$app"; echo "BARE WEBKITGTK: exited with status $?"; fi
-            wait "$app" 2>/dev/null || true
-          '
-
-      - name: AppImage starts (Linux)
-        if: runner.os == 'Linux'
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: |
-          image="$(ls installers/*.AppImage | head -1)"
-          chmod +x "$image"
-          xvfb-run -a dbus-run-session -- node scripts/ci/smoke.mts --app "$image" --out test-results/smoke --started-only
 
       - uses: actions/upload-artifact@v7
         if: always()
