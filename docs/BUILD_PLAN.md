@@ -84,7 +84,7 @@
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ✅ done |
 | LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ✅ done |
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ✅ done |
-| LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⬜ todo |
+| LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⏭ skipped — no Apple signing secrets on 2026-10-19; runs when the owner adds them (LJ18's pre-step) |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
@@ -183,7 +183,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Next: phase 10 (LJ18, only if the owner's Apple signing secrets exist), then LJ19.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Phase 10 (LJ18) ⏭ skipped: `gh secret list --repo memoliertorerr/LittleJoan` shows no Apple signing secrets (checked 2026-10-19), so the macOS build stays ad-hoc signed and LJ19's checklist keeps the README's Gatekeeper step; LJ18 runs as written once the owner adds the secrets (its pre-step). Next: LJ19.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -337,7 +337,8 @@ phases 7–11 keep their numbers and steps (LJ13–LJ19), adjusted where round 2
 9. **LJ17** · strong — `lj/p9-wayland-shortcut`. The portal's trigger in the Keyboard tab; a portal
    shortcut counts as working for the icon rule. Merged when green.
 10. **LJ18** · strong — `lj/p10-macos-signing`, only if the owner's Apple secrets exist (`gh secret
-    list` names only); otherwise ⏭ skipped and recorded in LJ19's PR. Merged when green.
+    list` names only); otherwise ⏭ skipped and recorded in LJ19's PR. Merged when green. *(⏭ skipped
+    2026-10-19: no secrets; recorded with the next phase's PR, as the owner decided.)*
 11. **LJ19** · standard — `lj/release-0.2.0`. **Checkpoint:** the owner's checklist; the
     version-bump PR may be merged when green; tag and release only on the owner's word.
 21. **LJ45 → LJ46** · strong — `lj/p21-links`. **Security-sensitive (`review`):** ready and green,
@@ -3312,6 +3313,13 @@ There should be no Gatekeeper warning. The hardened runtime must not break round
 either: the smoke's fullscreen, tray, quick-command and keymap runs stay green. Once every job is green,
 merge the PR into main with a merge commit (Ground Rule 24), then stop and report.
 ```
+
+**⏭ Skipped (2026-10-19):** `gh secret list --repo memoliertorerr/LittleJoan` listed no secrets at all,
+so none of the six Apple names exists. No `lj/p10-macos-signing` branch was made and nothing changed;
+the macOS build stays ad-hoc signed (`signingIdentity: "-"`), the README keeps its Gatekeeper
+step, and LJ19's checklist keeps it too. The owner decided to record the skip with the next phase's PR (phase 10's branch
+`lj/p10-arm64`, which carries LJ18.1) instead of LJ19's. This step runs unchanged once the owner has
+done its pre-step.
 
 ### LJ19 — Release v0.2.0 · standard · checkpoint
 
