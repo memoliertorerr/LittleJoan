@@ -2859,6 +2859,19 @@ download.png.
   the app's pages) — in case WebKitGTK 2.50 decides on a download object it hasn't tied to the view.
   GLib's `signal_emit_unlocked_R` (2.72, 22.04's) checked: emission hooks run after a RUN_FIRST class
   closure and before the handler list is even looked up, and a disconnected handler is skipped.
+- **CI for fix2 (run 39280858307, delayed by GitHub's Actions incident that afternoon): all thirteen
+  jobs green.** Every smoke job — Windows, macOS, `linux`, `linux-scale-2`, `linux-appimage` and
+  `linux-22.04` — saved both attachments in `~/Downloads` with their bytes, refused the panel's, and
+  **closing the window ended the slow download everywhere**: the server saw the connection go after
+  4–5 of 40 chunks and nothing was left in Downloads (macOS `download-cancelled 4`). Linux logged
+  `download-hook decide-destination` once, then `download-decide page` for each download; on 24.04
+  `download-deciders-removed 2` (wry's), on **22.04 `0` — on WebKitGTK 2.50.4 no handler of wry's is on
+  the download when `decide-destination` comes**, which is why the first design (a handler connected in
+  `download-started`) saw nothing there. The PDF attachment: saved on Windows and Linux, shown in the
+  page on macOS. Nothing turned up outside Downloads. macOS's bundled run passed this time.
+- **`lj-step-15-fix3`** (with phase 8's last docs): closing the window during a download is a smoke
+  rule now (`closeFailures`: the slow download started, the server saw the engine go before its last
+  chunk, nothing of it left in Downloads; 1 more test), since every engine does it.
 
 ### LJ16 — Page zoom · standard · auto
 

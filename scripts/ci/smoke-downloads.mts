@@ -6,10 +6,10 @@
 // lj-smoke.bin ok`, the file must be in the OS's Downloads folder with exactly those bytes
 // (`download.png`: the toolbar's "lj-smoke.bin saved" with "Show in folder"), and the same
 // download again lands as `lj-smoke (1).bin`. With an extension's panel shown (hello), the same
-// download is refused (`download-refused panel`) and no file appears. Then, informational: a slow
-// download (`lj-slow.bin`, 1 KB every half second) is closed with the window — what the server
-// saw (did the engine stop asking?) and what is left in Downloads go into summary.json. Both
-// files are removed afterwards. smoke.mts supplies the driver and the server; the rules are pure
+// download is refused (`download-refused panel`) and no file appears. Then a slow download
+// (`lj-slow.bin`, 1 KB every half second) is closed with the window: the server must see the
+// engine stop before the end, and no file may be left in Downloads (closing the window ends a
+// download, LJ15). Every file is removed afterwards. smoke.mts supplies the driver and the server; the rules are pure
 // and unit-tested (smoke-downloads.test.ts).
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -92,7 +92,7 @@ export interface DownloadRun {
   pdf: { downloaded: boolean; shownInPage: boolean };
   /** This run's files found outside the Downloads folder (diagnostics). */
   strays: string[];
-  /** Informational: closing the window during the slow download. */
+  /** Closing the window during the slow download. */
   slow: { started: boolean; served: SlowServe; leftInDownloads: { name: string; bytes: number }[]; afterHide: string[] };
 }
 
@@ -268,6 +268,25 @@ export function downloadFailures(run: DownloadRun, os: string): string[] {
   }
   if (run.panelFile) {
     failures.push(`downloads: ${PANEL_NAME} appeared although the download was refused`);
+  }
+  return failures.concat(closeFailures(run));
+}
+
+/**
+ * Closing the window ends a download under way (LJ15): the slow one started, the server saw the
+ * engine go away before its last chunk, and nothing of it is left in Downloads.
+ */
+export function closeFailures(run: DownloadRun): string[] {
+  if (!run.slow.started) {
+    return [`downloads: the slow download (${SLOW_NAME}) never started`];
+  }
+  const failures: string[] = [];
+  if (!run.slow.served.aborted || run.slow.served.completed) {
+    failures.push(`downloads: closing the window didn't end the download under way (the server sent ${run.slow.served.chunksSent} of ${SLOW_CHUNKS} chunks${run.slow.served.completed ? ", all of them" : ""})`);
+  }
+  const left = run.slow.leftInDownloads.filter((file) => file.name.includes("lj-slow"));
+  if (left.length > 0) {
+    failures.push(`downloads: closing the window left ${left.map((file) => `${file.name} (${file.bytes} bytes)`).join(", ")} in Downloads`);
   }
   return failures;
 }

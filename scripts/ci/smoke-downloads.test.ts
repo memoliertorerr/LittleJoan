@@ -8,6 +8,7 @@ import {
   downloadBody,
   downloadFailures,
   downloadSummary,
+  closeFailures,
   type DownloadRun,
 } from "./smoke-downloads.mts";
 
@@ -117,8 +118,22 @@ describe("the downloads run's rules (LJ15)", () => {
       leftInDownloads: [],
       afterHide: [],
     });
-    // Whatever the engine did, the rules don't depend on it.
-    const kept = good({ slow: { started: true, served: { started: true, chunksSent: 40, aborted: false, completed: true }, leftInDownloads: [{ name: "lj-slow.bin", bytes: 40960 }], afterHide: [] } });
-    expect(downloadFailures(kept, "darwin")).toEqual([]);
+  });
+
+  it("wants closing the window to end the download under way", () => {
+    expect(closeFailures(good())).toEqual([]);
+    // macOS before lj-step-15-fix: WebKit's network process went on writing the file.
+    const kept = good({
+      slow: { started: true, served: { started: true, chunksSent: 22, aborted: false, completed: false }, leftInDownloads: [{ name: "lj-slow.bin", bytes: 22528 }], afterHide: [] },
+    });
+    expect(downloadFailures(kept, "darwin")).toEqual([
+      "downloads: closing the window didn't end the download under way (the server sent 22 of 40 chunks)",
+      "downloads: closing the window left lj-slow.bin (22528 bytes) in Downloads",
+    ]);
+    const finished = good({ slow: { started: true, served: { started: true, chunksSent: 40, aborted: true, completed: true }, leftInDownloads: [], afterHide: [] } });
+    expect(closeFailures(finished)[0]).toContain("40 of 40 chunks, all of them");
+    expect(closeFailures(good({ slow: { started: false, served: { started: false, chunksSent: 0, aborted: false, completed: false }, leftInDownloads: [], afterHide: [] } }))).toEqual([
+      "downloads: the slow download (lj-slow.bin) never started",
+    ]);
   });
 });

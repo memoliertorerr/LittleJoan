@@ -1500,11 +1500,13 @@ and pushes to `main`:
   lj-smoke.bin ok`, in the OS's Downloads folder (`download-folder` = `~/Downloads` on every runner),
   the file holding exactly those bytes (`download.png`: the toolbar's "lj-smoke.bin saved" with
   Show in folder); the same again lands as `lj-smoke (1).bin`; with hello's panel shown the same
-  download must log `download-refused panel` and no file may appear. Informational
-  (`summary.json`'s `downloads.closeDuringDownload`): a slow download (`lj-slow.bin`, 1 KB every
-  half second; `download-progress.png`) with the window closed after 1.5 s — whether the server saw
-  the engine stop, and what is left in Downloads. Every file is removed afterwards (log
-  `smoke-downloads.log`).
+  download must log `download-refused panel` and no file may appear. Then a slow download
+  (`lj-slow.bin`, 1 KB every half second; `download-progress.png`: "Downloading lj-slow.bin…") with
+  the window closed after 1.5 s: the server must see the engine go away before its last chunk, and
+  nothing of it may be left in Downloads (`closeFailures`; `summary.json`'s
+  `downloads.closeDuringDownload`). Informational: a PDF sent as an attachment (`dl-pdf`) — saved,
+  or shown in the page (macOS) —, and files of the run found in the home or working folder. Every
+  file is removed afterwards (log `smoke-downloads.log`).
   Then the **tray run**
   (`smoke-tray.mts`, LJ41), its own launches with `"showTrayIcon": false`: the log must have
   `tray-visible false` after `shortcut-registered` (and never `true`); a second launch without
