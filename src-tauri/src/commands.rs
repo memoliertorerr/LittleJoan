@@ -19,17 +19,23 @@ use crate::input::{self, SearchEngine};
 use crate::joan;
 use crate::keys::PageAction;
 use crate::page_actions;
-use crate::phone_mode;
-use crate::settings::{self, Settings, Theme};
+use crate::settings::{self, Change, Settings, Theme};
+use crate::settings_live;
 use crate::settings_window::{self, SettingsTab};
 use crate::shortcut::{self, PluginRegistrar};
 use crate::smoke;
 use crate::state;
 use crate::suggest::Suggestion;
 use crate::toggle::Command;
-use crate::translate::{LANGUAGES, is_valid_lang};
+use crate::translate::LANGUAGES;
 use crate::welcome;
 
+/// The app itself from the command bar (LJ41): `quit_app`.
+pub mod app;
+/// Little Joan's keys for Settings (LJ43): `keymap_info`.
+pub mod keys;
+/// Quick commands in the command bar (LJ42): `quick_state`, `quick_command`.
+pub mod quick;
 /// Phone or desktop per site (LJ40): `site_mode_info`, `set_site_mode`.
 pub mod site;
 
@@ -143,7 +149,7 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
 }
 
 /// The smoke log's view of a theme: its mode and how many colors, never the colors.
-fn theme_summary(theme: &Theme) -> String {
+pub(crate) fn theme_summary(theme: &Theme) -> String {
     format!("{} colors={}", theme.mode.name(), theme.colors.len())
 }
 
@@ -152,6 +158,20 @@ fn theme_summary(theme: &Theme) -> String {
 pub struct Choice {
     id: String,
     name: String,
+}
+
+/// The search engines, as settings lists show them: `[{ id, name }]` (Settings, quick commands).
+pub(crate) fn engine_choices() -> Vec<Choice> {
+    SearchEngine::ALL
+        .iter()
+        .map(|engine| Choice {
+            id: serde_json::to_value(engine)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default(),
+            name: engine.name().to_owned(),
+        })
+        .collect()
 }
 
 /// Where Little Joan keeps things, for Settings → Privacy.
@@ -181,6 +201,10 @@ pub struct SettingsView {
     /// The sites built in on this OS (General's "Phone or desktop per site"): `[{ host, mode }]`
     /// — YouTube on the desktop agent on macOS and Linux, nothing on Windows.
     built_in_site_modes: Vec<site::BuiltInSite>,
+    /// The saved shortcut couldn't be registered at launch (LJ44): `{ wanted, active, reason }`.
+    shortcut_problem: Option<shortcut::Problem>,
+    /// A Linux Wayland session, where the X11 shortcut can't fire (Keyboard explains --toggle).
+    wayland_no_shortcut: bool,
 }
 
 /// Where the web engine keeps cookies and site data (docs/architecture.md, "Where data lives"):
@@ -201,27 +225,19 @@ fn site_data<R: Runtime>(app: &AppHandle<R>, webview_dir: Option<&Path>) -> Stri
 
 #[tauri::command]
 pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
-    let (settings, folder, webview_dir) = state::with(&app, |s| {
+    let (settings, folder, webview_dir, shortcut_problem) = state::with(&app, |s| {
         (
             s.settings.clone(),
             s.data_dir.clone(),
             s.webview_data_dir.clone(),
+            s.shortcut_problem.clone(),
         )
     });
     smoke::log("settings-loaded", "");
     SettingsView {
         settings,
         start_at_login: autostart::is_enabled(&app),
-        engines: SearchEngine::ALL
-            .iter()
-            .map(|engine| Choice {
-                id: serde_json::to_value(engine)
-                    .ok()
-                    .and_then(|v| v.as_str().map(str::to_owned))
-                    .unwrap_or_default(),
-                name: engine.name().to_owned(),
-            })
-            .collect(),
+        engines: engine_choices(),
         languages: LANGUAGES
             .iter()
             .map(|(code, name)| Choice {
@@ -236,19 +252,24 @@ pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
         },
         version: app.package_info().version.to_string(),
         built_in_site_modes: site::built_in_sites(),
+        shortcut_problem,
+        wayland_no_shortcut: welcome::wayland_no_shortcut_here(),
     }
 }
 
-/// The fields the settings window can change.
+/// The fields the settings window can change. Checked by settings::apply_change, like a quick
+/// command's change (LJ42).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsInput {
     shortcut: String,
-    search_engine: SearchEngine,
+    /// A search engine's id (`google`, `duckduckgo`, `bing`, `brave`).
+    search_engine: String,
     translate_to: String,
     mobile_sites: bool,
     remember_history: bool,
-    /// The theme; checked field by field (settings/theme.rs). Left out, the saved one stays.
+    /// The theme, valid as it stands (settings/theme.rs `parse_strict`). Left out, the saved one
+    /// stays.
     #[serde(default)]
     theme: Option<Value>,
     /// Settings → Extensions: the switched-off extensions (checked one by one) and Developer
@@ -262,68 +283,61 @@ pub struct SettingsInput {
     /// changed it while Settings was open).
     #[serde(default)]
     site_modes: Option<Value>,
+    /// Settings → General's tray / menu-bar icon switch. Left out, the saved one stays.
+    #[serde(default)]
+    show_tray_icon: Option<bool>,
+    /// The user's own keys (LJ43; Settings → Keyboard, LJ44): the whole table, checked by
+    /// keymap::validate. Left out, the saved one stays.
+    #[serde(default)]
+    keys: Option<Value>,
 }
 
-/// Validates and applies new settings: the shortcut is swapped live (the old one comes back if
-/// the new one is taken), then everything is saved.
+/// Validates and applies new settings: every part is checked first (settings::apply_change), the
+/// shortcut is swapped live (the old one comes back if the new one is taken), then the rest takes
+/// effect and is saved through the path the quick commands use too (settings_live.rs).
 #[tauri::command]
 pub async fn save_settings<R: Runtime>(
     app: AppHandle<R>,
     settings: SettingsInput,
 ) -> Result<Settings, String> {
-    if !is_valid_lang(&settings.translate_to) {
-        return Err("Pick a language from the list.".to_owned());
-    }
     let wanted = settings.shortcut.trim().to_owned();
+    let change = Change {
+        shortcut: Some(wanted.clone()),
+        search_engine: Some(settings.search_engine),
+        translate_to: Some(settings.translate_to),
+        mobile_sites: Some(settings.mobile_sites),
+        remember_history: Some(settings.remember_history),
+        theme: settings.theme,
+        theme_mode: None,
+        disabled_extensions: settings.disabled_extensions,
+        developer_mode: settings.developer_mode,
+        site_modes: settings.site_modes,
+        show_tray_icon: settings.show_tray_icon,
+        keys: settings.keys,
+    };
+    // A refused part changes nothing — not even the shortcut.
+    let current = state::with(&app, |s| s.settings.clone());
+    settings::apply_change(&current, &change)?;
     // Recording may have paused the active shortcut; resume it so the swap starts from a known
     // state.
     shortcut::set_suspended(&app, false);
     let old = state::with(&app, |s| s.active_shortcut.clone());
-    shortcut::swap(&PluginRegistrar(&app), old.as_deref(), &wanted)?;
-    smoke::log("shortcut-registered", &wanted);
-    let (dir, updated, theme_changed) = state::with(&app, |s| {
-        let before = s.shown_theme();
-        s.active_shortcut = Some(wanted.clone());
-        // Saved: the preview (if any) is the theme now.
-        s.theme_preview = None;
-        s.settings = Settings {
-            shortcut: wanted,
-            search_engine: settings.search_engine,
-            translate_to: settings.translate_to,
-            mobile_sites: settings.mobile_sites,
-            remember_history: settings.remember_history,
-            theme: settings.theme.as_ref().map_or_else(
-                || s.settings.theme.clone(),
-                |v| settings::theme::parse(Some(v)),
-            ),
-            disabled_extensions: settings.disabled_extensions.as_ref().map_or_else(
-                || s.settings.disabled_extensions.clone(),
-                |v| settings::disabled_extensions(Some(v)),
-            ),
-            developer_mode: settings.developer_mode.unwrap_or(s.settings.developer_mode),
-            site_modes: settings.site_modes.as_ref().map_or_else(
-                || s.settings.site_modes.clone(),
-                |v| settings::site_modes::parse(Some(v)),
-            ),
-            ..s.settings.clone()
-        };
-        (
-            s.data_dir.clone(),
-            s.settings.clone(),
-            s.shown_theme() != before,
-        )
-    });
-    if theme_changed {
-        bar::forget_painted(&app);
+    if let Err(err) = shortcut::swap(&PluginRegistrar(&app), old.as_deref(), &wanted) {
+        if !err.old_kept {
+            // Neither the new shortcut nor the old one works now: the icon comes back.
+            state::with(&app, |s| s.active_shortcut = None);
+            crate::tray::apply_visibility(&app);
+        }
+        return Err(err.message);
     }
-    // Switched-off extensions and Developer mode take effect with the next read.
-    extensions::registry::forget();
-    // Phone mode on or off takes effect on the open page at once, and so does the theme.
-    phone_mode::apply(&app, true);
-    bar::set_theme(&app, &updated.theme);
+    smoke::log("shortcut-registered", &wanted);
+    state::with(&app, |s| {
+        s.active_shortcut = Some(wanted);
+        // The saved shortcut works now: the launch's problem is over.
+        s.shortcut_problem = None;
+    });
+    let updated = settings_live::apply(&app, &change)?;
     settings_window::set_theme(&app, &updated.theme);
-    settings::save(&dir, &updated)
-        .map_err(|err| format!("The new settings work now, but couldn't be saved: {err}"))?;
     Ok(updated)
 }
 
@@ -421,27 +435,29 @@ pub async fn open_extension<R: Runtime>(
     page_action: bool,
 ) -> Result<(), String> {
     let target = if page_action {
-        let url = bar::page_url(&app)
-            .filter(|url| {
-                crate::navigation::is_external_openable(url)
-                    && !crate::keys::is_app_url(&crate::keys::app_origin(), url)
-            })
-            .ok_or_else(|| "Page actions work on a web page.".to_owned())?;
-        let title = app
-            .get_window(joan::LABEL)
-            .and_then(|window| window.title().ok())
-            .unwrap_or_default();
-        session::Target::PageAction(
-            command,
-            session::PageInfo {
-                url: url.to_string(),
-                title,
-            },
-        )
+        let page = web_page(&app).ok_or_else(|| "Page actions work on a web page.".to_owned())?;
+        session::Target::PageAction(command, page)
     } else {
         session::Target::Command(command)
     };
     session::open(&app, &id, target)
+}
+
+/// The web page that is open — its address and the window's title (the page's) —, or `None` on
+/// the start page, an extension's panel or with no window (page actions; the quick commands).
+pub(crate) fn web_page<R: Runtime>(app: &AppHandle<R>) -> Option<session::PageInfo> {
+    let url = bar::page_url(app).filter(|url| {
+        crate::navigation::is_external_openable(url)
+            && !crate::keys::is_app_url(&crate::keys::app_origin(), url)
+    })?;
+    let title = app
+        .get_window(joan::LABEL)
+        .and_then(|window| window.title().ok())
+        .unwrap_or_default();
+    Some(session::PageInfo {
+        url: url.to_string(),
+        title,
+    })
 }
 
 /// Every page in history, latest visit first: `[{ url, title, host, lastVisit, visitCount }]`

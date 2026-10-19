@@ -28,7 +28,29 @@ const OTHER_NAMES: Record<string, string> = {
   shift: "Shift",
 };
 
-/** "KeyJ" → "J", "Digit1" → "1"; other codes ("Space", "F5", "ArrowUp") stay as they are. */
+/** What punctuation and arrow codes show as (a US keyboard's labels). */
+const SYMBOLS: Record<string, string> = {
+  Equal: "=",
+  Minus: "-",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+  Semicolon: ";",
+  Quote: "'",
+  Backquote: "`",
+  Backslash: "\\",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+};
+
+/**
+ * "KeyJ" → "J", "Digit1" → "1", "BracketLeft" → "[", "ArrowLeft" → "←"; other codes ("Space",
+ * "F5", "Home") stay as they are.
+ */
 export function keyName(code: string): string {
   const letter = /^Key([A-Z])$/.exec(code);
   if (letter?.[1]) {
@@ -38,7 +60,7 @@ export function keyName(code: string): string {
   if (digit?.[1]) {
     return digit[1];
   }
-  return code;
+  return SYMBOLS[code] ?? code;
 }
 
 export function displayShortcut(accelerator: string, isMac: boolean): string {
@@ -81,6 +103,11 @@ const MODIFIER_CODES = new Set([
 /** Keys a global shortcut may end in (all of them parse on the Rust side too). */
 const SHORTCUT_KEY =
   /^(Key[A-Z]|Digit[0-9]|F([1-9]|1[0-9]|2[0-4])|Space|Enter|Tab|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(Up|Down|Left|Right)|Backquote|Backslash|BracketLeft|BracketRight|Comma|Equal|Minus|Period|Quote|Semicolon|Slash|Numpad[0-9]|Numpad(Add|Subtract|Multiply|Divide|Decimal|Enter))$/;
+
+/** Whether a global shortcut may end in `code` (the recorder's keys). */
+export function isShortcutKey(code: string): boolean {
+  return SHORTCUT_KEY.test(code);
+}
 
 /** F13–F24 exist on few keyboards, so they may be used without a modifier. */
 const LONE_KEY = /^F(1[3-9]|2[0-4])$/;

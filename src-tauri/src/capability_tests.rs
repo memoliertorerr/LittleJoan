@@ -231,6 +231,70 @@ fn only_the_bar_may_read_and_set_site_modes() {
     assert_eq!(bar_has, ["allow-set-site-mode", "allow-site-mode-info"]);
 }
 
+/// Fails unless exactly the bar's capability grants each of `wanted` (and the bar has them all).
+fn only_the_bar_grants(wanted: &[&str]) {
+    let mut bar_has = Vec::new();
+    for (place, capability) in all_capabilities() {
+        let granted: Vec<&str> = permissions(&capability)
+            .into_iter()
+            .filter(|p| wanted.contains(p))
+            .collect();
+        if granted.is_empty() {
+            continue;
+        }
+        let only_the_bar = capability.get("identifier").and_then(Value::as_str) == Some("bar")
+            && scopes(&capability, "webviews") == [bar::BAR]
+            && scopes(&capability, "windows").is_empty();
+        assert!(
+            only_the_bar,
+            "{place}: only the bar's capability may grant {granted:?}"
+        );
+        bar_has.extend(granted.into_iter().map(str::to_owned));
+    }
+    bar_has.sort();
+    let mut want: Vec<String> = wanted.iter().map(|p| (*p).to_owned()).collect();
+    want.sort();
+    assert_eq!(bar_has, want, "the bar must have exactly these");
+}
+
+#[test]
+fn only_the_bar_may_quit() {
+    // The command bar's "Quit Little Joan" (LJ41): the trusted bar only — never the page.
+    only_the_bar_grants(&["allow-quit-app"]);
+}
+
+#[test]
+fn only_the_bar_may_run_quick_commands() {
+    // The command bar's quick commands (LJ42): the trusted bar only — never the page, never
+    // Settings (which has its own Save).
+    only_the_bar_grants(&["allow-quick-state", "allow-quick-command"]);
+}
+
+#[test]
+fn only_the_bar_and_settings_may_read_the_keymap() {
+    // keymap_info (LJ43): Little Joan's keys, for Settings → Keyboard and the bar — never the page.
+    let mut granted_to = Vec::new();
+    for (place, capability) in all_capabilities() {
+        if !permissions(&capability).contains(&"allow-keymap-info") {
+            continue;
+        }
+        let id = capability.get("identifier").and_then(Value::as_str);
+        let bar_only = id == Some("bar")
+            && scopes(&capability, "webviews") == [bar::BAR]
+            && scopes(&capability, "windows").is_empty();
+        let settings_only = id == Some("settings")
+            && scopes(&capability, "windows") == [settings_window::LABEL]
+            && scopes(&capability, "webviews").is_empty();
+        assert!(
+            bar_only || settings_only,
+            "{place}: only the bar's and the settings window's capabilities may read the keymap"
+        );
+        granted_to.extend(id.map(str::to_owned));
+    }
+    granted_to.sort();
+    assert_eq!(granted_to, ["bar", "settings"]);
+}
+
 #[test]
 fn no_capability_is_added_at_runtime() {
     // A capability added in code (Manager::add_capability) would escape the checks above.

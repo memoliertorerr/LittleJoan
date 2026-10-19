@@ -24,6 +24,10 @@ describe("keyName", () => {
     expect(keyName("Digit0")).toBe("0");
     expect(keyName("Space")).toBe("Space");
     expect(keyName("Keyboard")).toBe("Keyboard");
+    expect(keyName("BracketLeft")).toBe("[");
+    expect(keyName("Backslash")).toBe("\\");
+    expect(keyName("ArrowLeft")).toBe("←");
+    expect(keyName("F5")).toBe("F5");
   });
 });
 

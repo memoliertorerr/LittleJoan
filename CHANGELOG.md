@@ -6,6 +6,37 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Hide the tray / menu-bar icon** (Settings → General → "Show the icon in the menu bar" on
+  macOS, "… in the system tray" on Windows and Linux). Little Joan then lives on its shortcut;
+  opening it again from your apps also opens the window. The icon comes back by itself whenever
+  the shortcut can't work (none could be registered, or a Linux Wayland session), so Little Joan
+  is never out of reach.
+- **Settings and Quit in the command bar:** type "settings" (or "preferences", "options") for
+  **Settings**, "quit" (or "exit") for **Quit Little Joan**.
+- **Quick commands in the command bar**, each showing its state: Translate page, Open in browser,
+  Copy link, Copy as Markdown link and Reload on a page; the theme's mode and presets, the search
+  engine, Mobile sites, Remember history, Start at login and the icon (✓ or on/off); Clear history
+  (it asks for a second Enter); Settings → each tab; Reload extensions. Settings changed this way
+  are saved at once, and an open Settings window keeps up.
+- **Little Joan's own keys can be changed** — Ctrl/Cmd+L, history, translate, reload, back,
+  forward, open in browser, close — in `settings.json` for now (`"keys": { "history":
+  "CommandOrControl+Shift+KeyK" }`; `""` for no key). Keys that type text, two actions on one
+  key and the shortcut that summons Little Joan are refused. On Windows, WebView2's own Ctrl+R,
+  F5 and Alt+← / Alt+→ keep working beside your keys.
+- **Settings → Keyboard:** the shortcut that summons Little Joan (moved here from General, which
+  keeps a line with it and **Change…**) and every one of Little Joan's own keys, each recorded
+  with a click, with **Reset** and **Reset all**. Clashes are refused; keys the system uses —
+  Spotlight's ⌘Space, Windows' Win+…, screenshots, input sources — and Ctrl+Alt (AltGr) are
+  warned about; on macOS the system shortcuts you turned off or moved in System Settings are taken
+  into account (read only, never changed). When the saved shortcut couldn't be registered (another app has it), Keyboard and
+  General say so, and which one Little Joan uses instead.
+
+### Changed
+- The command bar's rows for phone or desktop per site are now **Desktop site**, **Phone site**
+  and **Automatic**, "this site", the current one marked ✓ (they were "Request desktop site",
+  "Request phone site" and "Automatic for this site").
+
 ## [0.2.0-beta.3] — 2026-10-18
 
 A third pre-release of v0.2: smoother resizing, phone or desktop per site, and fixes — YouTube's

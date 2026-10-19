@@ -86,6 +86,23 @@ export function parsePageScreen(event: LogEvent): PageScreen | undefined {
   return { x, y, width, height, scale };
 }
 
+/**
+ * The page's latest place on the screen whose width is the page's (`width` logical pixels, as the
+ * page reported it), else the latest of all. After leaving fullscreen a layout computed from the
+ * fullscreen size can land after the restored one (seen on linux-scale-2: `page-screen
+ * 800,260,2560,1520` after `800,260,1440,1120`, the page itself 720 px wide), and a click from it
+ * misses the page.
+ */
+export function pageScreenFor(events: LogEvent[], width: number): PageScreen | undefined {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const screen = events[i] && parsePageScreen(events[i] as LogEvent);
+    if (screen && screen.scale > 0 && Math.abs(screen.width / screen.scale - width) < 1) {
+      return screen;
+    }
+  }
+  return lastPageScreen(events);
+}
+
 /** The page's latest place on the screen. */
 export function lastPageScreen(events: LogEvent[]): PageScreen | undefined {
   for (let i = events.length - 1; i >= 0; i -= 1) {
@@ -199,7 +216,7 @@ async function settled(d: FsDriver, app: FsApp, from: number, size: FsSize): Pro
 /** Clicks `path`'s button, screenshots 1 s later, clicks its exit 2 s after the click, waits for the report. */
 async function attempt(d: FsDriver, app: FsApp, size: FsSize, path: FsReport["path"]): Promise<void> {
   const from = app.events().length;
-  const screen = lastPageScreen(app.events());
+  const screen = pageScreenFor(app.events(), size.width);
   if (!screen) {
     console.log(`fullscreen: no page-screen line, so no click on ${path}`);
     return;

@@ -1,5 +1,5 @@
 //! The settings window: created on demand, destroyed on close, like the page window. A sidebar
-//! of tabs (General, Appearance, Extensions, Privacy, About) — the "advanced settings" that sit
+//! of tabs (General, Keyboard, Appearance, Extensions, Privacy, About) — the "advanced settings" that sit
 //! where Little Arc has "Contact the Team" (the command bar's "Settings & extensions" row). It
 //! opens on a tab from `--settings [tab]`, `open_settings(tab)`, the tray and Cmd+,; an open
 //! window is focused and switched to the tab asked for.
@@ -24,6 +24,8 @@ const SIZE: (f64, f64) = (600.0, 480.0);
 pub enum SettingsTab {
     #[default]
     General,
+    /// Every key of Little Joan's own and the global shortcut (LJ44).
+    Keyboard,
     Appearance,
     Extensions,
     Privacy,
@@ -31,8 +33,9 @@ pub enum SettingsTab {
 }
 
 impl SettingsTab {
-    pub const ALL: [SettingsTab; 5] = [
+    pub const ALL: [SettingsTab; 6] = [
         SettingsTab::General,
+        SettingsTab::Keyboard,
         SettingsTab::Appearance,
         SettingsTab::Extensions,
         SettingsTab::Privacy,
@@ -43,6 +46,7 @@ impl SettingsTab {
     pub fn name(self) -> &'static str {
         match self {
             SettingsTab::General => "general",
+            SettingsTab::Keyboard => "keyboard",
             SettingsTab::Appearance => "appearance",
             SettingsTab::Extensions => "extensions",
             SettingsTab::Privacy => "privacy",
@@ -124,6 +128,29 @@ pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme)
     }
 }
 
+/// Tells an open settings window that settings changed from the command bar (a quick command,
+/// LJ42) — and, with `start_at_login`, that the login entry did — so its draft follows
+/// (settings-logic.ts `rebase`: a field it didn't edit takes the new value) and a later Save
+/// doesn't undo the change.
+pub fn saved_changed<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &crate::settings::Settings,
+    start_at_login: Option<bool>,
+) {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    // Checked settings (settings.rs) as JSON: one value each, a safe script literal.
+    if let (Ok(json), Ok(login)) = (
+        serde_json::to_string(settings),
+        serde_json::to_string(&start_at_login),
+    ) {
+        let _ = window.eval(format!(
+            "window.littleJoanSettings && window.littleJoanSettings.savedChanged({json}, {login})"
+        ));
+    }
+}
+
 /// When the window closes: the shortcut it may have paused while recording comes back, and a
 /// theme it was previewing without saving (Cancel, or the close button) gives way to the saved
 /// one in the page window.
@@ -189,6 +216,15 @@ mod tests {
         assert_eq!(
             SettingsTab::from_name(" Privacy "),
             Some(SettingsTab::Privacy)
+        );
+        assert_eq!(
+            SettingsTab::from_name("Keyboard"),
+            Some(SettingsTab::Keyboard)
+        );
+        assert_eq!(
+            SettingsTab::ALL[1],
+            SettingsTab::Keyboard,
+            "between General and Appearance"
         );
         for bad in ["", "advanced", "privacy-tab", "--quit"] {
             assert_eq!(SettingsTab::from_name(bad), None, "{bad}");

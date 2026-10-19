@@ -84,8 +84,21 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   completed in the field (Tab accepts it) —, a search with your search engine, then more matches.
   ↑/↓ choose a row, Enter opens it (with no row chosen, Enter opens what you typed), Shift+Delete
   removes a page from your history, × or Esc closes the command bar. Typing "history" (or just
-  "hi") offers **History**. The last row, **Settings & extensions**, opens Settings on its
-  Extensions tab.
+  "hi") offers **History**; "settings" (or "preferences", "options") offers **Settings**; "quit"
+  (or "exit") offers **Quit Little Joan**. The last row, **Settings & extensions**, opens Settings
+  on its Extensions tab.
+- **Quick commands** in the command bar, each showing how things are now — type a word and pick
+  the row with ↓ and Enter:
+  - on a page: **Translate page**, **Open in browser**, **Copy link**, **Copy as Markdown link**,
+    **Reload**, and Desktop site / Phone site / Automatic for the site;
+  - **Theme: System / Light / Dark** and **Theme: Sand**, **Dusk**… (the presets; the current one
+    marked ✓), **Search with Google / DuckDuckGo / Bing / Brave** (✓), **Mobile sites — on/off**,
+    **Remember history — on/off**, **Start at login — on/off**, **Icon — shown/hidden**;
+  - **Clear history** (last hour, 24 hours, 7 days, everything — press Enter twice; Esc cancels),
+    **Settings → Appearance / Extensions / Privacy / About**, **Reload extensions**.
+
+  Settings you change this way are saved at once (an open Settings window follows); the shortcut,
+  keys, Developer mode and switching extensions stay in Settings.
 - **Quick answers** come first in the command bar as you type; Enter copies the answer:
   - calculator: `= 12*7`, `(1+2)^3`, `sqrt(2)`, `50% * 30`, `2pi`;
   - units: `10 km in mi`, `72f to c`, `5 kg in lb`, `1 gallon to liters`, `100 km/h in mph`,
@@ -133,8 +146,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Phone or desktop per site:** while a page shows its phone version, or its site has a mode of
   its own, the toolbar shows a small **Phone** / **Desktop** label — click it for the other
   version of that site, kept from then on. In the command bar, type "desktop", "phone" or "site"
-  for **Request desktop site**, **Request phone site** and **Automatic for this site** (the
-  window's width decides again); the current one is marked. **Settings → General → Phone or
+  for **Desktop site**, **Phone site** and **Automatic** (the window's width decides again), each
+  for this site; the current one is marked ✓. **Settings → General → Phone or
   desktop per site** lists them, with Remove. **YouTube always gets its desktop site on macOS and
   Linux** (built in) — its phone site's player expects an iPhone's video fullscreen, so its
   fullscreen button didn't work there (`m.youtube.com` addresses open as `www.youtube.com`); the
@@ -158,6 +171,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | History | Ctrl+H | Cmd+Y |
   | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |
 
+  These are the defaults: change any of them in **Settings → Keyboard**.
+
 - **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,
   `gstreamer1.0-libav` on Debian/Ubuntu); the `.deb` installs them.
@@ -167,12 +182,18 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),
-  `little-joan --start-at-login on|off`, `little-joan --settings [general|appearance|extensions|privacy|about]`
+  `little-joan --start-at-login on|off`, `little-joan --settings [general|keyboard|appearance|extensions|privacy|about]`
   (open Settings on a tab), `little-joan --extension <id>` (open an extension's first command,
   e.g. `snake` — page actions open from the command bar, on a page; experimental), and `little-joan --quit` talk to the running app. On Linux under Wayland, where global shortcuts can't be registered,
   bind `little-joan --toggle` to a key in your desktop's keyboard settings.
-- **Quit:** tray menu → **Quit Little Joan**, `little-joan --quit`, or Cmd+Q on macOS while
-  it's in front.
+- **No icon, if you prefer:** switch off **Show the icon in the menu bar** (macOS) / **in the
+  system tray** (Windows, Linux) in Settings → General. Little Joan then lives on the shortcut
+  alone; opening it again from your apps (or `little-joan` with no flags) also brings up the
+  window, and the command bar has **Settings** and **Quit Little Joan**. The icon comes back by
+  itself whenever the shortcut can't work — when neither yours nor the default could be
+  registered, or on a Linux Wayland session — so Little Joan is never out of reach.
+- **Quit:** tray menu → **Quit Little Joan**, the command bar's **Quit Little Joan** (type
+  "quit"), `little-joan --quit`, or Cmd+Q on macOS while it's in front.
 
 ## Translate
 
@@ -183,13 +204,13 @@ you to be signed in usually can't be translated this way.
 ## Settings
 
 Open **Settings…** from the tray / menu-bar icon, **Settings & extensions** at the bottom of the
-command bar, Cmd+, on macOS while Little Joan is in front, or `little-joan --settings [tab]`. Its
+command bar (or type "settings" there), Cmd+, on macOS while Little Joan is in front, or `little-joan --settings [tab]`. Its
 tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover all of them.
 
 - **General**
-  - **Shortcut** — click it, then press the new combination. It needs a modifier (Ctrl, Alt,
-    Cmd, or Super; Shift alone doesn't count). If another app already owns it, Little Joan says
-    so and keeps the old one.
+  - **Shortcut** — the one that summons Little Joan; **Change…** takes you to the Keyboard tab.
+  - **Show the icon in the menu bar / system tray** — on by default; off, the icon hides while
+    the shortcut works (above).
   - **Search with** — Google, DuckDuckGo, Bing, or Brave.
   - **Translate pages to** — the language for "Translate Page".
   - **Mobile sites in a narrow window** — phone mode (above).
@@ -198,6 +219,20 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
     Windows (the registry's Run key), `~/.config/autostart/Little Joan.desktop` on Linux. Little
     Joan keeps no copy of this setting, so if you remove it in your system's settings, it shows
     as off here too.
+- **Keyboard** — **Summon Little Joan**: click it, then press the new combination. It needs a
+  modifier (Ctrl, Alt, Cmd, or Super; Shift alone doesn't count). If another app already owns it,
+  Little Joan says so and keeps the old one; if the saved one couldn't be registered when Little
+  Joan started, both Keyboard and General say which one it uses instead. Then **Little Joan's
+  keys** — Open Location, History, Translate, Reload, Back, Forward, Open in browser, Close —, each
+  with its key: click it and press the new one (Backspace for no key, Esc to cancel), **Reset**
+  brings the default back, **Reset all** every one. Little Joan refuses keys that would type text,
+  a key two actions share, the summon shortcut, and the editing keys pages need (Ctrl/Cmd + C, V,
+  X, A, Z); it warns — without refusing — about keys the system uses ("macOS uses ⌘Space for
+  Spotlight"; on macOS it also reads your own changes in System Settings → Keyboard → Keyboard
+  Shortcuts, read-only, so a system shortcut you turned off isn't warned about) and about Ctrl+Alt
+  on Windows and Linux (AltGr). On Windows, WebView2's own Ctrl+R,
+  F5 and Alt+← / Alt+→ keep working beside your keys. They're stored in `settings.json` as
+  `"keys"`.
 - **Appearance** — the theme editor. **System / Light / Dark** at the top; a live preview of the
   toolbar and the command bar; **presets** (Mist, Sand, Sage, Lagoon, Dusk, Ember, Orchid,
   Glacier, Meadow, Berry, Graphite) that apply in one click; up to three **color pads** — hue

@@ -8,6 +8,7 @@ import {
   fsReports,
   fullscreenFailures,
   lastPageScreen,
+  pageScreenFor,
   layoutDuringWebKitFullscreen,
   parseFsReport,
   parsePageScreen,
@@ -86,6 +87,23 @@ describe("clicks", () => {
     expect(events[0] && parsePageScreen(events[0])).toEqual({ x: 10, y: 20, width: 390, height: 560, scale: 1 });
     expect(lastPageScreen(events)).toEqual({ x: -1440, y: 52, width: 780, height: 1120, scale: 2 });
     expect(lastPageScreen(parseLog("1 started\n"))).toBeUndefined();
+  });
+
+  it("go by the page's own width when a late layout logged the fullscreen size (linux-scale-2)", () => {
+    const events = parseLog(
+      [
+        "1 page-screen 0,80,2560,1520 scale=2",
+        "2 page-screen 800,260,1440,1120 scale=2",
+        "3 title LJ-FS element width=720 ua=desktop entered=1 held_ms=2340 exited_by_page=1 events=click",
+        "4 page-screen 800,260,2560,1520 scale=2",
+        "",
+      ].join("\n"),
+    );
+    expect(lastPageScreen(events)).toEqual({ x: 800, y: 260, width: 2560, height: 1520, scale: 2 });
+    expect(pageScreenFor(events, 720)).toEqual({ x: 800, y: 260, width: 1440, height: 1120, scale: 2 });
+    // Nothing of that width: the latest, as before.
+    expect(pageScreenFor(events, 390)).toEqual({ x: 800, y: 260, width: 2560, height: 1520, scale: 2 });
+    expect(pageScreenFor(parseLog("1 page-screen 10,20,390,560 scale=1\n"), 390)).toEqual({ x: 10, y: 20, width: 390, height: 560, scale: 1 });
   });
 
   it("land in the middle of a button: pixels on Windows and Linux, points on macOS", () => {

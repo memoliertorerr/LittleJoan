@@ -10,7 +10,10 @@ import {
   isChanged,
   tabForKey,
   tabFrom,
+  rebase,
   toInput,
+  trayLabelFor,
+  trayText,
   type Settings,
 } from "./settings-logic.ts";
 
@@ -27,6 +30,8 @@ const saved: Settings = {
   developerMode: false,
   disabledExtensions: ["hello"],
   siteModes: { "127.0.0.1": "desktop" },
+  showTrayIcon: true,
+  keys: {},
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -67,6 +72,61 @@ describe("settings logic", () => {
     expect(isChanged(saved, withSites({ "127.0.0.1": "desktop", "youtube.com": "auto" }))).toBe(true);
     expect(withSites({}).siteModes).toEqual({});
     expect("siteModes" in same()).toBe(false);
+  });
+
+  it("counts the icon switch as a change only when it differs", () => {
+    const withIcon = (showTrayIcon: boolean) =>
+      toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory, undefined, undefined, undefined, showTrayIcon);
+    expect(isChanged(saved, withIcon(true))).toBe(false);
+    expect(isChanged(saved, withIcon(false))).toBe(true);
+    expect(isChanged({ ...saved, showTrayIcon: false }, withIcon(false))).toBe(false);
+    expect(withIcon(false).showTrayIcon).toBe(false);
+    expect("showTrayIcon" in same()).toBe(false);
+    expect(hasChanges(changes(saved, true, withIcon(false), true))).toBe(true);
+  });
+
+  it("names the menu bar on macOS and the system tray elsewhere, and the shortcut in the note", () => {
+    expect(trayLabelFor("macos")).toBe("Show the icon in the menu bar");
+    expect(trayLabelFor("windows")).toBe("Show the icon in the system tray");
+    expect(trayLabelFor("linux")).toBe("Show the icon in the system tray");
+    expect(trayText("⌘⇧Space")).toBe(
+      "Without it, press ⌘⇧Space or open Little Joan again from your apps. The icon comes back by itself whenever the shortcut can't work.",
+    );
+    expect(trayText("")).toContain("press your shortcut");
+  });
+
+  it("rebases the window's draft on settings changed from the command bar (LJ42)", () => {
+    const dark = { ...saved.theme, mode: "dark" as const };
+    const changed: Settings = { ...saved, mobileSites: false, searchEngine: "brave", theme: dark, showTrayIcon: false };
+    // Nothing edited: everything follows the change.
+    expect(rebase(saved, saved, changed)).toEqual(changed);
+    // Edited fields keep their edit; the rest follows.
+    const draft: Settings = { ...saved, searchEngine: "bing", theme: { ...saved.theme, grain: 0.9 }, rememberHistory: false };
+    const rebased = rebase(draft, saved, changed);
+    expect(rebased.searchEngine).toBe("bing");
+    expect(rebased.theme.grain).toBe(0.9);
+    expect(rebased.theme.mode).toBe(saved.theme.mode);
+    expect(rebased.rememberHistory).toBe(false);
+    expect(rebased.mobileSites).toBe(false);
+    expect(rebased.showTrayIcon).toBe(false);
+    // An equal theme or list in another order counts as not edited.
+    const same: Settings = { ...saved, theme: { ...saved.theme, colors: [...saved.theme.colors] }, disabledExtensions: [...saved.disabledExtensions] };
+    expect(rebase(same, saved, changed).theme).toEqual(dark);
+    // A later Save sends the change, not the old value.
+    expect(isChanged(changed, toInput(rebased.shortcut, rebased.searchEngine, rebased.translateTo, rebased.mobileSites, rebased.rememberHistory))).toBe(true);
+    expect(toInput(rebased.shortcut, rebased.searchEngine, rebased.translateTo, rebased.mobileSites, rebased.rememberHistory).mobileSites).toBe(false);
+  });
+
+  it("counts the keys as a change only when they differ (LJ44)", () => {
+    const withKeys = (keys: Record<string, string>) =>
+      toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory, undefined, undefined, undefined, undefined, keys);
+    expect(isChanged(saved, withKeys({}))).toBe(false);
+    expect(isChanged(saved, withKeys({ history: "CommandOrControl+Shift+KeyK" }))).toBe(true);
+    expect(isChanged({ ...saved, keys: { close: "" } }, withKeys({ close: "" }))).toBe(false);
+    expect(withKeys({ close: "" }).keys).toEqual({ close: "" });
+    expect("keys" in same()).toBe(false);
+    expect(TABS.map((tab) => tab.id)).toEqual(["general", "keyboard", "appearance", "extensions", "privacy", "about"]);
+    expect(tabFrom("Keyboard")).toBe("keyboard");
   });
 
   it("sends only the edited fields", () => {
@@ -117,8 +177,8 @@ describe("settings logic", () => {
 });
 
 describe("tabs", () => {
-  it("are General, Appearance, Extensions, Privacy and About", () => {
-    expect(TABS.map((tab) => tab.label)).toEqual(["General", "Appearance", "Extensions", "Privacy", "About"]);
+  it("are General, Keyboard, Appearance, Extensions, Privacy and About", () => {
+    expect(TABS.map((tab) => tab.label)).toEqual(["General", "Keyboard", "Appearance", "Extensions", "Privacy", "About"]);
   });
 
   it("open by name, General for anything else", () => {
@@ -131,7 +191,8 @@ describe("tabs", () => {
   });
 
   it("move with ↑/↓, Home and End, without wrapping", () => {
-    expect(tabForKey("general", "ArrowDown")).toBe("appearance");
+    expect(tabForKey("general", "ArrowDown")).toBe("keyboard");
+    expect(tabForKey("keyboard", "ArrowDown")).toBe("appearance");
     expect(tabForKey("about", "ArrowDown")).toBe("about");
     expect(tabForKey("privacy", "ArrowUp")).toBe("extensions");
     expect(tabForKey("general", "ArrowUp")).toBe("general");

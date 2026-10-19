@@ -15,9 +15,12 @@ use serde_json::Value;
 use crate::input::SearchEngine;
 use crate::translate::is_valid_lang;
 
+pub mod change;
+pub mod keys;
 pub mod site_modes;
 pub mod theme;
 
+pub use change::{Change, apply_change};
 pub use site_modes::SiteMode;
 pub use theme::{Theme, ThemeMode};
 
@@ -57,6 +60,12 @@ pub struct Settings {
     /// Per site: the phone or the desktop user agent whatever the width, or `auto`
     /// (settings/site_modes.rs; phone.rs adds a built-in list for the WebKit engines).
     pub site_modes: BTreeMap<String, SiteMode>,
+    /// The tray / menu-bar icon (on by default). Off, it is hidden — unless the global shortcut
+    /// can't work, when it comes back by itself (tray.rs).
+    pub show_tray_icon: bool,
+    /// The user's own keys for Little Joan's actions (settings/keys.rs, keymap.rs): action id →
+    /// accelerator, `""` = no key; actions not named keep their defaults.
+    pub keys: BTreeMap<String, String>,
 }
 
 impl Default for Settings {
@@ -74,6 +83,8 @@ impl Default for Settings {
             developer_mode: false,
             disabled_extensions: Vec::new(),
             site_modes: BTreeMap::new(),
+            show_tray_icon: true,
+            keys: BTreeMap::new(),
         }
     }
 }
@@ -132,6 +143,10 @@ pub fn parse(json: &str) -> Settings {
         .get("developerMode")
         .and_then(Value::as_bool)
         .unwrap_or(defaults.developer_mode);
+    let show_tray_icon = map
+        .get("showTrayIcon")
+        .and_then(Value::as_bool)
+        .unwrap_or(defaults.show_tray_icon);
 
     Settings {
         version: SETTINGS_VERSION,
@@ -146,6 +161,8 @@ pub fn parse(json: &str) -> Settings {
         developer_mode,
         disabled_extensions: disabled_extensions(map.get("disabledExtensions")),
         site_modes: site_modes::parse(map.get("siteModes")),
+        show_tray_icon,
+        keys: keys::parse(map.get("keys")),
     }
 }
 
@@ -255,6 +272,11 @@ mod tests {
             developer_mode: true,
             disabled_extensions: vec!["hello".into(), "builtin:calc".into()],
             site_modes: BTreeMap::from([("youtube.com".to_owned(), SiteMode::Phone)]),
+            show_tray_icon: false,
+            keys: BTreeMap::from([(
+                "history".to_owned(),
+                "CommandOrControl+Shift+KeyK".to_owned(),
+            )]),
             theme: Theme {
                 mode: ThemeMode::Dark,
                 colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],
@@ -372,6 +394,22 @@ mod tests {
             json.contains(r#""siteModes":{"youtube.com":"phone"}"#),
             "{json}"
         );
+    }
+
+    #[test]
+    fn the_tray_icon_shows_unless_switched_off() {
+        assert!(Settings::default().show_tray_icon);
+        assert!(
+            parse("{}").show_tray_icon,
+            "settings from before the option existed"
+        );
+        assert!(!parse(r#"{"showTrayIcon": false}"#).show_tray_icon);
+        assert!(
+            parse(r#"{"showTrayIcon": "no"}"#).show_tray_icon,
+            "a wrong type falls back"
+        );
+        let json = serde_json::to_string(&Settings::default()).expect("json");
+        assert!(json.contains(r#""showTrayIcon":true"#), "{json}");
     }
 
     #[test]

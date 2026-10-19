@@ -15,6 +15,7 @@ pub mod history;
 pub mod history_store;
 pub mod input;
 pub mod joan;
+pub mod keymap;
 pub mod keys;
 pub mod layout;
 pub mod navigation;
@@ -24,11 +25,13 @@ pub mod phone;
 pub mod phone_mode;
 pub mod placement;
 pub mod settings;
+pub mod settings_live;
 pub mod settings_window;
 pub mod shortcut;
 pub mod smoke;
 pub mod state;
 pub mod suggest;
+pub mod system_shortcuts;
 pub mod toggle;
 pub mod translate;
 pub mod welcome;
@@ -90,7 +93,11 @@ pub fn run() {
             commands::open_extensions_folder,
             commands::open_extension,
             commands::site::site_mode_info,
-            commands::site::set_site_mode
+            commands::site::set_site_mode,
+            commands::app::quit_app,
+            commands::quick::quick_state,
+            commands::quick::quick_command,
+            commands::keys::keymap_info
         ])
         // Extension panels and their API (extensions/protocol.rs). Registered for every
         // webview; each request is checked (extensions/api.rs), and only the page webview's
@@ -113,14 +120,18 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let handle = app.handle();
+            state::init(handle)?;
             #[cfg(target_os = "macos")]
             {
-                app.set_menu(menu::create(handle)?)?;
+                // The page items' keys come from the keymap (state::init built it).
+                let keymap = state::with(handle, |s| s.keymap.clone());
+                app.set_menu(menu::create(handle, &keymap)?)?;
                 app.on_menu_event(menu::on_menu_event);
             }
-            state::init(handle)?;
             tray::create(handle)?;
             shortcut::register_from_settings(handle);
+            // Hidden only while the shortcut works (tray.rs, LJ41).
+            tray::apply_visibility(handle);
 
             // A first launch with flags (e.g. `--show <url>`, `--start-at-login on`, `--settings`) acts on
             // them; without flags Little Joan starts hibernating — except on the very first run

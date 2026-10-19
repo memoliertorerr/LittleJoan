@@ -9,6 +9,8 @@ use crate::cli::Args;
 use crate::cookies::SessionCookies;
 use crate::extensions::theme::Tokens;
 use crate::history_store::OpenHistory;
+use crate::keymap::Keymap;
+use crate::keys::Platform;
 use crate::settings::{self, SETTINGS_FILE, Settings, Theme};
 
 /// Development builds point this at `.cache/dev-data` (see scripts/env.sh). Shipped builds never
@@ -28,6 +30,9 @@ pub struct AppState {
     pub webview_data_dir: Option<PathBuf>,
     /// The accelerator currently registered as the global shortcut, if any.
     pub active_shortcut: Option<String>,
+    /// What went wrong with the saved shortcut at launch (shortcut.rs), until a save makes one
+    /// work: Settings says so (LJ44).
+    pub shortcut_problem: Option<crate::shortcut::Problem>,
     /// True while the settings window is recording a new shortcut (the active one is paused).
     pub shortcut_suspended: bool,
     /// A first run (no settings.json at launch) whose welcome the start page hasn't shown yet.
@@ -45,9 +50,31 @@ pub struct AppState {
     /// webview background (bar/background.rs); `None` until a bar painted, or after the theme
     /// changed.
     pub painted_background: Option<Tokens>,
+    /// Every Little Joan key on this OS: the defaults and the settings' `keys` (keymap.rs, LJ43);
+    /// built here and again whenever the settings change.
+    pub keymap: Keymap,
 }
 
 impl AppState {
+    /// A state with the default settings and nothing open, for tests.
+    #[cfg(test)]
+    pub fn for_tests() -> AppState {
+        AppState {
+            settings: Settings::default(),
+            data_dir: std::env::temp_dir().join("little-joan-test-state"),
+            webview_data_dir: None,
+            active_shortcut: None,
+            shortcut_problem: None,
+            shortcut_suspended: false,
+            first_run: false,
+            session_cookies: SessionCookies::default(),
+            history: None,
+            theme_preview: None,
+            painted_background: None,
+            keymap: Keymap::new(Platform::current(), &std::collections::BTreeMap::new()),
+        }
+    }
+
     /// The theme the bar shows: the preview while Settings edits one, else the saved theme.
     pub fn shown_theme(&self) -> Theme {
         self.theme_preview
@@ -71,17 +98,20 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         };
     let first_run = is_first_run(&data_dir);
     let settings = settings::load(&data_dir);
+    let keymap = Keymap::new(Platform::current(), &settings.keys);
     app.manage(Mutex::new(AppState {
         settings,
         data_dir,
         webview_data_dir,
         active_shortcut: None,
+        shortcut_problem: None,
         shortcut_suspended: false,
         first_run,
         session_cookies: SessionCookies::default(),
         history: None,
         theme_preview: None,
         painted_background: None,
+        keymap,
     }));
     Ok(())
 }
@@ -127,18 +157,7 @@ mod tests {
 
     #[test]
     fn the_bar_shows_the_preview_while_settings_edits_one() {
-        let mut state = AppState {
-            settings: Settings::default(),
-            data_dir: temp_dir("preview"),
-            webview_data_dir: None,
-            active_shortcut: None,
-            shortcut_suspended: false,
-            first_run: false,
-            session_cookies: SessionCookies::default(),
-            history: None,
-            theme_preview: None,
-            painted_background: None,
-        };
+        let mut state = AppState::for_tests();
         assert_eq!(state.shown_theme(), Theme::default());
         let preview = Theme {
             colors: vec!["#9d8fd0".into()],

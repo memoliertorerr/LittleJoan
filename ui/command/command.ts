@@ -1,8 +1,10 @@
 // The command bar's list (DOM glue): asks Rust for suggestions as you type (60 ms debounce, only
 // the latest answer counts), builds the rows (rows.ts; a quick answer from ui/answers/, our own
-// code; extension commands from extensions.ts, read once each time the command bar opens), draws
-// them as text (view.ts), and handles the inline autofill, the keys and the mouse. Enter (or a
-// click) on a quick answer copies it and says "Copied".
+// code; extension commands from extensions.ts and the quick commands' state from quick_state,
+// both read each time the command bar opens; the quick rows from quick.ts), draws them as text
+// (view.ts), and handles the inline autofill, the keys and the mouse. Enter (or a click) on a
+// quick answer copies it and says "Copied"; on a quick command it runs it (Clear history asks for
+// a second Enter), then the rows show the new state — or, for a page command, the page.
 import { invoke } from "@tauri-apps/api/core";
 import {
   buildRows,
@@ -16,7 +18,9 @@ import {
 } from "./rows.ts";
 import { renderRows } from "./view.ts";
 import { commandRows, isWebPage, type ExtensionInfo, type ExtensionsView } from "./extensions.ts";
+import { quickEnter, quickRows, quickStateFrom, type QuickState } from "./quick.ts";
 import { quickAnswer } from "../answers/index.ts";
+import { clearedText } from "../history/logic.ts";
 import type { SiteModeInfo } from "../toolbar/logic.ts";
 import { copyText } from "./copy.ts";
 
@@ -32,6 +36,8 @@ export interface CommandBar {
   onInput(event: Event): void;
   /** A key in the field; returns whether the list handled it. */
   onKey(event: KeyboardEvent): boolean;
+  /** Esc: a quick command waiting for its second Enter stops waiting; returns whether one was. */
+  cancel(): boolean;
 }
 
 /**
@@ -59,6 +65,13 @@ export function commandBar(
   let extensions: ExtensionInfo[] = [];
   /** The built-in quick answers switched off in Settings. */
   let disabledBuiltIns: string[] = [];
+  /** How things are for the quick commands, as of the command bar's opening (or the last one run). */
+  let quickState: QuickState | null = null;
+  /** The quick row waiting for its second Enter (Clear history), by key. */
+  let armed: string | null = null;
+  /** What the rows were last built from, to build them again with a new state. */
+  let lastQuery = "";
+  let lastSuggestions: Suggestion[] = [];
 
   const loadExtensions = (): void => {
     invoke<ExtensionsView>("extensions_list")
@@ -69,6 +82,17 @@ export function commandBar(
       .catch(() => {
         extensions = [];
       });
+  };
+
+  const loadQuick = (then?: () => void): void => {
+    invoke<unknown>("quick_state")
+      .then((value) => {
+        quickState = quickStateFrom(value);
+      })
+      .catch(() => {
+        quickState = null;
+      })
+      .finally(() => then?.());
   };
 
   const draw = (): void => {
@@ -107,10 +131,12 @@ export function commandBar(
   };
 
   const show = (query: string, suggestions: Suggestion[]): void => {
+    lastQuery = query;
+    lastSuggestions = suggestions;
     rows = buildRows(query, suggestions, {
       quickAnswer: (typedText) => quickAnswer(typedText, { now: Date.now(), disabled: disabledBuiltIns }),
       commands: (typedText) => commandRows(typedText, extensions, isWebPage(shown())),
-      site: isWebPage(shown()) ? site() : null,
+      quick: (typedText) => quickRows(typedText, quickState, isWebPage(shown()) ? site() : null, armed),
     });
     if (!applyAutofill()) {
       rows = { ...rows, autofill: null };
@@ -146,9 +172,26 @@ export function commandBar(
     }
   };
 
-  /** Says, in the quick answer's row for a moment, whether the copy worked (as text). */
-  const flash = (message: string): void => {
-    const domain = list.querySelector<HTMLElement>('.row-answer .row-domain');
+  /** The rows again from what they were built from (a new state, a row armed), the selection kept. */
+  const redraw = (): void => {
+    keep = selected;
+    inserting = false;
+    show(lastQuery, lastSuggestions);
+  };
+
+  /** Stops a quick command waiting for its second Enter; returns whether one was. */
+  const disarm = (): boolean => {
+    if (armed === null) {
+      return false;
+    }
+    armed = null;
+    redraw();
+    return true;
+  };
+
+  /** Says, in a row for a moment, what happened (as text): the quick answer's, or `selector`'s. */
+  const flash = (message: string, selector = ".row-answer .row-domain"): void => {
+    const domain = list.querySelector<HTMLElement>(selector);
     if (!domain) {
       return;
     }
@@ -185,12 +228,54 @@ export function commandBar(
         });
         break;
       case "copy":
-        void copyText(action.text, field).then((copied) => flash(copied ? "Copied" : "Couldn't copy"));
+        void copyText(action.text, field).then((copied) => {
+          if (copied && action.close) {
+            // The page's link (LJ42): copied, back to the page.
+            void invoke("set_overlay", { on: false });
+          } else {
+            flash(copied ? "Copied" : "Couldn't copy", action.close ? `[data-index="${selected ?? -1}"] .row-domain` : undefined);
+          }
+        });
         break;
+      case "quick": {
+        const step = quickEnter(armed, action);
+        armed = step.armed;
+        if (!step.run) {
+          // The first Enter on Clear history: the row says what a second one removes.
+          redraw();
+          break;
+        }
+        const command = action.command;
+        invoke<number | null>("quick_command", { command })
+          .then((removed) => {
+            if (action.closes) {
+              void invoke("set_overlay", { on: false });
+              return;
+            }
+            if (command.kind === "reloadExtensions") {
+              loadExtensions();
+            }
+            loadQuick(() => {
+              if (command.kind === "clearHistory") {
+                // History changed: the matches too.
+                keep = selected;
+                ask(queryFor(typed, shown()));
+                setTimeout(() => flash(clearedText(command.range, removed ?? 0), `[data-index="${keep ?? selected ?? -1}"] .row-domain`), 150);
+              } else {
+                redraw();
+              }
+            });
+          })
+          .catch((err: unknown) => flash(String(err), `[data-index="${selected ?? -1}"] .row-domain`));
+        break;
+      }
       case "siteMode":
         // Rust applies it to the open page's site (and reloads it if its agent changed); the
         // command bar closes so the page shows.
         void invoke("set_site_mode", { mode: action.mode }).then(() => invoke("set_overlay", { on: false }));
+        break;
+      case "quit":
+        void invoke("quit_app");
         break;
     }
   };
@@ -216,7 +301,9 @@ export function commandBar(
     if (index !== null && index !== selected) {
       selected = index;
       dropAutofill();
-      markSelection();
+      if (!disarm()) {
+        markSelection();
+      }
     }
   });
 
@@ -228,9 +315,18 @@ export function commandBar(
       keep = undefined;
       rows = EMPTY;
       selected = null;
+      armed = null;
+      lastQuery = "";
+      lastSuggestions = [];
       document.body.classList.remove("typing");
       if (open) {
         loadExtensions();
+        // Typing may beat the state: its rows come again once it is there.
+        loadQuick(() => {
+          if (lastQuery.trim() !== "") {
+            redraw();
+          }
+        });
         ask("");
       } else {
         latest++;
@@ -239,6 +335,7 @@ export function commandBar(
     },
 
     onInput(event: Event) {
+      armed = null;
       typed = field.value;
       inserting = event instanceof InputEvent && event.inputType.startsWith("insert");
       clearTimeout(timer);
@@ -256,7 +353,9 @@ export function commandBar(
           event.preventDefault();
           selected = outcome.selected;
           dropAutofill();
-          markSelection();
+          if (!disarm()) {
+            markSelection();
+          }
           return true;
         case "act":
           event.preventDefault();
@@ -279,6 +378,10 @@ export function commandBar(
         case "none":
           return false;
       }
+    },
+
+    cancel() {
+      return disarm();
     },
   };
 }

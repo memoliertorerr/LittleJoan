@@ -1,13 +1,13 @@
 // The smoke test's site-mode run (LJ40) and its rules. Its own launch (default theme, the window
 // 480×640): the smoke page at 390 px — the phone agent, the toolbar's "Phone" pill
-// (`phone-pill.png`) —; then the command bar's "Request desktop site" (Ctrl/Cmd+L, typed
+// (`phone-pill.png`) —; then the command bar's "Desktop site" (LJ42's quick row; Ctrl/Cmd+L, typed
 // "request desktop", ↓ ↓ Enter: the search row first, then the row; typed on Windows and Linux,
 // best effort on macOS): `site-mode 127.0.0.1 desktop`, settings.json keeps
-// `"127.0.0.1": "desktop"`, and the page loads once more with the desktop agent; "Automatic for
-// this site" brings the phone agent back (one reload, the entry gone). Then, informational:
+// `"127.0.0.1": "desktop"`, and the page loads once more with the desktop agent; "Automatic"
+// (typed "automatic") brings the phone agent back (one reload, the entry gone). Then, informational:
 // `?fits=1` (the page without its desktop minimum width) at 720 px, then 390 px — Windows asks
 // the engine whether the page fits and skips the reload (`ua-reload skipped fits`); macOS and
-// Linux reload. Last, "Request desktop site" once more and Settings → General listing the site
+// Linux reload. Last, "Desktop site" once more and Settings → General listing the site
 // (`settings-site-modes.png`).
 //
 // The smoke server writes each request's agent headers (User-Agent, Sec-CH-UA-Mobile,

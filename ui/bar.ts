@@ -219,6 +219,11 @@ if (field && rowList && toolbarRoot && historyRoot) {
     if (state.view === "overlay" && event.key !== "Escape" && command.onKey(event)) {
       return;
     }
+    // Esc first stops a quick command waiting for its second Enter (Clear history).
+    if (state.view === "overlay" && event.key === "Escape" && command.cancel()) {
+      event.preventDefault();
+      return;
+    }
     act(onKey(state, event.key, field.value, event.isComposing), event);
   });
   // Keys elsewhere in the bar (after a click in the welcome or the history list): Esc follows

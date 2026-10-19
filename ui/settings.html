@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="./settings.css" />
     <link rel="stylesheet" href="./settings/appearance.css" />
     <link rel="stylesheet" href="./settings/extensions.css" />
+    <link rel="stylesheet" href="./settings/keyboard.css" />
     <script type="module" src="./settings.ts"></script>
   </head>
   <!-- The settings window: tabs in a sidebar on the left, the chosen tab on the right, and
@@ -22,6 +23,13 @@
             <path d="M8 1.3v1.6M8 13.1v1.6M1.3 8h1.6M13.1 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M3.3 12.7l1.1-1.1M11.6 4.4l1.1-1.1" />
           </svg>
           General
+        </button>
+        <button id="tab-keyboard" class="tab" type="button" role="tab" data-tab="keyboard" aria-controls="panel-keyboard">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="1.6" y="3.6" width="12.8" height="8.8" rx="1.6" />
+            <path d="M4 6.4h.1M6.6 6.4h.1M9.3 6.4h.1M12 6.4h.1M5 9.6h6" />
+          </svg>
+          Keyboard
         </button>
         <button id="tab-appearance" class="tab" type="button" role="tab" data-tab="appearance" aria-controls="panel-appearance">
           <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -59,9 +67,17 @@
           <h1>General</h1>
           <div class="setting">
             <span class="setting-label" id="shortcut-label">Shortcut</span>
-            <button id="shortcut" class="recorder" type="button" aria-labelledby="shortcut-label">…</button>
+            <span class="setting-controls">
+              <span id="shortcut-current" class="kb-current">…</span>
+              <button id="shortcut-change" type="button">Change…</button>
+            </span>
           </div>
-          <p class="setting-note" id="shortcut-note">Click, then press the keys you want to use.</p>
+          <p class="setting-note kb-problem" id="general-problem" hidden></p>
+          <label class="setting" for="tray">
+            <span class="setting-label" id="tray-label">Show the icon in the system tray</span>
+            <input id="tray" type="checkbox" />
+          </label>
+          <p class="setting-note" id="tray-note"></p>
           <label class="setting" for="engine">
             <span class="setting-label">Search with</span>
             <select id="engine"></select>
@@ -83,6 +99,30 @@
             <input id="login" type="checkbox" />
           </label>
           <p class="setting-note" id="login-note">So the shortcut works after you restart.</p>
+        </section>
+
+        <section id="panel-keyboard" class="tab-panel" role="tabpanel" aria-labelledby="tab-keyboard" hidden>
+          <h1>Keyboard</h1>
+          <p class="kb-problem" id="kb-problem" hidden></p>
+          <div class="setting">
+            <span class="setting-label" id="summon-label">Summon Little Joan</span>
+            <span class="setting-controls">
+              <button id="shortcut" class="recorder" type="button" aria-labelledby="summon-label">…</button>
+              <button id="shortcut-reset" type="button" hidden>Reset</button>
+            </span>
+          </div>
+          <p class="setting-note" id="shortcut-note">Click, then press the keys you want to use.</p>
+          <ul class="kb-problems" id="summon-problems"></ul>
+          <p class="setting-note" id="kb-wayland" hidden>
+            On Wayland this shortcut can't be heard: bind <code>little-joan --toggle</code> to a key in your desktop's keyboard settings — it summons and dismisses the window.
+          </p>
+          <h2 id="kb-actions-label">Little Joan's keys</h2>
+          <p class="setting-note" id="kb-actions-note">They work while Little Joan's window is in front. Click one, then press the new key; Backspace means no key, Esc cancels.</p>
+          <ul id="kb-actions" class="kb-actions" aria-labelledby="kb-actions-label"></ul>
+          <p class="setting-note" id="kb-engine-note" hidden>WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ also reload and go back and forward, beside these.</p>
+          <div class="kb-footer">
+            <button id="kb-reset-all" type="button">Reset all</button>
+          </div>
         </section>
 
         <section id="panel-appearance" class="tab-panel" role="tabpanel" aria-labelledby="tab-appearance" hidden>

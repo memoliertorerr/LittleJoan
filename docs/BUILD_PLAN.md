@@ -106,10 +106,10 @@
 | LJ38 | *(round 3)* The bar's first paint: its theme before it paints; panels opened from hibernation wait for the bar | strong | auto | ✅ done |
 | LJ39 | *(round 3)* Live resize like Little Arc: only changed layout, macOS autoresizing masks, themed webview backgrounds, phone-mode hysteresis (600 / 640 px) | strong | auto | ✅ done (the bar's background only — see notes) |
 | LJ40 | *(round 3)* Phone mode per site: a command, a toolbar pill, a Settings list; Windows' phone agent with client hints; the owner's check | strong | checkpoint | ✅ done — the owner's check passed 2026-10-18 (see LJ40's notes); `v0.2.0-beta.3` released |
-| LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ⬜ todo |
-| LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ⬜ todo |
-| LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ⬜ todo |
-| LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ⬜ todo |
+| LJ41 | *(round 3)* Hide the tray / menu-bar icon (back by itself when the shortcut can't work); Settings and Quit in the command bar | standard | auto | ✅ done |
+| LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ✅ done |
+| LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ✅ done |
+| LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ⬜ todo |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ⬜ todo |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ⬜ todo |
@@ -180,7 +180,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). Next: phase 20.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Next: phase 7.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -200,6 +200,18 @@ and the guard fixed it on every element path; YouTube gets the desktop agent on 
 opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
+
+**Phase 20 (LJ41 → LJ44, 2026-10-19)** is PR #24 on `lj/p20-control`, merged by the agent once
+verify, package and smoke were green on every OS job (the standing exception; LJ36's fullscreen
+run missed its click on linux-scale-2 three times — a stale `page-screen` line after leaving
+fullscreen —, fixed in the harness by `lj-step-44-fix2`; the app's layout race is under Deferred
+follow-ups). The tray / menu-bar
+icon can be hidden and comes back by itself whenever the shortcut can't work; the command bar has
+Settings, Quit and quick commands showing their state (settings changes share one checked path
+with Save); every Little Joan key comes from one keymap and can be changed in Settings → Keyboard,
+with clashes refused and the OSes' reserved shortcuts warned about (on macOS refined by its own
+preferences, read-only). Human checks are in PR #24. **Next: phase 7 (LJ13 → LJ14)** — on the
+owner's go.
 
 **Phase 19 (LJ39 → LJ40, 2026-10-18)** is PR #22 on `lj/p19-resizing`, merged by the agent once
 verify, package and smoke were green on every OS job (the standing exception). Resizing applies
@@ -5910,6 +5922,63 @@ phase-20 PR into main as a draft, and watch CI until every job is green (Ground 
 fix attempts, then stop). Look at the screenshot on every OS.
 ```
 
+**Implementation notes (2026-10-19):**
+
+- **The rule** (`tray.rs`, pure and tested): `icon_visible(show_icon, shortcut_works)` = shown unless
+  the setting is off and the shortcut works; `shortcut_works(active_shortcut, wayland_no_shortcut)`
+  — no registered shortcut (`AppState::active_shortcut` `None`: the saved one and the default both
+  failed) or a Linux Wayland session (`welcome::wayland_no_shortcut_here`) → false; a shortcut
+  paused while Settings records one stays the active one, so it still counts (a test builds that
+  state). `apply_visibility` reads the setting and the active shortcut, calls the tray's own
+  `set_visible` only when the answer changed (an `AtomicU8`: nothing yet / shown / hidden — the
+  icon is built visible), and logs `tray-visible <bool>` the first time and on each change. It
+  runs after `shortcut::register_from_settings` in setup and after every `save_settings`.
+- **What `set_visible` does** (tray-icon 0.25.1, read in the registry): macOS removes the
+  `NSStatusItem` and builds it again from its kept attributes (icon, menu, tooltip) when shown;
+  Windows sends the tray's hidden window `WM_USER_SHOW_TRAYICON`, which hides or shows the
+  notification icon; **Linux sets the AppIndicator's status to `Passive` (hidden) or `Active`**.
+  Tauri runs it on the main thread (`run_item_main_thread!`: inline on the main thread, else it
+  waits for it), so it is never called with the state lock held. At startup the icon is created
+  visible and hidden in the same main-thread turn of setup, before the event loop runs.
+- **A swap that left no shortcut** (a small change to `shortcut::swap`, which the prompt's "one
+  that left no shortcut brings the icon back" needs): its error is now `SwapError { message,
+  old_kept }` — `old_kept` false when there was none, or the old one couldn't be registered again
+  after the new one was refused (another app took it in that moment; a test). `save_settings`
+  then forgets the active shortcut and applies the rule before returning the message, so the icon
+  comes back; a failed swap that restored the old one changes nothing.
+- **Settings:** `showTrayIcon` (default true; a wrong type falls back; tests). General: "Show the
+  icon in the menu bar" (macOS) / "… in the system tray" (`trayLabelFor`), right under the shortcut,
+  with the note from the prompt naming the shortcut as the recorder shows it (`trayText`, both
+  tested); `toInput` sends `showTrayIcon` and `isChanged` counts it (tests); `save_settings` takes
+  it as an optional field (left out, the saved one stays), like Developer mode.
+- **The command bar:** `builtInCommands` gains **Settings** (`settings`, `preferences`, `options`:
+  Settings on General through `open_settings`, the gear) and **Quit Little Joan** (`quit`, `exit`:
+  the new `quit_app`, a power symbol as a CSS mask), matched like History (one shared `names`: the
+  typed text starts a word, two letters or more, or a typed word is one); both always find room
+  among the 8 rows (a test with 12 history matches and a quick answer). "Settings & extensions"
+  stays the last row. `quit_app` (`src-tauri/src/commands/app.rs`) is `joan::quit`; build.rs's
+  manifest and `capabilities/bar.json` gain exactly `allow-quit-app`, and
+  `capability_tests.rs`' `only_the_bar_may_quit` fails if any other capability grants it.
+- `cli.rs`' `a_plain_second_launch_shows_the_window` already pins `forwarded_command()` →
+  `Show(None)` for a launch without flags: kept as it is.
+- **Smoke** (`scripts/ci/smoke-tray.mts` + test, after the site-mode run): its own launches through
+  `fullscreenLaunch` (which now takes extra environment variables). In the command bar "quit" is
+  the second row (the search row comes first), so the run presses ↓ ↓ Enter as the site-mode run
+  does; `command-quit.png` shows the typed command bar. The Settings screenshot is a relaunch of
+  its own (`tray-settings`), because Settings open beside the page window could take the
+  keyboard from the command bar's typing.
+- `npm run verify`: 545 TS tests, 317 Rust tests, clippy clean. Disk: 10 GiB free at the start of
+  the phase, 9.2 GiB after verify; `.cache/target` 1.6 GB.
+- **CI (run 39210723268): all ten jobs green.** The tray run on every OS: `tray-visible false` right
+  after `shortcut-registered` and never `true`; a plain second launch logged `window-created`;
+  "quit" reached the command bar (macOS too), ↓ ↓ Enter logged `quit` and the process ended by
+  itself; on both Linux jobs the `XDG_SESSION_TYPE=wayland` launch logged `tray-visible true`.
+  **Screenshots:** `settings-general-tray.png` — General with "Show the icon in the menu bar"
+  (macOS) / "… in the system tray" (Windows, Linux) unchecked under the shortcut, and the note
+  naming ⌘⇧Space / Ctrl+Shift+Space (on macOS the menu bar shows no Little Joan icon);
+  `command-quit.png` — "Search Google for "quit"", then "Quit Little Joan" with the power glyph,
+  then "Settings & extensions", on every OS (Linux at scale 2 crisp).
+
 ### LJ42 — Quick commands in the command bar, each showing its state · standard · auto
 
 **Verify:** `npm run verify` green, including:
@@ -5997,6 +6066,72 @@ bar, each showing its current state". Push and watch CI until every job is green
 two honest fix attempts, then stop). Look at both screenshots on every OS.
 ```
 
+**Implementation notes (2026-10-19):**
+
+- **One path for settings changes — split in two (a deviation in shape, not in substance):** the
+  prompt's `settings::apply_change(app, change)` would put Tauri types into `settings.rs`, which is
+  pure (Ground Rule 14). So `settings::apply_change(&Settings, &Change) -> Result<Settings, String>`
+  (`settings/change.rs`, pure) checks every part of a change — a search engine id, a language, a
+  whole theme (new `theme::parse_strict`: a known mode, 1–3 colors that all parse, numbers in 0–1),
+  a theme mode, the extensions' and sites' lists (entry by entry, as before), the bools — and
+  refuses the whole change for one bad part (tests: a bad engine id, an unknown mode, a bad color,
+  a bad language, an empty shortcut change nothing). `settings_live::apply(app, &change)` puts it to
+  work under the state lock (checked again against that moment's settings), ends a preview when the
+  theme changed, pushes a new theme to the bar (smoke log `theme <mode> colors=<n>` — `theme` now
+  also means "handed a new one"), re-runs LJ41's tray rule, forgets the registry when extensions
+  changed, runs `phone_mode::apply` when `mobileSites` or `siteModes` changed, and saves atomically.
+  `save_settings` checks the whole change first (so a refused part never swaps the shortcut), swaps
+  the shortcut, then calls the same function; its `searchEngine` is now an id string checked there,
+  and its theme is checked strictly (the Settings window only ever sends a valid one).
+- **`quick_state` / `quick_command`** (`src-tauri/src/commands/quick.rs`; build.rs's manifest;
+  `capabilities/bar.json` gains exactly `allow-quick-state` and `allow-quick-command`;
+  `capability_tests.rs`' `only_the_bar_may_run_quick_commands`, through a shared
+  `only_the_bar_grants` that `only_the_bar_may_quit` uses too). The command is a serde enum
+  `#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]`; **the field-less kinds are
+  empty structs (`Reload {}`), not unit variants** — a test showed serde's internally tagged unit
+  variants accept extra fields despite `deny_unknown_fields`. Tests refuse other kinds (`setShortcut`,
+  `setDeveloperMode`, `setExtension`, `setKeys`), extra fields, wrong types and missing ones. Page
+  commands are refused without a web page (`commands::web_page`, now shared with `open_extension`).
+  It logs `quick-command <kind> [<value>]` once accepted — values filtered to short words, never a URL
+  or a title (a test). After a settings command an open Settings window gets
+  `window.littleJoanSettings.savedChanged(<settings>, <startAtLogin | null>)`.
+- **The bar** (`ui/command/quick.ts`, pure + 13 tests; glue in `command.ts`): the list from the prompt,
+  each row's state after the title as text — "Mobile sites — on", "Theme: Dark ✓" (a new `mark` on a
+  row, drawn as text by `view.ts`, in the accent color), "Search with DuckDuckGo ✓", "Start at login —
+  off", "Icon — shown (the shortcut can't work)"; a preset row sends the preset's whole theme with the
+  user's mode, and is ✓ when the theme matches it. LJ40's three rows moved in as "Desktop site",
+  "Phone site", "Automatic", each "— this site", the current ✓ (the prompt's "Desktop site — this site
+  ✓"; "request" and "automatic" still find them, so LJ40's smoke types the same). Settings → <tab>
+  covers Appearance, Extensions, Privacy and About: **General is LJ41's "Settings" row**, so it isn't
+  offered twice. Clear history offers its four ranges; the first Enter turns the row into "press
+  Enter again to remove the history of the last hour" (`quickEnter`, tested), a second Enter on that
+  row runs it and says what went; Esc (`command.cancel()`, before the bar's own Esc), moving away or
+  typing cancels. Up to three quick rows always find room among the 8 (`QUICK_ROOM` in `buildRows`;
+  history matches make way); quick rows are never preselected, so Enter on typed text still opens it
+  — the smoke presses ↓ ↓ Enter as for LJ40's rows (the prompt's "type `mobile` → Enter" taken as that).
+  Copy link / Copy as Markdown link copy in the bar on the keypress (`copy.ts`), the Markdown from
+  `extensions/markdown-link/logic.js`'s `link("markdown", …)` imported by the bar (Vite and tsc took
+  it as is); page commands then close the command bar, settings ones keep it open and the rows show
+  the new state from a fresh `quick_state` (asked when the command bar opens, with `extensions_list`,
+  and again after each command; rows are built again if it lands after the typing).
+- **Settings follows** (`ui/settings-logic.ts` `rebase(draft, oldSaved, newSaved)`, tested): a field
+  the window didn't edit follows the command bar's change, an edited one keeps the edit (the theme
+  compared deeply, lists in any order); `settings.ts`' `savedChanged` applies it to the controls, the
+  Appearance editor, the Extensions tab and the site list (each only when not edited) and the login
+  switch.
+- `npm run verify`: 561 TS tests, 327 Rust tests, clippy clean. Disk: 9.2 GiB free at the start of
+  the step, 8.9 GiB after verify; `.cache/target` 1.6 GB.
+- **CI (run 39212735555): all ten jobs green.** The quick-commands run, every OS (macOS typed too):
+  "mobile" logged `quick-command setMobileSites false` and saved `"mobileSites": false`; "dark"
+  logged `quick-command setThemeMode dark`, handed the bar `theme dark colors=1` and saved the mode;
+  Copy link put the smoke page's address on the clipboard on Windows and macOS (Linux's runner has
+  no clipboard tool: informational). LJ40's site-mode run, typing the same words, passed with the
+  renamed rows. **Screenshots:** `quick-theme.png` — after "dark", the dark command bar with Theme:
+  System / Light / Dark ✓ / Mist ✓ / Sand / Sage / Lagoon (the ✓ in the accent colour), on every OS;
+  `quick-page.png` — over the smoke page, "Copy link" and "Copy as Markdown link" with the copy
+  symbol, then the bundled Clean link and Copy as Markdown link page actions (Deferred follow-ups:
+  the quick row and the page action of the same name both show).
+
 ### LJ43 — One keymap: every key of Little Joan's own, configurable (engine side) · strong · auto
 
 **Verify:** `npm run verify` green, including Rust tests for a pure `src-tauri/src/keymap.rs` (tests
@@ -6080,6 +6215,68 @@ notes (with df -h), and commit everything as one commit: "lj-step-43: one keymap
 Joan key, configurable in settings (engine side)". Push and watch CI until every job is green
 (Ground Rule 3; two honest fix attempts, then stop).
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **`keymap.rs`** (pure; 11 tests in `keymap/tests.rs`): `KeyAction` (ids `open-location`,
+  `history`, `translate`, `reload`, `back`, `forward`, `open-in-browser`, `close`; titles as the
+  menu has them; `page_action()` — the one place an action meets a `PageAction`), `Binding` (an
+  accelerator's modifiers unresolved — `CommandOrControl`, `Control`, `Super`, `Alt`, `Shift` —
+  and a `Key`; `parse` takes the global shortcut's names in any case and refuses a repeated or
+  unknown modifier; `accelerator()` writes `CommandOrControl…` back, never the resolved modifier;
+  `mods(platform)` resolves; `display` as Settings shows it), `defaults(platform, action)` (the
+  table test: today's keys exactly), `Keymap::new(platform, overrides)`, `action_for(key, mods)`
+  (exact), `binding`/`bindings`, `bindable`, `validate(platform, overrides, global_shortcut)` with
+  `Problem::message`, and `info()` for `keymap_info`.
+- **`keys.rs`** keeps `Key`, `Mods`, `Platform`, `PageAction` and the origin; `action_for` moved to
+  the keymap, its tests with it. `Key` now covers what the recorder records — letters, digits,
+  F1–F24, arrows, Home / End / PageUp / PageDown, `Equal`, `Minus`, the brackets, `Comma`,
+  `Period`, `Slash`, `Semicolon`, `Quote`, `Backquote`, `Backslash`, the keypad's digits and
+  operators — from `KeyboardEvent.code` names (`from_code` / `code`, round-trip tested), Windows
+  virtual keys (`VK_OEM_*` as on a US keyboard) and GDK key names (with Shift held GDK names the
+  shifted character — `braceleft`, `exclam` — counted as its key on a US layout). Keys match by what
+  they type, as before: on AZERTY Ctrl+W is still the key that types W (Windows' virtual keys,
+  GDK's names and macOS's key equivalents all work that way).
+- **Typing keys, a little wider than the prompt's words:** "Shift alone with a letter or digit" is
+  refused for every key that types (punctuation and the keypad too: Shift+= types "+"); Shift with
+  an arrow, Home/End/Page or an F-key is allowed (they type nothing).
+- **Settings:** `keys` (`settings/keys.rs`: unknown ids and unparsable accelerators dropped alone,
+  kept in the keymap's spelling; the round-trip test keeps them). A typing key from a hand-edited
+  file is never bound (`Keymap::new` ignores an override that isn't `bindable`; the default stays).
+  `save_settings` takes `keys` (optional, like `disabledExtensions`), through LJ42's shared change:
+  `settings::apply_change` refuses a set that fails `keymap::validate` with the first problem's
+  message — and also **a new global shortcut that is one of the keys** (validated whenever the
+  shortcut or the keys change). `AppState::keymap` is built at startup and again by
+  `settings_live::apply`.
+- **The hooks:** Windows' `AcceleratorKeyPressed` (both webviews) and Linux's `key-press-event`
+  ask `AppState::keymap` (a lock per press, held only for the lookup). **macOS:** `menu.rs` builds
+  the page items from the keymap (an action without a key gets none) and logs `menu-keys
+  <action>=<key | none>` in smoke mode; `settings_live` sets the menu again on the main thread
+  when the keys changed (`menu::refresh`). **Close Window is now Little Joan's own item** (the
+  standard `close_window` item's Cmd+W was fixed): its key comes from the keymap, and with Settings
+  in front it closes Settings, as the standard item did. `setup` now builds the state before the
+  menu (the menu needs the keymap).
+- **"Parses as a menu accelerator":** Tauri's menu items parse with muda and silently drop an
+  accelerator that fails, so the test matters — but muda isn't a direct dependency (adding one is a
+  stop condition). The test parses every default and every binding the recorder can produce (each
+  key with five modifier sets) with the global shortcut's parser (global-hotkey 0.8.0), whose
+  modifier and key names are the same as muda 0.20.0's for everything `accelerator()` writes
+  (checked in both crates' sources: muda additionally accepts `Meta` and falls back to
+  `keyboard_types::Code`'s names), and checks each round-trips through `Binding::parse`.
+- **`keymap_info`** (`src-tauri/src/commands/keys.rs`): `{ platform, actions: [{ id, title,
+  binding, defaults }], globalShortcut }`; `allow-keymap-info` in `capabilities/bar.json` and
+  `capabilities/settings.json`, and `capability_tests.rs`' `only_the_bar_and_settings_may_read_the_keymap`.
+- **Ground Rule 25 check:** a search of `ui/` and `src-tauri/src/` for key strings finds only the
+  global shortcut's default, macOS's fixed Settings… (Cmd+,) and Quit (Cmd+Q), the recorder's
+  modifier names and tests.
+- **Smoke** (`scripts/ci/smoke-keymap.mts` + test, after the quick-commands run): `pressShortcut`
+  learned Shift (SendKeys `^+k`, xdotool `ctrl+shift+k`, the Swift script's Command + Shift flags).
+- `npm run verify`: 565 TS tests, 338 Rust tests, clippy clean. Disk: 8.9 GiB free at the start of
+  the step, 8.8 GiB after verify; `.cache/target` 1.6 GB.
+- **CI (run 39214438496): all ten jobs green.** The keymap run, every OS: Ctrl+Shift+K (macOS ⌘⇧K,
+  through the menu) opened the history view and the old key (Ctrl+H; ⌘Y) then opened nothing;
+  macOS logged `menu-keys history=⌘⇧K` and `open-location=⌘L`. The main run's default history key
+  and LJ40's site-mode and LJ42's quick runs passed as before.
 
 ### LJ44 — Settings → Keyboard: record every key; clashes and the system's reserved shortcuts · standard · auto
 
@@ -6170,6 +6367,113 @@ This ends phase 20. Fill the PR description from the template. Needs human check
 Once verify, package and smoke are green on every OS job, merge the PR into main with a merge
 commit, then stop and report.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **Rust:** `SettingsTab::Keyboard` between General and Appearance (`--settings keyboard`, any
+  case; tests). `shortcut::settle(registrar, wanted)` (pure, tested with the fake registrar):
+  registers the saved shortcut, else the default, and returns what went wrong — `Problem { wanted,
+  active, reason: taken | invalid }` (`invalid` when it doesn't parse) —, kept as
+  `AppState::shortcut_problem` until a Save registers a shortcut; `get_settings` and `keymap_info`
+  report it as `shortcutProblem`, and `get_settings` also `waylandNoShortcut`. `shortcut::TAKEN`
+  reads "Another app or the system already uses that shortcut. Try another one." (a test).
+- **The tab** (`ui/settings/keyboard.ts` glue, `keyboard-logic.ts` pure + 13 tests,
+  `reserved-shortcuts.ts` data + 2 tests, `keyboard.css`): "Summon Little Joan" — the global
+  shortcut's recorder moved here from General with its suspend / resume unchanged (General keeps a
+  line with the shortcut and **Change…**, which switches here) —, then every keymap action from
+  `keymap_info` as a recorder button with **No key** and **Reset**, its problems under it as text,
+  **Reset all** at the bottom (the keys and the summon shortcut). Recording takes the next key with
+  a modifier (Shift counts, then the rules judge it) or an F-key; Esc cancels; Backspace means no
+  key; **a letter is the one the key types in the user's layout** (`KeyboardEvent.key`, so the
+  recorded `KeyA` is what Windows' virtual keys, GDK's names and macOS's key equivalents match —
+  `code` alone would record AZERTY's A as `KeyQ`), other keys by `code`. The recorder buttons are
+  updated in place while listening (rebuilding the rows would have dropped the focus and its blur
+  rule). The rules mirror `keymap::validate` — duplicates (aliases included), the summon shortcut,
+  typing keys, macOS without ⌘ or ⌃ — as errors that disable Save; the editing keys (Ctrl/Cmd + C,
+  V, X, A, Z, Shift+Z) are errors on every OS ("used for editing in pages"); the OSes' reserved
+  shortcuts and Ctrl+Alt on Windows / Linux are warnings. The summon recorder gets the same: one of
+  Little Joan's keys → error, a reserved one → warning. Save sends `keys` only when edited
+  (`isChanged` and `rebase` know them).
+- **The reserved table** is curated from the OSes' documentation (Apple's Mac keyboard shortcuts,
+  Microsoft's Windows keyboard shortcuts, GNOME's / KDE's / Ubuntu's defaults): the Verify's
+  entries plus ⌘⌥Space, ⌘⇧Q, ⌘⌥H, ⌘⌥D, ⌃⌘F, ⌃↑ / ⌃↓ / ⌃← / ⌃→ on macOS, Ctrl+Alt+Delete on
+  Windows and Linux, Print Screen on Linux. `Super+*` matches Super with any key.
+- `ui/lib/shortcut.ts`' `keyName` now shows punctuation and arrows by their labels (`[`, `←`), so
+  "⌘[" reads as it does in macOS's menus.
+- **Smoke:** the history-off run's Settings sequence opens Keyboard after Appearance
+  (`settings-keyboard.png`; `settingsFailures` wants `settings-window keyboard` after Appearance,
+  tests); a short launch whose settings.json says `"shortcut": "Hyper+Nope"` must log
+  `shortcut-failed`, register the default, and open Keyboard (`settings-keyboard-problem.png`;
+  `keyboardProblemFailures`, tests). On macOS the runner's `com.apple.symbolichotkeys` is exported
+  into the artifacts (read-only, informational) — the evidence for the read below.
+- **Reading macOS's own shortcuts — decided by the runner's export** (this commit's CI); see the
+  follow-up note below.
+- `npm run verify`: 581 TS tests, 339 Rust tests, clippy clean. Disk: 8.8 GiB free at the start of
+  the step and after verify; `.cache/target` 1.6 GB.
+- **CI (run 39216324726): all ten jobs green after one re-run.** The first attempt's linux-scale-2
+  smoke failed one rule of LJ36's fullscreen run — both "Phone player" clicks (at 2080,1453) never
+  reached the page (no report at 390 or 720 px) — a synthetic click that didn't arrive, in a run
+  this phase doesn't touch (LJ41–LJ43's CI passed it on that job); `gh run rerun --failed` once:
+  green. The Settings sequence logged `settings-window keyboard` after Appearance everywhere; the
+  problem launch logged `shortcut-failed Hyper+Nope: invalid`, registered the default and opened
+  Keyboard on every OS. **Screenshots:** `settings-keyboard.png` — the Keyboard tab between General
+  and Appearance: "Summon Little Joan" (⌘⇧Space / Ctrl+Shift+Space), then Little Joan's keys with
+  their recorders, "No key" and no Reset (all defaults): macOS ⌘L, ⌘Y, ⌘⇧T, ⌘R, ⌘[; Windows Ctrl+L,
+  Ctrl+H, Ctrl+Shift+T and "No key" for Reload / Back / Forward; Linux (scale 1 and 2) Ctrl+R, Alt+←,
+  Alt+→ too; `settings-keyboard-problem.png` — the problem line ("“Hyper+Nope” couldn't be
+  registered: it isn't a shortcut Little Joan can use. Little Joan is using ⌘⇧Space instead.") on
+  every OS, but the summon row read "HyperNope" on macOS (the display joined text that isn't a
+  shortcut), and nothing stopped saving that shortcut again — fixed below; General shows "Shortcut
+  Ctrl+Shift+Space [Change…]".
+
+**`lj-step-44-fix` — macOS's own shortcuts read (decided), and what the screenshots showed:**
+
+- **The decision, by the runner's export** (`symbolichotkeys.json` from run 39216324726, kept as
+  test data in `src-tauri/src/system_shortcuts/macos-runner.json` — a runner holds nothing
+  personal): 19 entries; 12 say only `enabled: false` (no key), Mission Control's space moves
+  (79–82) only `enabled: true`, the input sources (60, 61) are switched off **with their keys**
+  (`[32, 49, 262144]` → ⌃Space, `[32, 49, 786432]` → ⌃⌥Space: exactly the curated table's), and 164
+  is a `modifier` entry (a lone modifier, no key). So the domain is not empty and the mapping is
+  trustworthy where an entry has a key; entries without one say nothing — which the plan's design
+  already handles: **shipped**, with the curated table as the base. `system_shortcuts::parse`
+  (pure; tests on the export and on decoded flags — ⇧⌘3, ⌃← with the function-key flag, unknown
+  codes) and `platform/mac.rs`' `symbolic_hotkeys()` (NSUserDefaults `persistentDomainForName:`,
+  the property list walked into JSON through `msg_send`, in an autorelease pool; no new crate);
+  `keymap_info` adds `systemShortcuts` (empty on Windows and Linux). Curated macOS entries carry
+  their domain ids (Spotlight 64, Finder search 65, input sources 60 / 61, screenshots 28 / 30 /
+  184, ⌘` 27, ⌥⌘D 52, ⌃↑ 32, ⌃↓ 33, ⌃← 79, ⌃→ 81); in `reservedProblems` an entry switched off — or
+  moved to another key — drops its curated warning, and one that is on with a key warns there
+  ("macOS uses ⌥Space for Spotlight", else "one of its keyboard shortcuts"). It reads only; nothing
+  is ever written (Ground Rule 21). The read wasn't run on the development Mac (it would read the
+  owner's own preferences): CI's macOS smoke compares what `keymap_info` read (`system-shortcuts
+  <n> keys=<k>`) with the runner's export (`systemShortcutFailures`, tests).
+- **Fixes from the screenshots:** a summon shortcut that isn't one shows as written ("Hyper+Nope",
+  `show`) and is an error ("That isn't a shortcut Little Joan can use: record another one, or
+  Reset.") so Save can't store it again (`isShortcutKey`, exported from `ui/lib/shortcut.ts`);
+  Windows gets a note that WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these keys (the
+  README said so, the tab didn't); Rust's `Binding::display` shows punctuation and arrows as
+  Settings does (⌘[, Alt+←), so the menu log and Rust's refusals read like the tab.
+- `npm run verify`: 585 TS tests, 342 Rust tests, clippy clean. Disk: 14 GiB free.
+
+**`lj-step-44-fix2` — LJ36's fullscreen run clicks where the page is.** The docs commits' runs
+(39222245523, 39224458382) failed linux-scale-2 on the rule the first LJ44 run had hit — "phone at
+720: the page never reported" —, so it wasn't a one-off: 3 of 9 runs. The log showed why: after
+leaving element fullscreen two layouts follow, and when the one computed from the fullscreen size
+lands last, `page-screen` says `800,260,2560,1520` while the page reports 720 px; the run clicked
+the player's centre from that line (2080,1453), below the real page (y 260–1380). The run now
+takes the latest `page-screen` whose width is the page's own (`pageScreenFor`, falling back to the
+latest; a test with the logged lines). The rule is unchanged — the click must reach the page and
+the page must report. The app's race is recorded under Deferred follow-ups.
+**CI for fix2 (run 39226938206): all ten jobs green after one re-run** — linux-scale-2 passed its
+fullscreen run; macOS's smoke first failed LJ29's race step (the panel's load came 5 s after
+`extension-opened hello`, no file was served to it and hello never reported; every racer was
+still refused), a step this phase doesn't touch that passed in the six earlier runs; `gh run
+rerun --failed` once: green (Deferred follow-ups).
+- **CI for the fix (run 39219919487): all ten jobs green.** macOS's Keyboard tab read
+  `system-shortcuts 19 keys=2` — exactly the runner's export (`systemShortcutFailures` passed);
+  `settings-keyboard-problem.png` now shows "Hyper+Nope" as written with "That isn't a shortcut
+  Little Joan can use: record another one, or Reset." under it (Save off). Windows' note about
+  WebView2's own keys sits under the list, below the fold of the screenshot.
 
 ---
 
@@ -7225,6 +7529,26 @@ and where, then stop.
   do nothing. Options: say so in the pill's tooltip, hide the pill for hosts where both agents gave
   the same page (Windows can compare `Page.getLayoutMetrics`; WebKit can't without page script),
   or offer page zoom (phase 8) as the way to get a "desktop" layout in a narrow window.
+- **"Copy as Markdown link" shows twice when typing "copy"** (surfaced by LJ42's CI screenshot): the
+  quick command (copies at once) and the bundled page action of the same name (opens its panel with
+  the formats). Options: drop the quick row while the extension is switched on, or rename one
+  ("Copy Markdown link" for the quick row).
+- **After leaving element fullscreen, a layout from the fullscreen size can land last** (surfaced in
+  phase 20 on linux-scale-2, 3 of 9 runs): `element-fullscreen false` and the window's `Resized`
+  each lay out, and the one computed from the fullscreen size (2560×1520 physical) sometimes lands
+  after the restored one — the smoke log's `page-screen` then said `800,260,2560,1520` for a page
+  that reported 720 px. On Linux the GtkBox, not the bounds, places the page, so nothing showed;
+  but LJ36's fullscreen run clicked from that line and missed the page (no `LJ-FS phone` report at
+  720 px). `lj-step-44-fix2` made the harness click by the latest `page-screen` of the page's own
+  width (`pageScreenFor`). The app's race stays: on Windows and macOS, where bounds do place the
+  webviews, a stale layout would size the page wrong until the next `Resized` — not seen in CI
+  there. Option: lay out once more on the main thread after a fullscreen change settles (read the
+  size then), or drop a layout whose size isn't the window's current one.
+- **LJ29's race step flaked once on macOS** (run 39226938206, phase 20; green on a re-run): with the
+  racing page alive, the panel's load came 5 s after `extension-opened hello`, the start-page
+  detour didn't show, no `ljext` request was answered for the panel, and hello never reported — the
+  security rules held (every racer refused). If it recurs, look at the main thread's load during
+  the race (the detour's 1 s limit) first.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

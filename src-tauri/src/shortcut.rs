@@ -1,5 +1,6 @@
 //! The global shortcut that summons and dismisses the page window.
 
+use serde::Serialize;
 use tauri::plugin::TauriPlugin;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -58,15 +59,27 @@ impl<R: Runtime> Registrar for PluginRegistrar<'_, R> {
     }
 }
 
-pub const TAKEN: &str = "That shortcut is taken by another app or the system. Try another one.";
+pub const TAKEN: &str = "Another app or the system already uses that shortcut. Try another one.";
 pub const INVALID: &str = "That shortcut can't be used. Try another one.";
+
+/// Why a swap failed: the message for the user, and whether the old shortcut still works (it
+/// was put back, or never touched). `false` when there was none, or it couldn't come back — then
+/// no shortcut works, and the tray icon must show (tray.rs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwapError {
+    pub message: String,
+    pub old_kept: bool,
+}
 
 /// Replaces the active shortcut `old` with `new`. On failure the old shortcut is registered
 /// again and a message for the user is returned, so there is always a working shortcut if there
-/// was one before.
-pub fn swap(registrar: &impl Registrar, old: Option<&str>, new: &str) -> Result<(), String> {
+/// was one before — unless the old one can't come back either (`SwapError::old_kept`).
+pub fn swap(registrar: &impl Registrar, old: Option<&str>, new: &str) -> Result<(), SwapError> {
     if parse(new).is_err() {
-        return Err(INVALID.to_owned());
+        return Err(SwapError {
+            message: INVALID.to_owned(),
+            old_kept: old.is_some(),
+        });
     }
     if old == Some(new) {
         return Ok(());
@@ -80,12 +93,17 @@ pub fn swap(registrar: &impl Registrar, old: Option<&str>, new: &str) -> Result<
         Ok(()) => Ok(()),
         Err(err) => {
             eprintln!("little-joan: could not register the new shortcut: {err}");
-            if let Some(old) = old
-                && let Err(err) = registrar.register(old)
-            {
-                eprintln!("little-joan: could not restore the old shortcut: {err}");
-            }
-            Err(TAKEN.to_owned())
+            let old_kept = old.is_some_and(|old| match registrar.register(old) {
+                Ok(()) => true,
+                Err(err) => {
+                    eprintln!("little-joan: could not restore the old shortcut: {err}");
+                    false
+                }
+            });
+            Err(SwapError {
+                message: TAKEN.to_owned(),
+                old_kept,
+            })
         }
     }
 }
@@ -115,33 +133,77 @@ pub fn set_suspended<R: Runtime>(app: &AppHandle<R>, suspended: bool) {
     }
 }
 
-/// Registers the shortcut from settings; if it can't be parsed or is taken, falls back to the
-/// default. If neither works the app keeps running — the tray menu still opens the window.
-pub fn register_from_settings<R: Runtime>(app: &AppHandle<R>) {
-    let wanted = state::with(app, |s| s.settings.shortcut.clone());
-    let active = match register(app, &wanted) {
-        Ok(()) => Some(wanted),
-        Err(err) => {
-            eprintln!("little-joan: could not register the shortcut: {err}");
-            smoke::log("shortcut-failed", &err);
-            if wanted == DEFAULT_SHORTCUT {
-                None
-            } else {
-                match register(app, DEFAULT_SHORTCUT) {
-                    Ok(()) => Some(DEFAULT_SHORTCUT.to_owned()),
-                    Err(err) => {
-                        eprintln!("little-joan: could not register the default shortcut: {err}");
-                        smoke::log("shortcut-failed", &err);
-                        None
-                    }
-                }
+/// Why the saved shortcut didn't work at launch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Failure {
+    /// Another app or the system has it.
+    Taken,
+    /// It isn't a shortcut (settings.json says something that doesn't parse).
+    Invalid,
+}
+
+/// What went wrong with the saved shortcut at launch (LJ44): Settings says so, and which one
+/// Little Joan uses instead (`active`: the default, or none).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Problem {
+    pub wanted: String,
+    pub active: Option<String>,
+    pub reason: Failure,
+}
+
+/// Registers `wanted`, else the default: the shortcut that works (or none) and what went wrong
+/// with `wanted`, if anything.
+pub fn settle(registrar: &impl Registrar, wanted: &str) -> (Option<String>, Option<Problem>) {
+    let reason = if parse(wanted).is_err() {
+        Failure::Invalid
+    } else {
+        match registrar.register(wanted) {
+            Ok(()) => return (Some(wanted.to_owned()), None),
+            Err(err) => {
+                eprintln!("little-joan: could not register the shortcut: {err}");
+                smoke::log("shortcut-failed", &err);
+                Failure::Taken
             }
         }
     };
+    if reason == Failure::Invalid {
+        smoke::log("shortcut-failed", &format!("{wanted}: invalid"));
+    }
+    let active = if wanted == DEFAULT_SHORTCUT {
+        None
+    } else {
+        match registrar.register(DEFAULT_SHORTCUT) {
+            Ok(()) => Some(DEFAULT_SHORTCUT.to_owned()),
+            Err(err) => {
+                eprintln!("little-joan: could not register the default shortcut: {err}");
+                smoke::log("shortcut-failed", &err);
+                None
+            }
+        }
+    };
+    let problem = Problem {
+        wanted: wanted.to_owned(),
+        active: active.clone(),
+        reason,
+    };
+    (active, Some(problem))
+}
+
+/// Registers the shortcut from settings; if it can't be parsed or is taken, falls back to the
+/// default. If neither works the app keeps running — the tray icon comes back (tray.rs) and a
+/// second launch opens the window. What went wrong is kept for Settings (`shortcut_problem`).
+pub fn register_from_settings<R: Runtime>(app: &AppHandle<R>) {
+    let wanted = state::with(app, |s| s.settings.shortcut.clone());
+    let (active, problem) = settle(&PluginRegistrar(app), &wanted);
     if let Some(accelerator) = &active {
         smoke::log("shortcut-registered", accelerator);
     }
-    state::with(app, |s| s.active_shortcut = active);
+    state::with(app, |s| {
+        s.active_shortcut = active;
+        s.shortcut_problem = problem;
+    });
 }
 
 #[cfg(test)]
@@ -193,9 +255,38 @@ mod tests {
         fake.register("Alt+KeyJ").expect("free");
         assert_eq!(
             swap(&fake, Some("Alt+KeyJ"), "Alt+KeyK"),
-            Err(TAKEN.to_owned())
+            Err(SwapError {
+                message: TAKEN.to_owned(),
+                old_kept: true
+            })
         );
         assert_eq!(registered(&fake), ["Alt+KeyJ"]);
+    }
+
+    #[test]
+    fn swap_says_when_the_old_shortcut_couldnt_come_back() {
+        // Another app took the old one in the moment it was free.
+        let fake = Fake {
+            taken: BTreeSet::from(["Alt+KeyK".to_owned(), "Alt+KeyJ".to_owned()]),
+            ..Fake::default()
+        };
+        fake.registered.borrow_mut().insert("Alt+KeyJ".to_owned());
+        assert_eq!(
+            swap(&fake, Some("Alt+KeyJ"), "Alt+KeyK"),
+            Err(SwapError {
+                message: TAKEN.to_owned(),
+                old_kept: false
+            })
+        );
+        assert!(registered(&fake).is_empty());
+        let none = Fake {
+            taken: BTreeSet::from(["Alt+KeyK".to_owned()]),
+            ..Fake::default()
+        };
+        assert_eq!(
+            swap(&none, None, "Alt+KeyK").map_err(|err| err.old_kept),
+            Err(false)
+        );
     }
 
     #[test]
@@ -204,7 +295,10 @@ mod tests {
         fake.register("Alt+KeyJ").expect("free");
         assert_eq!(
             swap(&fake, Some("Alt+KeyJ"), "Ctrl+Nope"),
-            Err(INVALID.to_owned())
+            Err(SwapError {
+                message: INVALID.to_owned(),
+                old_kept: true
+            })
         );
         assert_eq!(registered(&fake), ["Alt+KeyJ"]);
     }
@@ -222,6 +316,55 @@ mod tests {
         let fake = Fake::default();
         assert_eq!(swap(&fake, None, "Alt+KeyJ"), Ok(()));
         assert_eq!(registered(&fake), ["Alt+KeyJ"]);
+    }
+
+    #[test]
+    fn a_shortcut_that_fails_at_launch_falls_back_and_says_why() {
+        let free = Fake::default();
+        assert_eq!(
+            settle(&free, "Alt+KeyJ"),
+            (Some("Alt+KeyJ".to_owned()), None)
+        );
+        let taken = Fake {
+            taken: BTreeSet::from(["Alt+KeyJ".to_owned()]),
+            ..Fake::default()
+        };
+        assert_eq!(
+            settle(&taken, "Alt+KeyJ"),
+            (
+                Some(DEFAULT_SHORTCUT.to_owned()),
+                Some(Problem {
+                    wanted: "Alt+KeyJ".into(),
+                    active: Some(DEFAULT_SHORTCUT.into()),
+                    reason: Failure::Taken
+                })
+            )
+        );
+        assert_eq!(registered(&taken), [DEFAULT_SHORTCUT]);
+        let invalid = settle(&Fake::default(), "Ctrl+Nope");
+        assert_eq!(invalid.0.as_deref(), Some(DEFAULT_SHORTCUT));
+        assert_eq!(invalid.1.map(|p| p.reason), Some(Failure::Invalid));
+        let both = Fake {
+            taken: BTreeSet::from(["Alt+KeyJ".to_owned(), DEFAULT_SHORTCUT.to_owned()]),
+            ..Fake::default()
+        };
+        let (active, problem) = settle(&both, "Alt+KeyJ");
+        assert_eq!(active, None, "no shortcut at all");
+        assert_eq!(problem.and_then(|p| p.active), None);
+        let json = serde_json::to_value(Problem {
+            wanted: "Alt+KeyJ".into(),
+            active: None,
+            reason: Failure::Taken,
+        })
+        .expect("json");
+        assert_eq!(
+            json,
+            serde_json::json!({ "wanted": "Alt+KeyJ", "active": null, "reason": "taken" })
+        );
+        assert_eq!(
+            TAKEN,
+            "Another app or the system already uses that shortcut. Try another one."
+        );
     }
 
     #[test]

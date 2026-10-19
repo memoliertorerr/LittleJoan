@@ -125,12 +125,13 @@ describe("the settings check", () => {
 5 settings-loaded
 6 settings-window privacy
 7 settings-window appearance
-8 quit
+8 settings-window keyboard
+9 quit
 `;
 
   it("lists the tabs and sees the page load after General", () => {
     const events = parseLog(GOOD_SETTINGS);
-    expect(settingsTabs(events)).toEqual(["general", "privacy", "appearance"]);
+    expect(settingsTabs(events)).toEqual(["general", "privacy", "appearance", "keyboard"]);
     expect(sawSettings(events, "general")).toBe(true);
     expect(sawSettings(parseLog("1 settings-loaded\n2 settings-window general\n"), "general")).toBe(false);
   });
@@ -146,8 +147,10 @@ describe("the settings check", () => {
     expect(settingsFailures(noPrivacy)).toEqual([expect.stringContaining("to Privacy")]);
     const noAppearance = parseLog(GOOD_SETTINGS.replace("7 settings-window appearance\n", ""));
     expect(settingsFailures(noAppearance)).toEqual([expect.stringContaining("to Appearance")]);
-    const opened = parseLog(GOOD_SETTINGS.replace("8 quit", "8 window-created"));
+    const noKeyboard = parseLog(GOOD_SETTINGS.replace("8 settings-window keyboard\n", ""));
+    expect(settingsFailures(noKeyboard)).toEqual([expect.stringContaining("to Keyboard")]);
+    const opened = parseLog(GOOD_SETTINGS.replace("9 quit", "9 window-created"));
     expect(settingsFailures(opened)).toEqual([expect.stringContaining("page window")]);
-    expect(settingsFailures(parseLog("1 started\n"))).toHaveLength(3);
+    expect(settingsFailures(parseLog("1 started\n"))).toHaveLength(4);
   });
 });

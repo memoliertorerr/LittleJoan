@@ -192,3 +192,83 @@ pub fn write_clipboard(text: &str) -> Result<(), String> {
         }
     }
 }
+
+/// macOS's own shortcuts (LJ44, read-only): the user's `com.apple.symbolichotkeys` preferences
+/// domain through NSUserDefaults, as JSON for system_shortcuts::parse (dictionaries, arrays,
+/// strings and numbers; anything else is left out). `None` when the domain doesn't exist. Never
+/// written. Any thread: NSUserDefaults is thread-safe, and an autorelease pool drains what the
+/// walk leaves.
+pub fn symbolic_hotkeys() -> Option<serde_json::Value> {
+    let class = AnyClass::get(c"NSUserDefaults")?;
+    let name = NSString::from_str("com.apple.symbolichotkeys");
+    objc2::rc::autoreleasepool(|_| {
+        // SAFETY: +standardUserDefaults returns the shared defaults; -persistentDomainForName:
+        // takes an NSString and returns an NSDictionary or nil.
+        let domain: Option<Retained<AnyObject>> = unsafe {
+            let defaults: Option<Retained<AnyObject>> = msg_send![class, standardUserDefaults];
+            let defaults = defaults?;
+            msg_send![&*defaults, persistentDomainForName: &*name]
+        };
+        let domain = domain?;
+        to_json(&domain, 0)
+    })
+}
+
+/// A property-list object as JSON (at most 8 levels and 1,024 items deep / wide).
+fn to_json(object: &AnyObject, depth: usize) -> Option<serde_json::Value> {
+    use serde_json::Value;
+    if depth > 8 {
+        return None;
+    }
+    let is = |name: &std::ffi::CStr| {
+        AnyClass::get(name).is_some_and(|class| {
+            // SAFETY: -isKindOfClass: takes a class and returns a BOOL.
+            unsafe { msg_send![object, isKindOfClass: class] }
+        })
+    };
+    // SAFETY (each branch): the object was checked to be of that class; NSDictionary's -allKeys
+    // returns an NSArray and -objectForKey: an object or nil; NSArray's -count an NSUInteger and
+    // -objectAtIndex: an object for an index below it; NSNumber's -longLongValue a long long.
+    if is(c"NSDictionary") {
+        let keys: Option<Retained<AnyObject>> = unsafe { msg_send![object, allKeys] };
+        let keys = keys?;
+        let count: usize = unsafe { msg_send![&*keys, count] };
+        let mut map = serde_json::Map::new();
+        for index in 0..count.min(1024) {
+            let key: Option<Retained<AnyObject>> =
+                unsafe { msg_send![&*keys, objectAtIndex: index] };
+            let Some(key) = key else {
+                continue;
+            };
+            let Some(Value::String(name)) = to_json(&key, depth + 1) else {
+                continue;
+            };
+            let value: Option<Retained<AnyObject>> =
+                unsafe { msg_send![object, objectForKey: &*key] };
+            if let Some(value) = value.as_deref().and_then(|v| to_json(v, depth + 1)) {
+                map.insert(name, value);
+            }
+        }
+        Some(Value::Object(map))
+    } else if is(c"NSArray") {
+        let count: usize = unsafe { msg_send![object, count] };
+        let items = (0..count.min(1024))
+            .filter_map(|index| {
+                let item: Option<Retained<AnyObject>> =
+                    unsafe { msg_send![object, objectAtIndex: index] };
+                let item = item?;
+                to_json(&item, depth + 1)
+            })
+            .collect();
+        Some(Value::Array(items))
+    } else if is(c"NSString") {
+        // SAFETY: checked to be an NSString above.
+        let text: &NSString = unsafe { &*std::ptr::from_ref(object).cast::<NSString>() };
+        Some(Value::String(text.to_string()))
+    } else if is(c"NSNumber") {
+        let number: i64 = unsafe { msg_send![object, longLongValue] };
+        Some(Value::from(number))
+    } else {
+        None
+    }
+}
