@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Little Joan is young: only the latest version (currently 0.1.x, from the `main` branch) gets
+Little Joan is young: only the latest version (currently 0.2.x, from the `main` branch) gets
 fixes.
 
 ## Reporting a vulnerability

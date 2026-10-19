@@ -6,6 +6,16 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-19
+
+The second version. It includes everything in the three pre-releases below, 0.2.0-beta.1 to
+beta.3 — start at login and a first-launch welcome; the Little Arc-style command bar and toolbar,
+local history, themes, and extensions (experimental) with twelve bundled ones; logins that survive
+closing and quitting; smoother resizing and phone or desktop per site; YouTube's fullscreen on
+macOS — plus what is listed here: downloads, page zoom, hiding the icon, quick commands, Little
+Joan's own keys in Settings → Keyboard, the shortcut under Wayland through the desktop's portal,
+fullscreen fixes on Linux, and Linux ARM64 builds.
+
 ### Added
 - **Linux on ARM64:** an `arm64` `.deb` (built on Ubuntu 22.04, so it installs on Ubuntu 22.04+ and
   Debian 12+, with the system's WebKitGTK) and an `aarch64` AppImage (built on Ubuntu 24.04, with
@@ -71,8 +81,41 @@ All notable changes to Little Joan are recorded here. The format follows
   request).
 
 ### Known issues
-- On Ubuntu 22.04 (the `.deb`, with the system's WebKitGTK 2.50.4) videos can't go fullscreen —
-  the price of not crashing. Ubuntu 24.04 and the AppImage keep fullscreen video.
+- **The builds aren't code-signed.** The macOS DMG is ad-hoc signed and not notarized, so macOS
+  blocks its first launch (the README's Install section has the one-time step); the Windows
+  installer isn't signed, so SmartScreen warns about an unknown publisher (More info → Run anyway).
+- **Videos can't go fullscreen with a WebKitGTK older than 2.52** — Ubuntu 22.04's 2.50, which the
+  `.deb` uses there (x86_64 and ARM64). That version crashes whenever a page goes fullscreen, so
+  Little Joan turns fullscreen off on it and a video plays in the window — the price of not
+  crashing. Ubuntu 24.04 and the AppImage (with its own WebKitGTK 2.52) keep fullscreen video.
+- **With a non-default theme, part of the toolbar can show the default colours for a split
+  second** while the window opens.
+- **Desktop site changes nothing on sites that send every device the same page** (fully
+  responsive ones), so the toolbar's Phone / Desktop label and the command seem to do nothing
+  there.
+- **macOS shows a file it can display — a PDF, an image — in the page instead of saving it,**
+  even when the site sends it as a download; a link marked as a download (the `download`
+  attribute) is saved. Windows and Linux save it.
+- **Linux under Wayland without the desktop's GlobalShortcuts portal** (GNOME 46 on Ubuntu 24.04,
+  for one) can't hear the shortcut: bind `little-joan --toggle` in your desktop's keyboard
+  settings. The AppImage installs no desktop file under Little Joan's app id, so GNOME's portal may
+  not give it the shortcut either.
+- **Windows:** a sign-in kept "until you close the browser" whose cookie is set for a whole domain
+  (`.example.com`) comes back for that domain's own host only, so after closing and reopening the
+  window a subdomain such as `www.example.com` may ask you to sign in again. Logins that are kept
+  across quitting aren't affected.
+- **"Copy as Markdown link" shows twice when you type "copy":** the quick command, which copies at
+  once, and the bundled extension of the same name, which opens with its formats.
+- **A double click on the toolbar always zooms the window,** even when macOS is set to minimize
+  on a title bar's double click.
+- **Windows: a fast drag can show a white strip for a frame at the edge of a dark page** (the
+  toolbar wears the theme; pages keep the web engine's white background).
+- **After an extension opens a page in the window** (Wayback Machine, Clean link's "Open it
+  here"), the toolbar's Back may do nothing; the command bar still goes anywhere.
+- **History can list a page twice** after a link on it was refused (Windows) or turned into a
+  download (Windows, Linux).
+- **The AppImage's start-at-login entry breaks if the AppImage's path has a space in it;** the
+  release's file name has none, so keep it in a folder without one.
 
 ## [0.2.0-beta.3] — 2026-10-18
 
@@ -314,7 +357,8 @@ global shortcut calls it.
   a Gatekeeper or SmartScreen warning.
 - Linux global shortcuts work on X11 only; on Wayland, bind `little-joan --toggle` instead.
 
-[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.0-beta.3...HEAD
+[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0
 [0.2.0-beta.3]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.3
 [0.2.0-beta.2]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.2
 [0.2.0-beta.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.1

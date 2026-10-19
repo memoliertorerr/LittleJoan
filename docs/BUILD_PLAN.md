@@ -86,7 +86,7 @@
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ✅ done |
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⏭ skipped — no Apple signing secrets on 2026-10-19; runs when the owner adds them (LJ18's pre-step) |
 | LJ18.1 | *(added mid-plan 2026-10-19)* Linux ARM64 builds: an `arm64` `.deb` (ubuntu-22.04-arm) and an `aarch64` AppImage (ubuntu-24.04-arm), smoke-tested on ARM runners like their x86_64 twins | strong | auto | ✅ done |
-| LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ todo |
+| LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ prepared — the release PR (`lj/release-0.2.0`: version 0.2.0, CHANGELOG, README; the owner's checklist) is merged once green; waiting for the owner's check; tag and release only on their word |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -184,7 +184,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Phase 10 (LJ18) ⏭ skipped: `gh secret list --repo memoliertorerr/LittleJoan` shows no Apple signing secrets (checked 2026-10-19), so the macOS build stays ad-hoc signed and LJ19's checklist keeps the README's Gatekeeper step; LJ18 runs as written once the owner adds the secrets (its pre-step). On the owner's decision (2026-10-19) phase 10 instead carries **LJ18.1, Linux ARM64 builds** (added mid-plan: the owner tests Ubuntu 22.04 ARM in Parallels on an Apple silicon Mac at LJ19's checkpoint): an `arm64` `.deb` built on ubuntu-22.04-arm and an `aarch64` AppImage built on ubuntu-24.04-arm, both smoke-tested on ARM runners like their x86_64 twins (branch `lj/p10-arm64`). Next: LJ19.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Phase 10 (LJ18) ⏭ skipped: `gh secret list --repo memoliertorerr/LittleJoan` shows no Apple signing secrets (checked 2026-10-19), so the macOS build stays ad-hoc signed and LJ19's checklist keeps the README's Gatekeeper step; LJ18 runs as written once the owner adds the secrets (its pre-step). On the owner's decision (2026-10-19) phase 10 instead carries **LJ18.1, Linux ARM64 builds** (added mid-plan: the owner tests Ubuntu 22.04 ARM in Parallels on an Apple silicon Mac at LJ19's checkpoint): an `arm64` `.deb` built on ubuntu-22.04-arm and an `aarch64` AppImage built on ubuntu-24.04-arm, both smoke-tested on ARM runners like their x86_64 twins (branch `lj/p10-arm64`). Phase 11 (LJ19): the release PR on `lj/release-0.2.0` — version 0.2.0, the CHANGELOG's `[0.2.0] — 2026-10-19` with its Known issues, the README pointing at v0.2.0 — merged by the agent once green (the owner allowed it for this PR); the owner's checklist is in the PR. Next: the owner's checklist; then, on their word, the v0.2.0 release (tag and `gh release create`); phase 21 starts only on the owner's go.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -204,6 +204,15 @@ and the guard fixed it on every element path; YouTube gets the desktop agent on 
 opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
+
+**Phase 11 (LJ19, 2026-10-19)** is the release PR on `lj/release-0.2.0`: version 0.2.0 everywhere
+(from 0.2.0-beta.3), `[Unreleased]` turned into `[0.2.0] — 2026-10-19` (the betas' sections kept as
+they are, a fresh empty `[Unreleased]`, Known issues for 0.2.0), the README pointing at v0.2.0 and
+its six files, SECURITY.md supporting 0.2.x. The agent merges it once verify, package and smoke are
+green (the owner allowed it for this PR) and stops: **LJ19 is a checkpoint.** The owner's checklist
+— every "Needs human check" of PRs #21–#28 and LJ19's prompt in one list: the Mac, Ubuntu 22.04 ARM
+in Parallels, other systems optional — is in the PR. The tag and the release wait for the owner's
+word; they are recorded in the first v0.3 phase's first commit (`main` is never committed to).
 
 **Phase 10 (LJ18 ⏭ skipped, LJ18.1, 2026-10-19)** is PR #28 on `lj/p10-arm64`, merged by the agent
 once verify, package and smoke were green on every job (the standing exception). LJ18 is skipped —
@@ -3521,6 +3530,37 @@ until every job is green (two honest fix attempts, then stop). This is a checkpo
 with the checklist above, merge it when green, tell the owner exactly what to check and where,
 then stop. Don't start phase 21 until the owner says go.
 ```
+
+**Implementation notes (2026-10-19):**
+
+- **Disk:** 7.4 GiB free at the start of the step, 7.2 GiB after verify; `.cache/target` 1.2 GB.
+- **Versions:** `0.2.0` in `package.json` (+ `package-lock.json`), `src-tauri/tauri.conf.json` and
+  `src-tauri/Cargo.toml` (+ `Cargo.lock`) — from `0.2.0-beta.3` (the prompt, written before beta.3,
+  says beta.2). Nothing else in the repository names the version.
+- **LJ18's skip** was already recorded by phase 10's PR (#28, as the owner decided), so this PR
+  leaves its row as it is.
+- **CHANGELOG:** `[Unreleased]` became `[0.2.0] — 2026-10-19` with a short introduction (it
+  includes 0.2.0-beta.1 to beta.3, plus what it lists); the betas' sections are unchanged; a fresh
+  empty `[Unreleased]` above it; the link references (`[Unreleased]` compares from `v0.2.0`,
+  `[0.2.0]` points at its tag). Known issues for 0.2.0: the unsigned builds; fullscreen off below
+  WebKitGTK 2.52 (Ubuntu 22.04's `.deb`, both architectures); the toolbar's split-second default
+  colours; Desktop site on fully responsive sites; and the open Deferred follow-ups a user can run
+  into — macOS showing attachments it can display, Wayland without the portal (and the AppImage
+  without a desktop file under the app id), Windows' domain-wide session cookies, "Copy as Markdown
+  link" twice, the double click always zooming, Windows' white strip at a dark page's edge during a
+  fast drag, Back after a panel opened a page, history counting a page twice, the AppImage's
+  unquoted login entry.
+- **README:** the status line names v0.2.0 as the latest release and what it has; Install names
+  the v0.2.0 files (`LittleJoan-0.2.0-…`, the two ARM64 ones included) and drops "until it is
+  released"; the x86_64 AppImage is "about 160 MB" (156.9 MiB in `main`'s CI); Downloads says what
+  macOS does with a PDF; Settings → General lists Phone or desktop per site. "Using it" otherwise
+  already described everything v0.2 added (each phase kept it current).
+- **SECURITY.md:** the supported version is 0.2.x.
+- **The owner's checklist** (in the PR): the "Needs human check" items of PRs #21–#28 and this
+  prompt's list, deduplicated and ordered — (1) the Mac, with the DMG `main`'s CI builds for the
+  merge commit; (2) Ubuntu 22.04 ARM in Parallels, with the arm64 `.deb`; (3) other systems,
+  optional — marked "(CI: done)" only where a smoke rule proves the item on every job of its kind.
+- `npm run verify`: 628 TS tests, 376 Rust tests, clippy clean (no code changed).
 
 ---
 
