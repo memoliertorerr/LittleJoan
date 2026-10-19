@@ -1320,7 +1320,8 @@ and pushes to `main`:
   agent); at each size the page's "Element fullscreen" (`requestFullscreen` on a container, as
   desktop YouTube) and "Phone player" (m.youtube.com's way under an iPhone agent:
   `video.webkitEnterFullscreen()`, the iOS events, an orientation lock; element fullscreen of its
-  container otherwise) are clicked where the app's `page-screen` line puts them, and each one's
+  container otherwise) are clicked where the app's latest `page-screen` line of the page's own width
+  puts them (a late layout from the fullscreen size can log a stale one after leaving it), and each one's
   Exit (in fullscreen, at the screen's centre) 2 s later — clicks only, never keys. Each attempt
   reports `LJ-FS <element|phone> width= ua= entered= held_ms= exited_by_page= events=`
   (screenshots `fs/element-390.png`, `fs/phone-390.png`, `fs/element-720.png`, 1 s after each

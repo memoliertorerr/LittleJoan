@@ -203,7 +203,9 @@ first, and panels from hibernation wait for it. Human checks are in PR #21. **Ne
 
 **Phase 20 (LJ41 → LJ44, 2026-10-19)** is PR #24 on `lj/p20-control`, merged by the agent once
 verify, package and smoke were green on every OS job (the standing exception; LJ36's fullscreen
-check flaked twice on linux-scale-2 and passed on a re-run each time — Deferred follow-ups). The tray / menu-bar
+run missed its click on linux-scale-2 three times — a stale `page-screen` line after leaving
+fullscreen —, fixed in the harness by `lj-step-44-fix2`; the app's layout race is under Deferred
+follow-ups). The tray / menu-bar
 icon can be hidden and comes back by itself whenever the shortcut can't work; the command bar has
 Settings, Quit and quick commands showing their state (settings changes share one checked path
 with Save); every Little Joan key comes from one keymap and can be changed in Settings → Keyboard,
@@ -6452,6 +6454,16 @@ commit, then stop and report.
   README said so, the tab didn't); Rust's `Binding::display` shows punctuation and arrows as
   Settings does (⌘[, Alt+←), so the menu log and Rust's refusals read like the tab.
 - `npm run verify`: 585 TS tests, 342 Rust tests, clippy clean. Disk: 14 GiB free.
+
+**`lj-step-44-fix2` — LJ36's fullscreen run clicks where the page is.** The docs commits' runs
+(39222245523, 39224458382) failed linux-scale-2 on the rule the first LJ44 run had hit — "phone at
+720: the page never reported" —, so it wasn't a one-off: 3 of 9 runs. The log showed why: after
+leaving element fullscreen two layouts follow, and when the one computed from the fullscreen size
+lands last, `page-screen` says `800,260,2560,1520` while the page reports 720 px; the run clicked
+the player's centre from that line (2080,1453), below the real page (y 260–1380). The run now
+takes the latest `page-screen` whose width is the page's own (`pageScreenFor`, falling back to the
+latest; a test with the logged lines). The rule is unchanged — the click must reach the page and
+the page must report. The app's race is recorded under Deferred follow-ups.
 - **CI for the fix (run 39219919487): all ten jobs green.** macOS's Keyboard tab read
   `system-shortcuts 19 keys=2` — exactly the runner's export (`systemShortcutFailures` passed);
   `settings-keyboard-problem.png` now shows "Hyper+Nope" as written with "That isn't a shortcut
@@ -7516,13 +7528,17 @@ and where, then stop.
   quick command (copies at once) and the bundled page action of the same name (opens its panel with
   the formats). Options: drop the quick row while the extension is switched on, or rename one
   ("Copy Markdown link" for the quick row).
-- **LJ36's fullscreen run: the "Phone player" click sometimes misses on linux-scale-2** (surfaced in
-  phase 20: 2 of 8 runs — 39216324726's first attempt and 39222245523 —, each green on a re-run
-  of the failed job; the app's code was the same as in runs that passed). At scale 2 the player
-  sits low in the window (the click at 2080,1453 for 720 px, 1139 for 390 px), and the click
-  doesn't reach the page — no `LJ-FS phone` report at all. Element-fullscreen clicks (y 501) never
-  miss. Options: click the player's upper half, or wait for the page's own "ready" after each
-  exit before the next click; look at a screenshot taken right before the click.
+- **After leaving element fullscreen, a layout from the fullscreen size can land last** (surfaced in
+  phase 20 on linux-scale-2, 3 of 9 runs): `element-fullscreen false` and the window's `Resized`
+  each lay out, and the one computed from the fullscreen size (2560×1520 physical) sometimes lands
+  after the restored one — the smoke log's `page-screen` then said `800,260,2560,1520` for a page
+  that reported 720 px. On Linux the GtkBox, not the bounds, places the page, so nothing showed;
+  but LJ36's fullscreen run clicked from that line and missed the page (no `LJ-FS phone` report at
+  720 px). `lj-step-44-fix2` made the harness click by the latest `page-screen` of the page's own
+  width (`pageScreenFor`). The app's race stays: on Windows and macOS, where bounds do place the
+  webviews, a stale layout would size the page wrong until the next `Resized` — not seen in CI
+  there. Option: lay out once more on the main thread after a fullscreen change settles (read the
+  size then), or drop a layout whose size isn't the window's current one.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
