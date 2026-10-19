@@ -44,6 +44,11 @@ All notable changes to Little Joan are recorded here. The format follows
 - **Fullscreen video in the AppImage:** it bundled Ubuntu 22.04's WebKitGTK 2.50, which crashes
   when a page goes fullscreen, on every distribution it ran on.
 
+### Known issues
+- On Ubuntu 22.04 (the `.deb`, with the system's WebKitGTK 2.50.4), a video's fullscreen button
+  still crashes Little Joan. WebKitGTK aborts even when the app declines the page's request, so
+  there is no workaround in Little Joan; Ubuntu 24.04 and the AppImage are fine.
+
 ## [0.2.0-beta.3] — 2026-10-18
 
 A third pre-release of v0.2: smoother resizing, phone or desktop per site, and fixes — YouTube's

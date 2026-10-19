@@ -164,6 +164,8 @@ ui/settings/sites-logic.ts         General's "Phone or desktop per site": the us
                                    the built-in ones, Remove / Reset, the draft (pure, unit-tested)
 ui/settings/sites.ts               that list in the General tab; DOM glue only
 docs/extensions.md                 the extension authors' guide (experimental)
+docs/upstream/                     reports drafted for other projects, for the owner to file:
+                                   webkitgtk-2.50-fullscreen-abort.md (Ubuntu 22.04's WebKitGTK)
 docs/images/                       the README's screenshots, cropped from CI's macOS smoke run (its
                                    test page and sample data only — nothing personal)
 ui/settings.css                    the settings window's styles (style.css has the shared tokens)
@@ -1068,6 +1070,7 @@ HTML5 element fullscreen (a video's fullscreen button) must fill the screen:
 | WebView2 (Windows) | The engine only fills the webview's bounds and raises `ContainsFullScreenElementChanged`; the app makes the window fullscreen and back. The change is queued off the callback because resizing re-enters WebView2. | `platform/win.rs` + `fullscreen.rs` |
 | WKWebView (macOS 12.3+) | wry enables `elementFullscreenEnabled`; WebKit moves the element into its own fullscreen window (its own Space). **The guard:** meanwhile nothing touches the page — `bar/view.rs`'s layout sets no bounds on, shows or hides the page (wry's `set_bounds` would set the WKWebView's frame inside WebKit's fullscreen window and shrink the video), phone mode doesn't switch (a reload would end it), and the command bar (Cmd+L, Cmd+Y, a click on the toolbar's site) doesn't open. "Meanwhile" is `fullscreenState` isn't "not in fullscreen" (macOS 13+), or the page's WKWebView isn't in the Little Joan window (macOS 12's only sign) — `fullscreen::page_layout_allowed`, read on the main thread where each decision is made. A skipped layout is applied once, after a 100 ms check finds the fullscreen ended (nothing runs otherwise). | `platform/mac.rs` + `fullscreen.rs` + `bar/view.rs` |
 | WebKitGTK (Linux) | The default `enter-fullscreen` handler fullscreens the toplevel GTK window. | none |
+| WebKitGTK older than 2.52 (Ubuntu 22.04's 2.50.4, the `.deb` there) | **The process aborts** (SIGABRT inside WebKitGTK) as a page enters element fullscreen — with WebKitGTK's own handling, and also when an `enter-fullscreen` handler returns TRUE to decline the request, with or without fullscreening the window itself (LJ14's experiment, a bare PyGObject window on two 22.04 runners). So the planned stopgap (decline, fullscreen the window instead) can't work, and none is in the app; the AppImage bundles 2.52 (LJ13). A report for Ubuntu is drafted in `docs/upstream/`. | none |
 
 `FullscreenTracker` only undoes a fullscreen it caused, so a window the user made fullscreen
 stays fullscreen when a video leaves it.
@@ -1414,9 +1417,12 @@ and pushes to `main`:
   tree; the job allows ptrace beyond a process's own children).
 - **Smoke-only reruns** (manual `workflow_dispatch`, for diagnosing without rebuilding):
   `installers_from_run` (smoke the installers of an earlier run; skips verify and package),
-  `extra_env` (e.g. `WEBKIT_DISABLE_DMABUF_RENDERER=1`), `linux_runner` (`ubuntu-24.04`),
-  `linux_window_manager` (`none`), `linux_plain_webkit_check` (repeat the fullscreen click in a
-  bare WebKitGTK window built with PyGObject — no Tauri — to tell engine crashes from ours).
+  `extra_env` (e.g. `WEBKIT_DISABLE_DMABUF_RENDERER=1`), `linux_runner` (`ubuntu-24.04`; the
+  `linux-appimage` entry stays on 24.04), `linux_window_manager` (`none`), `linux_plain_webkit_check`
+  (before the app's smoke, where the `.deb` runs: the fullscreen click in a bare WebKitGTK window
+  built with PyGObject — no Tauri — to tell engine crashes from ours, in three variants: WebKitGTK's
+  own handling, an `enter-fullscreen` handler returning TRUE, and that handler fullscreening the
+  window; each logs `BARE WEBKITGTK (<variant>): still running after the click` or its exit status).
 
   ```bash
   gh workflow run ci.yml --repo memoliertorerr/LittleJoan --ref <branch> \

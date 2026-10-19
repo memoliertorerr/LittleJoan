@@ -179,8 +179,10 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,
   `gstreamer1.0-libav` on Debian/Ubuntu); the `.deb` installs them.
   **Known issue:** the WebKitGTK shipped with Ubuntu 22.04 at the moment (2.50.4) crashes when
-  any page goes fullscreen — reproduced in testing without Little Joan. Ubuntu 24.04's
-  (2.52) works, and the AppImage brings its own 2.52.
+  any page goes fullscreen — reproduced in testing without Little Joan. Little Joan can't step
+  around it: WebKitGTK crashes even when an app declines the page's request (tested). Ubuntu
+  24.04's (2.52) works, and the AppImage brings its own 2.52 (it needs Ubuntu 24.04 or newer,
+  though). On 22.04, avoid a video's fullscreen button for now.
 - **Links that open a new window** (`target=_blank`) open in your default browser.
 - **Command line:** `little-joan --toggle`, `little-joan --show [https://…]`, `little-joan --hide`,
   `little-joan --size 390x844` (resize the open window, in logical pixels),

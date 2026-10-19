@@ -79,7 +79,7 @@
 | LJ11 | *(v0.2)* Start at login: tauri-plugin-autostart, a Settings switch, `--start-at-login on\|off`, the OS entry checked in smoke | strong | auto | ✅ done |
 | LJ12 | *(v0.2)* First launch: the window opens once with a welcome (shortcut, where the icon is, start at login) | standard | auto | ✅ done |
 | LJ13 | *(v0.2)* AppImage built on Ubuntu 24.04 (WebKitGTK 2.52); the AppImage gets the full smoke | strong | auto | ✅ done |
-| LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⬜ todo |
+| LJ14 | *(v0.2)* WebKitGTK older than 2.52: fullscreen the window instead of aborting; an Ubuntu 22.04 smoke job | strong | auto | ⏭ stopped at its experiment: 2.50.4 aborts even when `enter-fullscreen` is handled — no app change; the Launchpad draft written (see notes) |
 | LJ15 | *(v0.2)* Downloads: save to the Downloads folder; status and "Show in folder" in the URL bar | strong | auto | ⬜ todo |
 | LJ16 | *(v0.2)* Page zoom: Ctrl/Cmd + / − / 0 through native keys and `Webview::set_zoom` | standard | auto | ⬜ todo |
 | LJ17 | *(v0.2)* Wayland-native global shortcut through the XDG GlobalShortcuts portal | strong | auto | ⬜ todo |
@@ -128,8 +128,9 @@
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
 for narrow windows, and layout tests at scale factors 1, 1.5 and 2). PRs #1–#7 were merged into
 `main` at the user's request. The GitHub Release `v0.1.0` carries the Windows, macOS and Linux
-installers CI built from the tagged commit. Still open: Linux fullscreen on Ubuntu 22.04 and in
-the AppImage (WebKitGTK 2.50.4 aborts on element fullscreen; see Deferred follow-ups).**
+installers CI built from the tagged commit. Still open: Linux fullscreen on Ubuntu 22.04's `.deb`
+(WebKitGTK 2.50.4 aborts on element fullscreen, even when the app declines the request — LJ14's
+experiment; the AppImage is fixed by LJ13; see Deferred follow-ups).**
 
 **v0.2 status: planned 2026-10-17 with the user (scope and decisions under "Design Decisions
 Already Made → v0.2"). PR #8 (housekeeping: `.claude/` ignored, the Linux verify runner pinned
@@ -180,7 +181,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Next: phase 7.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25, a draft): LJ13 done; LJ14 stopped at its own experiment — waiting for the owner.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -200,6 +201,15 @@ and the guard fixed it on every element path; YouTube gets the desktop agent on 
 opens history on Windows and Linux; double-clicking the toolbar zooms; the bar paints its theme
 first, and panels from hibernation wait for it. Human checks are in PR #21. **Next: phase 19
 (LJ39 → LJ40)**, which ends in a checkpoint.
+
+**Phase 7 (LJ13 → LJ14, 2026-10-19)** is PR #25 on `lj/p7-linux-fullscreen` — **a draft, not
+merged: LJ14 stopped at its own stop condition.** LJ13: the AppImage is built on ubuntu-24.04
+(WebKitGTK 2.52.6 bundled, glibc 2.39, 156.79 MiB) and passes the whole smoke as `linux-appimage`;
+the `.deb` stays on ubuntu-22.04. LJ14: the 22.04 experiment showed WebKitGTK 2.50.4 aborting even
+when `enter-fullscreen` is handled (the request declined, with or without fullscreening the window
+instead), so the stopgap can't work; no app code changed; the Launchpad report is drafted in
+`docs/upstream/`. **Waiting for the owner:** whether to merge PR #25 as it stands (LJ13 plus the
+report), and what to do for 22.04 (Deferred follow-ups, "Linux fullscreen on Ubuntu 22.04").
 
 **Phase 20 (LJ41 → LJ44, 2026-10-19)** is PR #24 on `lj/p20-control`, merged by the agent once
 verify, package and smoke were green on every OS job (the standing exception; LJ36's fullscreen
@@ -2409,6 +2419,22 @@ job is still red after two honest fix attempts, stop and report.
   no one loads); `smoke.mts` fails at once when the app ends before it logged `started`, instead of
   timing out step by step. The `.deb`'s comment and the Packaging table now say glibc 2.34 (the
   binary's real need) instead of 2.35.
+- **CI for the fix (run 39247235206): all twelve jobs green after one re-run** — macOS's smoke first
+  failed one rule this phase doesn't touch: a WebContent process still alive 10 s after the third
+  summon cycle's hibernate (`afterEachCycle` `[0,0,1]`; every earlier sample 0, the 60 s sample of
+  the first cycle 0); `gh run rerun --failed` once: green (Deferred follow-ups). **`linux-appimage`
+  passed every rule of the full smoke:** codecs H.264 / VP9 / AV1 through MSE (the bundled
+  GStreamer), no WebKit helper left after hibernating (0 at 2–60 s, `[0,0,0]` per cycle), the
+  start-at-login entry pointing at the AppImage itself (`$APPIMAGE`), the fullscreen run's four
+  paths entered, held ~2.2 s and left by the page's own Exit, and gdb attached to the app in each
+  of the 20 launches. The library check found only the bundled fluidsynth MIDI plugin's
+  `libjack.so.0` / `libpipewire-0.3.so.0` missing (a plugin no page here loads). Memory at rest: the
+  AppImage's own (private dirty) 45.6 MB at start against the `.deb`'s 19.5 MB in the same run —
+  its bundled libraries' pages aren't shared with the system's —, both ~44–45 MB after a page
+  (Deferred follow-ups). **Screenshots** (`linux-appimage`): `fullscreen.png` — the green stage
+  fills the whole 1280×800 screen, the page reporting 1280×800 (no crash: the bundled 2.52.6);
+  `fs/element-390.png` — the element fills the screen with its Exit in the middle; `command-bar.png`
+  — the command bar in openbox's frame, the smoke page as the top site, as on `linux`.
 
 ### LJ14 — WebKitGTK older than 2.52: fullscreen the window instead of aborting · strong · auto
 
@@ -2483,6 +2509,46 @@ linux-22.04's fullscreen.png. This ends phase 7. Fill the PR description. Needs 
 These checks also go into LJ19's checklist. Once every job is green, merge the PR into main with a
 merge commit (Ground Rule 24), then stop and report.
 ```
+
+**Implementation notes (2026-10-19) — stopped at the experiment:**
+
+- **Disk:** 13 GiB free at the start of the step and after verify; `.cache/target` 1.6 GB.
+- **The experiment** (its own commit, `lj-step-14-experiment`: `gh workflow run` needs the variant
+  on the branch, and the prompt puts it before any app code): the "Bare WebKitGTK fullscreen check"
+  now runs the bare PyGObject window three ways — WebKitGTK's own handling (`default`), an
+  `enter-fullscreen` handler that returns TRUE (`handled`), and that handler fullscreening the
+  window too (`handled-window`, the stopgap's exact shape) — printing WebKitGTK's version, the
+  page's titles (it also reports `fullscreenerror` and a refused promise) and the signal. It moved
+  before the app's smoke: an app that aborts on 22.04 could otherwise run the job into its 45
+  minutes before the check. **Run 39247249388** (`installers_from_run=39240281091`,
+  `linux_runner=ubuntu-22.04`, `linux_plain_webkit_check=true`), on both 22.04 jobs (`linux`,
+  `linux-scale-2`), WebKitGTK 2.50.4: in every variant `enter-fullscreen: <variant>` is printed —
+  the signal comes, the handler runs and returns — and then `BARE WEBKITGTK (<variant>): exited
+  with status 134` (SIGABRT). No `fullscreenerror`, no refused request and no window-state change
+  came first. The app's own smoke in those jobs aborted at its first fullscreen click with v0.1's
+  backtrace (the same addresses: frames in `libwebkit2gtk-4.1.so.0` under a task JavaScriptCore's
+  RunLoop dispatched). Its Windows, macOS and AppImage smoke against the LJ13 installers passed
+  meanwhile; the run ends as cancelled (cancelled once both 22.04 checks had run, the rest being
+  the 22.04 app smoke, known to abort).
+- **The step's stop condition fired:** the handled request aborts anyway — not before the signal,
+  as the prompt guessed, but after it, whatever the handler returns. So, as the prompt says: **no app
+  code** (no `needs_window_fallback`, no fallback, no `linux-22.04` smoke entry — it would only show
+  the abort), Landmines updated, the known issue kept in the README (Fullscreen video: no workaround
+  is possible in the app; avoid fullscreen buttons on 22.04) and the CHANGELOG (an `[Unreleased]`
+  Known issues entry: 22.04's `.deb` still crashes; the AppImage, fixed by LJ13, needs 24.04+).
+- **Point 4:** `docs/upstream/webkitgtk-2.50-fullscreen-abort.md` — the Launchpad report draft for
+  Ubuntu's webkit2gtk (jammy): the bare reproduction in its three variants, the backtrace, what was
+  ruled out (the embedding app, the renderer, the window manager, how the request is handled), the
+  CI runs (38934582112, 38935403919, 39247249388) and the ask (2.52.x for jammy, as noble got).
+  Nothing was posted: the owner files it (from a 22.04 machine, `ubuntu-bug libwebkit2gtk-4.1-0`).
+- docs/architecture.md: the Fullscreen table's WebKitGTK < 2.52 row (what aborts, that no stopgap
+  is in the app), the bare check's variants, `docs/upstream/` in the file map. Deferred follow-ups:
+  the Linux fullscreen line stays open with what is left for 22.04.
+- **Deviation:** the commit message. The plan's "lj-step-14: WebKitGTK older than 2.52 fullscreens
+  the window instead of aborting; 22.04 smoke" would describe work the stop condition ruled out, so
+  this commit says what it holds.
+- `npm run verify`: 593 TS tests, 342 Rust tests, clippy clean (no code changed since
+  `lj-step-13-fix`).
 
 ### LJ15 — Downloads · strong · auto
 
@@ -7389,7 +7455,16 @@ and where, then stop.
   reproduction; (d) as a stopgap, handle `enter-fullscreen` and fullscreen only the window
   (the page wouldn't know it is fullscreen — YouTube's player would stay small). → *The user
   chose (a) + (d) on 2026-10-17, with (c) as a Launchpad report they file: planned as LJ13 and
-  LJ14. Waiting (b) looks unpromising: jammy's webkit2gtk hasn't moved since 2026-01-13.*
+  LJ14. Waiting (b) looks unpromising: jammy's webkit2gtk hasn't moved since 2026-01-13.* →
+  *2026-10-19: (a) done by LJ13 — the AppImage bundles 2.52.6 and passes the whole smoke,
+  fullscreen included. (d) is impossible: LJ14's experiment shows 2.50.4 aborting even when the
+  request is declined (run 39247249388), so LJ14 stopped without app code. (c) is drafted
+  (`docs/upstream/webkitgtk-2.50-fullscreen-abort.md`) for the owner to file. Left for 22.04's
+  `.deb`, the owner's call: (b) a jammy update, which the report asks for; (e) untested — switch
+  WebKitGTK's `enable-fullscreen` setting off below 2.52: the page's request would then fail
+  without reaching the code that aborts (probably), so no crash, but no fullscreen either and no
+  signal for a window fallback; one more variant of the bare check
+  (`view.get_settings().set_enable_fullscreen(False)`) would show whether it avoids the abort.*
 - **macOS footprint after the first page stays ~12 MB above the hibernating baseline**
   (11 → 23 MB) — WebKit's framework state in our process. Acceptable for v0.1; noted so a
   future memory pass knows where to look. Not in v0.2: worth a time-boxed look (vmmap /
@@ -7607,6 +7682,23 @@ and where, then stop.
   detour didn't show, no `ljext` request was answered for the panel, and hello never reported — the
   security rules held (every racer refused). If it recurs, look at the main thread's load during
   the race (the detour's 1 s limit) first.
+- **The AppImage's own memory at rest is about twice the `.deb`'s** (surfaced by LJ13's CI): 45.6 MB
+  private dirty at start against 19.5 MB, on the same runner and run — the bundled libraries'
+  relocated pages are the app's own instead of shared with the system's copies; after a page both
+  are ~44–45 MB. Resident memory is about the same (101 vs 99 MB). Not fixed: it is what bundling
+  costs. A look with `smaps` per mapping would say which libraries weigh most.
+- **The AppImage's login entry isn't quoted** (surfaced by LJ13, from the code): auto-launch writes
+  `Exec=<$APPIMAGE> ` unquoted (LJ11's Landmine), so an AppImage kept under a path with a space —
+  CI's artifact is named `Little Joan_<v>_amd64.AppImage` — would start at login as a broken
+  command on desktops that follow the desktop-entry spec. Release assets are renamed without a
+  space (`LittleJoan-<v>-linux-x86_64.AppImage`, which CI's AppImage smoke uses); the `.deb`'s
+  `/usr/bin/little-joan` has none. The smoke's check accepts an unquoted path. Option: quote the
+  path ourselves (build the `AutoLaunch` with a quoted path, as for the Windows Run value).
+- **macOS CI: a WebContent process can outlive a hibernate by more than 10 s** (phase 7, run
+  39247235206; green on a re-run): after the third summon cycle one helper was still there when the
+  cycle check looked (10 s), while the main sample — 2, 10, 30 and 60 s after the first hibernate —
+  saw none, as in every earlier run. LJ9 measured "1 helper at 2–10 s, 0 at 30 s" on macOS. If it
+  recurs, give the cycle check macOS's 30 s rather than loosen the rule.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -7655,7 +7747,10 @@ Populated from real friction, not speculation:
   `.deb` on 24.04. *(LJ13)* The AppImage bundles the WebKitGTK of the machine that builds it, so
   it is built on ubuntu-24.04 since LJ13 (2.52; the package job fails on anything older), and its
   glibc floor is 2.39; the `.deb`, still built on 22.04, uses whatever the system has. Whether
-  real 22.04 desktops crash too is a human check.
+  real 22.04 desktops crash too is a human check. *(LJ14)* **Declining the request doesn't help:**
+  2.50.4 emits `enter-fullscreen` and then aborts whatever the handler returns — TRUE (declined),
+  with or without fullscreening the window itself — in a bare PyGObject window on two 22.04
+  runners (run 39247249388). No stopgap through that signal exists.
 - **On Linux, tao doesn't see WebKitGTK's fullscreen.** WebKitGTK fullscreens the GTK window
   itself; `Window::is_fullscreen()` (tao's own state) stays false. Read the GDK window state
   (`platform::is_fullscreen`).
@@ -7862,6 +7957,18 @@ Populated from real friction, not speculation:
   shrunk to 480×600 in a black fullscreen window, and at 720 px phone mode's reload ending the
   fullscreen. Lay out the page on macOS only through `bar::apply_layout`, which asks
   `platform::page_in_webkit_fullscreen` first.
+- *(LJ13)* **An AppImage without FUSE (`APPIMAGE_EXTRACT_AND_RUN=1`) deletes its extracted folder
+  when it exits** — `$TMPDIR/appimage_extracted_<md5>`, shared by every launch of the same image.
+  A second instance (single-instance's remote control) exiting would delete the running first
+  instance's files; `NO_CLEANUP=1` keeps them. And its `AppRun` is linuxdeploy's bash script
+  (sourcing the GStreamer and GTK hooks, then `exec …/AppRun.wrapped`): gdb run on the AppImage
+  follows the runtime, not the app, so CI attaches gdb to the app's pid instead (ptrace_scope 0 on
+  the runner), and the app's process name is `AppRun.wrapped`, not `little-joan` — find it by
+  `/proc/<pid>/exe` (`smoke-linux.mts`).
+- *(LJ13)* **An AppImage leaves EGL, GL, GBM, ALSA, X11 and fonts to the system** (linuxdeploy's
+  excludelist). GitHub's `ubuntu-24.04` image has no `libEGL.so.1`, so the AppImage didn't start
+  there (`error while loading shared libraries`, exit 127) until the job installed `libegl1` & co.
+  Every desktop has them; a minimal container wouldn't.
 - *(round 3 research, to watch)* **macOS 26 / 27: an `.accessory` app's element fullscreen may
   leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
   and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after
