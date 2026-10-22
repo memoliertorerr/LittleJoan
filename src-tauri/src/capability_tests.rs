@@ -278,6 +278,13 @@ fn only_the_bar_may_reveal_downloads() {
 }
 
 #[test]
+fn only_the_bar_may_report_timing() {
+    // report_timing (LJ19.1): the bar's first frame and rows, for the smoke log — never the page,
+    // whose scripts must not write to it.
+    only_the_bar_grants(&["allow-report-timing"]);
+}
+
+#[test]
 fn only_the_bar_and_settings_may_read_the_keymap() {
     // keymap_info (LJ43): Little Joan's keys, for Settings → Keyboard and the bar — never the page.
     let mut granted_to = Vec::new();

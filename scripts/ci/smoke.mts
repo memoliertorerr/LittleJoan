@@ -34,7 +34,10 @@
 // smoke-downloads.mts), then the tray
 // run (its own launches with the icon switched off: it hides, a plain second launch opens the
 // window, the command bar's "Quit Little Joan" quits, Settings → General shows the switch, and on
-// Linux a Wayland session brings the icon back; smoke-tray.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
+// Linux a Wayland session brings the icon back; smoke-tray.mts), then the summon-timing run (its own
+// launch without gdb, a seeded history: first, warm, idle and cold summons — the file cache emptied
+// with sudo on macOS and Linux —, through `--show` and the real global shortcut; timing.md;
+// smoke-timing.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
 // smoke-theme.mts) and the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
@@ -100,6 +103,7 @@ import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tra
 import { findApp, listProcs } from "./smoke-linux.mts";
 import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
+import { summonTimings, timingFailures, timingRun, timingSummary, timingTable, type TimingDriver } from "./smoke-timing.mts";
 import { ZOOMED, zoomFailures, zoomReset, zoomSummary, zoomedViewport } from "./smoke-zoom.mts";
 import {
   DOWNLOAD_NAME,
@@ -659,10 +663,11 @@ const GDB_AFTER = ["-ex", "bt 40", "-ex", "thread apply all bt 8"];
 
 /**
  * Launches the app; with LJ_SMOKE_GDB=1 (Linux) it runs under gdb so a crash prints a backtrace —
- * the AppImage's app gets gdb attached once it runs (attachGdb).
+ * the AppImage's app gets gdb attached once it runs (attachGdb) — unless `gdb` is false (the
+ * timing run: gdb slows every thread and library the app starts).
  */
-function launch(withEnv: NodeJS.ProcessEnv = env): ChildProcess {
-  const underGdb = os === "linux" && process.env.LJ_SMOKE_GDB === "1";
+function launch(withEnv: NodeJS.ProcessEnv = env, gdb = true): ChildProcess {
+  const underGdb = gdb && os === "linux" && process.env.LJ_SMOKE_GDB === "1";
   const [command, args] =
     underGdb && !appImage ? ["gdb", ["-q", "-batch", "-ex", "run", ...GDB_AFTER, "--args", app as string]] : [app as string, []];
   const child = spawn(command, args, { env: withEnv, stdio: ["ignore", "pipe", "pipe"] });
@@ -1418,7 +1423,6 @@ const downloadCheck = await downloadRun({
   slowServed: () => ({ ...slowServe }),
 });
 console.log(`downloads: ${JSON.stringify(downloadSummary(downloadCheck))}`);
-server.close();
 // The tray run (LJ41, smoke-tray.mts): the icon switched off, and every way back still there.
 const trayDriver: TrayDriver = {
   os,
@@ -1431,6 +1435,109 @@ const trayDriver: TrayDriver = {
 };
 const trayCheck = await trayRun(trayDriver);
 console.log(`tray: ${JSON.stringify(traySummary(trayCheck, os))}`);
+
+/** Whether a command ran and exited with 0 (the timing run's cache eviction). */
+function succeeded(command: string, args: string[]): boolean {
+  try {
+    execFileSync(command, args, { stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
+    return true;
+  } catch (err) {
+    console.log(`(${command} ${args.join(" ")} failed: ${(err as Error).message})`);
+    return false;
+  }
+}
+
+/**
+ * The global shortcut (CommandOrControl+Shift+Space) as the OS would get it from a keyboard:
+ * xdotool (XTEST) on Linux, SendKeys on Windows, a CGEvent from a Swift script on macOS (best
+ * effort). Returns the unix ms just before the key went out (the helper's own clock where it has
+ * one), or null.
+ */
+function pressSummonShortcut(): number | null {
+  if (os === "win32") {
+    const sent = powershell(`Add-Type -AssemblyName System.Windows.Forms
+$t = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+[System.Windows.Forms.SendKeys]::SendWait('^+ ')
+Write-Output $t`);
+    console.log("pressed Ctrl+Shift+Space");
+    return Number(sent.trim().split(/\s+/).at(-1)) || null;
+  }
+  if (os === "darwin") {
+    const swift = join(out, "summon.swift");
+    writeFileSync(
+      swift,
+      `import AppKit
+print(Int64(Date().timeIntervalSince1970 * 1000))
+for down in [true, false] {
+  let event = CGEvent(keyboardEventSource: nil, virtualKey: 49, keyDown: down)
+  event?.flags = [.maskCommand, .maskShift]
+  event?.post(tap: .cghidEventTap)
+  usleep(60000)
+}
+let release = CGEvent(keyboardEventSource: nil, virtualKey: 55, keyDown: false)
+release?.flags = []
+release?.post(tap: .cghidEventTap)
+`,
+    );
+    const sent = run("swift", [swift]);
+    console.log("pressed Cmd+Shift+Space");
+    return Number(sent.trim().split(/\s+/)[0]) || null;
+  }
+  const sent = Date.now();
+  run("xdotool", ["key", "ctrl+shift+space"]);
+  console.log("pressed Ctrl+Shift+Space");
+  return sent;
+}
+
+// The summon-timing run (LJ19.1, smoke-timing.mts): its own launch, without gdb, on a fresh data
+// folder with a seeded history.json.
+const timingDriver: TimingDriver = {
+  os,
+  pageUrl: smokePageUrl,
+  launch: (name, settings, files) => {
+    const logFile = join(out, `smoke-${name}.log`);
+    rmSync(logFile, { force: true });
+    const runDir = dataDir(name, true, settings);
+    for (const [file, text] of Object.entries(files)) {
+      writeFileSync(join(runDir, file), text);
+    }
+    const runEnv = { ...env, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
+    const runChild = launch(runEnv, false);
+    return Promise.resolve({
+      pid: () => appPid(runChild),
+      settings: () => readIfThere(join(runDir, "settings.json")),
+      forward: (args) => forward(args, runEnv),
+      events: () => events(logFile),
+      waitFor: (what, test, timeoutMs) => waitFor(what, test, timeoutMs, logFile),
+      quit: async () => {
+        const runPid = appPid(runChild);
+        await forward(["--quit"], runEnv);
+        if (!(await exited(runPid, 15_000))) {
+          await quit(runChild, runPid);
+        }
+      },
+    });
+  },
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  evict: () => {
+    if (os === "darwin") {
+      return succeeded("sudo", ["-n", "purge"]) ? "purge" : "failed";
+    }
+    if (os === "linux") {
+      return succeeded("sudo", ["-n", "sh", "-c", "sync; echo 3 > /proc/sys/vm/drop_caches"]) ? "drop_caches" : "failed";
+    }
+    return "none";
+  },
+  pressSummonShortcut,
+};
+const timingCheck = await timingRun(timingDriver);
+const timingMd = timingTable(timingCheck, os);
+writeFileSync(join(out, "timing.md"), timingMd);
+console.log(timingMd);
+if (process.env.GITHUB_STEP_SUMMARY) {
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${timingMd}`);
+}
+server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
 // and the default settings are saved; the next launch on the same folder hibernates.
@@ -1526,6 +1633,9 @@ const summary = {
     rules: keyboardProblemFailures(keyboardProblem).concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os)),
   },
   trayRun: traySummary(trayCheck, os),
+  // LJ19.1: the timing run, and the main run's summons (its first is the runner's first window).
+  timingRun: timingSummary(timingCheck, os),
+  mainRunTimings: summonTimings(log),
   downloads: downloadSummary(downloadCheck),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
@@ -1580,6 +1690,7 @@ const failures = evaluate(
   .concat(keyboardProblemFailures(keyboardProblem))
   .concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os))
   .concat(trayFailures(trayCheck, os))
+  .concat(timingFailures(timingCheck, os))
   .concat(downloadFailures(downloadCheck, os))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
@@ -1589,7 +1700,7 @@ if (failures.length > 0) {
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
   const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
-  const trayLogs = ["quick", "keymap", "keyboard-problem", "downloads", "tray", "tray-settings", "tray-wayland"].map((name) => join(out, `smoke-${name}.log`));
+  const trayLogs = ["quick", "keymap", "keyboard-problem", "downloads", "tray", "tray-settings", "tray-wayland", "timing"].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }

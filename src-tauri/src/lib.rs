@@ -32,6 +32,7 @@ pub mod shortcut;
 pub mod smoke;
 pub mod state;
 pub mod suggest;
+pub mod summon_timing;
 pub mod system_shortcuts;
 pub mod toggle;
 pub mod translate;
@@ -47,6 +48,7 @@ mod tray;
 
 use tauri::RunEvent;
 
+use crate::summon_timing::Source;
 use crate::toggle::Command;
 
 /// Builds and runs the app. Returns only when the user quits.
@@ -65,7 +67,7 @@ pub fn run() {
             if args.quit {
                 joan::quit(app);
             } else if let Some(command) = args.forwarded_command() {
-                joan::dispatch(app, command);
+                joan::dispatch(app, command, Source::Cli);
             }
         }))
         .plugin(shortcut::plugin())
@@ -100,7 +102,8 @@ pub fn run() {
             commands::downloads::reveal_download,
             commands::quick::quick_state,
             commands::quick::quick_command,
-            commands::keys::keymap_info
+            commands::keys::keymap_info,
+            commands::timing::report_timing
         ])
         // Extension panels and their API (extensions/protocol.rs). Registered for every
         // webview; each request is checked (extensions/api.rs), and only the page webview's
@@ -161,11 +164,11 @@ pub fn run() {
                 // `little-joan --quit` with nothing running: nothing to quit, so this one ends.
                 joan::quit(handle);
             } else if let Some(command) = args.command {
-                joan::dispatch(handle, command);
+                joan::dispatch(handle, command, Source::Launch);
             } else if welcome && shortcut::welcome_now(handle) {
                 // While the portal is asked, the welcome waits for its answer (shortcut.rs), so it
                 // names the desktop's key — or explains `--toggle` when there is none.
-                joan::dispatch(handle, Command::Show(None));
+                joan::dispatch(handle, Command::Show(None), Source::Launch);
             }
             Ok(())
         })

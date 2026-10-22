@@ -218,6 +218,31 @@ pub fn webkit_fullscreen_logged() -> bool {
     false
 }
 
+/// macOS: a summon's NSProcessInfo activity — App Nap stays off from the request until the
+/// window is up (LJ19.1); dropping what this returns ends it. Never held at rest.
+#[cfg(target_os = "macos")]
+pub fn summon_activity() -> Option<mac::SummonActivity> {
+    mac::SummonActivity::begin()
+}
+
+/// Windows and Linux have no App Nap: nothing to hold.
+#[cfg(not(target_os = "macos"))]
+pub fn summon_activity() -> Option<()> {
+    None
+}
+
+/// macOS, for the smoke log: App Nap's state of the process now (LJ19.1).
+#[cfg(target_os = "macos")]
+pub fn nap_state() -> Option<String> {
+    mac::nap_state()
+}
+
+/// Windows and Linux: no App Nap.
+#[cfg(not(target_os = "macos"))]
+pub fn nap_state() -> Option<String> {
+    None
+}
+
 /// Puts `text` on the system clipboard (littleJoan.clipboard.writeText). Main thread only.
 #[cfg(windows)]
 pub fn write_clipboard(text: &str) -> Result<(), String> {

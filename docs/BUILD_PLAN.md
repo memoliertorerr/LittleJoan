@@ -87,6 +87,7 @@
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⏭ skipped — no Apple signing secrets on 2026-10-19; runs when the owner adds them (LJ18's pre-step) |
 | LJ18.1 | *(added mid-plan 2026-10-19)* Linux ARM64 builds: an `arm64` `.deb` (ubuntu-22.04-arm) and an `aarch64` AppImage (ubuntu-24.04-arm), smoke-tested on ARM runners like their x86_64 twins | strong | auto | ✅ done |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ prepared — the release PR (`lj/release-0.2.0`: version 0.2.0, CHANGELOG, README; the owner's checklist) is merged once green; waiting for the owner's check; tag and release only on their word |
+| LJ19.1 | *(added mid-plan 2026-10-22)* Faster first summon after idle: summon timing in the smoke log, measured per OS (first, warm, idle, cold-after-eviction, the real shortcut), then the summon path optimized where the numbers point; loose CI ceilings | strong | auto | ✅ done (measured, then lj-step-19.1-fix / fix2 — see notes; macOS −6…−17 % warm in CI, Windows −40 % (mostly faster runners; ~90 ms ours), Linux within noise; the rest is the engine starting at every summon) |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -213,6 +214,16 @@ green (the owner allowed it for this PR) and stops: **LJ19 is a checkpoint.** Th
 — every "Needs human check" of PRs #21–#28 and LJ19's prompt in one list: the Mac, Ubuntu 22.04 ARM
 in Parallels, other systems optional — is in the PR. The tag and the release wait for the owner's
 word; they are recorded in the first v0.3 phase's first commit (`main` is never committed to).
+
+**LJ19.1 (added 2026-10-22, the owner's "after a while, startup is kinda slow")** is PR #31 on
+`lj/p11-summon-speed`, merged by the agent once every job is green (the standing exception). It
+measured first — a `summon-timing` line per summon in the smoke log and a timing run on every
+smoke job (first, warm, idle, cold after `purge` / `drop_caches`, the real shortcut) — then took
+Little Joan's own work off the summon's way (history.json alongside the window, the window shown
+before Windows' cookie and agent setup, the first suggestions at once, macOS kept out of App Nap
+while a summon builds the window) and set loose per-OS ceilings. Most of a summon is now the web
+engine starting again; keeping it warm for a while bends hibernation and is the owner's call
+(Deferred follow-ups). v0.2.0's tag still waits for the owner.
 
 **Phase 10 (LJ18 ⏭ skipped, LJ18.1, 2026-10-19)** is PR #28 on `lj/p10-arm64`, merged by the agent
 once verify, package and smoke were green on every job (the standing exception). LJ18 is skipped —
@@ -3561,6 +3572,183 @@ then stop. Don't start phase 21 until the owner says go.
   merge commit; (2) Ubuntu 22.04 ARM in Parallels, with the arm64 `.deb`; (3) other systems,
   optional — marked "(CI: done)" only where a smoke rule proves the item on every job of its kind.
 - `npm run verify`: 628 TS tests, 376 Rust tests, clippy clean (no code changed).
+
+### LJ19.1 — Faster first summon after idle · strong · auto
+
+> **Added mid-plan 2026-10-22** — the owner's report: "after a while, startup is kinda slow; after
+> that it becomes fast again; maybe it's my hardware, but see if you can optimize." Read as: the
+> FIRST summon after Little Joan has hibernated for a while is slow, later ones are fast. Branch
+> `lj/p11-summon-speed` from the latest `main`; the PR goes into `main`, and the agent merges it
+> once every job is green (Ground Rule 24). v0.2.0's tag still waits for the owner.
+
+**Verify:** `npm run verify` green, including Rust tests for `summon_timing.rs` (the marks, the
+JSON line, completeness with and without a URL, the bar's "ago" reports clamped to the request)
+and `commands/timing.rs` (only `painted` / `commandBar` are accepted), `capability_tests.rs`
+(only the bar may call `report_timing`), and vitest for `ui/bar-timing.ts` (nothing is sent
+outside smoke tests; each mark once; "ago", never in the future) and `scripts/ci/smoke-timing.mts`
+(parsing, the rules, the table, the seeded history). CI: every smoke job runs the **timing run**
+(its own launch, without gdb, on a data folder with a 3,000-page history.json): first, warm ×3,
+the real global shortcut, idle (60 s), cold (macOS `sudo purge`, Linux `drop_caches`; Windows a
+180 s gap), cold with a URL, cold through the shortcut after 60 s more, a warm URL — every
+forwarded summon must log a complete `summon-timing` line with every mark, the native marks in
+order, under the per-OS ceilings; the shortcut summons count only when the key arrived. The
+numbers are in each smoke job's summary (`timing.md`) and `summary.json`'s `timingRun`.
+**The first commit only measures** (generous ceilings, no change to the summon path), so CI shows
+where the time goes before anything changes. **The fix commit (`lj-step-19.1-fix`)** changes the
+summon path where the numbers point and sets the ceilings from them, with headroom.
+**Commit:** `lj-step-19.1: summon timing in the smoke log; a timing run in CI (first, warm, idle, cold)`, then `lj-step-19.1-fix: <what the numbers pointed at>`
+
+```text
+The owner's report (2026-10-22): "after a while, startup is kinda slow; after that it becomes fast
+again; maybe it's my hardware, but see if you can optimize." The first summon after Little Joan
+has been idle for a while is slow; later summons are fast. Candidates (measure, don't assume):
+macOS paging out the app / WebKit while idle, App Nap on the idle accessory app, WebKit's (or
+WebView2's) processes starting at every summon — hibernation destroys the webviews, which stays —
+and our own work on the summon path (settings, history.json, the theme script, the extension
+registry, siteModes, Windows' cookie restore and DevTools agent, favicons, anything on the main
+thread before the window shows).
+
+1. MEASURE FIRST. Timing marks along the summon path (monotonic ms after the request): window
+   built, webviews added, window shown, the bar loaded, its first frame, the command bar's rows
+   (with a URL: the page's start). One `summon-timing <json>` line per summon, smoke mode only. In
+   CI on every OS: the first summon after launch, a warm one, and a "cold after idle" one (macOS
+   `sudo purge`, Linux `sync; echo 3 | sudo tee /proc/sys/vm/drop_caches`, Windows a long gap).
+   The numbers per OS go into these notes before any change.
+2. OPTIMIZE what the numbers point at, keeping every invariant: nothing alive at rest (no
+   pre-created or kept-alive webview), no IPC for joan-page, remote pages get no IPC or injected
+   scripts, the extension security model unchanged. Candidates: show the window as soon as the bar
+   can paint; move history / extension / siteModes loading and favicons off the critical path;
+   nothing blocking the main thread; no redundant Windows setup (DevTools agent, cookie restore)
+   before the window shows; whether App Nap delays the hotkey → window path on macOS (if so, a
+   short NSProcessInfo activity around the summon only — never a permanent one). Anything that
+   needs a design change (a warm webview) is an option for the owner, not done here.
+3. CI rules against regressions with generous limits from the measured numbers (logging plus a
+   loose ceiling, never a tight threshold).
+4. Docs: before / after numbers per OS in these notes; README only if user-visible; CHANGELOG
+   [Unreleased] → Changed; Deferred follow-ups for what was found but not done (an optional "stay
+   warm for N minutes" setting is the owner's call: it bends hibernation).
+```
+
+**Implementation notes (2026-10-22):**
+
+- **Disk:** 6.0 GiB free at the start of the step; `.cache/target` 1.2 GB.
+- **The marks** (`src-tauri/src/summon_timing.rs`): `joan::dispatch` takes the request's time and
+  where it came from (`Source`: shortcut, tray, cli, launch, app) before anything else runs; the
+  window code marks `dispatched` (it runs: off the main thread, after the lifecycle lock),
+  `windowBuilt`, `historyLoaded`, `webviewsAdded`, `cookiesRestored`, `agentSet`, `shown`,
+  `created`; the bar's load event `barLoaded`, its early theme report `barScript`, `start_info`
+  `barReady`; the page's `Started` for a web address `pageStarted`. Only the bar can see its first
+  frame and the command bar's rows: `ui/bar-timing.ts` notes them after a frame callback and a task
+  behind it, and — only when `start_info` says `timing` (smoke mode) — reports each once as "this
+  long ago" through a new bar-only command, `report_timing` (`painted` | `commandBar`, an `ago`
+  between 0 and 60 s), which Rust places on its own clock. In normal use nothing is measured,
+  kept, logged or sent.
+- **The timing run** (`scripts/ci/smoke-timing.mts`) is described under Verify; the shortcut is
+  pressed as a keyboard would (xdotool's XTEST on Linux, SendKeys on Windows, a CGEvent on macOS,
+  best effort) and its latency to the app's request mark is recorded (`sent→request`). The real
+  shortcut reached the app on every OS (Linux 21–76 ms from the key to the request, Windows
+  21–159 ms through SendKeys, macOS 167–343 ms through a Swift script's CGEvent).
+- **Before (the measuring commit, run 39767357061)** — ready (ms after the request: the command
+  bar's rows, or with a URL the later of the bar's first frame and the page's start):
+
+  | Job | first | warm (3) | idle 60 s | cold | cold + URL | cold, shortcut | warm URL |
+  |---|---|---|---|---|---|---|---|
+  | macos (Apple M1 VM) | 2,742 | 2,524–2,599 | 2,668 | 4,868 (purge) | 5,445 | 3,542 | 3,445 |
+  | windows | 965 | 820–920 | 718 | 769 (180 s gap) | 828 | 780 | 796 |
+  | linux (.deb, 24.04) | 440 | 316–334 | 290 | 706 (drop_caches) | 344 | 540 | 239 |
+  | linux-scale-2 | 663 | 471–493 | 473 | 928 | 430 | 837 | 331 |
+  | linux-appimage | 503 | 362–386 | 391 | 724 | 461 | 676 | 310 |
+  | linux-22.04 | 284 | 213–217 | 233 | 334 | 246 | 462 | 185 |
+  | linux-arm64 | 1,010 | 371–385 | 375 | 696 | 402 | 615 | 351 |
+  | linux-22.04-arm64 | 380 | 316–333 | 325 | 490 | 429 | 552 | 218 |
+  | linux-appimage-arm64 | 464 | 375–382 | 375 | 717 | 433 | 672 | 336 |
+
+  Where a warm summon's time went: **our own work before the webviews** — history.json (3,000
+  pages) read and parsed on the summon's path: 20–35 ms on Linux, 26–30 ms on macOS, 45–60 ms on
+  Windows; **Windows** — WebView2's environment and the two controllers 650 ms, then the page's
+  user agent through the DevTools protocol 45–60 ms *before* the window was shown: the bar had
+  painted (710–830 ms) before the window appeared (745–885 ms), once even its rows (the summon's
+  line came out before `shown`, which turned the first run red — a measuring bug, fixed by waiting
+  for `created` too); **macOS** — shown at 150–170 ms, then the engine: the bar's page finished
+  loading at ~1,400 ms (WebKit's WebContent, GPU and Networking processes start for every summon:
+  hibernation destroys them), its script ran at ~1,600 and asked `start_info` only at ~2,500 — a
+  ~0.9 s stall between its first report and its next call, in the engine; **Linux** — shown at
+  30–45 ms, the bar loaded at 150–220 ms, `barReady` → rows 80–150 ms (two IPC round trips: the
+  page's address, then the suggestions). **Cold after eviction** doubled macOS (4,868 ms: building
+  the NSWindow took 268 ms instead of 15, the two WKWebViews 1.5 s instead of 0.1, the bar's load
+  2 s — WebKit's and the app's code read back from disk) and Linux (+300–400 ms, mostly
+  engine-side); Windows can't evict its cache from a command, and a 180 s gap changed nothing.
+  **Idle without eviction** (60 s) was no slower than warm anywhere — on CI's macOS VM no sign of
+  App Nap in the numbers (the run had no way to read App Nap's state yet). The forwarding launch
+  of `--show` itself took 20–90 ms warm and up to 1.1 s cold on macOS (irrelevant for the
+  shortcut, which never starts a process).
+- **What changed (`lj-step-19.1-fix`)** — what the numbers pointed at, every invariant kept (no
+  webview before the summon, none kept after it; no IPC for the page; nothing injected into it):
+  1. **history.json loads on its own thread** while the window and the webviews are built
+     (`history_store::open` returns at once); every use of the window's history — the first
+     suggestions, the history view, recording a visit, removing, clearing, closing — waits for
+     that read (at most 10 s), and a read that ends after its window closed keeps nothing.
+  2. **The window shows before the cookie restore and the agent** (both still before any web page
+     loads: the start page under the command bar needs neither) — on Windows they wait for
+     WebView2.
+  3. **The bar asks for its first suggestions at once** instead of after the page's address (a new
+     window shows the start page, which has none; an address starts the list over).
+  4. **macOS: an `NSProcessInfo` activity** (user-initiated, latency-critical) from the request
+     until the window is up (`platform/mac/activity.rs`), so App Nap — which may throttle an idle,
+     windowless accessory app's CPU, timers and disk reads — can't slow the summon that most needs
+     the disk; nothing holds one at rest. CI's VM showed no App Nap, so this is aimed at the
+     owner's Mac; the summon-timing line now carries App Nap's state at the request (`nap`, the
+     task's suppression policy through `task_policy_get`), so a run with the smoke log can show it.
+  5. **Measuring:** the bar reports its whole start once, at the end, with more marks (its
+     navigation and HTML, its script, the answers to its first calls) — one call, so the report
+     adds nothing while the bar starts. **`lj-step-19.1-fix2`** (the coordinator's diagnosis of the
+     first run's red Windows job, the same race): a summon's line comes only once *every* mark it
+     waits for is in (`summon_timing::EXPECTED` + `commandBar` / `pageStarted`), in any order —
+     on Windows `barLoaded` … `commandBar` all come before `webviewsAdded` —, and one still missing
+     a mark is logged `partial` 20 s after its request (or when the window closes). Unit tests
+     replay Windows' order in Rust and in the rule; the rule checks the order only of the window
+     code's own marks, which one thread takes one after another.
+  6. **Ceilings** per OS, several times the numbers above: Linux 2 / 3 / 5 s (warm / first /
+     cold), macOS 8 / 10 / 15 s, Windows 4 / 5 / 6 s.
+- **After (`lj-step-19.1-fix` run 39774786991 / `fix2` run 39779576178)** — ready, ms; "—": that
+  job of the first run was cancelled by the next push:
+
+  | Job | first | warm (3) | idle 60 s | cold | cold + URL | cold, shortcut | warm URL |
+  |---|---|---|---|---|---|---|---|
+  | macos | 2,480 / 2,741 | 2,020–2,378 / 2,207–2,464 | 2,331 / 2,426 | 4,331 / 4,504 | 5,672 / 5,049 | 3,760 / 4,134 | 3,166 / 2,730 |
+  | windows | 503 / 541 | 446–502 / 507–521 | 505 / 505 | 521 / 546 | 565 / 560 | 520 / 503 | 616 / 556 |
+  | linux | — / 532 | — / 390–415 | — / 377 | — / 700 | — / 365 | — / 627 | — / 290 |
+  | linux-scale-2 | 563 / 573 | 404–426 / 416–428 | 411 / 430 | 1,197 / 905 | 446 / 359 | 687 / 647 | 303 / 406 |
+  | linux-appimage | 370 / 520 | 276–284 / 388–408 | 262 / 401 | 703 / 762 | 260 / 446 | 535 / 729 | 214 / 305 |
+  | linux-22.04 | 373 / 281 | 213–295 / 171–232 | 225 / 186 | 854 / 306 | 421 / 284 | 590 / 475 | 248 / 177 |
+  | linux-arm64 | — / 413 | — / 330–343 | — / 338 | — / 527 | — / 366 | — / 511 | — / 313 |
+  | linux-22.04-arm64 | — / 370 | — / 292–297 | — / 292 | — / 439 | — / 496 | — / 543 | — / 239 |
+  | linux-appimage-arm64 | — / 439 | — / 330–344 | — / 346 | — / 518 | — / 366 | — / 584 | — / 321 |
+
+  What the owner should feel: **macOS** warm −6…−17 %, cold after eviction −7…−11 % (the window is
+  up ~50 ms sooner, at 77–146 ms; the bar's navigation still starts only ~1.1–1.3 s after the
+  request on CI's VM, and the ~0.85 s engine stall is still there, now before the bar's script or
+  right after it); **Windows** about −40 % in both runs, mostly because WebView2 started faster on
+  those runners (its webviews took 380–480 ms instead of 600–920) — our own part is the 45–60 ms of
+  history.json and the 30–60 ms DevTools call taken off the path before the window shows (it now
+  appears 15–25 ms after the webviews, not 50–60), and the bar no longer paints well before the
+  window is there; **Linux** within the runners' noise (−90 to +70 ms per job; the window is up at
+  8–23 ms instead of 30–54, but parsing the 3,000-page history beside WebKit's start costs the
+  runners' few CPUs about what it saved). The engine's own start — every summon launches its
+  processes again, because hibernation destroys them — is now nearly all of a summon on every OS.
+  **App Nap:** `nap` read `active=0 lowpri=0 timer=0 disk=0` at every summon on CI's macOS runner,
+  even after 60 s of quiet and after `purge` — the runner never naps the app, so CI can neither
+  show App Nap's cost nor the activity's effect; the owner's Mac can (`LITTLEJOAN_SMOKE_LOG`).
+  Ceilings: every summon of both runs stayed far under them (macOS's slowest 5,672 ms against 15 s).
+  **Windows' zoom check** missed one synthetic key in each of the two runs (Ctrl+= in the first,
+  Ctrl+0 in the second; the app logged nothing for the missed key, and every other key check passed) —
+  the harness flake under Deferred follow-ups, now seen three times; the second run's Windows job
+  was re-run once, as the rules allow, and passed.
+- **Disk:** 6.0 GiB free at the start, 7.9 GiB at the end (`.cache/target` 1.2 GB). `npm run verify`:
+  649 TS tests, 389 Rust tests (macOS), clippy clean.
+  Not done, because they bend hibernation or need a design decision — see Deferred follow-ups:
+  keeping WebKit / WebView2 warm for a while after a close, and creating the page webview only
+  after the bar has painted (or when a page is opened).
 
 ---
 
@@ -8362,7 +8550,32 @@ and where, then stop.
   in the main run's zoom check SendKeys' Ctrl+= reached the page and Ctrl+0 3 s later didn't — the
   first miss of that check in the five Windows runs that had it. If it recurs, look at where the
   keyboard focus is after the zoom status shows (the toolbar's status area changes), or send the
-  key twice, rather than loosen the rule.
+  key twice, rather than loosen the rule. *(LJ19.1: it recurred twice in a row — Ctrl+= missed in
+  run 39774786991, Ctrl+0 in 39779576178 — with nothing in the app's log for the missed key and
+  every other key check of those runs passing. Next step: press a zoom key again when, after a few
+  seconds, the app logged no `zoom` line at all — the rule unchanged.)*
+- **Stay warm for a while after closing** (surfaced by LJ19.1). Most of a summon is the engine
+  starting its processes again (macOS ~1.3 s of CI's 2.5 s before the bar loads, Windows ~650 ms for
+  WebView2's environment and controllers, Linux ~110 ms), because hibernation destroys the window
+  and its webviews. An optional "keep Little Joan ready for N minutes after closing" — the window
+  hidden instead of destroyed, or one blank webview kept — would make a summon within that time
+  near-instant, at the cost of the engine's memory (tens to a hundred MB) for those minutes. It
+  bends Ground Rule 9 (nothing alive at rest), so it is the owner's decision; off by default if
+  ever built.
+- **Create the page webview only after the bar has painted** (surfaced by LJ19.1). A summon builds
+  the bar and the page webviews together, and the page loads the start page at once, so two web
+  processes start side by side (macOS: two WebContent processes; Windows: a second controller
+  before the window shows). The page is hidden under the command bar until a page is opened, so it
+  could be built later — after the bar's first frame, or when a page is asked for — but every
+  path that expects the page (navigation, extension panels, the agent, the cookies, the layout and
+  the macOS masks, Linux's GtkBox packing) would have to cope with a window without one, and
+  adding a webview to a visible window can flash it for a frame. Worth an experiment if the
+  owner's Mac still feels slow; measure with the timing run first.
+- **macOS's engine stall** (surfaced by LJ19.1). On CI's macOS VM the bar's script asked
+  `start_info` ~0.9 s after its first report (`barScript` → `barReady`), and once its first frame
+  came 1.3 s after its script was ready — the engine, not our code (Linux and Windows don't show
+  it). The bar's own marks (`barThemeAnswered`, `barStartInfo`, `barNavigation`, …) now say where
+  inside the engine it waits; look there before changing anything.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -8698,6 +8911,14 @@ Populated from real friction, not speculation:
   leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
   and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after
   a video's fullscreen, look there first.
+- *(LJ19.1)* **On Windows the bar can paint — even its rows — before the window is shown.**
+  WebView2 loads the bar while the page's controller is still being built, so anything measured
+  from the bar's side can come before the window code is done; a summon's timing is complete only
+  at `created` (summon_timing.rs). Don't read "the bar painted" as "the user saw it".
+- *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
+  there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
+  allow for it. Judge macOS changes by their before / after on the same runner kind, and the
+  owner's Mac by `LITTLEJOAN_SMOKE_LOG=<file>` and its `summon-timing` lines.
 
 ---
 

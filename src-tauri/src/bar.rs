@@ -48,6 +48,7 @@ use crate::page_address::PageAddress;
 use crate::phone_mode;
 use crate::platform;
 use crate::smoke;
+use crate::summon_timing::{self, Mark};
 use crate::tray;
 
 pub const BAR: &str = "joan-bar";
@@ -119,6 +120,7 @@ pub fn add_webviews<R: Runtime>(
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 smoke::log("bar-loaded", "");
+                summon_timing::mark(Mark::BarLoaded);
                 // The bar may have missed a change while it loaded: tell it the current state.
                 // (Its script may not be running yet — WKWebView can report the load before it
                 // ran — so `start_info`, which the script calls, tells it again: tell_state.)
@@ -150,6 +152,12 @@ pub fn add_webviews<R: Runtime>(
                 PageLoadEvent::Started => {
                     address().started(payload.url().clone());
                     smoke::log("page-started", payload.url().as_str());
+                    // A summon with a URL: its web page is on its way (LJ19.1; not the start page).
+                    if !keys::is_app_url(&keys::app_origin(), payload.url())
+                        && navigation::is_external_openable(payload.url())
+                    {
+                        summon_timing::mark(Mark::PageStarted);
+                    }
                     // What the toolbar shows, and what the extension handler serves beyond a
                     // panel's document: an extension only once its panel committed here.
                     extensions::session::page_committed(webview.app_handle(), payload.url());

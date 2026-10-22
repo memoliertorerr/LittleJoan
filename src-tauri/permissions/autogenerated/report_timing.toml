@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-report-timing"
+description = "Enables the report_timing command without any pre-configured scope."
+commands.allow = ["report_timing"]
+
+[[permission]]
+identifier = "deny-report-timing"
+description = "Denies the report_timing command without any pre-configured scope."
+commands.deny = ["report_timing"]

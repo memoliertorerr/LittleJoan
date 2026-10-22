@@ -28,6 +28,7 @@ use crate::shortcut::{
 };
 use crate::smoke;
 use crate::state;
+use crate::summon_timing::Source;
 use crate::toggle::Command;
 
 /// How long the portal may take to set up a session (D-Bus activation included). Binding has no
@@ -182,7 +183,7 @@ async fn listen<R: Runtime>(
             None => return,
             Some(Event::Activated(signal)) => {
                 if signal.shortcut_id() == backend::SHORTCUT_ID {
-                    joan::dispatch(app, Command::Toggle);
+                    joan::dispatch(app, Command::Toggle, Source::Shortcut);
                 }
             }
             Some(Event::Changed(signal)) => {

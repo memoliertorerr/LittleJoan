@@ -11,6 +11,7 @@ use crate::joan;
 use crate::keys::{self, PageAction};
 use crate::navigation;
 use crate::state;
+use crate::summon_timing::Source;
 use crate::toggle::Command;
 use crate::translate;
 use crate::zoom::Step;
@@ -19,7 +20,7 @@ use crate::zoom::Step;
 /// handlers running on it).
 pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
     if action == PageAction::Close {
-        joan::dispatch(app, Command::Hide);
+        joan::dispatch(app, Command::Hide, Source::App);
         return;
     }
     let app = app.clone();
