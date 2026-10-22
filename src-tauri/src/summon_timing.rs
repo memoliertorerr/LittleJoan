@@ -33,11 +33,13 @@
 //! | `commandBar` | the command bar's first rows were painted (the bar says so) |
 //! | `pageStarted` | with a URL: the web page started loading |
 //!
-//! A summon is complete once the window code is done (`created`) and, without a URL, the command
-//! bar's rows are painted (`commandBar`); with a URL, the bar's first frame (`barPainted`) and the
-//! page's start (`pageStarted`) are in — the command bar closes for the page, so it draws no rows.
-//! (On Windows the bar can paint its rows before the window is even shown.) The bar reports its
-//! marks once, in one call, at the end (commands/timing.rs).
+//! A summon is logged once every mark it waits for is in (`EXPECTED`, plus `commandBar` without a
+//! URL or `pageStarted` with one — the command bar closes for the page, so it draws no rows),
+//! whatever order they came in: they come from the window code, the history thread, the engine's
+//! events and the bar, and on Windows the bar loads, runs and can even paint its rows before
+//! `add_child` returns. One that misses a mark is logged as it is (`"partial":true`) when the
+//! window closes, or `GIVE_UP` after the request. The bar reports its marks once, in one call, at
+//! the end (commands/timing.rs); its diagnostic ones (`barNavigation` …) aren't waited for.
 
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -147,6 +149,25 @@ impl Request {
     }
 }
 
+/// The marks every summon waits for before it is logged (with `commandBar` or `pageStarted`).
+pub const EXPECTED: [Mark; 12] = [
+    Mark::Dispatched,
+    Mark::WindowBuilt,
+    Mark::WebviewsAdded,
+    Mark::Shown,
+    Mark::CookiesRestored,
+    Mark::AgentSet,
+    Mark::Created,
+    Mark::HistoryLoaded,
+    Mark::BarLoaded,
+    Mark::BarScript,
+    Mark::BarReady,
+    Mark::BarPainted,
+];
+
+/// How long after its request a summon still missing a mark is logged as it is (`partial`).
+const GIVE_UP: Duration = Duration::from_secs(20);
+
 /// One summon's marks (pure: the times are handed in).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Summon {
@@ -188,14 +209,14 @@ impl Summon {
         self.marks.iter().any(|(m, _)| *m == mark)
     }
 
-    /// Whether the last mark it waits for is in (the module's doc).
+    /// Whether every mark it waits for is in, in whatever order they came (the module's doc).
     pub fn complete(&self) -> bool {
-        let bar = if self.url {
-            self.has(Mark::BarPainted) && self.has(Mark::PageStarted)
+        let last = if self.url {
+            Mark::PageStarted
         } else {
-            self.has(Mark::CommandBar)
+            Mark::CommandBar
         };
-        bar && self.has(Mark::Created)
+        EXPECTED.iter().all(|&mark| self.has(mark)) && self.has(last)
     }
 
     /// The smoke log's JSON: the marks in the order they were recorded.
@@ -257,7 +278,23 @@ pub fn begin(request: Request, url: bool) {
     }
     let mut summon = Summon::new(request.source, url, request.at_unix_ms).with_nap(request.nap);
     summon.mark(Mark::Dispatched, millis_between(request.received, now));
-    *slot = Some((request.received, summon));
+    let received = request.received;
+    *slot = Some((received, summon));
+    drop(slot);
+    // A mark that never comes: the summon is logged as it got, GIVE_UP after its request (unless
+    // it was logged, or a newer one replaced it, meanwhile).
+    let _ = std::thread::Builder::new()
+        .name("little-joan-summon-timing".into())
+        .spawn(move || {
+            std::thread::sleep(GIVE_UP.saturating_sub(received.elapsed()));
+            let mut slot = current();
+            if slot.as_ref().is_some_and(|(at, _)| *at == received)
+                && let Some((_, summon)) = slot.take()
+            {
+                drop(slot);
+                smoke::log("summon-timing", &summon.to_json(true));
+            }
+        });
 }
 
 /// `mark` happened now.
@@ -312,44 +349,87 @@ pub fn end() {
 mod tests {
     use super::*;
 
+    /// Marks `marks` at increasing times; returns whether the summon was complete after each.
+    fn mark_all(summon: &mut Summon, marks: &[Mark]) -> Vec<bool> {
+        marks
+            .iter()
+            .enumerate()
+            .map(|(i, &mark)| {
+                summon.mark(mark, u64::try_from(i).unwrap_or(0) * 10);
+                summon.complete()
+            })
+            .collect()
+    }
+
     #[test]
-    fn a_summon_without_a_url_is_complete_at_the_command_bar() {
+    fn a_summon_without_a_url_waits_for_every_mark_and_the_command_bar() {
         let mut summon = Summon::new(Source::Shortcut, false, 1_000);
-        assert!(summon.mark(Mark::Dispatched, 1));
-        assert!(summon.mark(Mark::Shown, 40));
-        assert!(summon.mark(Mark::Created, 45));
-        assert!(summon.mark(Mark::BarPainted, 120));
-        assert!(!summon.complete());
-        assert!(summon.mark(Mark::CommandBar, 150));
+        let done = mark_all(&mut summon, &EXPECTED);
+        assert!(done.iter().all(|d| !d), "not before its rows");
+        assert!(summon.mark(Mark::CommandBar, 400));
         assert!(summon.complete());
     }
 
     #[test]
-    fn the_window_code_must_be_done_too() {
-        // Windows: the bar can paint its rows before the window is shown (CI, LJ19.1).
+    fn marks_in_windows_order_complete_only_with_the_last_one() {
+        // CI's Windows run (LJ19.1): WebView2 loads and runs the bar — and it paints its rows —
+        // before add_child returns, so the window code's marks come last.
+        let order = [
+            Mark::Dispatched,
+            Mark::WindowBuilt,
+            Mark::HistoryLoaded,
+            Mark::BarLoaded,
+            Mark::BarScript,
+            Mark::BarReady,
+            Mark::BarPainted,
+            Mark::CommandBar,
+            Mark::WebviewsAdded,
+            Mark::Shown,
+            Mark::CookiesRestored,
+            Mark::AgentSet,
+            Mark::Created,
+        ];
         let mut summon = Summon::new(Source::Cli, false, 1_000);
-        summon.mark(Mark::WebviewsAdded, 900);
-        summon.mark(Mark::CommandBar, 920);
+        let done = mark_all(&mut summon, &order);
+        assert_eq!(done.iter().filter(|d| **d).count(), 1);
+        assert_eq!(done.last(), Some(&true));
+        // Any mark missing keeps it open, whichever it is.
+        for missing in order {
+            let mut summon = Summon::new(Source::Cli, false, 1_000);
+            let rest: Vec<Mark> = order.iter().copied().filter(|m| *m != missing).collect();
+            mark_all(&mut summon, &rest);
+            assert!(!summon.complete(), "{missing:?}");
+        }
+    }
+
+    #[test]
+    fn a_summon_with_a_url_waits_for_the_page_not_the_rows() {
+        let mut summon = Summon::new(Source::Cli, true, 1_000);
+        mark_all(&mut summon, &EXPECTED);
         assert!(!summon.complete());
-        summon.mark(Mark::Shown, 930);
-        assert!(!summon.complete());
-        summon.mark(Mark::Created, 960);
+        summon.mark(Mark::CommandBar, 300);
+        assert!(!summon.complete(), "the command bar closes for the page");
+        summon.mark(Mark::PageStarted, 310);
         assert!(summon.complete());
     }
 
     #[test]
-    fn a_summon_with_a_url_waits_for_the_bar_and_the_page() {
-        let mut summon = Summon::new(Source::Cli, true, 1_000);
-        summon.mark(Mark::Created, 60);
-        summon.mark(Mark::PageStarted, 90);
-        assert!(!summon.complete());
-        summon.mark(Mark::BarPainted, 130);
+    fn the_bars_diagnostic_marks_are_not_waited_for() {
+        let mut summon = Summon::new(Source::Cli, false, 1_000);
+        mark_all(&mut summon, &EXPECTED);
+        summon.mark(Mark::CommandBar, 300);
         assert!(summon.complete());
-        // The command bar's rows aren't needed (it closes for the page).
-        let mut painted_only = Summon::new(Source::Cli, true, 1_000);
-        painted_only.mark(Mark::Created, 60);
-        painted_only.mark(Mark::CommandBar, 100);
-        assert!(!painted_only.complete());
+        for diagnostic in [
+            Mark::BarNavigation,
+            Mark::BarHtml,
+            Mark::BarModule,
+            Mark::BarThemeAnswered,
+            Mark::BarStartInfo,
+            Mark::BarSuggestions,
+        ] {
+            assert!(!EXPECTED.contains(&diagnostic));
+            assert!(!summon.has(diagnostic));
+        }
     }
 
     #[test]

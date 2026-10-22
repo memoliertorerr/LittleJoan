@@ -3689,10 +3689,15 @@ thread before the window shows).
      the disk; nothing holds one at rest. CI's VM showed no App Nap, so this is aimed at the
      owner's Mac; the summon-timing line now carries App Nap's state at the request (`nap`, the
      task's suppression policy through `task_policy_get`), so a run with the smoke log can show it.
-  5. **Measuring:** a summon is complete only once the window code is done (`created`), and the
-     bar reports its whole start once, at the end, with more marks (its navigation and HTML, its
-     script, the answers to its first calls) — one call, so the report adds nothing while the bar
-     starts.
+  5. **Measuring:** the bar reports its whole start once, at the end, with more marks (its
+     navigation and HTML, its script, the answers to its first calls) — one call, so the report
+     adds nothing while the bar starts. **`lj-step-19.1-fix2`** (the coordinator's diagnosis of the
+     first run's red Windows job, the same race): a summon's line comes only once *every* mark it
+     waits for is in (`summon_timing::EXPECTED` + `commandBar` / `pageStarted`), in any order —
+     on Windows `barLoaded` … `commandBar` all come before `webviewsAdded` —, and one still missing
+     a mark is logged `partial` 20 s after its request (or when the window closes). Unit tests
+     replay Windows' order in Rust and in the rule; the rule checks the order only of the window
+     code's own marks, which one thread takes one after another.
   6. **Ceilings** per OS, several times the numbers above: Linux 2 / 3 / 5 s (warm / first /
      cold), macOS 8 / 10 / 15 s, Windows 4 / 5 / 6 s.
   Not done, because they bend hibernation or need a design decision — see Deferred follow-ups:

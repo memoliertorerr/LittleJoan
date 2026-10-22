@@ -1329,8 +1329,11 @@ the window code's `dispatched`, `windowBuilt`, `webviewsAdded`, `shown`, `cookie
 `barLoaded`, `barModule`, `barScript`, `barThemeAnswered`, `barReady`, `barStartInfo`,
 `barPainted`, `barSuggestions`, then `commandBar`, or with a URL `pageStarted` — the bar's own
 reported once at the end through `report_timing`; `nap` macOS's App Nap state at the request
-(`active=<0|1> lowpri= timer= disk=`, the task's suppression policy), else `null`; `partial` when
-the window closed first; summon_timing.rs). Without the variable nothing is logged.
+(`active=<0|1> lowpri= timer= disk=`, the task's suppression policy), else `null`. The line
+comes once every mark the summon waits for is in, in whatever order (on Windows the bar loads,
+runs and paints inside `add_child`, before the window code's later marks); `partial` when one is
+still missing as the window closes, or 20 s after the request; summon_timing.rs). Without the
+variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 

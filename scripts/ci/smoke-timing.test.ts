@@ -89,6 +89,27 @@ describe("the timing run's rules", () => {
     expect(timingFailures([measured({}, { url: true })], "win32")).toEqual(["summon timing (warm): missing pageStarted"]);
   });
 
+  it("accept the bar's marks in any order — on Windows they all come before the webviews are added", () => {
+    // CI's Windows run (LJ19.1): WebView2 loads, runs and paints the bar inside add_child.
+    const windows = {
+      dispatched: 0,
+      windowBuilt: 3,
+      historyLoaded: 51,
+      barLoaded: 480,
+      barScript: 495,
+      barReady: 505,
+      barPainted: 470,
+      commandBar: 560,
+      webviewsAdded: 695,
+      shown: 700,
+      cookiesRestored: 701,
+      agentSet: 742,
+      created: 744,
+    };
+    expect(timingFailures([measured({}, { marks: windows })], "win32")).toEqual([]);
+    expect(readyMs(parseTiming(line({ marks: windows })) as SummonTiming)).toBe(560);
+  });
+
   it("refuse native marks out of order (broken instrumentation)", () => {
     const failures = timingFailures([measured({}, { marks: { ...MARKS, shown: 10 } })], "linux");
     expect(failures[0]).toMatch(/out of order/);
