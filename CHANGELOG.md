@@ -12,7 +12,11 @@ All notable changes to Little Joan are recorded here. The format follows
   suggestions straight away, and history no longer has to be read before the window can be built
   (it loads alongside). On macOS a summon is kept out of App Nap until the window is up — an idle,
   windowless Little Joan may be napping just when the first summon after a while has the most to
-  read back from disk. Nothing more is kept running while Little Joan hibernates.
+  read back from disk. Nothing more is kept running while Little Joan hibernates. Measured in CI,
+  from the request to the command bar's suggestions on screen: macOS 6–17 % faster, Windows'
+  window up together with its content (some 90 ms of Little Joan's own work taken off the way);
+  Linux within the noise. Most of what is left is the web engine starting up again, which
+  hibernation makes it do at every summon.
 
 ## [0.2.0] — 2026-10-19
 

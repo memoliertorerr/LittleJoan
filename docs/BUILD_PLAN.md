@@ -87,7 +87,7 @@
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⏭ skipped — no Apple signing secrets on 2026-10-19; runs when the owner adds them (LJ18's pre-step) |
 | LJ18.1 | *(added mid-plan 2026-10-19)* Linux ARM64 builds: an `arm64` `.deb` (ubuntu-22.04-arm) and an `aarch64` AppImage (ubuntu-24.04-arm), smoke-tested on ARM runners like their x86_64 twins | strong | auto | ✅ done |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ prepared — the release PR (`lj/release-0.2.0`: version 0.2.0, CHANGELOG, README; the owner's checklist) is merged once green; waiting for the owner's check; tag and release only on their word |
-| LJ19.1 | *(added mid-plan 2026-10-22)* Faster first summon after idle: summon timing in the smoke log, measured per OS (first, warm, idle, cold-after-eviction, the real shortcut), then the summon path optimized where the numbers point; loose CI ceilings | strong | auto | ⬜ in progress — measuring (`lj/p11-summon-speed`) |
+| LJ19.1 | *(added mid-plan 2026-10-22)* Faster first summon after idle: summon timing in the smoke log, measured per OS (first, warm, idle, cold-after-eviction, the real shortcut), then the summon path optimized where the numbers point; loose CI ceilings | strong | auto | ✅ done (measured, then lj-step-19.1-fix / fix2 — see notes; macOS −6…−17 % warm in CI, Windows −40 % (mostly faster runners; ~90 ms ours), Linux within noise; the rest is the engine starting at every summon) |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -214,6 +214,16 @@ green (the owner allowed it for this PR) and stops: **LJ19 is a checkpoint.** Th
 — every "Needs human check" of PRs #21–#28 and LJ19's prompt in one list: the Mac, Ubuntu 22.04 ARM
 in Parallels, other systems optional — is in the PR. The tag and the release wait for the owner's
 word; they are recorded in the first v0.3 phase's first commit (`main` is never committed to).
+
+**LJ19.1 (added 2026-10-22, the owner's "after a while, startup is kinda slow")** is PR #31 on
+`lj/p11-summon-speed`, merged by the agent once every job is green (the standing exception). It
+measured first — a `summon-timing` line per summon in the smoke log and a timing run on every
+smoke job (first, warm, idle, cold after `purge` / `drop_caches`, the real shortcut) — then took
+Little Joan's own work off the summon's way (history.json alongside the window, the window shown
+before Windows' cookie and agent setup, the first suggestions at once, macOS kept out of App Nap
+while a summon builds the window) and set loose per-OS ceilings. Most of a summon is now the web
+engine starting again; keeping it warm for a while bends hibernation and is the owner's call
+(Deferred follow-ups). v0.2.0's tag still waits for the owner.
 
 **Phase 10 (LJ18 ⏭ skipped, LJ18.1, 2026-10-19)** is PR #28 on `lj/p10-arm64`, merged by the agent
 once verify, package and smoke were green on every job (the standing exception). LJ18 is skipped —
@@ -3700,6 +3710,42 @@ thread before the window shows).
      code's own marks, which one thread takes one after another.
   6. **Ceilings** per OS, several times the numbers above: Linux 2 / 3 / 5 s (warm / first /
      cold), macOS 8 / 10 / 15 s, Windows 4 / 5 / 6 s.
+- **After (`lj-step-19.1-fix` run 39774786991 / `fix2` run 39779576178)** — ready, ms; "—": that
+  job of the first run was cancelled by the next push:
+
+  | Job | first | warm (3) | idle 60 s | cold | cold + URL | cold, shortcut | warm URL |
+  |---|---|---|---|---|---|---|---|
+  | macos | 2,480 / 2,741 | 2,020–2,378 / 2,207–2,464 | 2,331 / 2,426 | 4,331 / 4,504 | 5,672 / 5,049 | 3,760 / 4,134 | 3,166 / 2,730 |
+  | windows | 503 / 541 | 446–502 / 507–521 | 505 / 505 | 521 / 546 | 565 / 560 | 520 / 503 | 616 / 556 |
+  | linux | — / 532 | — / 390–415 | — / 377 | — / 700 | — / 365 | — / 627 | — / 290 |
+  | linux-scale-2 | 563 / 573 | 404–426 / 416–428 | 411 / 430 | 1,197 / 905 | 446 / 359 | 687 / 647 | 303 / 406 |
+  | linux-appimage | 370 / 520 | 276–284 / 388–408 | 262 / 401 | 703 / 762 | 260 / 446 | 535 / 729 | 214 / 305 |
+  | linux-22.04 | 373 / 281 | 213–295 / 171–232 | 225 / 186 | 854 / 306 | 421 / 284 | 590 / 475 | 248 / 177 |
+  | linux-arm64 | — / 413 | — / 330–343 | — / 338 | — / 527 | — / 366 | — / 511 | — / 313 |
+  | linux-22.04-arm64 | — / 370 | — / 292–297 | — / 292 | — / 439 | — / 496 | — / 543 | — / 239 |
+  | linux-appimage-arm64 | — / 439 | — / 330–344 | — / 346 | — / 518 | — / 366 | — / 584 | — / 321 |
+
+  What the owner should feel: **macOS** warm −6…−17 %, cold after eviction −7…−11 % (the window is
+  up ~50 ms sooner, at 77–146 ms; the bar's navigation still starts only ~1.1–1.3 s after the
+  request on CI's VM, and the ~0.85 s engine stall is still there, now before the bar's script or
+  right after it); **Windows** about −40 % in both runs, mostly because WebView2 started faster on
+  those runners (its webviews took 380–480 ms instead of 600–920) — our own part is the 45–60 ms of
+  history.json and the 30–60 ms DevTools call taken off the path before the window shows (it now
+  appears 15–25 ms after the webviews, not 50–60), and the bar no longer paints well before the
+  window is there; **Linux** within the runners' noise (−90 to +70 ms per job; the window is up at
+  8–23 ms instead of 30–54, but parsing the 3,000-page history beside WebKit's start costs the
+  runners' few CPUs about what it saved). The engine's own start — every summon launches its
+  processes again, because hibernation destroys them — is now nearly all of a summon on every OS.
+  **App Nap:** `nap` read `active=0 lowpri=0 timer=0 disk=0` at every summon on CI's macOS runner,
+  even after 60 s of quiet and after `purge` — the runner never naps the app, so CI can neither
+  show App Nap's cost nor the activity's effect; the owner's Mac can (`LITTLEJOAN_SMOKE_LOG`).
+  Ceilings: every summon of both runs stayed far under them (macOS's slowest 5,672 ms against 15 s).
+  **Windows' zoom check** missed one synthetic key in each of the two runs (Ctrl+= in the first,
+  Ctrl+0 in the second; the app logged nothing for the missed key, and every other key check passed) —
+  the harness flake under Deferred follow-ups, now seen three times; the second run's Windows job
+  was re-run once, as the rules allow, and passed.
+- **Disk:** 6.0 GiB free at the start, 7.9 GiB at the end (`.cache/target` 1.2 GB). `npm run verify`:
+  649 TS tests, 389 Rust tests (macOS), clippy clean.
   Not done, because they bend hibernation or need a design decision — see Deferred follow-ups:
   keeping WebKit / WebView2 warm for a while after a close, and creating the page webview only
   after the bar has painted (or when a page is opened).
@@ -8504,7 +8550,10 @@ and where, then stop.
   in the main run's zoom check SendKeys' Ctrl+= reached the page and Ctrl+0 3 s later didn't — the
   first miss of that check in the five Windows runs that had it. If it recurs, look at where the
   keyboard focus is after the zoom status shows (the toolbar's status area changes), or send the
-  key twice, rather than loosen the rule.
+  key twice, rather than loosen the rule. *(LJ19.1: it recurred twice in a row — Ctrl+= missed in
+  run 39774786991, Ctrl+0 in 39779576178 — with nothing in the app's log for the missed key and
+  every other key check of those runs passing. Next step: press a zoom key again when, after a few
+  seconds, the app logged no `zoom` line at all — the rule unchanged.)*
 - **Stay warm for a while after closing** (surfaced by LJ19.1). Most of a summon is the engine
   starting its processes again (macOS ~1.3 s of CI's 2.5 s before the bar loads, Windows ~650 ms for
   WebView2's environment and controllers, Linux ~110 ms), because hibernation destroys the window
