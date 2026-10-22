@@ -1,5 +1,9 @@
 # Little Joan
 
+[![CI](https://github.com/memoliertorerr/LittleJoan/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/memoliertorerr/LittleJoan/actions/workflows/ci.yml?query=branch%3Amain)
+[![License: MIT](https://img.shields.io/github/license/memoliertorerr/LittleJoan)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/memoliertorerr/LittleJoan)](https://github.com/memoliertorerr/LittleJoan/releases/latest)
+
 A tiny pop-up browser for Windows, Linux, and macOS that stays out of the way until you call it.
 
 Little Joan hibernates by default: after launch there is no window and no loaded page, just an
@@ -379,10 +383,12 @@ build commands, and how CI builds and smoke-tests the installers.
 
 ## Contributing
 
-Bug reports and ideas are welcome in [issues](https://github.com/memoliertorerr/LittleJoan/issues).
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and check changes, and
-[CHANGELOG.md](CHANGELOG.md) for what's in each version. Please report security problems
-privately as described in [SECURITY.md](SECURITY.md).
+Bug reports and ideas are welcome in [issues](https://github.com/memoliertorerr/LittleJoan/issues)
+(there's a form for each). See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and check
+changes, [docs/extensions.md](docs/extensions.md) for writing an extension of your own, and
+[CHANGELOG.md](CHANGELOG.md) for what's in each version. Everyone taking part follows the
+[code of conduct](CODE_OF_CONDUCT.md). Please report security problems privately as described in
+[SECURITY.md](SECURITY.md).
 
 ## License
 

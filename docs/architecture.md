@@ -35,6 +35,7 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
 README.md, LICENSE                 what it is, install, use; MIT
 CHANGELOG.md                       what each version contains
 CONTRIBUTING.md, SECURITY.md       how to build and check changes; how to report security problems
+CODE_OF_CONDUCT.md                 the Contributor Covenant 2.1; reports go privately to the maintainer
 package.json, package-lock.json   npm scripts (verify, icons, dev); all JS tooling is local
 tsconfig.json                      strict TS for ui/, scripts/, tests/, config files
 vite.config.mts                    UI build: root ui/, output dist/ (embedded into the binary)
@@ -167,6 +168,8 @@ ui/settings/sites-logic.ts         General's "Phone or desktop per site": the us
                                    the built-in ones, Remove / Reset, the draft (pure, unit-tested)
 ui/settings/sites.ts               that list in the General tab; DOM glue only
 docs/extensions.md                 the extension authors' guide (experimental)
+docs/trademark-check.md            where to check that the name is free before a wider launch or a
+                                   store listing (a note for the owner, not legal advice)
 docs/upstream/                     reports drafted for other projects, for the owner to file:
                                    webkitgtk-2.50-fullscreen-abort.md (Ubuntu 22.04's WebKitGTK)
 docs/images/                       the README's screenshots, cropped from CI's macOS smoke run (its
@@ -408,6 +411,9 @@ tests/smoke/smoke-logic.mjs        its logic (plain JS, JSDoc-typed, unit-tested
 tests/smoke/ext-probe.mjs          the smoke page's ?ext=probe: a web page trying an extension's
                                    API, files and panel (unit-tested)
 .github/workflows/ci.yml           verify on ubuntu-24.04, windows-latest, macos-latest; package; smoke
+.github/ISSUE_TEMPLATE/            issue forms: bug report, feature request; config.yml turns blank
+                                   issues off and links private vulnerability reporting
+.github/pull_request_template.md   what and why, how it was tested, the checklist
 ```
 
 ## Lifecycle

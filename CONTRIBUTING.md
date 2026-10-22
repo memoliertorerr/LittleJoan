@@ -1,7 +1,12 @@
 # Contributing to Little Joan
 
 Thanks for helping. Little Joan is small on purpose — it should stay light at rest and minimal
-on screen — so please open an issue to talk about a feature before building it.
+on screen — so please open an issue to talk about a feature before building it. The
+[new-issue page](https://github.com/memoliertorerr/LittleJoan/issues/new/choose) has a form for
+bug reports and one for feature requests (`.github/ISSUE_TEMPLATE/`).
+
+Everyone taking part — in issues, pull requests, and reviews — follows the
+[code of conduct](CODE_OF_CONDUCT.md) (the Contributor Covenant 2.1).
 
 ## Build and check
 
@@ -43,7 +48,10 @@ one and drives the installed app (`scripts/ci/smoke.mts`). A pull request needs 
 
 One logical change per commit, with a message that says what changed and why. Open the pull
 request against `main` unless a maintainer asks otherwise, and describe how you checked it —
-including anything that needs a real desktop to try.
+including anything that needs a real desktop to try. The pull request template
+(`.github/pull_request_template.md`) asks for that and has a short checklist: no AI-attribution
+lines in commits or the description, docs updated, a `CHANGELOG.md` entry under `[Unreleased]`
+for anything users will notice, and screenshots for anything that changes how it looks.
 
 ## Reporting a security problem
 
