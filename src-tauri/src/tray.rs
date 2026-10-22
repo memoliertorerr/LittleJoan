@@ -18,6 +18,7 @@ use crate::settings_window;
 use crate::shortcut::backend::{self, PortalState};
 use crate::smoke;
 use crate::state;
+use crate::summon_timing::Source;
 use crate::toggle::Command;
 use crate::welcome;
 
@@ -78,7 +79,7 @@ pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            OPEN_ID => joan::dispatch(app, Command::Show(None)),
+            OPEN_ID => joan::dispatch(app, Command::Show(None), Source::Tray),
             TRANSLATE_ID => page_actions::perform(app, PageAction::Translate),
             OPEN_IN_BROWSER_ID => page_actions::perform(app, PageAction::OpenInBrowser),
             SETTINGS_ID => settings_window::open(app, None),

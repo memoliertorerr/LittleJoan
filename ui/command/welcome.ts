@@ -25,6 +25,8 @@ export interface StartInfo {
   portalShortcut: PortalShortcut | null;
   /** The theme (settings.json's `theme`), applied as the bar loads. */
   theme: Theme;
+  /** Smoke tests only: the bar reports its part of the summon's timing (LJ19.1). */
+  timing?: boolean;
 }
 
 /** A sentence with one part in monospace: a key combination or a command. */

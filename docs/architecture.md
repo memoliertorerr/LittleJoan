@@ -86,6 +86,9 @@ ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above 
 ui/bar-boot.ts                     the bar's first paint: the theme of its initialization script,
                                    applied before anything awaits; start_info's only if it differs
                                    (pure part unit-tested)
+ui/bar-timing.ts                   smoke tests only (start_info's `timing`): when the bar painted its
+                                   first frame and the command bar its first rows, reported once
+                                   each as "this long ago" (report_timing; unit-tested, LJ19.1)
 ui/bar-logic.ts                    the address field: never clobber an edit (unit-tested)
 ui/command/view-state.ts           the bar's two views (toolbar, overlay) and what Enter / Esc do
                                    in each (unit-tested)
@@ -182,8 +185,8 @@ src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_
                                    history_remove, history_clear, open_settings, start_info,
                                    set_start_at_login, set_theme_tokens, extensions_list,
                                    open_extension, site_mode_info, set_site_mode, quit_app,
-                                   quick_state, quick_command, keymap_info, reveal_download; drag
-                                   the window
+                                   quick_state, quick_command, keymap_info, reveal_download,
+                                   report_timing; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, clear history, preview a theme, list / reload
                                    extensions, show their folder, close
@@ -263,6 +266,8 @@ src-tauri/src/phone/agent.rs       Windows' phone agent with client hints: CDP
 src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the built-in sites for
                                    Settings
 src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan")
+src-tauri/src/commands/timing.rs   the bar: report_timing (its first frame, the command bar's rows;
+                                   smoke tests only, LJ19.1)
 src-tauri/src/commands/downloads.rs  the bar: reveal_download (the toolbar's "Show in folder")
 src-tauri/src/commands/keys.rs     the bar and Settings: keymap_info; the portal's shortcut as they
                                    show it (PortalShortcut)
@@ -300,6 +305,9 @@ src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on 
                                    (`SettingsTab`, tested), open on a tab or switch an open one,
                                    links to the default browser
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
+src-tauri/src/summon_timing.rs     smoke mode only: a summon's marks from the request to the command
+                                   bar on screen, one `summon-timing` line per summon (pure part
+                                   tested, LJ19.1)
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen;
                                    WebKitFullscreen (WKWebView's fullscreenState);
                                    needs_fullscreen_off (WebKitGTK older than 2.52; tested)
@@ -393,6 +401,9 @@ scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a se
 scripts/ci/smoke-downloads.mts     CI: the downloads run (two attachments, one refused while a
                                    panel shows, the window closed during a slow one) and its rules;
                                    unit-tested
+scripts/ci/smoke-timing.mts        CI: the summon-timing run (first, warm, idle, cold after the file
+                                   cache was emptied, the real shortcut; timing.md), its rules and
+                                   ceilings; unit-tested (LJ19.1)
 scripts/ci/smoke-zoom.mts          CI: the main run's zoom check (Ctrl+= narrows the page's viewport,
                                    Ctrl+0 brings it back) and its rules; unit-tested
 scripts/ci/smoke-linux.mts         CI: which process is the app on Linux (under gdb, in the
@@ -1290,7 +1301,12 @@ when the window closed) / `download-deciders-removed <n>` (Linux: wry's handlers
 download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't the page's) /
 `download-noted` / `download-cancelled <n>` (macOS: a WKDownload noted; cancelled on close),
 `zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
-(Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1). Without
+(Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
+`summon-timing {"source":…,"url":…,"at":<unix ms>,"partial":…,"marks":{…}}` (LJ19.1: one line per
+summon that built the window, each mark in ms after the request on the monotonic clock —
+`dispatched`, `windowBuilt`, `historyLoaded`, `webviewsAdded`, `cookiesRestored`, `agentSet`,
+`shown`, `created`, `barLoaded`, `barScript`, `barReady`, `barPainted`, then `commandBar`, or with a
+URL `pageStarted`; `partial` when the window closed first; summon_timing.rs). Without
 the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
@@ -1567,7 +1583,20 @@ and pushes to `main`:
   (`settings-general-tray.png`); and on Linux a launch with `XDG_SESSION_TYPE=wayland` in its
   environment (still Xvfb's X11 underneath, but a Wayland session to Little Joan, where the X11
   shortcut can't fire) must log `tray-visible true` despite the setting (logs `smoke-tray.log`,
-  `smoke-tray-settings.log`, `smoke-tray-wayland.log`; `summary.json`'s `trayRun`). Last comes the
+  `smoke-tray-settings.log`, `smoke-tray-wayland.log`; `summary.json`'s `trayRun`). Then the
+  **summon-timing run** (`smoke-timing.mts`, LJ19.1), its own launch — without gdb on Linux, which
+  slows every thread and library the app starts — on a data folder holding a 3,000-page
+  `history.json` (300 sites under `.test`, which never resolve): the first summon after the launch,
+  three warm ones 3 s apart, one through the real global shortcut (xdotool's XTEST, SendKeys, a
+  CGEvent; best effort), one after 60 s of quiet, one after the OS's file cache was emptied (macOS
+  `sudo -n purge`, Linux `drop_caches`; Windows has no such command, so a 180 s gap), the same with
+  `--show <url>`, the shortcut again after an eviction and 60 s, and a warm `--show <url>`. Every
+  forwarded summon must log a complete `summon-timing` line with every mark, the native marks in
+  order, ready (the command bar's rows; with a URL the later of the bar's frame and the page's
+  start) under its ceiling; the shortcut summons count only when the key arrived (`sent→request`
+  is the key's latency to the app). The table goes into `timing.md` and the job's summary (log
+  `smoke-timing.log`, `summary.json`'s `timingRun`; the main run's own lines are its
+  `mainRunTimings`). Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs

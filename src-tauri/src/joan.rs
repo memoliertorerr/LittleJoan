@@ -22,6 +22,7 @@ use crate::platform;
 use crate::settings::{self, MIN_HEIGHT, MIN_WIDTH};
 use crate::smoke;
 use crate::state;
+use crate::summon_timing::{self, Mark, Request, Source};
 use crate::toggle::{self, Action, Command, WindowState};
 use crate::tray;
 
@@ -33,19 +34,30 @@ static LIFECYCLE: Mutex<()> = Mutex::new(());
 /// Last fullscreen state seen, for the smoke log only.
 static WAS_FULLSCREEN: AtomicBool = AtomicBool::new(false);
 
-/// Handles `command` off the main thread. Building webviews from the main thread can deadlock
-/// on Windows, and shortcut / single-instance / menu callbacks may run there.
-pub fn dispatch<R: Runtime>(app: &AppHandle<R>, command: Command) {
+/// Handles `command`, which came from `source`, off the main thread. Building webviews from the
+/// main thread can deadlock on Windows, and shortcut / single-instance / menu callbacks may run
+/// there. The request's time is taken first, for the smoke log's summon timing (LJ19.1).
+pub fn dispatch<R: Runtime>(app: &AppHandle<R>, command: Command, source: Source) {
+    let request = Request::now(source);
     let app = app.clone();
-    tauri::async_runtime::spawn(async move { handle(&app, command) });
+    tauri::async_runtime::spawn(async move { run(&app, command, Some(request)) });
 }
 
 /// Applies `command` to the current window state. Must not run on the main thread.
 pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
+    run(app, command, None);
+}
+
+fn run<R: Runtime>(app: &AppHandle<R>, command: Command, request: Option<Request>) {
     let _lifecycle = LIFECYCLE.lock().unwrap_or_else(PoisonError::into_inner);
     let action = toggle::decide(window_state(app), command);
     let result = match action {
-        Action::Create(url) => create(app, url),
+        Action::Create(url) => {
+            if let Some(request) = request {
+                summon_timing::begin(request, url.is_some());
+            }
+            create(app, url)
+        }
         Action::Focus => focus(app),
         Action::FocusAndNavigate(url) => focus(app).and_then(|()| bar::navigate(app, url)),
         Action::CreateExtension(id) => {
@@ -154,6 +166,7 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
         .resizable(true)
         .visible(false)
         .build()?;
+    summon_timing::mark(Mark::WindowBuilt);
     WAS_FULLSCREEN.store(false, Ordering::Relaxed);
     // A new window has no extension open yet.
     extensions::session::reset();
@@ -162,18 +175,23 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
     // default) handle it themselves. See fullscreen.rs; the bar hides meanwhile (bar.rs).
     // History first: the command bar asks for suggestions as soon as it loads.
     history_store::open(app);
+    summon_timing::mark(Mark::HistoryLoaded);
     if let Err(err) = bar::add_webviews(&window, width, height, webview_data_dir) {
         history_store::close(app);
         let _ = window.destroy();
         return Err(err);
     }
+    summon_timing::mark(Mark::WebviewsAdded);
     restore_session_cookies(app);
+    summon_timing::mark(Mark::CookiesRestored);
     // Phone or desktop user agent for this width, before any web page loads (phone_mode.rs).
     phone_mode::reset();
     phone_mode::apply(app, false);
+    summon_timing::mark(Mark::AgentSet);
     placement::place(app, &window, width, height);
     window.show()?;
     window.set_focus()?;
+    summon_timing::mark(Mark::Shown);
     bar::apply_layout(&window);
     // The window was built with the command bar open (bar.rs); this puts the keyboard in it.
     bar::focus_bar(app);
@@ -182,6 +200,7 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
     if let Some(url) = url {
         bar::navigate(app, url)?;
     }
+    summon_timing::mark(Mark::Created);
     bar::watch_url(app);
     // CI only (smoke log): WebKit's fullscreen state on macOS (LJ36).
     platform::watch_webkit_fullscreen(app);
@@ -337,10 +356,12 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
             // The close button, Cmd+W / Alt+F4: hibernate through the same path as the
             // shortcut (remember the size, release the page, destroy).
             api.prevent_close();
-            dispatch(window.app_handle(), Command::Hide);
+            dispatch(window.app_handle(), Command::Hide, Source::App);
         }
         WindowEvent::Destroyed => {
             tray::set_page_items_enabled(window.app_handle(), false);
+            // A summon still waiting for its last mark is logged as it got (LJ19.1).
+            summon_timing::end();
             smoke::log("hibernated", "");
         }
         WindowEvent::Resized(size) => {

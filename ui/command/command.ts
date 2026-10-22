@@ -42,7 +42,8 @@ export interface CommandBar {
 
 /**
  * `shown` gives the open page's address ("" = none); `showHistory` switches to the history view;
- * `site` gives what the open web page's site is on (Rust's info, for "Request desktop site" & co).
+ * `site` gives what the open web page's site is on (Rust's info, for "Request desktop site" & co);
+ * `onRows` runs each time rows from an answer are drawn (the summon's timing, LJ19.1).
  */
 export function commandBar(
   field: HTMLInputElement,
@@ -50,6 +51,7 @@ export function commandBar(
   shown: () => string,
   showHistory: () => void,
   site: () => SiteModeInfo | null = () => null,
+  onRows: () => void = () => undefined,
 ): CommandBar {
   let rows: RowList = EMPTY;
   let selected: number | null = null;
@@ -148,6 +150,7 @@ export function commandBar(
     }
     document.body.classList.toggle("typing", query.trim() !== "");
     draw();
+    onRows();
   };
 
   const ask = (query: string): void => {

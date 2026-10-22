@@ -13,6 +13,7 @@ use crate::joan;
 use crate::settings::DEFAULT_SHORTCUT;
 use crate::smoke;
 use crate::state;
+use crate::summon_timing::Source;
 use crate::toggle::Command;
 use crate::welcome;
 use backend::{Backend, PortalState};
@@ -22,7 +23,7 @@ pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
-                joan::dispatch(app, Command::Toggle);
+                joan::dispatch(app, Command::Toggle, Source::Shortcut);
             }
         })
         .build()
@@ -224,7 +225,7 @@ pub fn portal_answered<R: Runtime>(app: &AppHandle<R>, portal: PortalState) {
     });
     crate::tray::apply_visibility(app);
     if welcome {
-        joan::dispatch(app, Command::Show(None));
+        joan::dispatch(app, Command::Show(None), Source::Launch);
     }
 }
 

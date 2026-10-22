@@ -26,6 +26,7 @@ use crate::shortcut::{self, PluginRegistrar};
 use crate::smoke;
 use crate::state;
 use crate::suggest::Suggestion;
+use crate::summon_timing::{self, Mark};
 use crate::toggle::Command;
 use crate::translate::LANGUAGES;
 use crate::welcome;
@@ -41,6 +42,8 @@ pub mod keys;
 pub mod quick;
 /// Phone or desktop per site (LJ40): `site_mode_info`, `set_site_mode`.
 pub mod site;
+/// The bar's part of a summon's timing, in smoke tests (LJ19.1): `report_timing`.
+pub mod timing;
 
 /// Opens what the user typed in the URL bar in the page: a web address, or a search with the
 /// configured engine. The keyboard then moves to the page.
@@ -123,6 +126,9 @@ pub struct StartInfo {
     portal_shortcut: Option<PortalShortcut>,
     /// The theme, which the bar applies as it loads (ui/lib/theme.ts makes the colors).
     theme: Theme,
+    /// Smoke tests only: the bar reports its part of the summon's timing (`report_timing`,
+    /// LJ19.1). Never in normal use.
+    timing: bool,
 }
 
 /// What the bar needs as it loads: the theme, and for the command bar's welcome on the first
@@ -142,6 +148,7 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
     }
     // The bar's first call: its script runs, so a panel waiting to open may (bar/boot.rs).
     bar::mark_ready();
+    summon_timing::mark(Mark::BarReady);
     smoke::log("theme", &theme_summary(&theme));
     // The bar's script is running now: make sure it knows its view (bar::tell_state).
     bar::tell_state(&app);
@@ -154,6 +161,7 @@ pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
         wayland_no_shortcut: shortcut::backend_now(&app).toggle_hint(),
         portal_shortcut: PortalShortcut::from_state(&portal),
         theme,
+        timing: smoke::enabled(),
     }
 }
 
@@ -389,6 +397,8 @@ pub async fn set_theme_tokens<R: Runtime>(app: AppHandle<R>, tokens: Value, earl
                 && let Some(theme) = bar::early_theme()
             {
                 smoke::log("theme-early", &theme_summary(&theme));
+                // The bar's script runs: its first report (LJ19.1).
+                summon_timing::mark(Mark::BarScript);
             }
         }
         None => eprintln!("little-joan: the bar's theme report didn't pass the checks"),

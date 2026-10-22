@@ -13,9 +13,11 @@
 // "Desktop" pill and the command bar's "Request desktop site" rows, LJ40), and
 // window.littleJoan.setStatus what just happened (the toolbar's status area: downloads, LJ15).
 // Before all of that, at the top: the theme Rust's initialization script left (bar-boot.ts), so
-// the first frame isn't the default theme.
+// the first frame isn't the default theme. In smoke tests the bar also says when its first frame
+// and the command bar's first rows were painted (bar-timing.ts, LJ19.1).
 import { invoke } from "@tauri-apps/api/core";
 import { bootTheme, needsTheme } from "./bar-boot.ts";
+import { afterPaint, timingReporter, type TimingMark } from "./bar-timing.ts";
 import { mayReplace, textFor } from "./bar-logic.ts";
 import { commandBar } from "./command/command.ts";
 import { fillPanel } from "./command/panel.ts";
@@ -72,6 +74,22 @@ const early = bootTheme(window.__littleJoanTheme, (theme) => {
   applyTheme(theme, reportTheme);
 });
 
+/** The summon's timing (smoke tests only: start_info says so): this bar's first frame, the rows. */
+const timing = timingReporter(
+  (mark, ago) => {
+    invoke("report_timing", { mark, ago }).catch(() => undefined);
+  },
+  () => performance.now(),
+);
+const markAfterPaint = (mark: TimingMark): void =>
+  afterPaint(
+    () => timing.saw(mark, performance.now()),
+    (callback) => requestAnimationFrame(() => callback()),
+    (callback) => setTimeout(callback, 0),
+  );
+// The frame after this script's first run: the theme and the view are on it.
+markAfterPaint("painted");
+
 // macOS: the traffic lights sit in the bar's top left corner (style.css leaves room for them).
 document.documentElement.classList.toggle("os-macos", isMac(navigator.userAgent));
 
@@ -115,7 +133,13 @@ if (field && rowList && toolbarRoot && historyRoot) {
     field.select();
   };
 
-  const command = commandBar(field, rowList, () => state.shown, showHistory, () => siteInfo);
+  let rowsMarked = false;
+  const command = commandBar(field, rowList, () => state.shown, showHistory, () => siteInfo, () => {
+    if (!rowsMarked && state.view === "overlay") {
+      rowsMarked = true;
+      markAfterPaint("commandBar");
+    }
+  });
   const historyPanel = historyView(historyRoot, showCommand);
   const tools = toolbar(toolbarRoot);
 
@@ -263,10 +287,12 @@ if (field && rowList && toolbarRoot && historyRoot) {
       if (needsTheme(early, info.theme)) {
         applyTheme(info.theme, reportTheme);
       }
+      timing.enable(info.timing === true);
       fillPanel(info);
     })
     .catch(() => {
       // Without the facts there is no welcome and the default theme stays; the bar works the same.
+      timing.enable(false);
     });
   invoke<string | null>("page_url")
     .then(setUrl)

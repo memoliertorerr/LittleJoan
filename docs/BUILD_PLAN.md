@@ -87,6 +87,7 @@
 | LJ18 | *(v0.2)* macOS Developer ID signing and notarization in CI (runs only if the owner's secrets exist; else ⏭ skipped and recorded) | strong | auto | ⏭ skipped — no Apple signing secrets on 2026-10-19; runs when the owner adds them (LJ18's pre-step) |
 | LJ18.1 | *(added mid-plan 2026-10-19)* Linux ARM64 builds: an `arm64` `.deb` (ubuntu-22.04-arm) and an `aarch64` AppImage (ubuntu-24.04-arm), smoke-tested on ARM runners like their x86_64 twins | strong | auto | ✅ done |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ⬜ prepared — the release PR (`lj/release-0.2.0`: version 0.2.0, CHANGELOG, README; the owner's checklist) is merged once green; waiting for the owner's check; tag and release only on their word |
+| LJ19.1 | *(added mid-plan 2026-10-22)* Faster first summon after idle: summon timing in the smoke log, measured per OS (first, warm, idle, cold-after-eviction, the real shortcut), then the summon path optimized where the numbers point; loose CI ceilings | strong | auto | ⬜ in progress — measuring (`lj/p11-summon-speed`) |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -3561,6 +3562,80 @@ then stop. Don't start phase 21 until the owner says go.
   merge commit; (2) Ubuntu 22.04 ARM in Parallels, with the arm64 `.deb`; (3) other systems,
   optional — marked "(CI: done)" only where a smoke rule proves the item on every job of its kind.
 - `npm run verify`: 628 TS tests, 376 Rust tests, clippy clean (no code changed).
+
+### LJ19.1 — Faster first summon after idle · strong · auto
+
+> **Added mid-plan 2026-10-22** — the owner's report: "after a while, startup is kinda slow; after
+> that it becomes fast again; maybe it's my hardware, but see if you can optimize." Read as: the
+> FIRST summon after Little Joan has hibernated for a while is slow, later ones are fast. Branch
+> `lj/p11-summon-speed` from the latest `main`; the PR goes into `main`, and the agent merges it
+> once every job is green (Ground Rule 24). v0.2.0's tag still waits for the owner.
+
+**Verify:** `npm run verify` green, including Rust tests for `summon_timing.rs` (the marks, the
+JSON line, completeness with and without a URL, the bar's "ago" reports clamped to the request)
+and `commands/timing.rs` (only `painted` / `commandBar` are accepted), `capability_tests.rs`
+(only the bar may call `report_timing`), and vitest for `ui/bar-timing.ts` (nothing is sent
+outside smoke tests; each mark once; "ago", never in the future) and `scripts/ci/smoke-timing.mts`
+(parsing, the rules, the table, the seeded history). CI: every smoke job runs the **timing run**
+(its own launch, without gdb, on a data folder with a 3,000-page history.json): first, warm ×3,
+the real global shortcut, idle (60 s), cold (macOS `sudo purge`, Linux `drop_caches`; Windows a
+180 s gap), cold with a URL, cold through the shortcut after 60 s more, a warm URL — every
+forwarded summon must log a complete `summon-timing` line with every mark, the native marks in
+order, under the per-OS ceilings; the shortcut summons count only when the key arrived. The
+numbers are in each smoke job's summary (`timing.md`) and `summary.json`'s `timingRun`.
+**The first commit only measures** (generous ceilings, no change to the summon path), so CI shows
+where the time goes before anything changes. **The fix commit (`lj-step-19.1-fix`)** changes the
+summon path where the numbers point and sets the ceilings from them, with headroom.
+**Commit:** `lj-step-19.1: summon timing in the smoke log; a timing run in CI (first, warm, idle, cold)`, then `lj-step-19.1-fix: <what the numbers pointed at>`
+
+```text
+The owner's report (2026-10-22): "after a while, startup is kinda slow; after that it becomes fast
+again; maybe it's my hardware, but see if you can optimize." The first summon after Little Joan
+has been idle for a while is slow; later summons are fast. Candidates (measure, don't assume):
+macOS paging out the app / WebKit while idle, App Nap on the idle accessory app, WebKit's (or
+WebView2's) processes starting at every summon — hibernation destroys the webviews, which stays —
+and our own work on the summon path (settings, history.json, the theme script, the extension
+registry, siteModes, Windows' cookie restore and DevTools agent, favicons, anything on the main
+thread before the window shows).
+
+1. MEASURE FIRST. Timing marks along the summon path (monotonic ms after the request): window
+   built, webviews added, window shown, the bar loaded, its first frame, the command bar's rows
+   (with a URL: the page's start). One `summon-timing <json>` line per summon, smoke mode only. In
+   CI on every OS: the first summon after launch, a warm one, and a "cold after idle" one (macOS
+   `sudo purge`, Linux `sync; echo 3 | sudo tee /proc/sys/vm/drop_caches`, Windows a long gap).
+   The numbers per OS go into these notes before any change.
+2. OPTIMIZE what the numbers point at, keeping every invariant: nothing alive at rest (no
+   pre-created or kept-alive webview), no IPC for joan-page, remote pages get no IPC or injected
+   scripts, the extension security model unchanged. Candidates: show the window as soon as the bar
+   can paint; move history / extension / siteModes loading and favicons off the critical path;
+   nothing blocking the main thread; no redundant Windows setup (DevTools agent, cookie restore)
+   before the window shows; whether App Nap delays the hotkey → window path on macOS (if so, a
+   short NSProcessInfo activity around the summon only — never a permanent one). Anything that
+   needs a design change (a warm webview) is an option for the owner, not done here.
+3. CI rules against regressions with generous limits from the measured numbers (logging plus a
+   loose ceiling, never a tight threshold).
+4. Docs: before / after numbers per OS in these notes; README only if user-visible; CHANGELOG
+   [Unreleased] → Changed; Deferred follow-ups for what was found but not done (an optional "stay
+   warm for N minutes" setting is the owner's call: it bends hibernation).
+```
+
+**Implementation notes (2026-10-22):**
+
+- **Disk:** 6.0 GiB free at the start of the step; `.cache/target` 1.2 GB.
+- **The marks** (`src-tauri/src/summon_timing.rs`): `joan::dispatch` takes the request's time and
+  where it came from (`Source`: shortcut, tray, cli, launch, app) before anything else runs; the
+  window code marks `dispatched` (it runs: off the main thread, after the lifecycle lock),
+  `windowBuilt`, `historyLoaded`, `webviewsAdded`, `cookiesRestored`, `agentSet`, `shown`,
+  `created`; the bar's load event `barLoaded`, its early theme report `barScript`, `start_info`
+  `barReady`; the page's `Started` for a web address `pageStarted`. Only the bar can see its first
+  frame and the command bar's rows: `ui/bar-timing.ts` notes them after a frame callback and a task
+  behind it, and — only when `start_info` says `timing` (smoke mode) — reports each once as "this
+  long ago" through a new bar-only command, `report_timing` (`painted` | `commandBar`, an `ago`
+  between 0 and 60 s), which Rust places on its own clock. In normal use nothing is measured,
+  kept, logged or sent.
+- **The timing run** (`scripts/ci/smoke-timing.mts`) is described under Verify; the shortcut is
+  pressed as a keyboard would (xdotool's XTEST on Linux, SendKeys on Windows, a CGEvent on macOS,
+  best effort) and its latency to the app's request mark is recorded (`sent→request`).
 
 ---
 
