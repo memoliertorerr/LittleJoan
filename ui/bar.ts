@@ -13,8 +13,9 @@
 // "Desktop" pill and the command bar's "Request desktop site" rows, LJ40), and
 // window.littleJoan.setStatus what just happened (the toolbar's status area: downloads, LJ15).
 // Before all of that, at the top: the theme Rust's initialization script left (bar-boot.ts), so
-// the first frame isn't the default theme. In smoke tests the bar also says when its first frame
-// and the command bar's first rows were painted (bar-timing.ts, LJ19.1).
+// the first frame isn't the default theme. In smoke tests the bar also says how its start went —
+// its navigation, this script, the first answers, its first frame and the command bar's first
+// rows (bar-timing.ts, LJ19.1).
 import { invoke } from "@tauri-apps/api/core";
 import { bootTheme, needsTheme } from "./bar-boot.ts";
 import { afterPaint, timingReporter, type TimingMark } from "./bar-timing.ts";
@@ -51,6 +52,32 @@ const closeButton = document.querySelector<HTMLButtonElement>("#close");
 const toolbarRoot = document.querySelector<HTMLElement>(".toolstrip");
 const historyRoot = document.querySelector<HTMLElement>("#history");
 
+/** The summon's timing (smoke tests only: start_info says so), reported once (bar-timing.ts). */
+const timing = timingReporter(
+  (marks) => {
+    invoke("report_timing", { marks }).catch(() => undefined);
+  },
+  () => performance.now(),
+);
+const markNow = (mark: TimingMark): void => timing.saw(mark, performance.now());
+const markAfterPaint = (mark: TimingMark, then: () => void = () => undefined): void =>
+  afterPaint(
+    () => {
+      markNow(mark);
+      then();
+    },
+    (callback) => requestAnimationFrame(() => callback()),
+    (callback) => setTimeout(callback, 0),
+  );
+// The engine's part: this page's navigation started at 0 on performance.now()'s clock, and its
+// HTML arrived at the navigation entry's responseEnd.
+timing.saw("navigation", 0);
+const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+if (navigation && navigation.responseEnd > 0) {
+  timing.saw("html", navigation.responseEnd);
+}
+markNow("module");
+
 /** The next theme report is the early theme's (the smoke log's `theme-early`, LJ38). */
 let reportEarly = false;
 /** That report, which start_info waits for, so the log keeps the order it happened in. */
@@ -64,7 +91,7 @@ const reportTheme = (tokens: ThemeTokens): void => {
     // Panels then wait for the next report; the bar itself is unaffected.
   });
   if (early) {
-    earlyReported = sent;
+    earlyReported = sent.then(() => markNow("themeAnswered"));
   }
 };
 
@@ -74,21 +101,11 @@ const early = bootTheme(window.__littleJoanTheme, (theme) => {
   applyTheme(theme, reportTheme);
 });
 
-/** The summon's timing (smoke tests only: start_info says so): this bar's first frame, the rows. */
-const timing = timingReporter(
-  (mark, ago) => {
-    invoke("report_timing", { mark, ago }).catch(() => undefined);
-  },
-  () => performance.now(),
-);
-const markAfterPaint = (mark: TimingMark): void =>
-  afterPaint(
-    () => timing.saw(mark, performance.now()),
-    (callback) => requestAnimationFrame(() => callback()),
-    (callback) => setTimeout(callback, 0),
-  );
-// The frame after this script's first run: the theme and the view are on it.
-markAfterPaint("painted");
+// The frame after this script's first run: the theme and the view are on it. A window that opened
+// on a page draws no rows, so the report goes now (or, if the command bar was still open, soon).
+markAfterPaint("painted", () => {
+  setTimeout(() => timing.flush(), document.body.classList.contains("toolbar") ? 0 : 3000);
+});
 
 // macOS: the traffic lights sit in the bar's top left corner (style.css leaves room for them).
 document.documentElement.classList.toggle("os-macos", isMac(navigator.userAgent));
@@ -137,6 +154,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
   const command = commandBar(field, rowList, () => state.shown, showHistory, () => siteInfo, () => {
     if (!rowsMarked && state.view === "overlay") {
       rowsMarked = true;
+      markNow("suggestions");
       markAfterPaint("commandBar");
     }
   });
@@ -284,6 +302,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
     .then(() => invoke<StartInfo>("start_info"))
     .then((info) => {
       // Again only when it differs: a preview may have changed it since the window was built.
+      markNow("startInfo");
       if (needsTheme(early, info.theme)) {
         applyTheme(info.theme, reportTheme);
       }
@@ -294,10 +313,18 @@ if (field && rowList && toolbarRoot && historyRoot) {
       // Without the facts there is no welcome and the default theme stays; the bar works the same.
       timing.enable(false);
     });
+  // The command bar's first rows at once: a new window shows the start page, which has no address
+  // (LJ19.1: one round trip less before them). An address — a summon with a URL, a bar that
+  // loaded again — starts the list over.
+  command.reset(state.view === "overlay");
   invoke<string | null>("page_url")
-    .then(setUrl)
-    .catch(() => setUrl(null))
-    .finally(() => command.reset(state.view === "overlay"));
+    .then((url) => {
+      setUrl(url);
+      if (url !== null) {
+        command.reset(state.view === "overlay");
+      }
+    })
+    .catch(() => setUrl(null));
   invoke<unknown>("site_mode_info")
     .then((info) => window.littleJoan?.setSiteMode(info))
     .catch(() => undefined);

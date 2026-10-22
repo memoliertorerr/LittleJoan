@@ -1,8 +1,9 @@
 // The smoke test's summon-timing run (LJ19.1) and its rules. The app logs one `summon-timing
 // <json>` line per summon that built the window (src-tauri/src/summon_timing.rs): milliseconds
-// from the request to each step — the window built, history loaded, the webviews added, the window
-// shown, the bar loaded, its script running, its first frame, the command bar's first rows (or,
-// with a URL, the web page started). This run measures, on its own launch (no gdb, so Linux's
+// from the request to each step — the window built, the webviews added, the window shown, history
+// loaded (on its own thread), the bar's navigation, load, script and first answers, its first
+// frame, the command bar's first rows (or, with a URL, the web page started) — and on macOS App
+// Nap's state at the request (`nap`). This run measures, on its own launch (no gdb, so Linux's
 // numbers aren't gdb's) with a seeded history of HISTORY_SEED pages:
 //   first           the first summon after the launch
 //   warm ×3         a summon a few seconds after the last one closed
@@ -15,10 +16,10 @@
 //   cold-shortcut   evicted, IDLE_MS of quiet, then the global shortcut (best effort)
 //   url             a warm `--show <url>`
 // Each CLI summon (forwarded `--show`) must log a complete line with every mark; the shortcut
-// ones count only when the key arrived. The ceilings are loose on purpose (CI runners vary a
-// lot): they catch a summon that got much slower, not a few hundred milliseconds. The numbers
-// go into summary.json, timing.md and the job's summary. Pure parts unit-tested
-// (smoke-timing.test.ts); smoke.mts supplies the driver.
+// ones count only when the key arrived. The ceilings (CEILINGS, per OS, from LJ19.1's numbers)
+// are loose on purpose — CI runners vary a lot —: they catch a summon that got several times
+// slower, not a few hundred milliseconds. The numbers go into summary.json, timing.md and the
+// job's summary. Pure parts unit-tested (smoke-timing.test.ts); smoke.mts supplies the driver.
 import type { LogEvent } from "./smoke-log.mts";
 import type { SiteApp } from "./smoke-sitemode.mts";
 
@@ -28,15 +29,17 @@ export interface SummonTiming {
   url: boolean;
   /** The request's unix ms (the app's wall clock). */
   at: number;
+  /** macOS: App Nap's state at the request (`active=<0|1> lowpri= timer= disk=`), else null. */
+  nap: string | null;
   partial: boolean;
   /** Milliseconds after the request, per mark. */
   marks: Record<string, number>;
 }
 
-/** The marks every summon has, in order (the native steps run one after another). */
-export const NATIVE_MARKS = ["dispatched", "windowBuilt", "historyLoaded", "webviewsAdded", "cookiesRestored", "agentSet", "shown", "created"] as const;
-/** The bar's marks every summon has. */
-export const BAR_MARKS = ["barLoaded", "barScript", "barReady", "barPainted"] as const;
+/** The marks every summon has, in order (the window code runs them one after another). */
+export const NATIVE_MARKS = ["dispatched", "windowBuilt", "webviewsAdded", "shown", "cookiesRestored", "agentSet", "created"] as const;
+/** The other marks every summon has (history loads on its own thread; the bar's in its own order). */
+export const BAR_MARKS = ["historyLoaded", "barLoaded", "barScript", "barReady", "barPainted"] as const;
 
 /** A `summon-timing` line's JSON, or undefined when it isn't one. */
 export function parseTiming(detail: string): SummonTiming | undefined {
@@ -51,7 +54,14 @@ export function parseTiming(detail: string): SummonTiming | undefined {
         marks[name] = ms;
       }
     }
-    return { source: value.source, url: value.url, at: typeof value.at === "number" ? value.at : 0, partial: value.partial === true, marks };
+    return {
+      source: value.source,
+      url: value.url,
+      at: typeof value.at === "number" ? value.at : 0,
+      nap: typeof value.nap === "string" ? value.nap : null,
+      partial: value.partial === true,
+      marks,
+    };
   } catch {
     return undefined;
   }
@@ -97,13 +107,23 @@ export interface Ceilings {
   cold: number;
 }
 
-/** Until LJ19.1's measurements set them per OS: only a summon that is plainly broken fails. */
+/**
+ * Per OS (process.platform), several times what LJ19.1 measured on CI's runners before its changes
+ * (ready, ms — first / warm / cold): Linux 280–500 / 210–390 / 330–730, macOS 2,740 / 2,520–2,600
+ * / 4,870–5,450 (CI's macOS VMs are slow to start WebKit), Windows 965 / 820–920 / 770–830.
+ */
+export const CEILINGS: Record<string, Ceilings> = {
+  linux: { warm: 2000, first: 3000, cold: 5000 },
+  darwin: { warm: 8000, first: 10_000, cold: 15_000 },
+  win32: { warm: 4000, first: 5000, cold: 6000 },
+};
+
+/** Anywhere else: only a summon that is plainly broken fails. */
 export const DEFAULT_CEILINGS: Ceilings = { warm: 15_000, first: 20_000, cold: 30_000 };
 
 /** The ceilings for `os` (process.platform). */
 export function ceilingsFor(os: string): Ceilings {
-  void os;
-  return DEFAULT_CEILINGS;
+  return CEILINGS[os] ?? DEFAULT_CEILINGS;
 }
 
 function ceilingOf(kind: Kind, ceilings: Ceilings): number {
@@ -169,14 +189,29 @@ export function summaryRow(m: Measured) {
     // The key (or the forwarding launch) to the app's request mark, both wall clocks.
     sentToRequestMs: t && m.sentAt !== null ? t.at - m.sentAt : null,
     readyMs: t ? (readyMs(t) ?? null) : null,
+    nap: t?.nap ?? null,
     marks: t?.marks ?? null,
     partial: t?.partial ?? null,
   };
 }
 
-const TABLE_MARKS = ["windowBuilt", "historyLoaded", "webviewsAdded", "agentSet", "shown", "barLoaded", "barScript", "barReady", "barPainted", "commandBar", "pageStarted"];
+const TABLE_MARKS = [
+  "windowBuilt",
+  "webviewsAdded",
+  "shown",
+  "agentSet",
+  "historyLoaded",
+  "barNavigation",
+  "barLoaded",
+  "barModule",
+  "barReady",
+  "barPainted",
+  "barSuggestions",
+  "commandBar",
+  "pageStarted",
+];
 
-/** A Markdown table of the run (timing.md and the job's summary). */
+/** A Markdown table of the run (timing.md and the job's summary); App Nap's state below it. */
 export function timingTable(run: Measured[], os: string): string {
   const head = ["summon", "trigger", "sent→request", ...TABLE_MARKS, "ready"];
   const lines = [
@@ -195,6 +230,13 @@ export function timingTable(run: Measured[], os: string): string {
       row.reached ? String(row.readyMs ?? "–") : "not reached",
     ];
     lines.push(`| ${cells.join(" | ")} |`);
+  }
+  const naps = run.filter((m) => m.timing?.nap);
+  if (naps.length > 0) {
+    lines.push("", "App Nap at the request (macOS, the task's suppression policy):", "");
+    for (const m of naps) {
+      lines.push(`- ${m.kind}: ${m.timing?.nap ?? ""}`);
+    }
   }
   return `${lines.join("\n")}\n`;
 }

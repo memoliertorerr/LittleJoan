@@ -6,6 +6,14 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **Summons faster, also after Little Joan has been idle for a while.** The window now appears
+  before Windows' web engine has finished its setup for web pages, the command bar asks for its
+  suggestions straight away, and history no longer has to be read before the window can be built
+  (it loads alongside). On macOS a summon is kept out of App Nap until the window is up — an idle,
+  windowless Little Joan may be napping just when the first summon after a while has the most to
+  read back from disk. Nothing more is kept running while Little Joan hibernates.
+
 ## [0.2.0] — 2026-10-19
 
 The second version. It includes everything in the three pre-releases below, 0.2.0-beta.1 to

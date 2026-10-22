@@ -51,6 +51,11 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
 fn run<R: Runtime>(app: &AppHandle<R>, command: Command, request: Option<Request>) {
     let _lifecycle = LIFECYCLE.lock().unwrap_or_else(PoisonError::into_inner);
     let action = toggle::decide(window_state(app), command);
+    // macOS: App Nap stays off while a summon builds the window (LJ19.1); it ends with this
+    // function, once the window is up and focused. Nothing is held at rest.
+    let _awake = matches!(action, Action::Create(_) | Action::CreateExtension(_))
+        .then(platform::summon_activity)
+        .flatten();
     let result = match action {
         Action::Create(url) => {
             if let Some(request) = request {
@@ -173,21 +178,17 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
     // Element fullscreen (video): WebView2 needs platform::install_page's handler; WKWebView
     // (wry enables elementFullscreenEnabled) and WebKitGTK (fullscreens the toplevel by
     // default) handle it themselves. See fullscreen.rs; the bar hides meanwhile (bar.rs).
-    // History first: the command bar asks for suggestions as soon as it loads.
+    // History loads on its own thread meanwhile (LJ19.1); the command bar's first suggestions,
+    // and every other use of it, wait for that.
     history_store::open(app);
-    summon_timing::mark(Mark::HistoryLoaded);
+    // The page's user agent starts unknown in a new window (set below, before any web page).
+    phone_mode::reset();
     if let Err(err) = bar::add_webviews(&window, width, height, webview_data_dir) {
         history_store::close(app);
         let _ = window.destroy();
         return Err(err);
     }
     summon_timing::mark(Mark::WebviewsAdded);
-    restore_session_cookies(app);
-    summon_timing::mark(Mark::CookiesRestored);
-    // Phone or desktop user agent for this width, before any web page loads (phone_mode.rs).
-    phone_mode::reset();
-    phone_mode::apply(app, false);
-    summon_timing::mark(Mark::AgentSet);
     placement::place(app, &window, width, height);
     window.show()?;
     window.set_focus()?;
@@ -197,6 +198,14 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
     bar::focus_bar(app);
     smoke::log("window-created", "");
     bar::log_overlay();
+    // Once the window is on screen, and still before any web page loads (the start page under
+    // the command bar needs neither): the kept session cookies (Windows) and the page's user
+    // agent for its width (phone_mode.rs). On Windows both wait for WebView2, which kept the
+    // window hidden some 50 ms longer before LJ19.1.
+    restore_session_cookies(app);
+    summon_timing::mark(Mark::CookiesRestored);
+    phone_mode::apply(app, false);
+    summon_timing::mark(Mark::AgentSet);
     if let Some(url) = url {
         bar::navigate(app, url)?;
     }

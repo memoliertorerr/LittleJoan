@@ -86,9 +86,10 @@ ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above 
 ui/bar-boot.ts                     the bar's first paint: the theme of its initialization script,
                                    applied before anything awaits; start_info's only if it differs
                                    (pure part unit-tested)
-ui/bar-timing.ts                   smoke tests only (start_info's `timing`): when the bar painted its
-                                   first frame and the command bar its first rows, reported once
-                                   each as "this long ago" (report_timing; unit-tested, LJ19.1)
+ui/bar-timing.ts                   smoke tests only (start_info's `timing`): how the bar's start
+                                   went — its navigation, HTML, script, first answers, first frame,
+                                   the command bar's first rows —, reported once, at the end, as
+                                   "this long ago" (report_timing; unit-tested, LJ19.1)
 ui/bar-logic.ts                    the address field: never clobber an edit (unit-tested)
 ui/command/view-state.ts           the bar's two views (toolbar, overlay) and what Enter / Esc do
                                    in each (unit-tested)
@@ -204,7 +205,8 @@ src-tauri/src/history.rs           history: what is recorded, frecency, top site
 src-tauri/src/history/manage.rs    the history view's list (latest visit first) and "Clear
                                    history" by range: hour, day, week, all (pure, tested)
 src-tauri/src/history_store.rs     history.json on disk and in AppState while the window exists:
-                                   load, record (page load / title events), autosave, atomic save,
+                                   load (on its own thread, waited for by every use), record (page
+                                   load / title events), autosave, atomic save,
                                    remove one and clear a range (both rewrite the file at once,
                                    with no window straight on disk), the list, the suggestions
 src-tauri/src/suggest.rs           what the command bar suggests: top sites or the starters,
@@ -266,8 +268,8 @@ src-tauri/src/phone/agent.rs       Windows' phone agent with client hints: CDP
 src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the built-in sites for
                                    Settings
 src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan")
-src-tauri/src/commands/timing.rs   the bar: report_timing (its first frame, the command bar's rows;
-                                   smoke tests only, LJ19.1)
+src-tauri/src/commands/timing.rs   the bar: report_timing (its start's marks; smoke tests only,
+                                   LJ19.1)
 src-tauri/src/commands/downloads.rs  the bar: reveal_download (the toolbar's "Show in folder")
 src-tauri/src/commands/keys.rs     the bar and Settings: keymap_info; the portal's shortcut as they
                                    show it (PortalShortcut)
@@ -337,6 +339,9 @@ src-tauri/src/platform/linux.rs    Linux: GTK window key-press-event → keys.rs
                                    older than 2.52 (the runtime version)
 src-tauri/src/platform/linux/downloads.rs  Linux: the page's downloads through WebKitGTK itself (an
                                    emission hook on decide-destination), cancelled on close
+src-tauri/src/platform/mac/activity.rs     macOS: a summon's NSProcessInfo activity (App Nap off
+                                   until the window is up; never at rest) and, for the smoke log,
+                                   App Nap's state (the task's suppression policy) (LJ19.1)
 src-tauri/src/platform/mac/downloads.rs    macOS: the page's WKDownloads noted (a wrapped
                                    -[WKDownload setDelegate:]) and cancelled when the window closes
 src-tauri/src/platform/portal.rs   Linux: the summon shortcut through the XDG GlobalShortcuts portal
@@ -450,6 +455,17 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
 - Every request goes through `toggle::decide` (table below) and `joan::handle`, which runs off
   the main thread (`joan::dispatch`): building a webview window from the main thread can
   deadlock on Windows. A lifecycle mutex keeps two quick presses from creating two windows.
+- **A summon, in order** (`joan::create`; LJ19.1 measured and shortened it): the hidden window;
+  history.json starts loading on its own thread; the bar and the page webviews; the window
+  placed, shown and focused, the command bar's field focused; then — still before any web page
+  loads, since the start page under the command bar needs neither — the kept session cookies
+  (Windows) and the page's user agent for its width (on Windows both wait for WebView2, which
+  kept the window hidden some 50 ms longer before); then the URL, if one was asked for. The bar
+  asks for its first suggestions as soon as its script runs, without waiting for the page's
+  address. **macOS:** a summon that builds the window holds an `NSProcessInfo` activity
+  (user-initiated, latency-critical; `platform/mac/activity.rs`) from the request until the
+  window is up, so App Nap — which may have throttled the idle, windowless app — doesn't slow
+  it; nothing holds one at rest.
 - The window opens centred in the work area of the monitor under the mouse cursor, at the last
   size the user left it (logical pixels, saved on close unless fullscreen/maximized/minimized).
 - **Every close goes through the same path.** The close button, Cmd+W / Alt+F4
@@ -621,7 +637,11 @@ Little Joan keeps a local history for the command bar's suggestions (LJ23) and t
 from the sites visited.
 
 - **Where:** `history.json` next to `settings.json` (the table above; `LITTLEJOAN_DATA_DIR`
-  in dev builds and CI). Loaded when the page window opens, kept in `AppState` while it exists,
+  in dev builds and CI). Loaded when the page window opens — on a thread of its own while the
+  window and its webviews are built (LJ19.1: a 3,000-page file took 20–50 ms off every summon);
+  every use of the window's history (suggestions, the history view, recording, removing,
+  clearing, closing) waits for that read first, at most 10 s, and a read that ends after its
+  window closed keeps nothing —, kept in `AppState` while it exists,
   saved atomically (temp file + rename) when it closes, every 30 s while there are unsaved
   visits, and on Quit; dropped from memory on hibernate, so nothing extra is held at rest.
 - **Format:** `{ "version": 1, "entries": [ { "url", "title", "host", "visitCount", "visits":
@@ -1302,12 +1322,15 @@ download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't t
 `download-noted` / `download-cancelled <n>` (macOS: a WKDownload noted; cancelled on close),
 `zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
-`summon-timing {"source":…,"url":…,"at":<unix ms>,"partial":…,"marks":{…}}` (LJ19.1: one line per
-summon that built the window, each mark in ms after the request on the monotonic clock —
-`dispatched`, `windowBuilt`, `historyLoaded`, `webviewsAdded`, `cookiesRestored`, `agentSet`,
-`shown`, `created`, `barLoaded`, `barScript`, `barReady`, `barPainted`, then `commandBar`, or with a
-URL `pageStarted`; `partial` when the window closed first; summon_timing.rs). Without
-the variable nothing is logged.
+`summon-timing {"source":…,"url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}` (LJ19.1: one
+line per summon that built the window, each mark in ms after the request on the monotonic clock —
+the window code's `dispatched`, `windowBuilt`, `webviewsAdded`, `shown`, `cookiesRestored`,
+`agentSet`, `created`; `historyLoaded` (its own thread); the bar's `barNavigation`, `barHtml`,
+`barLoaded`, `barModule`, `barScript`, `barThemeAnswered`, `barReady`, `barStartInfo`,
+`barPainted`, `barSuggestions`, then `commandBar`, or with a URL `pageStarted` — the bar's own
+reported once at the end through `report_timing`; `nap` macOS's App Nap state at the request
+(`active=<0|1> lowpri= timer= disk=`, the task's suppression policy), else `null`; `partial` when
+the window closed first; summon_timing.rs). Without the variable nothing is logged.
 
 ## Pure core (no Tauri types, unit-tested)
 
@@ -1593,8 +1616,11 @@ and pushes to `main`:
   `--show <url>`, the shortcut again after an eviction and 60 s, and a warm `--show <url>`. Every
   forwarded summon must log a complete `summon-timing` line with every mark, the native marks in
   order, ready (the command bar's rows; with a URL the later of the bar's frame and the page's
-  start) under its ceiling; the shortcut summons count only when the key arrived (`sent→request`
-  is the key's latency to the app). The table goes into `timing.md` and the job's summary (log
+  start) under its ceiling — per OS, several times what LJ19.1 measured (Linux 2 / 3 / 5 s for
+  warm / first / cold, macOS 8 / 10 / 15 s, Windows 4 / 5 / 6 s: loose on purpose, CI's runners
+  vary) —; the shortcut summons count only when the key arrived (`sent→request` is the key's
+  latency to the app). The table, with macOS's App Nap state per summon under it, goes into
+  `timing.md` and the job's summary (log
   `smoke-timing.log`, `summary.json`'s `timingRun`; the main run's own lines are its
   `mainRunTimings`). Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,

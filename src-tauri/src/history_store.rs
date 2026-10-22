@@ -1,9 +1,11 @@
 //! History on disk and in memory (history.rs is the pure part).
 //!
-//! `history.json` lives next to settings.json. It is loaded when the page window opens, kept in
-//! `AppState` while the window exists, saved atomically when the window closes and every 30 s
-//! while it has changes, and dropped when Little Joan hibernates — nothing extra is held at
-//! rest. Visits are recorded natively from the page webview's load and title events (bar.rs),
+//! `history.json` lives next to settings.json. It is loaded when the page window opens — on a
+//! thread of its own, while the window and its webviews are built (LJ19.1: a big history took
+//! 20–50 ms off every summon); everything that uses the window's history waits for that load
+//! first (`wait_loaded`) —, kept in `AppState` while the window exists, saved atomically when the
+//! window closes and every 30 s while it has changes, and dropped when Little Joan hibernates —
+//! nothing extra is held at rest. Visits are recorded natively from the page webview's load and title events (bar.rs),
 //! so pages need no IPC; nothing is recorded while the "Remember history" setting is off.
 //! Removing a page or clearing a range (the history view, Settings → Privacy) rewrites the file
 //! at once — with no window open, straight on disk. History never leaves the machine.
@@ -12,7 +14,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Runtime};
@@ -24,6 +26,7 @@ use crate::keys;
 use crate::smoke;
 use crate::state;
 use crate::suggest::{self, Suggestion};
+use crate::summon_timing::{self, Mark};
 
 /// How often unsaved visits are written while the window is open.
 const AUTOSAVE_EVERY: Duration = Duration::from_secs(30);
@@ -35,6 +38,59 @@ const AUTOSAVE_EVERY: Duration = Duration::from_secs(30);
 static FILE: Mutex<()> = Mutex::new(());
 /// Bumped for every window, so an old autosave loop stops.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Bumped when a window opens and when it closes: a load that finishes after its window closed
+/// keeps nothing (nothing may be held at rest).
+static WINDOW: AtomicU64 = AtomicU64::new(0);
+/// How many reads of history.json are under way (one per window that opened; an old window's
+/// read can still be finishing when the next window opens).
+static LOADING: Loading = Loading::new();
+/// The longest anything waits for that read (a stuck disk mustn't hang the window for good).
+const LOAD_WAIT: Duration = Duration::from_secs(10);
+
+/// Reads under way, and a wait for them with a time limit.
+struct Loading {
+    busy: Mutex<u32>,
+    done: Condvar,
+}
+
+impl Loading {
+    const fn new() -> Self {
+        Loading {
+            busy: Mutex::new(0),
+            done: Condvar::new(),
+        }
+    }
+
+    fn started(&self) {
+        *self.busy.lock().unwrap_or_else(PoisonError::into_inner) += 1;
+    }
+
+    fn finished(&self) {
+        let mut busy = self.busy.lock().unwrap_or_else(PoisonError::into_inner);
+        *busy = busy.saturating_sub(1);
+        if *busy == 0 {
+            self.done.notify_all();
+        }
+    }
+
+    /// Blocks until no read is under way or `limit` passed. Never call it holding the file lock
+    /// or the app state's lock (a read takes both).
+    fn wait(&self, limit: Duration) {
+        let busy = self.busy.lock().unwrap_or_else(PoisonError::into_inner);
+        let (busy, timeout) = self
+            .done
+            .wait_timeout_while(busy, limit, |busy| *busy > 0)
+            .unwrap_or_else(PoisonError::into_inner);
+        if *busy > 0 && timeout.timed_out() {
+            eprintln!("little-joan: history.json is taking long to load; going on without it");
+        }
+    }
+}
+
+/// Waits for the open window's history to be loaded (at once when it is, or with no window).
+fn wait_loaded() {
+    LOADING.wait(LOAD_WAIT);
+}
 
 /// The history of the open window.
 #[derive(Debug, Default)]
@@ -80,25 +136,48 @@ fn save_unlocked(dir: &Path, history: &History) -> io::Result<()> {
     fs::rename(&tmp, dir.join(HISTORY_FILE))
 }
 
-/// The window opened: loads history and starts the autosave loop.
+/// The window opened: starts loading history (its own thread; whatever needs it waits) and the
+/// autosave loop. Returns at once.
 pub fn open<R: Runtime>(app: &AppHandle<R>) {
-    {
-        let _file = file_lock();
-        let dir = state::with(app, |s| s.data_dir.clone());
-        let history = load(&dir);
-        state::with(app, |s| {
+    let window = WINDOW.fetch_add(1, Ordering::SeqCst) + 1;
+    LOADING.started();
+    let loader = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("little-joan-history-load".into())
+        .spawn(move || {
+            load_into(&loader, window);
+            LOADING.finished();
+        });
+    if spawned.is_err() {
+        // No thread: load it here, as before LJ19.1.
+        load_into(app, window);
+        LOADING.finished();
+    }
+    autosave(app);
+}
+
+/// Reads history.json into the window `window`'s state — unless that window closed meanwhile.
+fn load_into<R: Runtime>(app: &AppHandle<R>, window: u64) {
+    let _file = file_lock();
+    let dir = state::with(app, |s| s.data_dir.clone());
+    let history = load(&dir);
+    state::with(app, |s| {
+        if WINDOW.load(Ordering::SeqCst) == window {
             s.history = Some(OpenHistory {
                 history,
                 ..OpenHistory::default()
             });
-        });
-    }
-    autosave(app);
+        }
+    });
+    summon_timing::mark(Mark::HistoryLoaded);
 }
 
 /// The window closes: saves what changed and drops the history from memory.
 pub fn close<R: Runtime>(app: &AppHandle<R>) {
     GENERATION.fetch_add(1, Ordering::Relaxed);
+    // A load still running keeps nothing now; one that finished is saved below.
+    WINDOW.fetch_add(1, Ordering::SeqCst);
+    wait_loaded();
     let _file = file_lock();
     let (dir, open) = state::with(app, |s| (s.data_dir.clone(), s.history.take()));
     if let Some(open) = open.filter(|open| open.dirty) {
@@ -153,6 +232,7 @@ fn autosave<R: Runtime>(app: &AppHandle<R>) {
 /// The app is about to load something in the page: its visit gets `kind` (open_input: typed;
 /// the reload page action: reload).
 pub fn set_next_kind<R: Runtime>(app: &AppHandle<R>, kind: VisitKind) {
+    wait_loaded();
     state::with(app, |s| {
         if let Some(open) = s.history.as_mut() {
             open.next_kind = Some(kind);
@@ -163,6 +243,7 @@ pub fn set_next_kind<R: Runtime>(app: &AppHandle<R>, kind: VisitKind) {
 /// The page finished loading `url`: one visit, unless history is off or the page is the app's
 /// own (or not a web page at all).
 pub fn page_loaded<R: Runtime>(app: &AppHandle<R>, url: &Url) {
+    wait_loaded();
     let recorded = state::with(app, |s| {
         let remember = s.settings.remember_history;
         let open = s.history.as_mut()?;
@@ -200,6 +281,7 @@ fn same_page(a: &Url, b: &Url) -> bool {
 
 /// The page at `url` is now titled `title`.
 pub fn title_changed<R: Runtime>(app: &AppHandle<R>, url: &Url, title: &str) {
+    wait_loaded();
     state::with(app, |s| {
         let remember = s.settings.remember_history;
         let Some(open) = s.history.as_mut() else {
@@ -244,6 +326,7 @@ fn clearing(range: ClearRange) -> impl FnOnce(&mut History, u64) -> (usize, bool
 
 /// Every page for the history view, latest visit first (empty while no window is open).
 pub fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<Listed> {
+    wait_loaded();
     state::with(app, |s| {
         s.history
             .as_ref()
@@ -257,6 +340,7 @@ fn edit<R: Runtime, T>(
     app: &AppHandle<R>,
     change: impl FnOnce(&mut History, u64) -> (T, bool),
 ) -> io::Result<T> {
+    wait_loaded();
     let _file = file_lock();
     state::with(app, |s| {
         let dir = s.data_dir.clone();
@@ -304,6 +388,7 @@ pub fn suggest<R: Runtime>(
     current: Option<&Url>,
     engine: SearchEngine,
 ) -> Vec<Suggestion> {
+    wait_loaded();
     state::with(app, |s| match s.history.as_ref() {
         Some(open) => suggest::suggestions(&open.history, query, current, engine, now_millis()),
         None => suggest::suggestions(&History::default(), query, current, engine, now_millis()),
@@ -322,6 +407,41 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn waiting_for_the_load_ends_when_every_read_is_over() {
+        let loading = std::sync::Arc::new(Loading::new());
+        // Nothing under way: no wait at all.
+        let start = std::time::Instant::now();
+        loading.wait(Duration::from_secs(5));
+        assert!(start.elapsed() < Duration::from_secs(1));
+        // Two reads (an old window's still finishing): the wait lasts until both are over.
+        loading.started();
+        loading.started();
+        let reads = std::sync::Arc::clone(&loading);
+        let finisher = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            reads.finished();
+            std::thread::sleep(Duration::from_millis(50));
+            reads.finished();
+        });
+        let start = std::time::Instant::now();
+        loading.wait(Duration::from_secs(5));
+        assert!(start.elapsed() >= Duration::from_millis(90));
+        assert!(start.elapsed() < Duration::from_secs(4));
+        finisher.join().expect("the finishing thread");
+        // A read that never ends: the wait gives up at its limit.
+        loading.started();
+        let start = std::time::Instant::now();
+        loading.wait(Duration::from_millis(60));
+        assert!(start.elapsed() >= Duration::from_millis(60));
+        loading.finished();
+        // More ends than starts never wraps around.
+        loading.finished();
+        let start = std::time::Instant::now();
+        loading.wait(Duration::from_secs(5));
+        assert!(start.elapsed() < Duration::from_secs(1));
     }
 
     #[test]

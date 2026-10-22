@@ -3635,7 +3635,69 @@ thread before the window shows).
   kept, logged or sent.
 - **The timing run** (`scripts/ci/smoke-timing.mts`) is described under Verify; the shortcut is
   pressed as a keyboard would (xdotool's XTEST on Linux, SendKeys on Windows, a CGEvent on macOS,
-  best effort) and its latency to the app's request mark is recorded (`sent→request`).
+  best effort) and its latency to the app's request mark is recorded (`sent→request`). The real
+  shortcut reached the app on every OS (Linux 21–76 ms from the key to the request, Windows
+  21–159 ms through SendKeys, macOS 167–343 ms through a Swift script's CGEvent).
+- **Before (the measuring commit, run 39767357061)** — ready (ms after the request: the command
+  bar's rows, or with a URL the later of the bar's first frame and the page's start):
+
+  | Job | first | warm (3) | idle 60 s | cold | cold + URL | cold, shortcut | warm URL |
+  |---|---|---|---|---|---|---|---|
+  | macos (Apple M1 VM) | 2,742 | 2,524–2,599 | 2,668 | 4,868 (purge) | 5,445 | 3,542 | 3,445 |
+  | windows | 965 | 820–920 | 718 | 769 (180 s gap) | 828 | 780 | 796 |
+  | linux (.deb, 24.04) | 440 | 316–334 | 290 | 706 (drop_caches) | 344 | 540 | 239 |
+  | linux-scale-2 | 663 | 471–493 | 473 | 928 | 430 | 837 | 331 |
+  | linux-appimage | 503 | 362–386 | 391 | 724 | 461 | 676 | 310 |
+  | linux-22.04 | 284 | 213–217 | 233 | 334 | 246 | 462 | 185 |
+  | linux-arm64 | 1,010 | 371–385 | 375 | 696 | 402 | 615 | 351 |
+  | linux-22.04-arm64 | 380 | 316–333 | 325 | 490 | 429 | 552 | 218 |
+  | linux-appimage-arm64 | 464 | 375–382 | 375 | 717 | 433 | 672 | 336 |
+
+  Where a warm summon's time went: **our own work before the webviews** — history.json (3,000
+  pages) read and parsed on the summon's path: 20–35 ms on Linux, 26–30 ms on macOS, 45–60 ms on
+  Windows; **Windows** — WebView2's environment and the two controllers 650 ms, then the page's
+  user agent through the DevTools protocol 45–60 ms *before* the window was shown: the bar had
+  painted (710–830 ms) before the window appeared (745–885 ms), once even its rows (the summon's
+  line came out before `shown`, which turned the first run red — a measuring bug, fixed by waiting
+  for `created` too); **macOS** — shown at 150–170 ms, then the engine: the bar's page finished
+  loading at ~1,400 ms (WebKit's WebContent, GPU and Networking processes start for every summon:
+  hibernation destroys them), its script ran at ~1,600 and asked `start_info` only at ~2,500 — a
+  ~0.9 s stall between its first report and its next call, in the engine; **Linux** — shown at
+  30–45 ms, the bar loaded at 150–220 ms, `barReady` → rows 80–150 ms (two IPC round trips: the
+  page's address, then the suggestions). **Cold after eviction** doubled macOS (4,868 ms: building
+  the NSWindow took 268 ms instead of 15, the two WKWebViews 1.5 s instead of 0.1, the bar's load
+  2 s — WebKit's and the app's code read back from disk) and Linux (+300–400 ms, mostly
+  engine-side); Windows can't evict its cache from a command, and a 180 s gap changed nothing.
+  **Idle without eviction** (60 s) was no slower than warm anywhere — on CI's macOS VM no sign of
+  App Nap in the numbers (the run had no way to read App Nap's state yet). The forwarding launch
+  of `--show` itself took 20–90 ms warm and up to 1.1 s cold on macOS (irrelevant for the
+  shortcut, which never starts a process).
+- **What changed (`lj-step-19.1-fix`)** — what the numbers pointed at, every invariant kept (no
+  webview before the summon, none kept after it; no IPC for the page; nothing injected into it):
+  1. **history.json loads on its own thread** while the window and the webviews are built
+     (`history_store::open` returns at once); every use of the window's history — the first
+     suggestions, the history view, recording a visit, removing, clearing, closing — waits for
+     that read (at most 10 s), and a read that ends after its window closed keeps nothing.
+  2. **The window shows before the cookie restore and the agent** (both still before any web page
+     loads: the start page under the command bar needs neither) — on Windows they wait for
+     WebView2.
+  3. **The bar asks for its first suggestions at once** instead of after the page's address (a new
+     window shows the start page, which has none; an address starts the list over).
+  4. **macOS: an `NSProcessInfo` activity** (user-initiated, latency-critical) from the request
+     until the window is up (`platform/mac/activity.rs`), so App Nap — which may throttle an idle,
+     windowless accessory app's CPU, timers and disk reads — can't slow the summon that most needs
+     the disk; nothing holds one at rest. CI's VM showed no App Nap, so this is aimed at the
+     owner's Mac; the summon-timing line now carries App Nap's state at the request (`nap`, the
+     task's suppression policy through `task_policy_get`), so a run with the smoke log can show it.
+  5. **Measuring:** a summon is complete only once the window code is done (`created`), and the
+     bar reports its whole start once, at the end, with more marks (its navigation and HTML, its
+     script, the answers to its first calls) — one call, so the report adds nothing while the bar
+     starts.
+  6. **Ceilings** per OS, several times the numbers above: Linux 2 / 3 / 5 s (warm / first /
+     cold), macOS 8 / 10 / 15 s, Windows 4 / 5 / 6 s.
+  Not done, because they bend hibernation or need a design decision — see Deferred follow-ups:
+  keeping WebKit / WebView2 warm for a while after a close, and creating the page webview only
+  after the bar has painted (or when a page is opened).
 
 ---
 
@@ -8438,6 +8500,28 @@ and where, then stop.
   first miss of that check in the five Windows runs that had it. If it recurs, look at where the
   keyboard focus is after the zoom status shows (the toolbar's status area changes), or send the
   key twice, rather than loosen the rule.
+- **Stay warm for a while after closing** (surfaced by LJ19.1). Most of a summon is the engine
+  starting its processes again (macOS ~1.3 s of CI's 2.5 s before the bar loads, Windows ~650 ms for
+  WebView2's environment and controllers, Linux ~110 ms), because hibernation destroys the window
+  and its webviews. An optional "keep Little Joan ready for N minutes after closing" — the window
+  hidden instead of destroyed, or one blank webview kept — would make a summon within that time
+  near-instant, at the cost of the engine's memory (tens to a hundred MB) for those minutes. It
+  bends Ground Rule 9 (nothing alive at rest), so it is the owner's decision; off by default if
+  ever built.
+- **Create the page webview only after the bar has painted** (surfaced by LJ19.1). A summon builds
+  the bar and the page webviews together, and the page loads the start page at once, so two web
+  processes start side by side (macOS: two WebContent processes; Windows: a second controller
+  before the window shows). The page is hidden under the command bar until a page is opened, so it
+  could be built later — after the bar's first frame, or when a page is asked for — but every
+  path that expects the page (navigation, extension panels, the agent, the cookies, the layout and
+  the macOS masks, Linux's GtkBox packing) would have to cope with a window without one, and
+  adding a webview to a visible window can flash it for a frame. Worth an experiment if the
+  owner's Mac still feels slow; measure with the timing run first.
+- **macOS's engine stall** (surfaced by LJ19.1). On CI's macOS VM the bar's script asked
+  `start_info` ~0.9 s after its first report (`barScript` → `barReady`), and once its first frame
+  came 1.3 s after its script was ready — the engine, not our code (Linux and Windows don't show
+  it). The bar's own marks (`barThemeAnswered`, `barStartInfo`, `barNavigation`, …) now say where
+  inside the engine it waits; look there before changing anything.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -8773,6 +8857,14 @@ Populated from real friction, not speculation:
   leave the Dock hidden** (Apple Developer Forums thread 846037). Little Joan is an Accessory app
   and uses WebKit's element fullscreen; not seen here yet. If the owner sees the Dock missing after
   a video's fullscreen, look there first.
+- *(LJ19.1)* **On Windows the bar can paint — even its rows — before the window is shown.**
+  WebView2 loads the bar while the page's controller is still being built, so anything measured
+  from the bar's side can come before the window code is done; a summon's timing is complete only
+  at `created` (summon_timing.rs). Don't read "the bar painted" as "the user saw it".
+- *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
+  there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
+  allow for it. Judge macOS changes by their before / after on the same runner kind, and the
+  owner's Mac by `LITTLEJOAN_SMOKE_LOG=<file>` and its `summon-timing` lines.
 
 ---
 

@@ -5,29 +5,39 @@
 //!
 //! One line per summon that built the window, once its last mark is in (or the window closes
 //! first, `"partial":true`):
-//! `summon-timing {"source":"cli","url":false,"at":<unix ms>,"partial":false,"marks":{...}}`,
-//! each mark in milliseconds after the request, on the monotonic clock (`Instant`). The marks, in
-//! the order they normally come:
+//! `summon-timing {"source":"cli","url":false,"at":<unix ms>,"nap":…,"partial":false,"marks":{...}}`,
+//! each mark in milliseconds after the request, on the monotonic clock (`Instant`); `nap` is
+//! macOS's App Nap state at the request (`platform::nap_state`; `null` elsewhere). The marks, in
+//! the order they normally come (since LJ19.1's changes):
 //!
 //! | Mark | When |
 //! |---|---|
 //! | `dispatched` | the window code runs (off the main thread, after the lifecycle lock) |
 //! | `windowBuilt` | the native window exists (hidden) |
-//! | `historyLoaded` | history.json read and parsed |
 //! | `webviewsAdded` | the bar and the page webviews exist |
+//! | `shown` | the window is on screen and focused |
 //! | `cookiesRestored` | the kept session cookies are set again (Windows; nothing elsewhere) |
 //! | `agentSet` | the page's user agent for its width (Windows: a DevTools call) |
-//! | `shown` | the window is on screen and focused |
 //! | `created` | the window code is done (with a URL: its navigation started) |
+//! | `historyLoaded` | history.json read and parsed (on its own thread, any time after `dispatched`) |
+//! | `barNavigation` | the bar's navigation started (the engine's timing; the bar says so) |
+//! | `barHtml` | bar.html arrived (the bar says so) |
 //! | `barLoaded` | the bar's page finished loading (the engine's load event) |
-//! | `barScript` | the bar's script runs (its early theme report) |
+//! | `barModule` | ui/bar.ts runs (the bar says so) |
+//! | `barScript` | its early theme report reached Rust |
+//! | `barThemeAnswered` | … and its answer reached the bar (the bar says so) |
 //! | `barReady` | the bar asked `start_info` |
+//! | `barStartInfo` | … and its answer reached the bar (the bar says so) |
 //! | `barPainted` | the bar's first frame was painted (the bar says so) |
+//! | `barSuggestions` | the first suggestions were drawn into the command bar (the bar says so) |
 //! | `commandBar` | the command bar's first rows were painted (the bar says so) |
 //! | `pageStarted` | with a URL: the web page started loading |
 //!
-//! A summon without a URL is complete at `commandBar`; one with a URL at `barPainted` and
-//! `pageStarted` (the command bar closes for the page, so it draws no rows).
+//! A summon is complete once the window code is done (`created`) and, without a URL, the command
+//! bar's rows are painted (`commandBar`); with a URL, the bar's first frame (`barPainted`) and the
+//! page's start (`pageStarted`) are in — the command bar closes for the page, so it draws no rows.
+//! (On Windows the bar can paint its rows before the window is even shown.) The bar reports its
+//! marks once, in one call, at the end (commands/timing.rs).
 
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -72,10 +82,16 @@ pub enum Mark {
     AgentSet,
     Shown,
     Created,
+    BarNavigation,
+    BarHtml,
     BarLoaded,
+    BarModule,
     BarScript,
+    BarThemeAnswered,
     BarReady,
+    BarStartInfo,
     BarPainted,
+    BarSuggestions,
     CommandBar,
     PageStarted,
 }
@@ -91,10 +107,16 @@ impl Mark {
             Mark::AgentSet => "agentSet",
             Mark::Shown => "shown",
             Mark::Created => "created",
+            Mark::BarNavigation => "barNavigation",
+            Mark::BarHtml => "barHtml",
             Mark::BarLoaded => "barLoaded",
+            Mark::BarModule => "barModule",
             Mark::BarScript => "barScript",
+            Mark::BarThemeAnswered => "barThemeAnswered",
             Mark::BarReady => "barReady",
+            Mark::BarStartInfo => "barStartInfo",
             Mark::BarPainted => "barPainted",
+            Mark::BarSuggestions => "barSuggestions",
             Mark::CommandBar => "commandBar",
             Mark::PageStarted => "pageStarted",
         }
@@ -102,12 +124,14 @@ impl Mark {
 }
 
 /// When a request arrived: taken where it is received (joan::dispatch), before anything else runs.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Request {
     pub source: Source,
     pub received: Instant,
     /// The same moment on the wall clock, so CI can line it up with its own (unix ms).
     pub at_unix_ms: u128,
+    /// Smoke mode, macOS: App Nap's state at that moment (`platform::nap_state`).
+    pub nap: Option<String>,
 }
 
 impl Request {
@@ -118,6 +142,7 @@ impl Request {
             at_unix_ms: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_or(0, |d| d.as_millis()),
+            nap: smoke::enabled().then(crate::platform::nap_state).flatten(),
         }
     }
 }
@@ -128,6 +153,8 @@ pub struct Summon {
     source: Source,
     url: bool,
     at_unix_ms: u128,
+    /// App Nap's state at the request (macOS), as `platform::nap_state` words it.
+    nap: Option<String>,
     marks: Vec<(Mark, u64)>,
 }
 
@@ -137,8 +164,15 @@ impl Summon {
             source,
             url,
             at_unix_ms,
+            nap: None,
             marks: Vec::new(),
         }
+    }
+
+    /// With App Nap's state at the request.
+    pub fn with_nap(mut self, nap: Option<String>) -> Summon {
+        self.nap = nap;
+        self
     }
 
     /// Records `mark` at `ms` after the request; the first time counts. Returns whether it did.
@@ -156,11 +190,12 @@ impl Summon {
 
     /// Whether the last mark it waits for is in (the module's doc).
     pub fn complete(&self) -> bool {
-        if self.url {
+        let bar = if self.url {
             self.has(Mark::BarPainted) && self.has(Mark::PageStarted)
         } else {
             self.has(Mark::CommandBar)
-        }
+        };
+        bar && self.has(Mark::Created)
     }
 
     /// The smoke log's JSON: the marks in the order they were recorded.
@@ -170,8 +205,12 @@ impl Summon {
             .iter()
             .map(|(mark, ms)| format!("\"{}\":{ms}", mark.name()))
             .collect();
+        let nap = self.nap.as_ref().map_or_else(
+            || "null".to_owned(),
+            |nap| serde_json::to_string(nap).unwrap_or_else(|_| "null".to_owned()),
+        );
         format!(
-            "{{\"source\":\"{}\",\"url\":{},\"at\":{},\"partial\":{partial},\"marks\":{{{}}}}}",
+            "{{\"source\":\"{}\",\"url\":{},\"at\":{},\"nap\":{nap},\"partial\":{partial},\"marks\":{{{}}}}}",
             self.source.name(),
             self.url,
             self.at_unix_ms,
@@ -216,7 +255,7 @@ pub fn begin(request: Request, url: bool) {
     if let Some((_, old)) = slot.take() {
         smoke::log("summon-timing", &old.to_json(true));
     }
-    let mut summon = Summon::new(request.source, url, request.at_unix_ms);
+    let mut summon = Summon::new(request.source, url, request.at_unix_ms).with_nap(request.nap);
     summon.mark(Mark::Dispatched, millis_between(request.received, now));
     *slot = Some((request.received, summon));
 }
@@ -226,21 +265,34 @@ pub fn mark(mark: Mark) {
     mark_at(mark, Instant::now());
 }
 
-/// The bar's report: `mark` happened `ago_ms` milliseconds before now.
-pub fn mark_ago(mark: Mark, ago_ms: f64) {
+/// The bar's report: each mark happened its `ago` milliseconds before now.
+pub fn marks_ago(marks: &[(Mark, f64)]) {
     let now = Instant::now();
-    let received = current().as_ref().map(|(received, _)| *received);
-    if let Some(at) = received.and_then(|received| moment_ago(now, ago_ms, received)) {
-        mark_at(mark, at);
-    }
+    let Some(received) = current().as_ref().map(|(received, _)| *received) else {
+        return;
+    };
+    let at: Vec<(Mark, Instant)> = marks
+        .iter()
+        .filter_map(|&(mark, ago)| Some((mark, moment_ago(now, ago, received)?)))
+        .collect();
+    record(&at);
 }
 
 fn mark_at(mark: Mark, at: Instant) {
+    record(&[(mark, at)]);
+}
+
+/// Records each mark (the first time counts); logs the summon once it is complete.
+fn record(marks: &[(Mark, Instant)]) {
     let mut slot = current();
     let Some((received, summon)) = slot.as_mut() else {
         return;
     };
-    if summon.mark(mark, millis_between(*received, at)) && summon.complete() {
+    let mut added = false;
+    for &(mark, at) in marks {
+        added |= summon.mark(mark, millis_between(*received, at));
+    }
+    if added && summon.complete() {
         let done = summon.to_json(false);
         *slot = None;
         drop(slot);
@@ -265,6 +317,7 @@ mod tests {
         let mut summon = Summon::new(Source::Shortcut, false, 1_000);
         assert!(summon.mark(Mark::Dispatched, 1));
         assert!(summon.mark(Mark::Shown, 40));
+        assert!(summon.mark(Mark::Created, 45));
         assert!(summon.mark(Mark::BarPainted, 120));
         assert!(!summon.complete());
         assert!(summon.mark(Mark::CommandBar, 150));
@@ -272,14 +325,29 @@ mod tests {
     }
 
     #[test]
+    fn the_window_code_must_be_done_too() {
+        // Windows: the bar can paint its rows before the window is shown (CI, LJ19.1).
+        let mut summon = Summon::new(Source::Cli, false, 1_000);
+        summon.mark(Mark::WebviewsAdded, 900);
+        summon.mark(Mark::CommandBar, 920);
+        assert!(!summon.complete());
+        summon.mark(Mark::Shown, 930);
+        assert!(!summon.complete());
+        summon.mark(Mark::Created, 960);
+        assert!(summon.complete());
+    }
+
+    #[test]
     fn a_summon_with_a_url_waits_for_the_bar_and_the_page() {
         let mut summon = Summon::new(Source::Cli, true, 1_000);
+        summon.mark(Mark::Created, 60);
         summon.mark(Mark::PageStarted, 90);
         assert!(!summon.complete());
         summon.mark(Mark::BarPainted, 130);
         assert!(summon.complete());
         // The command bar's rows aren't needed (it closes for the page).
         let mut painted_only = Summon::new(Source::Cli, true, 1_000);
+        painted_only.mark(Mark::Created, 60);
         painted_only.mark(Mark::CommandBar, 100);
         assert!(!painted_only.complete());
     }
@@ -291,23 +359,25 @@ mod tests {
         assert!(!summon.mark(Mark::BarLoaded, 900));
         assert_eq!(
             summon.to_json(false),
-            r#"{"source":"tray","url":false,"at":5,"partial":false,"marks":{"barLoaded":70}}"#
+            r#"{"source":"tray","url":false,"at":5,"nap":null,"partial":false,"marks":{"barLoaded":70}}"#
         );
     }
 
     #[test]
     fn the_json_keeps_the_order_of_the_marks() {
-        let mut summon = Summon::new(Source::Launch, true, 1_760_000_000_123);
+        let mut summon = Summon::new(Source::Launch, true, 1_760_000_000_123)
+            .with_nap(Some("active=1 \"x\"".to_owned()));
         summon.mark(Mark::Dispatched, 0);
         summon.mark(Mark::WindowBuilt, 12);
         summon.mark(Mark::PageStarted, 200);
         let json = summon.to_json(true);
         assert_eq!(
             json,
-            r#"{"source":"launch","url":true,"at":1760000000123,"partial":true,"marks":{"dispatched":0,"windowBuilt":12,"pageStarted":200}}"#
+            r#"{"source":"launch","url":true,"at":1760000000123,"nap":"active=1 \"x\"","partial":true,"marks":{"dispatched":0,"windowBuilt":12,"pageStarted":200}}"#
         );
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
         assert_eq!(parsed["marks"]["windowBuilt"], 12);
+        assert_eq!(parsed["nap"], "active=1 \"x\"");
     }
 
     #[test]
@@ -321,10 +391,16 @@ mod tests {
             Mark::AgentSet,
             Mark::Shown,
             Mark::Created,
+            Mark::BarNavigation,
+            Mark::BarHtml,
             Mark::BarLoaded,
+            Mark::BarModule,
             Mark::BarScript,
+            Mark::BarThemeAnswered,
             Mark::BarReady,
+            Mark::BarStartInfo,
             Mark::BarPainted,
+            Mark::BarSuggestions,
             Mark::CommandBar,
             Mark::PageStarted,
         ];

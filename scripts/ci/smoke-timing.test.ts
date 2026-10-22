@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
 import {
   BAR_MARKS,
+  CEILINGS,
   DEFAULT_CEILINGS,
   NATIVE_MARKS,
+  ceilingsFor,
   median,
   parseTiming,
   readyMs,
@@ -19,12 +21,12 @@ import {
 const MARKS = {
   dispatched: 1,
   windowBuilt: 20,
-  historyLoaded: 45,
   webviewsAdded: 120,
-  cookiesRestored: 120,
-  agentSet: 121,
   shown: 140,
+  cookiesRestored: 141,
+  agentSet: 145,
   created: 150,
+  historyLoaded: 45,
   barLoaded: 300,
   barScript: 310,
   barReady: 330,
@@ -42,8 +44,9 @@ function measured(over: Partial<Measured> = {}, timing: Partial<SummonTiming> = 
 
 describe("summon-timing lines (LJ19.1)", () => {
   it("parse the app's JSON, keeping only numeric marks", () => {
-    const t = parseTiming(JSON.stringify({ source: "shortcut", url: true, at: 5, partial: true, marks: { shown: 40, bad: "x", pageStarted: 90 } }));
-    expect(t).toEqual({ source: "shortcut", url: true, at: 5, partial: true, marks: { shown: 40, pageStarted: 90 } });
+    const t = parseTiming(JSON.stringify({ source: "shortcut", url: true, at: 5, nap: "active=1 lowpri=1 timer=5 disk=1", partial: true, marks: { shown: 40, bad: "x", pageStarted: 90 } }));
+    expect(t).toEqual({ source: "shortcut", url: true, at: 5, nap: "active=1 lowpri=1 timer=5 disk=1", partial: true, marks: { shown: 40, pageStarted: 90 } });
+    expect(parseTiming(line())?.nap).toBeNull();
     for (const bad of ["", "{", "[]", JSON.stringify({ source: 1, url: false, marks: {} }), JSON.stringify({ source: "cli", url: false })]) {
       expect(parseTiming(bad)).toBeUndefined();
     }
@@ -89,13 +92,23 @@ describe("the timing run's rules", () => {
   it("refuse native marks out of order (broken instrumentation)", () => {
     const failures = timingFailures([measured({}, { marks: { ...MARKS, shown: 10 } })], "linux");
     expect(failures[0]).toMatch(/out of order/);
+    // History loads on its own thread: any time.
+    expect(timingFailures([measured({}, { marks: { ...MARKS, historyLoaded: 900 } })], "linux")).toEqual([]);
   });
 
-  it("refuse a summon over its ceiling, per kind", () => {
-    const slow = { ...MARKS, commandBar: DEFAULT_CEILINGS.warm + 1 };
-    expect(timingFailures([measured({}, { marks: slow })], "linux")[0]).toMatch(/over the 15000 ms ceiling/);
-    // The same time is fine for a cold summon.
+  it("refuse a summon over its ceiling, per kind and OS", () => {
+    const slow = { ...MARKS, commandBar: CEILINGS["linux"]!.warm + 1 };
+    expect(timingFailures([measured({}, { marks: slow })], "linux")[0]).toMatch(/over the 2000 ms ceiling/);
+    // The same time is fine for a cold summon, and for a warm one on macOS.
     expect(timingFailures([measured(), measured({ kind: "cold" }, { marks: slow })], "linux")).toEqual([]);
+    expect(timingFailures([measured({}, { marks: slow })], "darwin")).toEqual([]);
+    // An OS without its own ceilings gets the loosest.
+    expect(ceilingsFor("freebsd")).toEqual(DEFAULT_CEILINGS);
+    for (const os of ["linux", "darwin", "win32"]) {
+      const c = ceilingsFor(os);
+      expect(c.warm).toBeLessThanOrEqual(c.first);
+      expect(c.first).toBeLessThanOrEqual(c.cold);
+    }
   });
 
   it("list every mark the app logs", () => {
@@ -109,12 +122,21 @@ describe("the timing run's summary", () => {
     expect(summaryRow(measured({ kind: "shortcut", trigger: "shortcut", timing: null, sentAt: null }))).toMatchObject({ reached: false, sentToRequestMs: null, readyMs: null });
   });
 
-  it("draws a Markdown table", () => {
-    const table = timingTable([measured(), measured({ kind: "cold", evicted: "purge" }), measured({ kind: "shortcut", trigger: "shortcut", timing: null })], "darwin");
+  it("draws a Markdown table, with App Nap's state under it", () => {
+    const table = timingTable(
+      [
+        measured(),
+        measured({ kind: "cold", evicted: "purge" }, { nap: "active=1 lowpri=1 timer=5 disk=1" }),
+        measured({ kind: "shortcut", trigger: "shortcut", timing: null }),
+      ],
+      "darwin",
+    );
     expect(table).toContain("### Summon timing (darwin)");
-    expect(table).toContain("| warm | cli | 500 | 20 | 45 | 120 | 121 | 140 | 300 | 310 | 330 | 325 | 360 | – | 360 |");
+    expect(table).toContain("| warm | cli | 500 | 20 | 120 | 140 | 145 | 45 | – | 300 | – | 330 | 325 | – | 360 | – | 360 |");
     expect(table).toContain("| cold (purge) |");
     expect(table).toContain("not reached");
+    expect(table).toContain("- cold: active=1 lowpri=1 timer=5 disk=1");
+    expect(timingTable([measured()], "linux")).not.toContain("App Nap");
   });
 
   it("takes the median (the lower middle for an even count)", () => {
