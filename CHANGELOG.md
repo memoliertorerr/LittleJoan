@@ -18,7 +18,7 @@ All notable changes to Little Joan are recorded here. The format follows
   Linux within the noise. Most of what is left is the web engine starting up again, which
   hibernation makes it do at every summon.
 
-## [0.2.0] — 2026-10-19
+## [0.2.0] — 2026-10-23
 
 The second version. It includes everything in the three pre-releases below, 0.2.0-beta.1 to
 beta.3 — start at login and a first-launch welcome; the Little Arc-style command bar and toolbar,
