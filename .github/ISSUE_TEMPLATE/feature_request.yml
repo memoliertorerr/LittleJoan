@@ -1,0 +1,45 @@
+name: Feature request
+description: An idea for Little Joan.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Little Joan is small on purpose — light at rest and minimal on screen —
+        so not every good idea fits, and talking it over here before anyone builds it saves work
+        (see [CONTRIBUTING.md](https://github.com/memoliertorerr/LittleJoan/blob/main/CONTRIBUTING.md)).
+        Some ideas work well as an extension:
+        [docs/extensions.md](https://github.com/memoliertorerr/LittleJoan/blob/main/docs/extensions.md)
+        shows how to write one.
+
+        **Security problems don't belong here.** Please report them privately, as described in
+        [SECURITY.md](https://github.com/memoliertorerr/LittleJoan/blob/main/SECURITY.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The situation or problem, in your own words — what's missing or in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you'd like it to work. A sketch or a screenshot of something similar is welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Other ways around it, an extension, or how another app does it.
+  - type: dropdown
+    id: platforms
+    attributes:
+      label: Systems it's for
+      multiple: true
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - All of them
