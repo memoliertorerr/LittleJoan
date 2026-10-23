@@ -277,7 +277,18 @@ function startHelper(d: SpacesDriver): Helper {
   child.stderr?.on("data", (chunk: Buffer) => process.stdout.write(`[fs-helper] ${chunk.toString()}`));
   child.on("exit", (code, signal) => console.log(`fs-helper exited with code ${code} signal ${signal}`));
   child.on("error", (err) => console.log(`(fs-helper: ${err.message})`));
-  const statuses = () => (existsSync(statusPath) ? parseStatus(readFileSync(statusPath, "utf8")) : []);
+  let read: HelperStatus[] = [];
+  const statuses = () => {
+    try {
+      if (existsSync(statusPath)) {
+        read = parseStatus(readFileSync(statusPath, "utf8"));
+      }
+    } catch {
+      // Windows: PowerShell's Add-Content holds the file without sharing it while it writes
+      // (EBUSY, seen in CI); the last read stands until the next one.
+    }
+    return read;
+  };
   return {
     statusPath,
     child,

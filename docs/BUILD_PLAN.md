@@ -227,6 +227,14 @@ while a summon builds the window) and set loose per-OS ceilings. Most of a summo
 engine starting again; keeping it warm for a while bends hibernation and is the owner's call
 (Deferred follow-ups). v0.2.0's tag still waits for the owner.
 
+**LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
+`lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
+macOS windows get moveToActiveSpace + fullScreenAuxiliary at the normal level; Linux raises with
+the X server's time; Windows was already right. A new over-full-screen smoke run (a full-screen
+helper window per OS, then `--show`, the real shortcut and `--settings` over it) passes on all nine
+smoke jobs. The PR also carries the coordinator's `ci:` commit: apt moves on from GitHub's crawling
+Azure mirror, and the smoke job's limit is 75 minutes.
+
 **Phase 10 (LJ18 ⏭ skipped, LJ18.1, 2026-10-19)** is PR #28 on `lj/p10-arm64`, merged by the agent
 once verify, package and smoke were green on every job (the standing exception). LJ18 is skipped —
 no Apple signing secrets —, and LJ18.1 adds Linux ARM64: an `arm64` `.deb` built on
@@ -3892,6 +3900,29 @@ above other apps' windows after the user clicks elsewhere (Little Arc isn't alwa
   frontmost app) on each change while a page window exists, and a smoke-only knob
   (`LITTLEJOAN_SMOKE_SPACES_BITS`, ignored without the smoke log) for smoke-only runs of the same
   installers with other bits (`gh workflow run … -f installers_from_run= -f extra_env=`).
+- **What CI showed, round 2 (run 39932267293 on `fix2`, all 18 jobs green) and the experiment**
+  (smoke-only runs of its installers: 39933471136 with bits 0 = AppKit's default, 39933480027 with
+  2 = moveToActiveSpace only, 39933488593 with 256 = fullScreenAuxiliary only): on macOS every
+  variant summoned the window over the full-screen helper `focused=true top=true space=true`
+  without leaving its Space, and around every element fullscreen `wk-app` read the same in all
+  four — the app active and frontmost all along, the menu bar hidden while `in`, the Little Joan
+  window off the video's Space while `in` and key again after the exit; LJ36's rules green in all.
+  The 1-s menu bar came back in only one of the four (bits 2) and not with 258: a timing artifact
+  of a launch's first full-screen transition, not the setting. **So on CI's macOS 15 runner the
+  accessory policy alone already puts a summoned window over another app's full-screen window**
+  (as the round-1 probes said); the collection behaviour is what AppKit documents for it
+  (fullScreenAuxiliary) and what brings an already open window from another Space
+  (moveToActiveSpace) — the latter no runner can show; both are the owner's check. Kept as
+  designed. **`lj-step-19.2-fix3`:** the bits-0 run's Windows job died on `EBUSY` reading the
+  helper's status file while PowerShell's `Add-Content` held it (no read sharing): the run now keeps
+  its last read until the next one. (The bits-256 run's Windows job missed the zoom check's
+  synthetic Ctrl+0 — the known flake under Deferred follow-ups; the AppImage jobs of the
+  experiment found no installers, dispatched before that package job ended.)
+- **Over-full-screen numbers (round 2, every smoke job):** all three summons (`--show`, the real
+  shortcut after a typed letter, `--settings`) `focused=true top=true`, the active window the
+  app's, the helper full screen and active before each; Linux logged `window-present … x11
+  server-time` for each. apt (`apt-install.sh`): `update` 4–13 s, the download 2–57 s, no
+  failover needed in that run.
 
 ---
 
@@ -9078,6 +9109,12 @@ Populated from real friction, not speculation:
   WebView2 loads the bar while the page's controller is still being built, so anything measured
   from the bar's side can come before the window code is done; a summon's timing is complete only
   at `created` (summon_timing.rs). Don't read "the bar painted" as "the user saw it".
+- *(LJ19.2)* **On CI's macOS 15 runner an accessory app's window with AppKit's *default*
+  collection behaviour already shows over another app's full-screen Space** (focused, on top, no
+  Space switch: the probes and the bits-0 smoke run). CI therefore can't show what
+  fullScreenAuxiliary adds there; it proves the bits (`window-spaces`) and that nothing broke.
+- *(LJ19.2)* **On Windows a file PowerShell's `Add-Content` is writing can't be read** (node's
+  `readFileSync`: `EBUSY`) — read helper status files in a try and keep the last good read.
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the
