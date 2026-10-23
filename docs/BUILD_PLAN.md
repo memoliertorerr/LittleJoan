@@ -3877,6 +3877,21 @@ above other apps' windows after the user clicks elsewhere (Little Arc isn't alwa
   ("Internal Error, Pathname to install is not absolute"); the install now runs without the flag
   (everything is in apt's cache by then, so it fetches nothing). The mirror list itself worked:
   update 6–10 s, the download 8–26 s on every Linux job of that run.
+- **What CI showed, round 1 (run 39928621638, `lj-step-19.2-fix`, all 18 jobs green):** every
+  over-full-screen summon on all nine smoke jobs came up `focused=true top=true` with the active
+  window the app's (macOS also `space=true`, the helper's Space still on screen); `window-spaces`
+  `moveToActiveSpace|fullScreenAuxiliary was=default level=0` for both windows; LJ36's fullscreen
+  rules green. Two things to look at: **the macOS probes** — an accessory window with AppKit's
+  *default* behaviour also came up over the full-screen helper, key, on its Space (as did 258 and
+  258 + canJoinAllApplications), so on this runner (macOS 15) the accessory policy alone already
+  puts a new window over a full-screen app; and **a menu bar over the first element fullscreen** —
+  `fs/element-390.png` (1 s after the first entry) showed Finder's menu bar in both runs with the
+  change and in none of three earlier `main` runs (the later entries' screenshots had none), and
+  the window logged no `focused true` after the exits. **`lj-step-19.2-fix2`** measures it: a
+  `wk-app` line (the app active, the menu bar, the window key and on the active Space, the
+  frontmost app) on each change while a page window exists, and a smoke-only knob
+  (`LITTLEJOAN_SMOKE_SPACES_BITS`, ignored without the smoke log) for smoke-only runs of the same
+  installers with other bits (`gh workflow run … -f installers_from_run= -f extra_env=`).
 
 ---
 

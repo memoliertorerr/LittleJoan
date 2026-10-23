@@ -39,7 +39,8 @@ pub fn join_active_space<R: Runtime>(window: &Window<R>) {
         let (was, behavior, level) = unsafe {
             let ns_window = &*ns_window;
             let was: usize = msg_send![ns_window, collectionBehavior];
-            let _: () = msg_send![ns_window, setCollectionBehavior: spaces::summoned(was)];
+            let wanted = smoke_override().unwrap_or_else(|| spaces::summoned(was));
+            let _: () = msg_send![ns_window, setCollectionBehavior: wanted];
             let behavior: usize = msg_send![ns_window, collectionBehavior];
             let level: isize = msg_send![ns_window, level];
             (was, behavior, level)
@@ -51,6 +52,66 @@ pub fn join_active_space<R: Runtime>(window: &Window<R>) {
     });
     if let Err(err) = queued {
         eprintln!("little-joan: could not set where the window shows: {err}");
+    }
+}
+
+/// CI experiments only (smoke mode): `LITTLEJOAN_SMOKE_SPACES_BITS=<n>` sets these collection
+/// behaviour bits instead of `spaces::summoned`'s, to compare AppKit's default and the parts of
+/// the setting on one runner (ci.yml's `extra_env`). Ignored without the smoke log.
+fn smoke_override() -> Option<usize> {
+    if !smoke::enabled() {
+        return None;
+    }
+    std::env::var("LITTLEJOAN_SMOKE_SPACES_BITS")
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// Smoke mode, on the main thread, while WebKit's element fullscreen is watched (mac.rs): the app's
+/// state as `active=<bool> menubar=<bool> key=<bool> space=<bool> front=<own|other>` — whether the
+/// app is active, AppKit shows the menu bar, the Little Joan window is key and on the active Space,
+/// and which app is frontmost. `None` when the window is gone.
+pub fn app_state<R: Runtime>(window: &Window<R>) -> Option<String> {
+    let ns_window = window.ns_window().ok()?.cast::<AnyObject>();
+    let application = AnyClass::get(c"NSApplication")?;
+    let menu = AnyClass::get(c"NSMenu")?;
+    let workspace = AnyClass::get(c"NSWorkspace")?;
+    if ns_window.is_null() {
+        return None;
+    }
+    // SAFETY: main thread (the caller's with_webview closure); `ns_window` is this tauri window's
+    // live NSWindow; +sharedApplication / +sharedWorkspace return the shared objects (or nil),
+    // -isActive / +menuBarVisible / -isKeyWindow / -isOnActiveSpace a BOOL,
+    // -frontmostApplication an NSRunningApplication or nil, -processIdentifier a pid_t.
+    unsafe {
+        let ns_window = &*ns_window;
+        let app: Option<Retained<AnyObject>> = msg_send![application, sharedApplication];
+        let active = app.is_some_and(|app| {
+            let active: bool = msg_send![&*app, isActive];
+            active
+        });
+        let menubar: bool = msg_send![menu, menuBarVisible];
+        let key: bool = msg_send![ns_window, isKeyWindow];
+        let space: bool = msg_send![ns_window, isOnActiveSpace];
+        let shared: Option<Retained<AnyObject>> = msg_send![workspace, sharedWorkspace];
+        let front = shared.and_then(|shared| {
+            let front: Option<Retained<AnyObject>> = msg_send![&*shared, frontmostApplication];
+            front.map(|front| {
+                let pid: i32 = msg_send![&*front, processIdentifier];
+                pid
+            })
+        });
+        let own = i32::try_from(std::process::id()).ok();
+        Some(format!(
+            "active={active} menubar={menubar} key={key} space={space} front={}",
+            if front.is_some() && front == own {
+                "own"
+            } else {
+                "other"
+            }
+        ))
     }
 }
 

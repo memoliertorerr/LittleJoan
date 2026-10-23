@@ -1382,7 +1382,11 @@ behaviour was set before it was first shown, and what it had before; LJ19.2), `w
 after a summon brought a window to the front: the key window of the active app / the foreground
 window / GTK's active window; nothing covering its centre, or the top of the window manager's
 stack; macOS: on the active Space), `window-present <label> x11 server-time | current-time`
-(Linux: the summon's raise-and-focus and its timestamp),
+(Linux: the summon's raise-and-focus and its timestamp), `wk-app active=<bool> menubar=<bool>
+key=<bool> space=<bool> front=<own|other>` (macOS, while a page window exists, on each change: the
+app active, the menu bar shown, the Little Joan window key and on the active Space, the frontmost
+app — around WebKit's element fullscreen; with `LITTLEJOAN_SMOKE_SPACES_BITS=<n>` in a smoke run
+the windows get those collection-behaviour bits instead, for CI experiments only),
 `summon-timing {"source":…,"url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}` (LJ19.1: one
 line per summon that built the window, each mark in ms after the request on the monotonic clock —
 the window code's `dispatched`, `windowBuilt`, `webviewsAdded`, `shown`, `cookiesRestored`,

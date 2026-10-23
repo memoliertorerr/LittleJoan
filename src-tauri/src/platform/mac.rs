@@ -6,7 +6,7 @@
 //! full-screen window (mac/spaces.rs, LJ19.2).
 
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
-use std::sync::mpsc;
+use std::sync::{Mutex, PoisonError, mpsc};
 use std::time::Duration;
 
 use objc2::rc::Retained;
@@ -151,12 +151,17 @@ pub fn watch_webkit_fullscreen<R: Runtime>(app: &AppHandle<R>) {
         .name("little-joan-wk-fullscreen".into())
         .spawn(move || {
             while let Some(page) = bar::page(&app) {
-                let _ = page.with_webview(|webview| {
+                let window = page.window();
+                let _ = page.with_webview(move |webview| {
                     let view = webview.inner().cast::<AnyObject>();
                     if view.is_null() {
                         return;
                     }
                     note_state(fullscreen_state(view).unwrap_or(WebKitFullscreen::Not));
+                    // LJ19.2: the app, the menu bar and the window around WebKit's fullscreen.
+                    if let Some(state) = spaces::app_state(&window) {
+                        note_app(state);
+                    }
                 });
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -177,6 +182,18 @@ fn note_state(state: WebKitFullscreen) {
     let code = state as i8;
     if LOGGED.swap(code, Ordering::SeqCst) != code {
         smoke::log("wk-fullscreen", state.name());
+    }
+}
+
+/// The last `wk-app` line the smoke log got.
+static LOGGED_APP: Mutex<String> = Mutex::new(String::new());
+
+/// Smoke mode: logs `wk-app <state>` (spaces::app_state) when it differs from the last line.
+fn note_app(state: String) {
+    let mut last = LOGGED_APP.lock().unwrap_or_else(PoisonError::into_inner);
+    if *last != state {
+        smoke::log("wk-app", &state);
+        *last = state;
     }
 }
 
