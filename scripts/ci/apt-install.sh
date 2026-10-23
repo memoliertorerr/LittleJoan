@@ -106,4 +106,6 @@ step() {
 
 step update update
 step download install -y --download-only "$@"
-as_root "$apt_get" install -y --no-download "$@"
+# Everything is in apt's cache now, so this fetches nothing. (Not `--no-download`: with it apt
+# 2.4 and 2.7 refuse a local .deb — "Internal Error, Pathname to install is not absolute", CI.)
+as_root "$apt_get" install -y "$@"

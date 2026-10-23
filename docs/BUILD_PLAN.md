@@ -3872,6 +3872,11 @@ above other apps' windows after the user clicks elsewhere (Little Arc isn't alwa
   on update and download, then the Ubuntu archive first); the smoke job's limit is 75 minutes. The
   packages and every check are the same. The script's failover was tried on the Mac against a
   folder of fake sources and a fake apt-get that stalls (bash 3.2, so no bash-4 features).
+  **`lj-step-19.2-fix`:** its first CI run (39925283258) failed the five `.deb` smoke jobs in that
+  step — the final `apt-get install --no-download` refuses a local `.deb` on apt 2.4 and 2.7
+  ("Internal Error, Pathname to install is not absolute"); the install now runs without the flag
+  (everything is in apt's cache by then, so it fetches nothing). The mirror list itself worked:
+  update 6–10 s, the download 8–26 s on every Linux job of that run.
 
 ---
 
