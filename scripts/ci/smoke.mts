@@ -37,7 +37,11 @@
 // Linux a Wayland session brings the icon back; smoke-tray.mts), then the summon-timing run (its own
 // launch without gdb, a seeded history: first, warm, idle and cold summons — the file cache emptied
 // with sudo on macOS and Linux —, through `--show` and the real global shortcut; timing.md;
-// smoke-timing.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
+// smoke-timing.mts), then the over-full-screen run (another app's full-screen window first — a
+// Swift app in native full screen on macOS, a borderless WinForms window on Windows, an X11
+// _NET_WM_STATE_FULLSCREEN window on Linux —, then Little Joan summoned over it through `--show`,
+// the real shortcut and `--settings`: in front with the keyboard, on the same Space;
+// over-fullscreen*.png; smoke-spaces.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
 // smoke-theme.mts) and the webview helper processes. The app runs on a fresh
 // LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
 // as every launch after the first does. Last, the first-launch check: quit, launch on an empty
@@ -104,6 +108,7 @@ import { findApp, listProcs } from "./smoke-linux.mts";
 import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
 import { summonTimings, timingFailures, timingRun, timingSummary, timingTable, type TimingDriver } from "./smoke-timing.mts";
+import { spacesFailures, spacesRun, spacesSummary } from "./smoke-spaces.mts";
 import { ZOOMED, zoomFailures, zoomReset, zoomSummary, zoomedViewport } from "./smoke-zoom.mts";
 import {
   DOWNLOAD_NAME,
@@ -1537,6 +1542,20 @@ console.log(timingMd);
 if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${timingMd}`);
 }
+// The over-full-screen run (LJ19.2, smoke-spaces.mts): its own launch, summoned over another app's
+// full-screen window.
+const spacesCheck = await spacesRun({
+  os,
+  out,
+  launch: fullscreenLaunch,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  clickCentre,
+  typeText,
+  pressSummonShortcut,
+  run,
+});
+console.log(`spaces: ${JSON.stringify(spacesSummary(spacesCheck, os))}`);
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -1636,6 +1655,8 @@ const summary = {
   // LJ19.1: the timing run, and the main run's summons (its first is the runner's first window).
   timingRun: timingSummary(timingCheck, os),
   mainRunTimings: summonTimings(log),
+  // LJ19.2: summoned over another app's full-screen window.
+  spacesRun: spacesSummary(spacesCheck, os),
   downloads: downloadSummary(downloadCheck),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
@@ -1691,6 +1712,7 @@ const failures = evaluate(
   .concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os))
   .concat(trayFailures(trayCheck, os))
   .concat(timingFailures(timingCheck, os))
+  .concat(spacesFailures(spacesCheck, os))
   .concat(downloadFailures(downloadCheck, os))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
@@ -1700,7 +1722,7 @@ if (failures.length > 0) {
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
   const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
-  const trayLogs = ["quick", "keymap", "keyboard-problem", "downloads", "tray", "tray-settings", "tray-wayland", "timing"].map((name) => join(out, `smoke-${name}.log`));
+  const trayLogs = ["quick", "keymap", "keyboard-problem", "downloads", "tray", "tray-settings", "tray-wayland", "timing", "spaces"].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }

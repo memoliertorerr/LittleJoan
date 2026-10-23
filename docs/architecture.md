@@ -313,6 +313,11 @@ src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke t
 src-tauri/src/summon_timing.rs     smoke mode only: a summon's marks from the request to the command
                                    bar on screen, one `summon-timing` line per summon (pure part
                                    tested, LJ19.1)
+src-tauri/src/spaces.rs            where a summoned window shows up (LJ19.2): macOS's collection
+                                   behaviour (`summoned`: moveToActiveSpace + fullScreenAuxiliary,
+                                   AppKit's exclusive groups kept to one member), the bits' names,
+                                   the smoke log's `window-spaces` / `window-front` lines (pure,
+                                   tested)
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen;
                                    WebKitFullscreen (WKWebView's fullscreenState);
                                    needs_fullscreen_off (WebKitGTK older than 2.52; tested)
@@ -333,6 +338,8 @@ src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → k
                                    ContainsFullScreenElementChanged → window fullscreen; phone
                                    mode's agent through the DevTools protocol (SetUserAgent as the
                                    fallback), Page.getLayoutMetrics
+src-tauri/src/platform/win/front.rs  Windows: the smoke log's check that a summoned window is the
+                                   foreground window and on top at its centre (LJ19.2)
 src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode), autoresizing
                                    masks; WebKit's fullscreenState (CI's `wk-fullscreen` log); the
                                    symbolic-hotkeys domain read through NSUserDefaults (read-only)
@@ -342,11 +349,17 @@ src-tauri/src/platform/linux.rs    Linux: GTK window key-press-event → keys.rs
                                    older than 2.52 (the runtime version)
 src-tauri/src/platform/linux/downloads.rs  Linux: the page's downloads through WebKitGTK itself (an
                                    emission hook on decide-destination), cancelled on close
+src-tauri/src/platform/linux/front.rs      Linux: a summon's raise-and-focus (GTK present) with the X
+                                   server's time on X11, and the smoke log's active / top-of-stack
+                                   check (LJ19.2)
 src-tauri/src/platform/mac/activity.rs     macOS: a summon's NSProcessInfo activity (App Nap off
                                    until the window is up; never at rest) and, for the smoke log,
                                    App Nap's state (the task's suppression policy) (LJ19.1)
 src-tauri/src/platform/mac/downloads.rs    macOS: the page's WKDownloads noted (a wrapped
                                    -[WKDownload setDelegate:]) and cancelled when the window closes
+src-tauri/src/platform/mac/spaces.rs       macOS: a window's collection behaviour set before it is
+                                   first shown (the active Space, over full-screen apps; LJ19.2),
+                                   and the smoke log's key / on-top / on-the-active-Space check
 src-tauri/src/platform/portal.rs   Linux: the summon shortcut through the XDG GlobalShortcuts portal
                                    (ashpd): the host registry, a session, BindShortcuts, Activated
                                    → toggle, ShortcutsChanged (LJ17)
@@ -412,6 +425,12 @@ scripts/ci/smoke-downloads.mts     CI: the downloads run (two attachments, one r
 scripts/ci/smoke-timing.mts        CI: the summon-timing run (first, warm, idle, cold after the file
                                    cache was emptied, the real shortcut; timing.md), its rules and
                                    ceilings; unit-tested (LJ19.1)
+scripts/ci/smoke-spaces.mts        CI: the over-full-screen run (Little Joan summoned over another
+                                   app's full-screen window: `--show`, the real shortcut,
+                                   `--settings`; macOS probes) and its rules; unit-tested (LJ19.2)
+scripts/ci/smoke-spaces-helpers.mts  CI: that full-screen window per OS — a Swift app in native full
+                                   screen, a borderless WinForms window, an X11 window with
+                                   _NET_WM_STATE_FULLSCREEN — each writing its status every 500 ms
 scripts/ci/smoke-zoom.mts          CI: the main run's zoom check (Ctrl+= narrows the page's viewport,
                                    Ctrl+0 brings it back) and its rules; unit-tested
 scripts/ci/smoke-linux.mts         CI: which process is the app on Linux (under gdb, in the
@@ -472,6 +491,32 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   (user-initiated, latency-critical; `platform/mac/activity.rs`) from the request until the
   window is up, so App Nap — which may have throttled the idle, windowless app — doesn't slow
   it; nothing holds one at rest.
+- **Where the window shows up (LJ19.2): where the user is, in front with the keyboard — over
+  another app's full-screen window too — and never always-on-top.** Like Little Arc: it opens
+  where you are and goes behind other windows once you click them. **macOS:** before the window
+  (and Settings) is first shown, `platform/mac/spaces.rs` gives its NSWindow the collection
+  behaviour `spaces::summoned` — `MoveToActiveSpace` (made active, it comes to the Space on
+  screen instead of taking the user to its own; not `CanJoinAllSpaces`, which would put the open
+  window on every desktop and full-screen Space at once) and `FullScreenAuxiliary` (it may show on
+  a full-screen window's Space, another app's too for an accessory app like Little Joan); the
+  level stays normal, so the summon's activation is what puts it in front, and it drops behind
+  like any window after a click elsewhere. AppKit allows one of fullScreenPrimary / Auxiliary /
+  None, so Little Joan's own window can't be made a full-screen Space (its green button zooms);
+  a page's element fullscreen is WebKit's own window and is untouched (LJ36's guard as before).
+  The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
+  other apps' full-screen Spaces. **Windows:** tao's `set_focus` already does what's needed:
+  `SetForegroundWindow`, and when the foreground lock refuses it (a background process), an Alt
+  tap through `SendInput` and again; the global shortcut's `WM_HOTKEY` grants the right anyway,
+  and a second launch passes it on (`AllowSetForegroundWindow`, tauri-plugin-single-instance). The
+  window is never topmost: a full-screen window that is topmost itself stays above it.
+  **Linux:** the window manager raises and focuses on GTK's `present` (`_NET_ACTIVE_WINDOW`) —
+  if the request isn't older than the user's last input in another window (focus-stealing
+  prevention). tao presents with `GDK_CURRENT_TIME`, which GTK turns into the last input event
+  Little Joan saw — after the user once typed into it, an old keystroke, so a later summon over a
+  full-screen window was refused and left behind it. `platform/linux/front.rs` presents with the X
+  server's time now (`gdk_x11_get_server_time`; the shortcut's key goes to global-hotkey's own X
+  connection, never to GTK); on Wayland GTK and the compositor decide, as before. A window manager
+  may still refuse when the user was typing in another window at that very moment.
 - The window opens centred in the work area of the monitor under the mouse cursor, at the last
   size the user left it (logical pixels, saved on close unless fullscreen/maximized/minimized).
 - **Every close goes through the same path.** The close button, Cmd+W / Alt+F4
@@ -1328,6 +1373,13 @@ download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't t
 `download-noted` / `download-cancelled <n>` (macOS: a WKDownload noted; cancelled on close),
 `zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
+`window-spaces <label> behavior=<names> was=<names> level=<n>` (macOS: a window's collection
+behaviour was set before it was first shown, and what it had before; LJ19.2), `window-front
+<label> focused=<bool> top=<bool>[ space=<bool>]` or `window-front <label> unknown` (about a second
+after a summon brought a window to the front: the key window of the active app / the foreground
+window / GTK's active window; nothing covering its centre, or the top of the window manager's
+stack; macOS: on the active Space), `window-present <label> x11 server-time | current-time`
+(Linux: the summon's raise-and-focus and its timestamp),
 `summon-timing {"source":…,"url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}` (LJ19.1: one
 line per summon that built the window, each mark in ms after the request on the monotonic clock —
 the window code's `dispatched`, `windowBuilt`, `webviewsAdded`, `shown`, `cookiesRestored`,
@@ -1371,6 +1423,9 @@ The modules below hold every decision the app makes; the native glue only calls 
   | Open, focused     | Destroy | Focus      | FocusAndNavigate   | Destroy |
   | Open, not focused | Focus   | Focus      | FocusAndNavigate   | Destroy |
 
+- **spaces** — macOS's collection behaviour for Little Joan's windows: `summoned(current)` sets
+  `MoveToActiveSpace` and `FullScreenAuxiliary`, clears the other members of their exclusive
+  groups (`CanJoinAllSpaces`; fullScreenPrimary / None) and keeps every other bit; idempotent.
 - **cli** — `--toggle`, `--show [http(s) url]`, `--hide`, `--size WxH` (1–10000 each; resizes
   the open window); the last flag wins; unknown arguments are ignored; `--show` accepts only
   absolute web URLs. `--start-at-login on|off` (any case; other values are ignored) is a
@@ -1631,7 +1686,24 @@ and pushes to `main`:
   latency to the app). The table, with macOS's App Nap state per summon under it, goes into
   `timing.md` and the job's summary (log
   `smoke-timing.log`, `summary.json`'s `timingRun`; the main run's own lines are its
-  `mainRunTimings`). Last comes the
+  `mainRunTimings`). Then the **over-full-screen run** (`smoke-spaces.mts`, LJ19.2): another
+  app's full-screen window first (`smoke-spaces-helpers.mts` — macOS: a Swift app in native full
+  screen, its own Space; Windows: a borderless WinForms window covering the screen, not topmost;
+  Linux: an X11 window with `_NET_WM_STATE_FULLSCREEN`, through Python's ctypes and libX11, under
+  openbox), made active (a click on it; macOS: its own activation), then Little Joan on its own
+  launch summoned over it three times — `--show`; after a letter typed into its command bar
+  (Windows, Linux), `--hide` and a click back, the real global shortcut (`--show` if its key didn't
+  arrive); `--hide`, `--settings`. Windows and Linux: the full-screen window was active before
+  each summon, and each summoned window logs `window-front … focused=true top=true` while the
+  active window belongs to the app (the helper's GetForegroundWindow; xdotool). macOS: every
+  window's `window-spaces` shows moveToActiveSpace + fullScreenAuxiliary at level 0, and once the
+  helper is full screen its Space is still the one on screen after each summon and the window is
+  on it (`space=true`); in front and the keyboard are recorded (CI's summons are synthetic, which
+  macOS 14+ may not activate an app for), as are three probes — an accessory window with AppKit's
+  default behaviour, with Little Joan's, and with Little Joan's + canJoinAllApplications, ordered
+  front over the full-screen window. Screenshots `over-fullscreen.png`,
+  `over-fullscreen-shortcut.png`, `over-fullscreen-settings.png` (log `smoke-spaces.log`, the
+  helper's `fs-helper.jsonl`; `summary.json`'s `spacesRun`). Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (logs

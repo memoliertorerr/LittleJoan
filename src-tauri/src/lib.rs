@@ -30,6 +30,7 @@ pub mod settings_live;
 pub mod settings_window;
 pub mod shortcut;
 pub mod smoke;
+pub mod spaces;
 pub mod state;
 pub mod suggest;
 pub mod summon_timing;

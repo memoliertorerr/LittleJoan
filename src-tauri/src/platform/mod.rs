@@ -1,5 +1,7 @@
-//! Per-OS native hooks installed on the page window's two webviews (bar.rs), and the Linux
-//! portal that holds the summon shortcut in a Wayland session (portal.rs, LJ17).
+//! Per-OS native hooks installed on the page window's two webviews (bar.rs), the Linux portal
+//! that holds the summon shortcut in a Wayland session (portal.rs, LJ17), and where a summoned
+//! window shows up — the current Space, in front, over another app's full-screen window (LJ19.2,
+//! spaces.rs).
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -11,8 +13,12 @@ mod portal;
 mod win;
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use tauri::{AppHandle, Runtime, Webview, Window};
+
+use crate::smoke;
+use crate::spaces::Front;
 
 /// Linux: asks the XDG GlobalShortcuts portal for the summon shortcut (a Wayland session, LJ17);
 /// it answers later, through shortcut::portal_answered.
@@ -259,4 +265,75 @@ pub fn write_clipboard(text: &str) -> Result<(), String> {
 #[cfg(target_os = "macos")]
 pub fn write_clipboard(text: &str) -> Result<(), String> {
     mac::write_clipboard(text)
+}
+
+/// macOS: before a window is first shown, its collection behaviour joins it to the Space the user
+/// is on and lets it show over another app's full-screen window (LJ19.2, mac/spaces.rs; smoke log
+/// `window-spaces …`). Queued on the main thread ahead of the caller's `show()`.
+#[cfg(target_os = "macos")]
+pub fn join_active_space<R: Runtime>(window: &Window<R>) {
+    mac::join_active_space(window);
+}
+
+/// Windows and Linux open a new window on the current virtual desktop / workspace, where the
+/// summon raises it.
+#[cfg(not(target_os = "macos"))]
+pub fn join_active_space<R: Runtime>(_window: &Window<R>) {}
+
+/// Linux: raises and focuses a window being shown, with a fresh X server timestamp on X11, so the
+/// window manager doesn't refuse it as focus stealing (linux/front.rs, LJ19.2).
+#[cfg(target_os = "linux")]
+pub fn bring_to_front<R: Runtime>(window: &Window<R>) -> tauri::Result<()> {
+    linux::bring_to_front(window)
+}
+
+/// Windows and macOS: tao's `set_focus` — `SetForegroundWindow`, with its Alt-key fallback when
+/// the foreground lock refuses (win/front.rs); `makeKeyAndOrderFront` and
+/// `activateIgnoringOtherApps` on macOS.
+#[cfg(not(target_os = "linux"))]
+pub fn bring_to_front<R: Runtime>(window: &Window<R>) -> tauri::Result<()> {
+    window.set_focus()
+}
+
+/// How long after a summon `report_front` looks: the window manager's (or AppKit's) answer to
+/// the raise has come by then.
+const FRONT_DELAY: Duration = Duration::from_millis(1200);
+
+/// Smoke mode only (CI's over-full-screen check, LJ19.2): about a second after a summon brought
+/// `window` to the front, logs `window-front <label> focused=<bool> top=<bool>[ space=<bool>]`
+/// (spaces::Front), or `window-front <label> unknown` when the window is gone. Nothing runs
+/// without the smoke log.
+pub fn report_front<R: Runtime>(window: &Window<R>) {
+    if !smoke::enabled() {
+        return;
+    }
+    let window = window.clone();
+    let spawned = std::thread::Builder::new()
+        .name("little-joan-front".into())
+        .spawn(move || {
+            std::thread::sleep(FRONT_DELAY);
+            let detail = match front(&window) {
+                Some(front) => front.line(window.label()),
+                None => format!("{} unknown", window.label()),
+            };
+            smoke::log("window-front", &detail);
+        });
+    if let Err(err) = spawned {
+        eprintln!("little-joan: could not check the window's place: {err}");
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn front<R: Runtime>(window: &Window<R>) -> Option<Front> {
+    mac::front(window)
+}
+
+#[cfg(windows)]
+fn front<R: Runtime>(window: &Window<R>) -> Option<Front> {
+    win::front(window)
+}
+
+#[cfg(target_os = "linux")]
+fn front<R: Runtime>(window: &Window<R>) -> Option<Front> {
+    linux::front(window)
 }

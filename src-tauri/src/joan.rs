@@ -190,14 +190,18 @@ fn create<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri::Result<()>
     }
     summon_timing::mark(Mark::WebviewsAdded);
     placement::place(app, &window, width, height);
+    // macOS: on the Space the user is on, a full-screen app's too, before it is first shown.
+    platform::join_active_space(&window);
     window.show()?;
-    window.set_focus()?;
+    // In front with the keyboard (on Linux with a fresh X server timestamp; LJ19.2).
+    platform::bring_to_front(&window)?;
     summon_timing::mark(Mark::Shown);
     bar::apply_layout(&window);
     // The window was built with the command bar open (bar.rs); this puts the keyboard in it.
     bar::focus_bar(app);
     smoke::log("window-created", "");
     bar::log_overlay();
+    platform::report_front(&window);
     // Once the window is on screen, and still before any web page loads (the start page under
     // the command bar needs neither): the kept session cookies (Windows) and the page's user
     // agent for its width (phone_mode.rs). On Windows both wait for WebView2, which kept the
@@ -254,7 +258,8 @@ fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(window) = app.get_window(LABEL) {
         window.unminimize()?;
         window.show()?;
-        window.set_focus()?;
+        platform::bring_to_front(&window)?;
+        platform::report_front(&window);
     }
     Ok(())
 }

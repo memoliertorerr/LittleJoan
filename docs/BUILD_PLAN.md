@@ -88,6 +88,7 @@
 | LJ18.1 | *(added mid-plan 2026-10-19)* Linux ARM64 builds: an `arm64` `.deb` (ubuntu-22.04-arm) and an `aarch64` AppImage (ubuntu-24.04-arm), smoke-tested on ARM runners like their x86_64 twins | strong | auto | ✅ done |
 | LJ19 | *(v0.2)* Release v0.2.0: versions, CHANGELOG, README; the owner's checklist; the green PR may be merged, the tag waits for the owner's word | standard | checkpoint | ✅ done — v0.2.0 released 2026-10-23 on 67379a4 (the commit CI built, run 39333251091; seven assets incl. ARM64) on the owner's word; the owner tests it afterwards |
 | LJ19.1 | *(added mid-plan 2026-10-22)* Faster first summon after idle: summon timing in the smoke log, measured per OS (first, warm, idle, cold-after-eviction, the real shortcut), then the summon path optimized where the numbers point; loose CI ceilings | strong | auto | ✅ done (measured, then lj-step-19.1-fix / fix2 — see notes; macOS −6…−17 % warm in CI, Windows −40 % (mostly faster runners; ~90 ms ours), Linux within noise; the rest is the engine starting at every summon) |
+| LJ19.2 | *(added mid-plan 2026-10-22)* Show over full-screen apps and on the current Space: macOS windows join the active Space and may show over other apps' full-screen windows (moveToActiveSpace + fullScreenAuxiliary, the normal level), Linux raises with a fresh X server timestamp, Windows checked; an over-full-screen smoke run on every OS | strong | auto | ✅ done (CI: see notes) |
 | LJ19.3 | *(added mid-plan 2026-10-22)* Open-source polish: issue and PR templates, the Contributor Covenant code of conduct, README badges, a trademark-check note for the owner (PR #30, docs-only, run in a second checkout in parallel with LJ19.1) | standard | auto | ✅ done — PR #30, merged as 60c1db3 |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
@@ -186,7 +187,7 @@ commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
 and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Phase 10 (LJ18) ⏭ skipped: `gh secret list --repo memoliertorerr/LittleJoan` shows no Apple signing secrets (checked 2026-10-19), so the macOS build stays ad-hoc signed and LJ19's checklist keeps the README's Gatekeeper step; LJ18 runs as written once the owner adds the secrets (its pre-step). On the owner's decision (2026-10-19) phase 10 instead carries **LJ18.1, Linux ARM64 builds** (added mid-plan: the owner tests Ubuntu 22.04 ARM in Parallels on an Apple silicon Mac at LJ19's checkpoint): an `arm64` `.deb` built on ubuntu-22.04-arm and an `aarch64` AppImage built on ubuntu-24.04-arm, both smoke-tested on ARM runners like their x86_64 twins (branch `lj/p10-arm64`). Phase 11 (LJ19): the release PR on `lj/release-0.2.0` — version 0.2.0, the CHANGELOG's `[0.2.0] — 2026-10-19` with its Known issues, the README pointing at v0.2.0 — merged by the agent once green (the owner allowed it for this PR); the owner's checklist is in the PR. Next: the owner's checklist; then, on their word, the v0.2.0 release (tag and `gh release create`); phase 21 starts only on the owner's go.** **2026-10-23: on the owner's word v0.2.0 was released (the Latest release) from 67379a4; the owner tests it afterwards and a v0.2.1 follows if needed. LJ19.1 (faster first summon) and LJ19.3 (open-source polish) are merged; next: LJ19.2 (show over full-screen apps, current Space), then v0.3.****
+checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Phase 10 (LJ18) ⏭ skipped: `gh secret list --repo memoliertorerr/LittleJoan` shows no Apple signing secrets (checked 2026-10-19), so the macOS build stays ad-hoc signed and LJ19's checklist keeps the README's Gatekeeper step; LJ18 runs as written once the owner adds the secrets (its pre-step). On the owner's decision (2026-10-19) phase 10 instead carries **LJ18.1, Linux ARM64 builds** (added mid-plan: the owner tests Ubuntu 22.04 ARM in Parallels on an Apple silicon Mac at LJ19's checkpoint): an `arm64` `.deb` built on ubuntu-22.04-arm and an `aarch64` AppImage built on ubuntu-24.04-arm, both smoke-tested on ARM runners like their x86_64 twins (branch `lj/p10-arm64`). Phase 11 (LJ19): the release PR on `lj/release-0.2.0` — version 0.2.0, the CHANGELOG's `[0.2.0] — 2026-10-19` with its Known issues, the README pointing at v0.2.0 — merged by the agent once green (the owner allowed it for this PR); the owner's checklist is in the PR. Next: the owner's checklist; then, on their word, the v0.2.0 release (tag and `gh release create`); phase 21 starts only on the owner's go.** **2026-10-23: on the owner's word v0.2.0 was released (the Latest release) from 67379a4; the owner tests it afterwards and a v0.2.1 follows if needed. LJ19.1 (faster first summon) and LJ19.3 (open-source polish) are merged; LJ19.2 (show over full-screen apps, on the current Space; PR #33 on `lj/p11-fullscreen-spaces`) is done; next: v0.3 on the owner's go.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -3750,6 +3751,118 @@ thread before the window shows).
   Not done, because they bend hibernation or need a design decision — see Deferred follow-ups:
   keeping WebKit / WebView2 warm for a while after a close, and creating the page webview only
   after the bar has painted (or when a page is opened).
+
+### LJ19.2 — Show over full-screen apps and on the current Space · strong · auto
+
+> **Added mid-plan 2026-10-22, approved by the owner** ("Little Arc appears above full-screen apps
+> — show over fullscreen apps for sure"). Branch `lj/p11-fullscreen-spaces` from the latest
+> `main`; the PR goes into `main`, and the agent merges it once every job is green (Ground Rule
+> 24). No CI workflow change: the new run lives in the smoke harness (`scripts/ci/`), which every
+> smoke job already runs.
+
+**Verify:** `npm run verify` green, including Rust tests for `spaces.rs` (`summoned`: moveToActiveSpace
++ fullScreenAuxiliary from any starting behaviour, one member of each of AppKit's exclusive groups,
+every other bit kept, idempotent; the bits' names; the `window-spaces` / `window-front` lines) and
+vitest for `scripts/ci/smoke-spaces.mts` (the helper's status file, `window-front` / `window-spaces`
+parsing, the rules per OS, the summary). CI: every smoke job runs the **over-full-screen run** —
+another app's full-screen window first (macOS: a Swift app in native full screen; Windows: a
+borderless WinForms window covering the screen, not topmost; Linux: an X11 window with
+`_NET_WM_STATE_FULLSCREEN` under openbox), made active, then Little Joan summoned over it by
+`--show`, by the real shortcut after a letter was typed into it and the full-screen window clicked
+again, and by `--settings`. Windows and Linux: each summoned window `focused=true top=true` and the
+active window the app's; macOS: every window's `window-spaces` shows moveToActiveSpace +
+fullScreenAuxiliary at level 0, and where the helper reached full screen, its Space stays on screen
+through every summon with the window on it (`space=true`); in front / keyboard on macOS and three
+AppKit probes are informational. Screenshots `over-fullscreen.png`, `over-fullscreen-shortcut.png`,
+`over-fullscreen-settings.png`. Every earlier smoke rule stays green, LJ36's element-fullscreen run
+on macOS included.
+**Human check:** on the Mac — Safari (or any app) in full screen, ⌘⇧Space: Little Joan appears over
+it on that Space; another Space, summon: it appears there; a YouTube video's fullscreen inside
+Little Joan still works; Little Joan doesn't stay on top after clicking another app.
+**Commit:** `lj-step-19.2: show over full-screen apps and on the current Space`
+
+```text
+The owner (2026-10-22): "Little Arc appears above full-screen apps — show over fullscreen apps for
+sure." Summoning Little Joan while another app is full screen, or on any Space / desktop, must open
+the window right there, on top, with the keyboard, without switching Spaces — and it must not stay
+above other apps' windows after the user clicks elsewhere (Little Arc isn't always-on-top).
+
+1. macOS: set the page window's (and Settings') NSWindow collection behaviour before it is first
+   shown, through objc2 as platform/mac/* does: MoveToActiveSpace or CanJoinAllSpaces (decide and
+   say why) with FullScreenAuxiliary; check whether a raised level is needed while summoned and keep
+   it only as long as needed. The accessory activation policy stays; element fullscreen (LJ36's
+   guard) keeps working. No new dependency.
+2. Windows: check what the summon does (SetForegroundWindow rules, focus-stealing prevention) over
+   a full-screen window (a browser in F11, a borderless game); fix with the least invasive standard
+   technique only if needed. Never always-on-top.
+3. Linux (X11): the same through the window manager's normal raise/activate path
+   (_NET_ACTIVE_WINDOW via GTK's present); document what window managers may still refuse.
+4. Unit tests for every pure decision; a smoke run per OS over a full-screen window (`--show`, a
+   screenshot `over-fullscreen.png`, the app's own smoke-log check), and on macOS a `window-spaces`
+   line proving the collection behaviour and level where the visual can't be checked. Docs: README
+   (one line), CHANGELOG [Unreleased] → Added, docs/architecture.md (window behaviour), this plan.
+```
+
+**Implementation notes (2026-10-23):**
+
+- **Disk:** 9.0 GiB free at the start of the step; `.cache/target` 1.2 GB.
+- **What the summon did before** (read in tao 0.37.1 and the plugins): macOS — `show()` then
+  `set_focus()` = `makeKeyAndOrderFront` + `activateIgnoringOtherApps:YES`, on a window with AppKit's
+  default collection behaviour, which can't be on another app's full-screen Space: macOS takes the
+  user to a desktop Space instead (or, when it declines to activate the app, leaves the window
+  there out of sight). Windows — `ShowWindow`, then `SetForegroundWindow`, and when the foreground
+  lock refuses it tao taps Alt through `SendInput` and tries again (input the system counts as the
+  user's); the hotkey's `WM_HOTKEY` grants the right anyway, and a `--show` second launch passes it
+  on (`AllowSetForegroundWindow`, tauri-plugin-single-instance). Linux — tao's `present_with_time(
+  GDK_CURRENT_TIME)`, which GTK turns into the last input event *this app* saw: none for a new
+  process, but after the user once typed into Little Joan, that keystroke — older than anything
+  they did since in the full-screen app, so openbox, Mutter and KWin refuse the activation as focus
+  stealing and leave the window under the focused (full-screen) one. The global shortcut's key never
+  reaches GTK (global-hotkey grabs it on its own X connection).
+- **macOS — `MoveToActiveSpace | FullScreenAuxiliary`, the normal level** (`spaces::summoned`,
+  `platform/mac/spaces.rs`): queued on the main thread right before the window's `show()` (tauri
+  delivers both in order), for the page window and Settings (now built hidden and shown the same
+  way). **MoveToActiveSpace, not CanJoinAllSpaces:** both bring the window to the Space on screen,
+  but CanJoinAllSpaces would also leave an open window on every desktop and full-screen Space at
+  once, following the user through Mission Control like a sticker — a pop-up browser belongs where
+  it was summoned, and an open one summoned from another Space comes over (MoveToActiveSpace moves
+  it when it is made active). **FullScreenAuxiliary** lets the window show on a full-screen window's
+  Space; for an accessory app — Little Joan's activation policy, kept — that includes other apps'
+  (Apple DTS: the accessory policy is what lets an app's windows appear above other apps' full-screen
+  content). AppKit allows one of fullScreenPrimary / Auxiliary / None, so Little Joan's own window
+  can't become a full-screen Space any more (its green button zooms; the toolbar's double click
+  already zoomed); element fullscreen is WebKit's own window (WebKit changes only that window's
+  behaviour, read in WKFullScreenWindowController.mm), so a video's fullscreen is untouched.
+  `canJoinAllApplications` (macOS 13+, "join other apps' full-screen spaces", meant for floating
+  overlays; it also takes the window out of Stage Manager's layout) was left out — the CI probe
+  records whether a runner needs it. **No raised level:** the summon's activation orders the window
+  in front of the full-screen window; a floating level would keep Little Joan above every other app
+  after a click elsewhere (and Apple DTS notes floating and statusBar levels sit *below* full-screen
+  content for a window that doesn't activate its app anyway). Smoke log: `window-spaces <label>
+  behavior=moveToActiveSpace|fullScreenAuxiliary was=default level=0`.
+- **Windows — no change:** the path above is the standard set of techniques already (SetForegroundWindow,
+  the Alt-key unlock, AllowSetForegroundWindow); the window is never topmost, so a full-screen
+  window that isn't topmost goes behind it, and one that is topmost stays above it (a game in
+  exclusive full screen, a topmost video player — not covered). CI checks it from outside.
+- **Linux — the X server's time** (`platform/linux/front.rs`): `bring_to_front` presents the window
+  with `gdk_x11_get_server_time` (declared against libgdk-3, which gdk-sys links — no new
+  dependency) on X11, `GDK_CURRENT_TIME` on Wayland (GTK and the compositor decide, xdg-activation,
+  as before), and shows only the toplevel first if tao's show hasn't run yet (`show_all` would show
+  the page webview the command bar's overlay hides). A window manager may still refuse when the
+  user typed into another window that very moment (openbox: within 500 ms of the request).
+  Smoke log: `window-present <label> x11 server-time`.
+- **The check** (smoke mode only): about 1.2 s after a summon brought a window to the front,
+  `window-front <label> focused= top=[ space=]` — macOS: the key window of the active app, the
+  topmost window at its centre (`+[NSWindow windowNumberAtPoint:belowWindowWithWindowNumber:]`),
+  on the active Space; Windows: the foreground window, `WindowFromPoint` at its centre (a
+  `windows` crate feature tauri already builds, `Win32_UI_WindowsAndMessaging`); Linux: GTK's
+  active window, the top of `_NET_CLIENT_LIST_STACKING`.
+- **The run** (`scripts/ci/smoke-spaces.mts`, helpers in `smoke-spaces-helpers.mts`, after the
+  timing run) is described under Verify. The Linux helper is Python's ctypes over libX11 (both on
+  every runner: nothing installed); its typed letter before the shortcut's summon is what made the
+  old timestamp a problem, so that summon is the Linux fix's test.
+- `npm run verify`: 658 TS tests, 395 Rust tests (macOS), clippy clean. Disk: 10 GiB free after
+  verify; `.cache/target` 1.2 GB.
 
 ---
 
@@ -8577,6 +8690,16 @@ and where, then stop.
   came 1.3 s after its script was ready — the engine, not our code (Linux and Windows don't show
   it). The bar's own marks (`barThemeAnswered`, `barStartInfo`, `barNavigation`, …) now say where
   inside the engine it waits; look there before changing anything.
+- **The shortcut during a video's fullscreen on macOS** (surfaced by LJ19.2). While WebKit shows a
+  page's element fullscreen in its own window, the Little Joan window isn't the key window, so the
+  shortcut focuses it (toggle table) — and with `MoveToActiveSpace` + `FullScreenAuxiliary` it now
+  comes onto the video's full-screen Space, over the video, where before macOS switched to the
+  window's desktop Space. Either is odd; the owner may prefer the shortcut to hide Little Joan then
+  (treat WebKit's fullscreen window as "focused" in `toggle::decide`'s input).
+- **A topmost full-screen window stays above Little Joan** (surfaced by LJ19.2): Little Joan is never
+  topmost, so on Windows a topmost full-screen window (some video players, exclusive-full-screen
+  games) and on Linux a window manager's full-screen layer for a still-focused window keep it
+  behind. Making Little Joan topmost while summoned would need a rule for when to drop it again.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---

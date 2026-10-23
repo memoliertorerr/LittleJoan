@@ -8,7 +8,8 @@
 //! fullscreen is followed through WebKitGTK's `enter-fullscreen` and `leave-fullscreen`
 //! signals, to hide the bar meanwhile — and switched off on WebKitGTK older than 2.52, which
 //! aborts the process as a page enters it (LJ14.1, `fullscreen::needs_fullscreen_off`).
-//! The page's downloads go through WebKitGTK itself (linux/downloads.rs, LJ15).
+//! The page's downloads go through WebKitGTK itself (linux/downloads.rs, LJ15). A summon raises
+//! and focuses the window with a fresh X server timestamp (linux/front.rs, LJ19.2).
 
 use gtk::glib::Propagation;
 use gtk::glib::prelude::*;
@@ -28,6 +29,9 @@ use crate::state;
 /// The page's downloads, through WebKitGTK itself (LJ15).
 mod downloads;
 pub use downloads::cancel as cancel_downloads;
+/// A summoned window in front, with the keyboard (LJ19.2).
+mod front;
+pub use front::{bring_to_front, front};
 
 /// The bar: a fixed height at the top of the window's box instead of an equal share.
 ///

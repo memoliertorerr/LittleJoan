@@ -2,7 +2,8 @@
 //! mask (LJ39), WebKit's element fullscreen (`fullscreenState`), and the general pasteboard
 //! (extensions' clipboard.writeText); the page's downloads are followed to cancel them when the
 //! window closes (mac/downloads.rs, LJ15); App Nap stays off while a summon builds the window
-//! (mac/activity.rs, LJ19.1).
+//! (mac/activity.rs, LJ19.1); the windows join the active Space and may show over another app's
+//! full-screen window (mac/spaces.rs, LJ19.2).
 
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
 use std::sync::mpsc;
@@ -27,6 +28,9 @@ pub use downloads::{cancel as cancel_downloads, follow as follow_downloads};
 /// App Nap and a summon (LJ19.1).
 mod activity;
 pub use activity::{SummonActivity, nap_state};
+/// Spaces and other apps' full-screen windows (LJ19.2).
+mod spaces;
+pub use spaces::{front, join_active_space};
 
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     let result = page.with_webview(move |webview| {
