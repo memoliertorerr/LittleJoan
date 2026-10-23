@@ -60,11 +60,12 @@ jobs:
         with:
           node-version: 24
 
+      # apt moves on from a mirror that crawls (scripts/ci/apt-install.sh), here and in every Linux
+      # job below.
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+          bash scripts/ci/apt-install.sh libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
             librsvg2-dev libxdo-dev libssl-dev build-essential
 
       # env.sh puts the toolchain, registry, and target dir under .cache/ — the same layout as
@@ -150,8 +151,7 @@ jobs:
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+          bash scripts/ci/apt-install.sh libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
             librsvg2-dev libxdo-dev libssl-dev build-essential file \
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
 
@@ -301,8 +301,11 @@ jobs:
     needs: package
     # Normally after package; with installers_from_run, on its own against that run's installers.
     if: ${{ always() && (needs.package.result == 'success' || inputs.installers_from_run) }}
-    # Linux mirrors were seen taking 20 minutes to deliver WebKitGTK.
-    timeout-minutes: 45
+    # Linux mirrors were seen taking 20 minutes to deliver WebKitGTK, and 45 (2026-10-23: main's
+    # run 39875402501, linux-22.04, both attempts cancelled at the old 45-minute limit). apt now
+    # moves on from a crawling mirror (scripts/ci/apt-install.sh); 75 minutes leave headroom
+    # over the smoke itself (5–15 minutes).
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -416,8 +419,7 @@ jobs:
       - name: Install (Linux, .deb through apt)
         if: runner.os == 'Linux' && matrix.installer == 'deb'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11 gdb
+          bash scripts/ci/apt-install.sh ./installers/*.deb xvfb xdotool imagemagick openbox dbus-x11 gdb
           echo "APP=$(command -v little-joan)" >> "$GITHUB_ENV"
 
       # As a user gets it: the release's file name (no space), made executable. An AppImage leaves
@@ -430,8 +432,7 @@ jobs:
       - name: Install (Linux, the AppImage)
         if: matrix.installer == 'appimage'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xdotool imagemagick openbox dbus-x11 gdb \
+          bash scripts/ci/apt-install.sh xvfb xdotool imagemagick openbox dbus-x11 gdb \
             libegl1 libgl1 libgles2 libgbm1 libegl-mesa0 libgl1-mesa-dri libasound2t64
           # x86_64 or aarch64: the release's names (LittleJoan-<v>-linux-<machine>.AppImage).
           machine="$(uname -m)"
@@ -470,7 +471,7 @@ jobs:
       - name: Bare WebKitGTK fullscreen check (Linux, diagnostics only)
         if: ${{ !cancelled() && matrix.installer == 'deb' && inputs.linux_plain_webkit_check }}
         run: |
-          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1 xvfb xdotool openbox dbus-x11
+          bash scripts/ci/apt-install.sh python3-gi gir1.2-webkit2-4.1 xvfb xdotool openbox dbus-x11
           cat > /tmp/plain.html <<'HTML'
           <!doctype html><title>plain ready</title>
           <div id="s" style="position:fixed;inset:0;background:#f7c948" onclick="this.requestFullscreen().catch((e) => { document.title = 'plain request refused: ' + e.name; })"></div>

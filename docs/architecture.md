@@ -435,6 +435,9 @@ scripts/ci/smoke-zoom.mts          CI: the main run's zoom check (Ctrl+= narrows
                                    Ctrl+0 brings it back) and its rules; unit-tested
 scripts/ci/smoke-linux.mts         CI: which process is the app on Linux (under gdb, in the
                                    AppImage), read from /proc (pure parts unit-tested)
+scripts/ci/apt-install.sh          CI: every Linux job's apt install — retries, 30 s timeouts, a
+                                   deadline on update and download, then the Ubuntu archive first
+                                   in the mirror lists (a crawling Azure mirror, LJ19.2)
 tests/smoke/smoke.html             CI smoke page: codec report + a big "Go fullscreen" button
                                    (under a desktop agent a 600 px minimum width, like most
                                    desktop pages, unless ?fits=1; its report says `uamobile=`);
@@ -1711,7 +1714,9 @@ and pushes to `main`:
   `summary.json` (memory — resident and the app's own: private bytes / private dirty /
   physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs,
   the login entries found)
-  are uploaded as `smoke-<name>`. Linux runs under `xvfb-run` + `dbus-run-session`
+  are uploaded as `smoke-<name>` (the job's limit is 75 minutes: GitHub's Azure apt mirror has
+  crawled for 45, so every Linux job installs through `scripts/ci/apt-install.sh`, which stops a
+  download that passes 8 minutes and goes on with the Ubuntu archive first). Linux runs under `xvfb-run` + `dbus-run-session`
   (single-instance needs a session bus) with openbox, and under gdb so a crash leaves a
   backtrace. A second Linux job (`linux-scale-2`) runs the
   same test at **scale factor 2** (`GDK_SCALE=2` on a 2560×1600 Xvfb screen); the Windows and

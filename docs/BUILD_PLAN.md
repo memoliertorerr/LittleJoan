@@ -3863,6 +3863,15 @@ above other apps' windows after the user clicks elsewhere (Little Arc isn't alwa
   old timestamp a problem, so that summon is the Linux fix's test.
 - `npm run verify`: 658 TS tests, 395 Rust tests (macOS), clippy clean. Disk: 10 GiB free after
   verify; `.cache/target` 1.2 GB.
+- **`ci: apt fails over from a slow mirror; Linux smoke timeout with headroom`** (a separate commit
+  the coordinator asked for, naming `.github/workflows/ci.yml`): `main`'s CI for a74910e lost
+  `smoke (linux-22.04)` twice to the 45-minute limit — its apt step crawled 45 minutes on the
+  Azure mirror (Landmines) — and this PR's first verify (ubuntu-24.04) sat 13+ minutes in apt.
+  Every Linux apt step (verify, package, smoke, the bare-WebKitGTK diagnostics; x86_64 and arm64)
+  now runs `scripts/ci/apt-install.sh` (retries, 30 s timeouts, mirror lists, an 8-minute deadline
+  on update and download, then the Ubuntu archive first); the smoke job's limit is 75 minutes. The
+  packages and every check are the same. The script's failover was tried on the Mac against a
+  folder of fake sources and a fake apt-get that stalls (bash 3.2, so no bash-4 features).
 
 ---
 
@@ -8764,7 +8773,17 @@ Populated from real friction, not speculation:
   timeouts, and Ubuntu's ddebs had no symbols for the updated WebKitGTK. The cheapest
   discriminator was reproducing with a bare WebKitGTK window (`linux_plain_webkit_check`).
 - **GitHub's Azure apt mirror can take 20+ minutes** for WebKitGTK; the smoke job's timeout
-  is 45 minutes.
+  is 45 minutes. *(2026-10-23: 45 minutes — main's run 39875402501, smoke (linux-22.04), both
+  attempts: `apt-get install` of the `.deb`'s ~200 packages from `azure.archive.ubuntu.com` ran
+  07:33 → 08:18 at ~60 KB/s (a 511 kB package in 8 s) and the job was cancelled at its limit; the
+  same morning PR #33's first verify (ubuntu-24.04) sat 13+ minutes in its apt step. The runners'
+  sources already go through a mirror list (`mirror+file:/etc/apt/apt-mirrors.txt`: Azure first,
+  then the Ubuntu archive), but apt moves on only from a mirror that **fails**, never from one that
+  crawls. Since LJ19.2's `ci:` commit every Linux job installs through `scripts/ci/apt-install.sh`:
+  `Acquire::Retries 3` and 30 s http(s) timeouts, a mirror list for any plain Ubuntu mirror in the
+  sources, and `apt-get update` / the download under an 8-minute deadline each — past it apt is
+  stopped, the Ubuntu archive (ports.ubuntu.com on arm64) goes first in every mirror list and the
+  step goes on from what was fetched. The smoke job's limit is 75 minutes.)*
 - **Google Translate's proxy picks the UI language from the requester's IP** (`_x_tr_hl=it`
   came back from a plain request), so the translate URL passes `hl=<lang>` too.
 - *(v0.2 planning, 2026-10-17)* **Tauri's `zoom_hotkeys_enabled` is IPC for the page on macOS
