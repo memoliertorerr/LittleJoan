@@ -6,6 +6,18 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Opens over full-screen apps, on the Space you are on.** Summoning Little Joan while another
+  app is full screen — a video, a game, Safari or a browser in full screen — opens it right
+  there, in front and ready to type, instead of taking you elsewhere; on a Mac it opens on the
+  Space you are on (a full-screen app's Space included) rather than switching Spaces, and an open
+  window you summon from another Space comes to you. It still goes behind other windows when you
+  click them: it never stays on top. On a Mac, Little Joan's own window can no longer be made a
+  full-screen Space itself (its green button zooms it); a video's full screen works as before.
+  On Linux (X11) the summon now asks the window manager with a current timestamp, so it is no
+  longer refused as "focus stealing" — left behind a full-screen window — once you had typed
+  into Little Joan earlier. Windows already did this; CI now checks it on every system.
+
 ### Changed
 - **Summons faster, also after Little Joan has been idle for a while.** The window now appears
   before Windows' web engine has finished its setup for web pages, the command bar asks for its

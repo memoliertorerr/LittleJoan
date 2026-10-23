@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Windo
 use crate::bar;
 use crate::keys;
 use crate::navigation;
+use crate::platform;
 use crate::shortcut;
 use crate::smoke;
 use crate::state;
@@ -71,7 +72,8 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
     tauri::async_runtime::spawn(async move {
         if let Some(window) = app.get_webview_window(LABEL) {
             let _ = window.unminimize();
-            let _ = window.set_focus();
+            let _ = platform::bring_to_front(&window.as_ref().window());
+            platform::report_front(&window.as_ref().window());
             if let Some(tab) = tab {
                 // The name is one of ours (no user text), so it can go into the script as is.
                 let _ = window.eval(format!(
@@ -90,6 +92,8 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
             .maximizable(false)
             .minimizable(false)
             .center()
+            // Shown below, once macOS knows it may join the Space the user is on (LJ19.2).
+            .visible(false)
             .focused(true)
             // The tab to open on, before the page's own script runs.
             .initialization_script(format!(
@@ -109,7 +113,17 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
             })
             .build();
         match built {
-            Ok(_) => smoke::log("settings-window", tab.name()),
+            Ok(window) => {
+                // Like the page window: on the current Space (macOS), then in front (LJ19.2).
+                let window = window.as_ref().window();
+                platform::join_active_space(&window);
+                if let Err(err) = window.show() {
+                    eprintln!("little-joan: could not show settings: {err}");
+                }
+                let _ = platform::bring_to_front(&window);
+                smoke::log("settings-window", tab.name());
+                platform::report_front(&window);
+            }
             Err(err) => eprintln!("little-joan: could not open settings: {err}"),
         }
     });

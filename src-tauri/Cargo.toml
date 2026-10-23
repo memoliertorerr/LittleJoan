@@ -33,8 +33,12 @@ tauri-plugin-autostart = "2.5"
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
 # Win32 clipboard (System_DataExchange, System_Memory) for extensions' clipboard.writeText;
-# BCryptGenRandom (Security_Cryptography) for the extension runtime's nonces and tokens.
+# BCryptGenRandom (Security_Cryptography) for the extension runtime's nonces and tokens; the
+# foreground window and the window at a point (Foundation, UI_WindowsAndMessaging — tauri and tao
+# build them already) for the smoke log's over-full-screen check (LJ19.2).
 windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_System_DataExchange",
     "Win32_System_Memory",

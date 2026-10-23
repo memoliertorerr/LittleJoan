@@ -93,7 +93,9 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 
 - **Summon:** press **Ctrl+Shift+Space** (Windows, Linux) or **Cmd+Shift+Space** (macOS), or
   choose **Open Little Joan** in the tray menu. The window opens with the **command bar** over
-  it: type an address or a search and press Enter.
+  it: type an address or a search and press Enter. It opens where you are — on the current
+  desktop or Space, and over an app that is full screen — and goes behind other windows when you
+  click them, like any window.
 - **The command bar** suggests as you go. With nothing typed it shows the sites you open most
   (until there is some history: Wikipedia, YouTube, GitHub and Google Maps). As you type: the
   best match from your history — and when what you type starts a site's address, the address is

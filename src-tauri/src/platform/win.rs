@@ -4,7 +4,8 @@
 //! agent through the DevTools protocol (LJ40): `Emulation.setUserAgentOverride` with client-hint
 //! metadata, `SetUserAgent` only as the fallback, and `Page.getLayoutMetrics` to skip a reload for
 //! a page that already fits. The protocol is the engine's own interface, called from Rust: no
-//! script goes into the page, and DevTools stay off.
+//! script goes into the page, and DevTools stay off. Whether a summoned window is in front, for
+//! the smoke log: win/front.rs (LJ19.2).
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, mpsc};
@@ -40,6 +41,10 @@ use crate::page_actions;
 use crate::phone::{self, agent};
 use crate::smoke;
 use crate::state;
+
+/// A summoned window in front, for the smoke log (LJ19.2).
+mod front;
+pub use front::front;
 
 /// The URL bar: page keys only.
 pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
