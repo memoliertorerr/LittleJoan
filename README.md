@@ -35,6 +35,9 @@ affiliated with or endorsed by The Browser Company.
 > [changelog](CHANGELOG.md) has everything, and the known issues). Every build is smoke-tested in
 > CI on all three systems (Linux: the `.deb` on Ubuntu 24.04 and 22.04 and the AppImage on 24.04,
 > on x86_64 and ARM64); none is code-signed yet. See the known issue under Fullscreen video.
+> The [v0.2.1-beta.1 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.1-beta.1)
+> opens instantly: it stays ready after you close it (or hibernates, your choice in Settings), and
+> opens over full-screen apps on the Space you are on.
 > The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 

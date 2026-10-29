@@ -249,7 +249,11 @@ alone and LJ57's checklist drops them; **signing and updates come right after v0
 with LJ58 (LJ18's signing, once the owner adds the Apple secrets) and LJ59 (auto-update, once the
 owner adds an updater signing key; the agent never creates, sees or handles private keys).
 **Execution order from here: 19.4 → (a pre-release the coordinator makes) → 21 → 22 → 23 → 24 → 25
-(LJ56 only) → 26 → round 4 (58 → 59).**
+(LJ56 only) → 26 → round 4 (58 → 59).** LJ19.4 is PR #34, merged as 77a9623 (main's CI
+40887886884 green, 18 jobs). On the owner's word (2026-10-29: "let me see the new release with
+guided setup") the coordinator publishes it as the **pre-release `v0.2.1-beta.1`**, built from the
+merge commit of the release PR on `lj/release-0.2.1-beta.1` (v0.2.0 stays the Latest release until the
+owner's test); then the work pauses, and phase 21 starts on the owner's go.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
