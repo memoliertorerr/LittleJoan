@@ -175,6 +175,9 @@
         persistSet,
         persistTitle,
         PERSIST_STORAGE_KEY,
+        PING_EVERY_MS,
+        pingRequest,
+        pingUrl,
         readyTitle,
         requestFullscreen,
         viewportTitle,
@@ -212,7 +215,17 @@
       const probe = probeRequest(location.search);
       // ?ext=race&base=<origin>: iframes and window.open at the panel while the app opens it.
       const race = raceRequest(location.search);
-      if (fsRequest(location.search)) {
+      // ?ping=<id>: a ping to the smoke server every 250 ms while the page runs (LJ19.4: after a
+      // close they must stop — nothing of the page survives it).
+      const ping = pingRequest(location.search);
+      if (ping) {
+        show(`LJ-PING ${ping.id}`);
+        let sent = 0;
+        setInterval(() => {
+          sent += 1;
+          fetch(pingUrl(ping.id, sent), { cache: "no-store" }).catch(() => undefined);
+        }, PING_EVERY_MS);
+      } else if (fsRequest(location.search)) {
         runFullscreen();
       } else if (probe) {
         void runProbe(probe.base);

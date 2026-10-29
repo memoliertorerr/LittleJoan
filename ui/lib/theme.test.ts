@@ -302,3 +302,26 @@ describe("the default theme and presets", () => {
     expect(css).toBe(defaultsCss());
   });
 });
+
+describe("the base background", () => {
+  // The same cases as src-tauri/src/theme_color.rs' test (LJ19.4): Rust computes --lj-bg-0 for the
+  // window and the bar's webview before the bar paints, so the two must agree.
+  const cases: [string[], number, boolean, string][] = [
+    [["#8c9bb5"], 0.45, false, "#dae1ee"],
+    [["#8c9bb5"], 0.45, true, "#262b35"],
+    [["#9d8fd0", "#e0a2a0"], 0.6, false, "#e2dbff"],
+    [["#9d8fd0", "#e0a2a0"], 0.6, true, "#2d2545"],
+    [["#ff0000"], 1, false, "#ffd4cc"],
+    [["#00ff00"], 1, true, "#003b00"],
+    [["#000000"], 0.5, false, "#d1d1d1"],
+    [["#ffffff"], 0, true, "#333333"],
+    [["#1e90ff", "#123456", "#abcdef"], 0.8, true, "#002a54"],
+    [["#2f6f4f"], 0.3, false, "#cfe2d6"],
+  ];
+  it("is what Rust's theme_color.rs computes", () => {
+    for (const [colors, intensity, dark, want] of cases) {
+      const theme = { mode: "system" as const, colors, intensity, grain: 0 };
+      expect(palette(theme, dark).backgrounds[0], `${colors.join(",")} ${intensity} ${dark}`).toBe(want);
+    }
+  });
+});

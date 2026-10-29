@@ -5,7 +5,10 @@
 //! metadata, `SetUserAgent` only as the fallback, and `Page.getLayoutMetrics` to skip a reload for
 //! a page that already fits. The protocol is the engine's own interface, called from Rust: no
 //! script goes into the page, and DevTools stay off. Whether a summoned window is in front, for
-//! the smoke log: win/front.rs (LJ19.2).
+//! the smoke log: win/front.rs (LJ19.2). LJ19.4: the bar's `ProcessFailed` (a ready window whose
+//! bar is gone is built anew), the bar's memory target and visibility while the window rests, and
+//! the page's downloads noted (`DownloadStarting`) so closing the page cancels them — the window's
+//! WebView2 environment, which used to take them along, now outlives the page.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, mpsc};
@@ -45,24 +48,31 @@ use crate::state;
 /// A summoned window in front, for the smoke log (LJ19.2).
 mod front;
 pub use front::front;
+/// The bar's processes failing, its rest, the page's downloads (LJ19.4).
+mod rest;
+pub use rest::{bar_at_rest, cancel_downloads};
+use rest::{install_process_failed, note_downloads};
 
-/// The URL bar: page keys only.
+/// The bar: page keys, and its processes failing (LJ19.4).
 pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
     install(bar, false);
 }
 
-/// The page: page keys, and element fullscreen.
+/// The page: page keys, element fullscreen, and its downloads noted.
 pub fn install_page<R: Runtime>(page: &Webview<R>) {
     install(page, true);
 }
 
-fn install<R: Runtime>(webview: &Webview<R>, with_fullscreen: bool) {
+fn install<R: Runtime>(webview: &Webview<R>, page: bool) {
     let app = webview.app_handle().clone();
     let window = webview.window();
     let result = webview.with_webview(move |platform_webview| {
         let controller = platform_webview.controller();
-        if with_fullscreen {
+        if page {
             install_fullscreen(&controller, app.clone(), window);
+            note_downloads(&controller);
+        } else {
+            install_process_failed(&controller, app.clone());
         }
         let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
             let Some(args) = args else {

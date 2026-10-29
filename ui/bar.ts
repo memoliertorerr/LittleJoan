@@ -14,10 +14,14 @@
 // window.littleJoan.setStatus what just happened (the toolbar's status area: downloads, LJ15).
 // Before all of that, at the top: the theme Rust's initialization script left (bar-boot.ts), so
 // the first frame isn't the default theme. In smoke tests the bar also says how its start went —
-// its navigation, this script, the first answers, its first frame and the command bar's first
-// rows (bar-timing.ts, LJ19.1).
+// its navigation, this script, the first answers, its first frame, the command bar's first rows
+// and when its field had the keyboard (bar-timing.ts, LJ19.1).
+// While Little Joan stays ready (LJ19.4) the bar outlives a close: window.littleJoan.rest puts it
+// back to how a summon opens it (the window hidden, its page gone), and window.littleJoan.summoned
+// starts it over for the next summon — the first rows, the theme if it changed meanwhile, the
+// field focused — with that summon's own timing.
 import { invoke } from "@tauri-apps/api/core";
-import { bootTheme, needsTheme } from "./bar-boot.ts";
+import { bootTheme, needsTheme, sameTheme } from "./bar-boot.ts";
 import { afterPaint, timingReporter, type TimingMark } from "./bar-timing.ts";
 import { mayReplace, textFor } from "./bar-logic.ts";
 import { commandBar } from "./command/command.ts";
@@ -27,7 +31,7 @@ import { applyTheme } from "./lib/apply-theme.ts";
 import { initialState, onCloseButton, onKey, withOverlay, withShown, type KeyOutcome } from "./command/view-state.ts";
 import { historyView } from "./history/history.ts";
 import { extensionLabel, isMac, siteModeInfo, type ExtensionLabel, type SiteModeInfo } from "./toolbar/logic.ts";
-import type { ThemeTokens } from "./lib/theme.ts";
+import { themeFrom, type ThemeTokens } from "./lib/theme.ts";
 import { toolbar } from "./toolbar/toolbar.ts";
 
 declare global {
@@ -42,6 +46,8 @@ declare global {
       setExtension(label: unknown): void;
       setSiteMode(info: unknown): void;
       setStatus(message: unknown): void;
+      rest(): void;
+      summoned(info: unknown): void;
     };
   }
 }
@@ -52,13 +58,15 @@ const closeButton = document.querySelector<HTMLButtonElement>("#close");
 const toolbarRoot = document.querySelector<HTMLElement>(".toolstrip");
 const historyRoot = document.querySelector<HTMLElement>("#history");
 
-/** The summon's timing (smoke tests only: start_info says so), reported once (bar-timing.ts). */
-const timing = timingReporter(
-  (marks) => {
-    invoke("report_timing", { marks }).catch(() => undefined);
-  },
-  () => performance.now(),
-);
+/** A summon's timing (smoke tests only: start_info, or the summon, says so), reported once (bar-timing.ts). */
+const newTiming = () =>
+  timingReporter(
+    (marks) => {
+      invoke("report_timing", { marks }).catch(() => undefined);
+    },
+    () => performance.now(),
+  );
+let timing = newTiming();
 const markNow = (mark: TimingMark): void => timing.saw(mark, performance.now());
 const markAfterPaint = (mark: TimingMark, then: () => void = () => undefined): void =>
   afterPaint(
@@ -69,6 +77,15 @@ const markAfterPaint = (mark: TimingMark, then: () => void = () => undefined): v
     (callback) => requestAnimationFrame(() => callback()),
     (callback) => setTimeout(callback, 0),
   );
+/** The bar's field had the keyboard (its document focused, the field active), once per summon. */
+let focusSeen = false;
+const noteFocus = (field: HTMLInputElement | null): void => {
+  if (!focusSeen && field !== null && document.hasFocus() && document.activeElement === field) {
+    focusSeen = true;
+    markNow("focused");
+  }
+};
+
 // The engine's part: this page's navigation started at 0 on performance.now()'s clock, and its
 // HTML arrived at the navigation entry's responseEnd.
 timing.saw("navigation", 0);
@@ -151,6 +168,8 @@ if (field && rowList && toolbarRoot && historyRoot) {
   };
 
   let rowsMarked = false;
+  /** The theme the bar shows now (the early one, start_info's, or a summon's). */
+  let shownTheme: unknown = window.__littleJoanTheme;
   const command = commandBar(field, rowList, () => state.shown, showHistory, () => siteInfo, () => {
     if (!rowsMarked && state.view === "overlay") {
       rowsMarked = true;
@@ -232,6 +251,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
     },
     showHistory,
     setTheme(theme: unknown) {
+      shownTheme = theme;
       applyTheme(theme, reportTheme);
     },
     setExtension(label: unknown) {
@@ -245,9 +265,56 @@ if (field && rowList && toolbarRoot && historyRoot) {
     setStatus(message: unknown) {
       tools.setStatus(message);
     },
+    rest() {
+      // The window closed and rests (LJ19.4): back to how a summon opens the bar — the command
+      // bar over the window, an empty field, no rows, history view, welcome or status.
+      state = initialState();
+      canGoBack = false;
+      extension = null;
+      siteInfo = null;
+      if (panel === "history") {
+        panel = "command";
+        historyPanel.close();
+      }
+      field.value = "";
+      const welcomeSection = document.querySelector<HTMLElement>("#welcome");
+      if (welcomeSection) {
+        welcomeSection.hidden = true;
+      }
+      command.reset(false);
+      tools.clearStatus();
+      tools.update("", canGoBack, extension, siteInfo);
+      render();
+      tools.setVisible(false);
+      field.focus();
+    },
+    summoned(info: unknown) {
+      // A summon from ready (LJ19.4): its own timing, the theme if it changed while the window
+      // rested, the command bar's first rows, the field focused (the window shows right after).
+      const raw = (typeof info === "object" && info !== null ? info : {}) as Record<string, unknown>;
+      timing = newTiming();
+      timing.enable(raw.timing === true);
+      rowsMarked = false;
+      focusSeen = false;
+      if (raw.theme !== undefined && (shownTheme === undefined || !sameTheme(themeFrom(shownTheme), themeFrom(raw.theme)))) {
+        applyTheme(raw.theme, reportTheme);
+      }
+      shownTheme = raw.theme ?? shownTheme;
+      markAfterPaint("painted", () => {
+        setTimeout(() => timing.flush(), 3000);
+      });
+      command.reset(state.view === "overlay");
+      field.focus();
+      field.select();
+      noteFocus(field);
+    },
   };
 
-  field.addEventListener("focus", () => field.select());
+  field.addEventListener("focus", () => {
+    field.select();
+    noteFocus(field);
+  });
+  window.addEventListener("focus", () => noteFocus(field));
   // Leaving the toolbar's field without pressing Enter drops the edit, as browsers do. (In the
   // command bar the text stays until it closes: a click on a row or the welcome mustn't lose it.)
   field.addEventListener("blur", () => {
@@ -303,6 +370,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
     .then((info) => {
       // Again only when it differs: a preview may have changed it since the window was built.
       markNow("startInfo");
+      shownTheme = info.theme;
       if (needsTheme(early, info.theme)) {
         applyTheme(info.theme, reportTheme);
       }
@@ -329,4 +397,5 @@ if (field && rowList && toolbarRoot && historyRoot) {
     .then((info) => window.littleJoan?.setSiteMode(info))
     .catch(() => undefined);
   field.focus();
+  noteFocus(field);
 }

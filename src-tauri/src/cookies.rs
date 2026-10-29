@@ -2,9 +2,12 @@
 //!
 //! A session cookie has no expiry: a site's "until you close the browser" login. For Little Joan
 //! the browser is the app run, not the window — but WebView2 gives every window its own browser
-//! environment, which ends when the window closes, taking the session cookies with it. So
-//! `joan::destroy` reads the page webview's cookies and keeps the session ones here (in
-//! `AppState`), and `joan::create` sets them again before the new page loads.
+//! environment, which ends when the window closes, taking the session cookies with it. So closing
+//! the page (bar/page.rs `close_page`) reads its cookies and keeps the session ones here (in
+//! `AppState`), and building the next page sets them again before any web page loads. Since LJ19.4
+//! the page webview is closed with every close while the window may stay ready (its environment
+//! then lives on with the bar): setting them again is harmless either way, and right when the
+//! window was destroyed (Hibernate, or Stay ready's window released).
 //!
 //! They live only in memory: this module has no file or serialization code (a test reads its
 //! source to keep it that way), and `SessionCookies` can't be printed with its values. Quitting

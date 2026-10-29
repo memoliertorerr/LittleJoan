@@ -24,13 +24,15 @@ use url::Url;
 mod background;
 mod boot;
 pub mod download;
+pub mod page;
 mod status;
 mod view;
 mod watch;
 mod zoom;
 
-pub use background::{forget_painted, painted};
+pub use background::{forget_painted, painted, window_background};
 pub use boot::{BAR_READY, Ready, early_theme, mark_ready, set_theme, theme_script};
+pub use page::{ensure_page, page_summon};
 pub use view::{
     after_webkit_fullscreen, apply_layout, element_fullscreen, log_overlay, mode, overlay,
     page_in_webkit_fullscreen, set_element_fullscreen, set_overlay,
@@ -40,7 +42,6 @@ pub use zoom::zoom_page;
 
 use crate::back_stack::BackStack;
 use crate::extensions;
-use crate::history_store;
 use crate::keys;
 use crate::layout::{Mode, Rect, layout};
 use crate::navigation;
@@ -49,7 +50,6 @@ use crate::phone_mode;
 use crate::platform;
 use crate::smoke;
 use crate::summon_timing::{self, Mark};
-use crate::tray;
 
 pub const BAR: &str = "joan-bar";
 pub const PAGE: &str = "joan-page";
@@ -77,8 +77,10 @@ pub fn bar_text(url: &Url, app_origin: &Url) -> Option<String> {
     }
 }
 
-/// Adds the bar and the page to a new page window of `width` × `height` logical pixels.
-pub fn add_webviews<R: Runtime>(
+/// Adds the bar to a new page window of `width` × `height` logical pixels, with the command bar
+/// open over the whole window. The page webview comes later (bar/page.rs, LJ19.4): after the bar is
+/// on screen, or at once for a summon with a URL.
+pub fn add_bar<R: Runtime>(
     window: &Window<R>,
     width: f64,
     height: f64,
@@ -105,16 +107,15 @@ pub fn add_webviews<R: Runtime>(
         height,
     };
     let bar_rect = layout(width, height, Mode::Overlay).bar.unwrap_or(whole);
-    // The page starts hidden; these are its bounds for when the overlay closes.
-    let page_rect = layout(width, height, Mode::Toolbar).page.unwrap_or(whole);
 
     let mut bar = WebviewBuilder::new(BAR, WebviewUrl::App("bar.html".into()))
         // Its theme before its first paint (the bar only: the page webview never gets a script),
-        // and that theme's background under it (LJ39; the page keeps the engine's white).
+        // and that theme's background under it (LJ39, LJ19.4: computed from the theme until the
+        // bar painted one; the page keeps the engine's white).
         .initialization_script(theme_script(&theme))
         .background_color(background::bar_background(window, &theme))
         // The bar is ours and never leaves the app's origin (about:blank only to unload it when
-        // the window closes on macOS, see joan::release_page).
+        // the window is destroyed on macOS, see joan::release_window).
         .on_navigation(|url| navigation::is_allowed_bar_navigation(url, &keys::app_origin()))
         .on_new_window(|_, _| NewWindowResponse::Deny)
         .on_page_load(|webview, payload| {
@@ -128,98 +129,17 @@ pub fn add_webviews<R: Runtime>(
                 tell_back(&webview, can_go_back());
             }
         });
-    let mut page = WebviewBuilder::new(PAGE, WebviewUrl::App("index.html".into()))
-        // Web pages only: no file:, javascript:, or app-launching schemes (navigation.rs); an
-        // extension's panel only when the app opened it (extensions/session.rs).
-        .on_navigation(extensions::session::allow_page_navigation)
-        .on_document_title_changed(|webview, title| {
-            let title = title.trim();
-            let title = if title.is_empty() {
-                "Little Joan"
-            } else {
-                title
-            };
-            let _ = webview.window().set_title(title);
-            smoke::log("title", title);
-            let app = webview.app_handle();
-            publish_url(app);
-            if let Some(url) = page_url(app) {
-                history_store::title_changed(app, &url, title);
-            }
-        })
-        .on_page_load(|webview, payload| {
-            match payload.event() {
-                PageLoadEvent::Started => {
-                    address().started(payload.url().clone());
-                    smoke::log("page-started", payload.url().as_str());
-                    // A summon with a URL: its web page is on its way (LJ19.1; not the start page).
-                    if !keys::is_app_url(&keys::app_origin(), payload.url())
-                        && navigation::is_external_openable(payload.url())
-                    {
-                        summon_timing::mark(Mark::PageStarted);
-                    }
-                    // What the toolbar shows, and what the extension handler serves beyond a
-                    // panel's document: an extension only once its panel committed here.
-                    extensions::session::page_committed(webview.app_handle(), payload.url());
-                    // A page the page itself opened gets its site's user agent (phone_mode.rs).
-                    phone_mode::page_started(webview.app_handle(), payload.url());
-                }
-                PageLoadEvent::Finished => {
-                    address().finished(payload.url().clone());
-                }
-            }
-            let app = webview.app_handle();
-            publish_url(app);
-            if payload.event() == PageLoadEvent::Finished {
-                let url = payload.url();
-                let web_page = !keys::is_app_url(&keys::app_origin(), url)
-                    && navigation::is_external_openable(url);
-                tray::set_page_items_enabled(app, web_page);
-                smoke::log("page-loaded", url.as_str());
-                let changed = back().loaded(url, &keys::app_origin());
-                if changed && let Some(bar) = app.get_webview(BAR) {
-                    tell_back(&bar, can_go_back());
-                }
-                // History records visits natively: the page itself has no IPC.
-                history_store::page_loaded(app, url);
-            }
-        })
-        // target=_blank and window.open go to the default browser (web URLs only).
-        .on_new_window(|url, _features| {
-            if !navigation::is_external_openable(&url) {
-                smoke::log("new-window-refused", url.as_str());
-            } else if let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>) {
-                eprintln!("little-joan: could not open the link in the default browser: {err}");
-            }
-            NewWindowResponse::Deny
-        });
-    // Downloads go to the Downloads folder, the toolbar says how they went (bar/download.rs).
-    // WebKitGTK's come through platform/linux.rs instead: wry's handler there is the web
-    // context's, and the first webview's decides for all of them (Landmines).
-    #[cfg(not(target_os = "linux"))]
-    {
-        page = page.on_download(download::on_download);
-    }
     // Both webviews of a window must share one data directory (WebView2 requires it).
     if let Some(dir) = data_dir {
-        bar = bar.data_directory(dir.clone());
-        page = page.data_directory(dir);
+        bar = bar.data_directory(dir);
     }
-
     let bar = window.add_child(
         bar,
         LogicalPosition::new(bar_rect.x, bar_rect.y),
         LogicalSize::new(bar_rect.width, bar_rect.height),
     )?;
-    let page = window.add_child(
-        page,
-        LogicalPosition::new(page_rect.x, page_rect.y),
-        LogicalSize::new(page_rect.width, page_rect.height),
-    )?;
     platform::install_bar(&bar);
-    platform::install_page(&page);
-    platform::set_overlay(&bar, &page, true);
-    let _ = page.hide();
+    platform::set_overlay(&bar, None, true);
     Ok(())
 }
 
@@ -337,6 +257,8 @@ pub fn focus_page<R: Runtime>(app: &AppHandle<R>) {
 /// keyboard follows the page out of it (the toolbar has no field to keep it). The page gets its
 /// site's user agent first (phone_mode.rs, which may load a known phone address's desktop one).
 pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
+    // A summon's page webview may not be built yet (LJ19.4): it is now.
+    ensure_page(app)?;
     if app.get_webview(PAGE).is_some() {
         let was_open = overlay();
         set_overlay(app, false);
@@ -350,6 +272,7 @@ pub fn navigate<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
 
 /// Loads `url` in the page and tells the bar, leaving the view as it is.
 pub fn load<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
+    ensure_page(app)?;
     if let Some(page) = app.get_webview(PAGE) {
         address().navigating(url.clone());
         page.navigate(url)?;
@@ -363,6 +286,7 @@ pub fn load<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
 /// load events arrive, so a navigation the guard refuses (or the engine cancels) leaves the real
 /// page named. Closes the command bar like `navigate`.
 pub fn navigate_pending<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Result<()> {
+    ensure_page(app)?;
     if let Some(page) = app.get_webview(PAGE) {
         let was_open = overlay();
         set_overlay(app, false);
@@ -375,9 +299,14 @@ pub fn navigate_pending<R: Runtime>(app: &AppHandle<R>, url: Url) -> tauri::Resu
     Ok(())
 }
 
-/// The page webview, if the window is open.
+/// The page webview, if the window is open and has one (it comes after the bar, LJ19.4).
 pub fn page<R: Runtime>(app: &AppHandle<R>) -> Option<Webview<R>> {
     app.get_webview(PAGE)
+}
+
+/// The bar webview, if the window exists.
+pub fn bar<R: Runtime>(app: &AppHandle<R>) -> Option<Webview<R>> {
+    app.get_webview(BAR)
 }
 
 /// Both webviews of the window, if it is open.
@@ -386,6 +315,40 @@ pub fn webviews<R: Runtime>(app: &AppHandle<R>) -> Vec<Webview<R>> {
         .into_iter()
         .filter_map(|label| app.get_webview(label))
         .collect()
+}
+
+/// The window closed while Little Joan stays ready (LJ19.4): its page is gone, and the bar goes
+/// back to how a summon opens it — the command bar over the whole window, an empty field, no rows,
+/// no history view, welcome or status — so the next summon shows it at once. Nothing of the page
+/// is kept: its address, its trail, its zoom, its status.
+pub fn rest<R: Runtime>(app: &AppHandle<R>) {
+    *address() = PageAddress::new();
+    *back() = BackStack::new();
+    *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    status::forget();
+    zoom::new_window();
+    view::new_window();
+    if let Some(bar) = app.get_webview(BAR) {
+        platform::set_overlay(&bar, None, true);
+        let _ = bar.eval("window.littleJoan && window.littleJoan.rest()");
+    }
+    if let Some(window) = app.get_window(crate::joan::LABEL) {
+        apply_layout(&window);
+    }
+}
+
+/// A summon from ready (LJ19.4): the bar starts over for it — the command bar's first rows, the
+/// theme if it changed meanwhile, its field focused — and in smoke tests reports this summon's
+/// timing (`timing`). The theme is a checked one (hex colors, a mode name, two numbers), so its
+/// JSON is a safe script literal.
+pub fn summoned<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme, timing: bool) {
+    let Some(bar) = app.get_webview(BAR) else {
+        return;
+    };
+    let info = serde_json::json!({ "theme": theme, "timing": timing });
+    let _ = bar.eval(format!(
+        "window.littleJoan && window.littleJoan.summoned({info})"
+    ));
 }
 
 #[cfg(test)]

@@ -14,6 +14,8 @@ import {
   persistRequest,
   persistSet,
   persistTitle,
+  pingRequest,
+  pingUrl,
   readyTitle,
   requestFullscreen,
   viewportTitle,
@@ -154,5 +156,18 @@ describe("persistence check", () => {
     // An older token doesn't count: the check is about the value set last.
     expect(persistTitle("lj_p=t0; lj_s=t1", "t0", "t1")).toBe("LJ-PERSIST p=0 s=1 l=0");
     expect(persistTitle("", null, "t1")).toBe("LJ-PERSIST p=0 s=0 l=0");
+  });
+});
+
+describe("the ping page (LJ19.4)", () => {
+  it("reads its id and refuses anything else", () => {
+    expect(pingRequest("?ping=ready-1")).toEqual({ id: "ready-1" });
+    for (const bad of ["", "?ping=", "?ping=a%20b", "?ping=<x>", `?ping=${"a".repeat(33)}`, "?other=1"]) {
+      expect(pingRequest(bad), bad).toBeUndefined();
+    }
+  });
+
+  it("pings its own origin", () => {
+    expect(pingUrl("ready-1", 7)).toBe("/ping?id=ready-1&n=7");
   });
 });

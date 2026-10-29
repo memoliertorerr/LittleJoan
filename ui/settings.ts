@@ -21,6 +21,8 @@ import {
   CLEAR_CHOICES,
   CLEAR_START,
   TABS,
+  afterCloseChoices,
+  afterCloseFrom,
   changes,
   clearQuestion,
   clearStep,
@@ -60,6 +62,7 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 
 const tray = element<HTMLInputElement>("#tray");
+const afterClose = element<HTMLSelectElement>("#after-close");
 const trayLabel = element<HTMLElement>("#tray-label");
 const trayNote = element<HTMLElement>("#tray-note");
 const login = element<HTMLInputElement>("#login");
@@ -150,6 +153,7 @@ function input(): SettingsInput {
     sites.draft(),
     tray.checked,
     keyboard.keys(),
+    afterCloseFrom(afterClose.value),
   );
 }
 
@@ -165,6 +169,7 @@ function shownSettings(from: Settings): Settings {
     mobileSites: mobile.checked,
     rememberHistory: remember.checked,
     showTrayIcon: tray.checked,
+    afterClose: afterCloseFrom(afterClose.value),
     theme: look.draft(),
     disabledExtensions: extensions.disabledExtensions,
     developerMode: extensions.developerMode,
@@ -228,7 +233,7 @@ for (const { id } of TABS) {
   });
 }
 
-for (const control of [engine, language, mobile, tray, login, remember]) {
+for (const control of [engine, language, mobile, tray, afterClose, login, remember]) {
   control.addEventListener("change", refresh);
 }
 
@@ -291,6 +296,7 @@ window.littleJoanSettings = {
     mobile.checked = draft.mobileSites;
     remember.checked = draft.rememberHistory;
     tray.checked = draft.showTrayIcon;
+    afterClose.value = afterCloseFrom(draft.afterClose);
     if (!sameTheme(draft.theme, shown.theme)) {
       look.load(themeFrom(draft.theme));
     }
@@ -324,6 +330,7 @@ invoke<SettingsView>("get_settings")
     remember.checked = view.settings.rememberHistory;
     tray.checked = view.settings.showTrayIcon;
     trayLabel.textContent = trayLabelFor(view.platform);
+    fill(afterClose, afterCloseChoices(view.platform), afterCloseFrom(view.settings.afterClose));
     extensionsPanel.load({ disabledExtensions: view.settings.disabledExtensions, developerMode: view.settings.developerMode });
     builtInSites = builtInsFrom(view.builtInSiteModes);
     sites.load(siteModesFrom(view.settings.siteModes), builtInSites);

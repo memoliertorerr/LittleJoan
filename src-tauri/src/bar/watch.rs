@@ -9,13 +9,13 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use super::{PAGE, address, publish_url};
 
-/// Bumped for every new window, so an old address watcher stops.
+/// Bumped for every new page webview, so an old address watcher stops.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
-/// Checks the page's address once a second while this window exists, for in-page changes that
-/// raise no load or title event — the only place the engine's address is read, and only while
-/// the last load event was `Finished` (page_address.rs). Stops when the window goes or a newer
-/// one replaces it.
+/// Checks the page's address once a second while this page webview exists, for in-page changes
+/// that raise no load or title event — the only place the engine's address is read, and only
+/// while the last load event was `Finished` (page_address.rs). Stops when the page goes (every
+/// close, LJ19.4: nothing runs while the window rests) or a newer one replaces it.
 pub fn watch_url<R: Runtime>(app: &AppHandle<R>) {
     let generation = GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
     let app = app.clone();
@@ -26,6 +26,7 @@ pub fn watch_url<R: Runtime>(app: &AppHandle<R>) {
                 std::thread::sleep(Duration::from_secs(1));
                 if GENERATION.load(Ordering::Relaxed) != generation
                     || app.get_window(crate::joan::LABEL).is_none()
+                    || app.get_webview(PAGE).is_none()
                 {
                     break;
                 }

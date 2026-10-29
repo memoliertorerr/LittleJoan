@@ -41,10 +41,13 @@
 // Swift app in native full screen on macOS, a borderless WinForms window on Windows, an X11
 // _NET_WM_STATE_FULLSCREEN window on Linux —, then Little Joan summoned over it through `--show`,
 // the real shortcut and `--settings`: in front with the keyboard, on the same Space;
-// over-fullscreen*.png; smoke-spaces.mts), then check the logs (scripts/ci/smoke-log.mts, smoke-command.mts,
-// smoke-theme.mts) and the webview helper processes. The app runs on a fresh
-// LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it starts hibernating
-// as every launch after the first does. Last, the first-launch check: quit, launch on an empty
+// over-fullscreen*.png; smoke-spaces.mts), then the rest runs (LJ19.4, smoke-rest.mts: one launch per
+// "After closing" mode — what stays at rest, a pinging page stopping at the close, memory at rest,
+// keys typed right after the shortcut, the ready bar's web process killed), then check the logs
+// (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper processes.
+// The app runs on a fresh LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it
+// starts at rest as every launch after the first does — since LJ19.4 that is "Stay ready", the
+// default: the hidden window and the bar built a few seconds after the launch. Last, the first-launch check: quit, launch on an empty
 // data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
 // folder (it must hibernate). Screenshots and a summary land in <out>. Linux runs inside
 // xvfb-run + dbus-run-session with a window manager.
@@ -109,6 +112,7 @@ import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
 import { summonTimings, timingFailures, timingRun, timingSummary, timingTable, type TimingDriver } from "./smoke-timing.mts";
 import { spacesFailures, spacesRun, spacesSummary } from "./smoke-spaces.mts";
+import { restFailures, restRun, restSummary, restTable, type EngineProc, type RestRun } from "./smoke-rest.mts";
 import { ZOOMED, zoomFailures, zoomReset, zoomSummary, zoomedViewport } from "./smoke-zoom.mts";
 import {
   DOWNLOAD_NAME,
@@ -534,6 +538,110 @@ function helperPids(): number[] {
 }
 
 /**
+ * The app's engine processes now (LJ19.4's rest runs), with their resident memory: on Windows its
+ * msedgewebview2 tree (renderers are `--type=renderer`), on Linux its WebKitGTK children (web
+ * processes are WebKitWebProcess), on macOS the WebKit services — XPC services, launchd's children,
+ * so the ones that weren't running before the launch (`before`; WebContent runs pages).
+ */
+function engineProcs(appPid: number, before: readonly number[]): EngineProc[] {
+  if (appPid <= 0) {
+    return [];
+  }
+  if (os === "win32") {
+    type Row = { ProcessId: number; ParentProcessId: number; Name: string; WorkingSetSize: number; CommandLine: string | null };
+    let rows: Row[];
+    try {
+      const parsed = JSON.parse(
+        powershell("Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, WorkingSetSize, CommandLine | ConvertTo-Json -Compress") || "[]",
+      ) as Row | Row[];
+      rows = Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      rows = [];
+    }
+    const tree = descendants(rows.map((r) => ({ pid: r.ProcessId, ppid: r.ParentProcessId })), appPid);
+    return rows
+      .filter((r) => tree.has(r.ProcessId) && r.ProcessId !== appPid && /msedgewebview2/i.test(r.Name))
+      .map((r) => ({ pid: r.ProcessId, name: r.Name, web: (r.CommandLine ?? "").includes("--type=renderer"), rssKb: Math.round(Number(r.WorkingSetSize) / 1024) }));
+  }
+  if (os === "linux") {
+    const procs = listProcs();
+    const tree = descendants(procs, appPid);
+    return procs
+      .filter((p) => tree.has(p.pid) && p.pid !== appPid)
+      .map((p) => {
+        let name = "";
+        let rssKb = 0;
+        try {
+          name = readFileSync(`/proc/${p.pid}/comm`, "utf8").trim();
+          rssKb = Number(/^VmRSS:\s+(\d+) kB/m.exec(readFileSync(`/proc/${p.pid}/status`, "utf8"))?.[1] ?? 0);
+        } catch {
+          // Gone meanwhile.
+        }
+        return { pid: p.pid, name, web: name.startsWith("WebKitWebProces"), rssKb };
+      })
+      .filter((p) => p.name.startsWith("WebKit"));
+  }
+  const old = new Set(before);
+  return run("ps", ["-axo", "pid=,rss=,comm="])
+    .split("\n")
+    .flatMap((line) => {
+      const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+      if (!match?.[1] || !match[2] || !match[3]?.includes("com.apple.WebKit.")) {
+        return [];
+      }
+      const pid = Number(match[1]);
+      const name = match[3].split("/").at(-1) ?? match[3];
+      return old.has(pid) ? [] : [{ pid, name, web: name.includes("WebContent"), rssKb: Number(match[2]) }];
+    });
+}
+
+/** The pids under `root` (itself included) in a process list. */
+function descendants(procs: readonly { pid: number; ppid: number }[], root: number): Set<number> {
+  const children = new Map<number, number[]>();
+  for (const p of procs) {
+    children.set(p.ppid, [...(children.get(p.ppid) ?? []), p.pid]);
+  }
+  const tree = new Set<number>();
+  const queue = [root];
+  while (queue.length > 0) {
+    const pid = queue.pop() as number;
+    if (!tree.has(pid)) {
+      tree.add(pid);
+      queue.push(...(children.get(pid) ?? []));
+    }
+  }
+  return tree;
+}
+
+/** Every WebKit service running now (macOS; elsewhere the app's tree says which are ours). */
+function enginePidsNow(): number[] {
+  if (os !== "darwin") {
+    return [];
+  }
+  return run("ps", ["-axo", "pid=,comm="])
+    .split("\n")
+    .filter((line) => line.includes("com.apple.WebKit."))
+    .map((line) => Number(line.trim().split(/\s+/)[0]))
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
+}
+
+/** Ends processes at once (the rest run's "the bar's web process died"). */
+function killPids(pids: readonly number[]): void {
+  for (const pid of pids) {
+    if (os === "win32") {
+      run("taskkill", ["/F", "/PID", String(pid)]);
+    } else {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch (err) {
+        console.log(`(could not kill ${pid}: ${String(err)})`);
+      }
+    }
+  }
+  console.log(`killed ${pids.join(", ") || "nothing"}`);
+}
+
+/**
  * The OS's login items that run the installed app (the binary and its canonical path): values
  * under HKCU's Run key on Windows, LaunchAgent plists on macOS, XDG autostart files on Linux.
  * Every entry is read, not just the name tauri-plugin-autostart uses, so a renamed entry counts.
@@ -584,6 +692,9 @@ async function forward(args: string[], withEnv: NodeJS.ProcessEnv = env): Promis
 
 /** Each request's agent headers, one JSON line each (the site-mode run reads them, LJ40). */
 const agentLogPath = join(out, "agent-headers.jsonl");
+
+/** The ping page's pings (LJ19.4's rest runs): the id and the server's unix ms of each. */
+const pingLog: { id: string; t: number }[] = [];
 
 /** What the server saw of the downloads run's slow download (LJ15). */
 const slowServe: SlowServe = { started: false, chunksSent: 0, aborted: false, completed: false };
@@ -637,6 +748,13 @@ function serve(): Promise<Server> {
         brands: header("sec-ch-ua"),
       })}\n`,
     );
+    // The ping page (LJ19.4): ?ping=<id> pages ping here while they run.
+    if (name === "ping") {
+      const id = new URLSearchParams((req.url ?? "").split("?")[1] ?? "").get("id") ?? "";
+      pingLog.push({ id, t: Date.now() });
+      res.writeHead(204, { "cache-control": "no-store" }).end();
+      return;
+    }
     // The downloads run's attachments (LJ15): the address names something else than the header.
     if (name === DOWNLOAD_PATH) {
       const body = downloadBody();
@@ -776,12 +894,15 @@ if (count(events(), "started") === 0 && (child.exitCode !== null || child.signal
   console.log("\nSMOKE FAILED:\n- the app ended before it started (its output is above)");
   process.exit(1);
 }
-await sleep(3000);
+// Stay ready (LJ19.4, the default): the hidden window and the bar a few seconds after the launch.
+// The page's helpers are what comes after this (the bar's stay; smoke-rest.mts checks them).
+await waitFor("prewarmed (the hidden window and the bar)", (e) => count(e, "prewarmed") > 0, 20_000);
+await sleep(2000);
 const pid = appPid(child);
 const idleMb = memoryMb(pid);
 const idleOwnMb = ownMemoryMb(pid);
 const helpersAtStart = helperPids();
-console.log(`hibernating at start: ${idleMb} MB resident, ${idleOwnMb} MB own, ${helpersAtStart.length} webview helpers`);
+console.log(`ready at start: ${idleMb} MB resident, ${idleOwnMb} MB own, ${helpersAtStart.length} webview helpers (the bar's)`);
 screenshot("hibernating.png");
 
 await forward(["--show"]);
@@ -871,9 +992,9 @@ const afterMb = memoryMb(pid);
 const afterOwnMb = ownMemoryMb(pid);
 const helpersAfter = helperSamples["60s"] ?? survivors(pageHelpers, helperPids());
 writeFileSync(join(out, "helpers-after-hibernate.txt"), helperListing());
-console.log(`hibernating after a page: ${afterMb} MB resident, ${afterOwnMb} MB own, helpers ${JSON.stringify(helperSamples)}`);
+console.log(`ready after a page: ${afterMb} MB resident, ${afterOwnMb} MB own, the page's helpers left ${JSON.stringify(helperSamples)}`);
 
-// Two more summon/hibernate cycles: helper counts that grow per cycle would mean webviews leak.
+// Two more summon / close cycles: helper counts that grow per cycle would mean webviews leak.
 const helpersPerCycle: number[] = [helpersAfter];
 for (const cycle of [2, 3]) {
   const before = helperPids();
@@ -1556,6 +1677,55 @@ const spacesCheck = await spacesRun({
   run,
 });
 console.log(`spaces: ${JSON.stringify(spacesSummary(spacesCheck, os))}`);
+// The rest runs (LJ19.4, smoke-rest.mts): one launch per "After closing" mode.
+const restRuns: RestRun[] = [];
+for (const mode of ["ready", "hibernate", "ready15"] as const) {
+  restRuns.push(
+    await restRun(
+      {
+        os,
+        pageUrl: smokePageUrl,
+        launch: (name, settings, extra) => {
+          const logFile = join(out, `smoke-${name}.log`);
+          rmSync(logFile, { force: true });
+          const runDir = dataDir(name, true, settings);
+          const runEnv = { ...env, ...extra, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
+          const runChild = launch(runEnv, false);
+          return Promise.resolve({
+            pid: () => appPid(runChild),
+            settings: () => readIfThere(join(runDir, "settings.json")),
+            forward: (args) => forward(args, runEnv),
+            events: () => events(logFile),
+            waitFor: (what, test, timeoutMs) => waitFor(what, test, timeoutMs, logFile),
+            quit: async () => {
+              const runPid = appPid(runChild);
+              await forward(["--quit"], runEnv);
+              if (!(await exited(runPid, 15_000))) {
+                await quit(runChild, runPid);
+              }
+            },
+          });
+        },
+        sleep: (ms) => sleep(ms).then(() => undefined),
+        pings: (id) => pingLog.filter((p) => p.id === id).map((p) => p.t),
+        engine: engineProcs,
+        enginePids: enginePidsNow,
+        appRssKb: (runPid) => Math.round(memoryMb(runPid) * 1024),
+        kill: killPids,
+        pressSummonShortcut,
+        typeText,
+        screenshot,
+      },
+      mode,
+    ),
+  );
+}
+const restMd = restTable(restRuns, os);
+writeFileSync(join(out, "rest.md"), restMd);
+console.log(restMd);
+if (process.env.GITHUB_STEP_SUMMARY) {
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${restMd}`);
+}
 server.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
@@ -1598,9 +1768,11 @@ const pageFullscreen = lastTitle(log, "LJ-SMOKE fullscreen=on") !== undefined;
 const summary = {
   os,
   app,
-  memoryMb: { hibernatingAtStart: idleMb, withSmokePage: shownMb, hibernatingAfterPage: afterMb },
-  ownMemoryMb: { hibernatingAtStart: idleOwnMb, withSmokePage: shownOwnMb, hibernatingAfterPage: afterOwnMb },
-  // afterHibernate / afterEachCycle: how many of the helpers that served the page are still alive.
+  // The main run stays ready (LJ19.4's default): the app's own memory at rest with its bar.
+  memoryMb: { readyAtStart: idleMb, withSmokePage: shownMb, readyAfterPage: afterMb },
+  ownMemoryMb: { readyAtStart: idleOwnMb, withSmokePage: shownOwnMb, readyAfterPage: afterOwnMb },
+  // afterHibernate / afterEachCycle: how many of the helpers that served the page are still alive
+  // after a close (atStart: the ready bar's).
   webviewHelpers: {
     atStart: helpersAtStart.length,
     withPage: pageHelpers.length,
@@ -1657,6 +1829,8 @@ const summary = {
   mainRunTimings: summonTimings(log),
   // LJ19.2: summoned over another app's full-screen window.
   spacesRun: spacesSummary(spacesCheck, os),
+  // LJ19.4: what stays at rest per "After closing" mode.
+  restRuns: restRuns.map(restSummary),
   downloads: downloadSummary(downloadCheck),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   themes: themeRuns.map(({ run, events: runEvents }) => ({
@@ -1713,6 +1887,7 @@ const failures = evaluate(
   .concat(trayFailures(trayCheck, os))
   .concat(timingFailures(timingCheck, os))
   .concat(spacesFailures(spacesCheck, os))
+  .concat(restRuns.flatMap((restCheck) => restFailures(restCheck, os)))
   .concat(downloadFailures(downloadCheck, os))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
@@ -1722,7 +1897,21 @@ if (failures.length > 0) {
   const extensionLog = join(out, "smoke-extensions.log");
   const bundledLog = join(out, "smoke-bundled.log");
   const fullscreenLogs = [join(out, "smoke-fullscreen.log"), join(out, "smoke-fullscreen-site.log"), join(out, "smoke-resize.log"), join(out, "smoke-site-mode.log")];
-  const trayLogs = ["quick", "keymap", "keyboard-problem", "downloads", "tray", "tray-settings", "tray-wayland", "timing", "spaces"].map((name) => join(out, `smoke-${name}.log`));
+  const trayLogs = [
+    "quick",
+    "keymap",
+    "keyboard-problem",
+    "downloads",
+    "tray",
+    "tray-settings",
+    "tray-wayland",
+    "timing-ready",
+    "timing",
+    "spaces",
+    "rest-ready",
+    "rest-hibernate",
+    "rest-ready15",
+  ].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);
   }

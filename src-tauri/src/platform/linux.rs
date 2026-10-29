@@ -4,12 +4,15 @@
 //! The bar sits in a frame whose natural height doesn't follow the bar's web content (see
 //! `install_bar`).
 //! Page keys go through the GTK window's `key-press-event`, which runs before WebKitGTK receives
-//! the key (handlers connected with `connect_*` run before the class handler). Element
+//! the key (handlers connected with `connect_*` run before the class handler); it is connected once
+//! per window, with the bar (the page webview comes and goes per summon since LJ19.4). Element
 //! fullscreen is followed through WebKitGTK's `enter-fullscreen` and `leave-fullscreen`
 //! signals, to hide the bar meanwhile — and switched off on WebKitGTK older than 2.52, which
 //! aborts the process as a page enters it (LJ14.1, `fullscreen::needs_fullscreen_off`).
 //! The page's downloads go through WebKitGTK itself (linux/downloads.rs, LJ15). A summon raises
-//! and focuses the window with a fresh X server timestamp (linux/front.rs, LJ19.2).
+//! and focuses the window with a fresh X server timestamp (linux/front.rs, LJ19.2). The bar's web
+//! process ending (`web-process-terminated`) is reported to joan.rs, which rebuilds a ready window
+//! whose bar is gone (LJ19.4).
 
 use gtk::glib::Propagation;
 use gtk::glib::prelude::*;
@@ -43,9 +46,19 @@ pub use front::{bring_to_front, front};
 /// viewport that sizes the child to the frame — and the frame is what the box packs: 40 px in
 /// Toolbar mode, the whole box in Overlay mode.
 pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
+    let app = bar.app_handle().clone();
     // with_webview runs on the GTK main thread, where GTK objects may be touched.
-    let result = bar.with_webview(|webview| {
+    let result = bar.with_webview(move |webview| {
         let view = webview.inner();
+        // Its web process ended (crashed, killed, out of memory): a ready window rebuilds (LJ19.4).
+        let ended = app.clone();
+        view.connect_web_process_terminated(move |_, reason| {
+            crate::joan::bar_process_ended(&ended, &format!("{reason:?}"));
+        });
+        match view.toplevel() {
+            Some(toplevel) => connect_page_keys(&app, &toplevel),
+            None => eprintln!("little-joan: the bar has no toplevel window; page keys are off"),
+        }
         let Some(container) = view
             .parent()
             .and_then(|parent| parent.downcast::<gtk::Box>().ok())
@@ -103,18 +116,20 @@ fn bar_slot(view: &webkit2gtk::WebView) -> Option<(gtk::Box, gtk::Widget)> {
 /// packed to fill the window (its 40 px request stays as a minimum, so the window can still
 /// shrink) and the page widget is hidden; closing it undoes both. tao shows a window with `show_all()`, which
 /// would bring a hidden page back, so the page is kept out of it (`no_show_all`) meanwhile.
-pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: &Webview<R>, on: bool) {
-    let result = page.with_webview(move |webview| {
-        let view = webview.inner();
-        view.set_no_show_all(on);
-        if on {
-            view.hide();
-        } else {
-            view.show_all();
+pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: Option<&Webview<R>>, on: bool) {
+    if let Some(page) = page {
+        let result = page.with_webview(move |webview| {
+            let view = webview.inner();
+            view.set_no_show_all(on);
+            if on {
+                view.hide();
+            } else {
+                view.show_all();
+            }
+        });
+        if let Err(err) = result {
+            eprintln!("little-joan: could not reach the page: {err}");
         }
-    });
-    if let Err(err) = result {
-        eprintln!("little-joan: could not reach the page: {err}");
     }
     let result = bar.with_webview(move |webview| match bar_slot(&webview.inner()) {
         Some((container, slot)) => {
@@ -159,7 +174,7 @@ fn fullscreen_off_where_it_aborts(view: &webkit2gtk::WebView) {
     }
 }
 
-/// The page: page keys for the whole window, element fullscreen, and its downloads.
+/// The page: element fullscreen and its downloads (page keys are the window's, `install_bar`).
 pub fn install_page<R: Runtime>(page: &Webview<R>) {
     let app = page.app_handle().clone();
     let result = page.with_webview(move |webview| {
@@ -176,35 +191,37 @@ pub fn install_page<R: Runtime>(page: &Webview<R>) {
                 Some(false.to_value())
             });
         }
-        let Some(toplevel) = view.toplevel() else {
-            eprintln!("little-joan: the webview has no toplevel window; page keys are off");
-            return;
-        };
-        toplevel.connect_key_press_event(move |_, event| {
-            let state = event.state();
-            let mods = Mods {
-                ctrl: state.contains(gtk::gdk::ModifierType::CONTROL_MASK),
-                shift: state.contains(gtk::gdk::ModifierType::SHIFT_MASK),
-                alt: state.contains(gtk::gdk::ModifierType::MOD1_MASK),
-                meta: state.contains(gtk::gdk::ModifierType::SUPER_MASK)
-                    || state.contains(gtk::gdk::ModifierType::META_MASK),
-            };
-            let key = event
-                .keyval()
-                .name()
-                .map_or(Key::Other, |name| Key::from_gdk_name(name.as_str()));
-            match state::with(&app, |s| s.keymap.action_for(key, mods)) {
-                Some(action) => {
-                    page_actions::perform(&app, action.page_action());
-                    Propagation::Stop
-                }
-                None => Propagation::Proceed,
-            }
-        });
     });
     if let Err(err) = result {
         eprintln!("little-joan: could not reach the webview: {err}");
     }
+}
+
+/// Page keys for the whole window: its toplevel's `key-press-event` (once per window, from
+/// `install_bar`), before WebKitGTK sees the key.
+fn connect_page_keys<R: Runtime>(app: &tauri::AppHandle<R>, toplevel: &gtk::Widget) {
+    let app = app.clone();
+    toplevel.connect_key_press_event(move |_, event| {
+        let state = event.state();
+        let mods = Mods {
+            ctrl: state.contains(gtk::gdk::ModifierType::CONTROL_MASK),
+            shift: state.contains(gtk::gdk::ModifierType::SHIFT_MASK),
+            alt: state.contains(gtk::gdk::ModifierType::MOD1_MASK),
+            meta: state.contains(gtk::gdk::ModifierType::SUPER_MASK)
+                || state.contains(gtk::gdk::ModifierType::META_MASK),
+        };
+        let key = event
+            .keyval()
+            .name()
+            .map_or(Key::Other, |name| Key::from_gdk_name(name.as_str()));
+        match state::with(&app, |s| s.keymap.action_for(key, mods)) {
+            Some(action) => {
+                page_actions::perform(&app, action.page_action());
+                Propagation::Stop
+            }
+            None => Propagation::Proceed,
+        }
+    });
 }
 
 /// The GDK window state's fullscreen bit (set by WebKitGTK's own fullscreen, by tao, or by the

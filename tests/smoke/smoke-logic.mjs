@@ -117,6 +117,29 @@ export function persistRequest(search) {
   return undefined;
 }
 
+/** How often a `?ping=<id>` page pings the smoke server (LJ19.4). */
+export const PING_EVERY_MS = 250;
+
+/**
+ * `?ping=<id>`: the "nothing of the page survives a close" check (LJ19.4) — the page pings the
+ * smoke server every PING_EVERY_MS for as long as it runs. The id is the smoke test's own word.
+ * @param {string} search location.search
+ * @returns {{ id: string } | undefined}
+ */
+export function pingRequest(search) {
+  const id = new URLSearchParams(search).get("ping") ?? "";
+  return /^[\w-]{1,32}$/.test(id) ? { id } : undefined;
+}
+
+/**
+ * The ping's address on the smoke server (same origin).
+ * @param {string} id
+ * @param {number} n
+ */
+export function pingUrl(id, n) {
+  return `/ping?id=${encodeURIComponent(id)}&n=${n}`;
+}
+
 /**
  * The cookies `?persist=set` writes: a persistent one (a year), and a session one (no expiry,
  * so it must end with the app run).

@@ -180,8 +180,9 @@ mod tests {
 
     #[test]
     fn only_the_bars_builder_adds_an_initialization_script() {
-        // The page webview (joan-page) never gets one (Ground Rules 10 and 18): in this file's
-        // code there is exactly one, between the bar's builder and the page's.
+        // The page webview (joan-page) never gets one (Ground Rules 10 and 18): in bar.rs's code
+        // there is exactly one, in the bar's builder; the page's builder (bar/page.rs since
+        // LJ19.4) has none — the walk below checks that file with every other.
         let source = include_str!("../bar.rs");
         let code = source.split("#[cfg(test)]").next().unwrap_or(source);
         assert_eq!(code.matches("initialization_script").count(), 1);
@@ -191,12 +192,12 @@ mod tests {
         let bar = code
             .find("WebviewBuilder::new(BAR")
             .expect("the bar's builder");
-        let page = code
-            .find("WebviewBuilder::new(PAGE")
-            .expect("the page's builder");
+        assert!(bar < call, "the script belongs to the bar's builder");
+        assert!(!code.contains("WebviewBuilder::new(PAGE"));
+        let page = include_str!("page.rs");
         assert!(
-            bar < call && call < page,
-            "the script belongs to the bar's builder"
+            page.contains("WebviewBuilder::new(PAGE"),
+            "the page's builder lives in bar/page.rs"
         );
         // And nowhere else but the settings window's own (its tab).
         let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");

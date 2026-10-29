@@ -32,6 +32,34 @@ export interface Settings {
   showTrayIcon: boolean;
   /** The user's own keys (Keyboard, LJ43/44): action id → accelerator, "" for no key. */
   keys: Record<string, string>;
+  /** What stays at rest after a close (General, LJ19.4; settings/after_close.rs). */
+  afterClose: AfterClose;
+}
+
+/** "After closing" (LJ19.4, the owner's decision): the hidden window and the bar stay, for 15 minutes, or nothing. */
+export type AfterClose = "ready" | "ready15" | "hibernate";
+
+/**
+ * About how much memory "Stay ready" keeps while the window is closed, per OS — the app's and its
+ * web engine's processes together (resident memory), as CI's smoke runs measured it (LJ19.4's
+ * notes). A rough figure on purpose: it varies with the machine.
+ */
+export const READY_MEMORY_MB: Readonly<Record<string, number>> = { macos: 90, windows: 140, linux: 110 };
+
+/** General's "After closing" choices, worded for `platform`, drawn as text. */
+export function afterCloseChoices(platform: string): Choice[] {
+  const mb = READY_MEMORY_MB[platform];
+  const memory = mb === undefined ? "some memory" : `about ${mb} MB of memory`;
+  return [
+    { id: "ready", name: `Stay ready — opens instantly; keeps ${memory} while closed` },
+    { id: "ready15", name: "Stay ready for 15 minutes, then hibernate" },
+    { id: "hibernate", name: "Hibernate — uses no memory while closed; opens a little slower" },
+  ];
+}
+
+/** An "After closing" value from anything: one of the three, else the default, `ready`. */
+export function afterCloseFrom(value: unknown): AfterClose {
+  return value === "ready15" || value === "hibernate" ? value : "ready";
 }
 
 /** Where Little Joan keeps things (Rust's get_settings), for the Privacy tab. */
@@ -76,6 +104,8 @@ export interface SettingsInput {
   showTrayIcon?: boolean;
   /** Keyboard's keys; left out (not edited), Rust keeps the saved ones. */
   keys?: Record<string, string>;
+  /** General's "After closing"; left out, Rust keeps the saved one. */
+  afterClose?: AfterClose;
 }
 
 /** The Extensions tab's part of Save (settings/extensions-logic.ts's draft). */
@@ -142,6 +172,7 @@ export function toInput(
   siteModes?: Record<string, SiteMode>,
   showTrayIcon?: boolean,
   keys?: Record<string, string>,
+  afterClose?: AfterClose,
 ): SettingsInput {
   return {
     shortcut,
@@ -154,6 +185,7 @@ export function toInput(
     ...(siteModes ? { siteModes } : {}),
     ...(showTrayIcon === undefined ? {} : { showTrayIcon }),
     ...(keys ? { keys } : {}),
+    ...(afterClose === undefined ? {} : { afterClose }),
   };
 }
 
@@ -176,7 +208,8 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     (input.disabledExtensions !== undefined && !sameIds(saved.disabledExtensions, input.disabledExtensions)) ||
     (input.siteModes !== undefined && !sameSites(saved.siteModes, input.siteModes)) ||
     (input.showTrayIcon !== undefined && input.showTrayIcon !== saved.showTrayIcon) ||
-    (input.keys !== undefined && !sameOverrides(saved.keys, input.keys))
+    (input.keys !== undefined && !sameOverrides(saved.keys, input.keys)) ||
+    (input.afterClose !== undefined && input.afterClose !== afterCloseFrom(saved.afterClose))
   );
 }
 
@@ -196,6 +229,7 @@ export function rebase(draft: Settings, oldSaved: Settings, newSaved: Settings):
     mobileSites: follow("mobileSites"),
     rememberHistory: follow("rememberHistory"),
     showTrayIcon: follow("showTrayIcon"),
+    afterClose: follow("afterClose"),
     developerMode: follow("developerMode"),
     theme: follow("theme", sameTheme),
     disabledExtensions: follow("disabledExtensions", sameIds),

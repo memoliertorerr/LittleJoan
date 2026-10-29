@@ -186,7 +186,7 @@ export function evaluate(events: LogEvent[], expect: Expectations, measured: Mea
     failures.push("the page never reported element fullscreen after the click");
   }
   if (count(events, "window-created") < 2 || count(events, "hibernated") < 2) {
-    failures.push("summoning again after hibernating did not create and destroy a second window");
+    failures.push("summoning again after a close did not open and close a second window");
   }
   if (measured.pageHelpersLeft > 0) {
     failures.push(`webview helper processes of the page left after hibernating: ${measured.pageHelpersLeft}`);

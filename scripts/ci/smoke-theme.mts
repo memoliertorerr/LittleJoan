@@ -3,7 +3,8 @@
 // so the main run's memory numbers don't move. The bar logs `theme <mode> colors=<n>` each time
 // it loads (start_info, src-tauri/src/commands.rs) — the mode and a count, never the colors —, and
 // before that `theme-early <mode> colors=<n>` when it painted its initialization script's theme
-// before its first frame (LJ38).
+// before its first frame (LJ38). A summon from the ready window (LJ19.4) hands the bar its theme
+// again: `theme-summon <mode> colors=<n>`.
 import type { LogEvent } from "./smoke-log.mts";
 import { sawSettings, sawSmokeTopSite } from "./smoke-command.mts";
 
@@ -15,6 +16,11 @@ export interface ThemeEvent {
 /** Reads a `theme` event's detail; anything else is undefined. */
 export function parseTheme(event: LogEvent): ThemeEvent | undefined {
   return event.event === "theme" ? themeDetail(event.detail) : undefined;
+}
+
+/** Reads a `theme-summon` event's detail (a summon from ready handed the bar its theme, LJ19.4). */
+export function parseSummonTheme(event: LogEvent): ThemeEvent | undefined {
+  return event.event === "theme-summon" ? themeDetail(event.detail) : undefined;
 }
 
 /** Reads a `theme-early` event's detail (the bar painted its first theme, LJ38). */
@@ -88,6 +94,11 @@ export function themeFailures(run: ThemeRun, events: LogEvent[]): string[] {
   for (const theme of handed) {
     if (theme.mode !== wanted.mode || theme.colors !== wanted.colors) {
       failures.push(`${run.name}: the bar got a ${theme.mode} theme with ${theme.colors} colors, not ${wanted.mode} with ${wanted.colors}`);
+    }
+  }
+  for (const theme of events.map(parseSummonTheme).filter((t) => t !== undefined)) {
+    if (theme.mode !== wanted.mode || theme.colors !== wanted.colors) {
+      failures.push(`${run.name}: a summon from ready handed the bar a ${theme.mode} theme with ${theme.colors} colors, not ${wanted.mode} with ${wanted.colors}`);
     }
   }
   failures.push(...earlyThemeFailures(run, events));

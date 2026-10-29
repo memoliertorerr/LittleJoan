@@ -1,8 +1,9 @@
 //! The bar's part of a summon's timing (LJ19.1): what only the bar can see — its navigation, its
-//! HTML, its script, the first answers it got, its first painted frame and the command bar's first
-//! rows on screen. The bar reports them once, in one call, only when `start_info` says so — in
-//! smoke tests (`LITTLEJOAN_SMOKE_LOG`) — so normal use never calls this. Only the bar may call it
-//! (capabilities/bar.json, and a test).
+//! HTML, its script, the first answers it got, its first painted frame, the command bar's first
+//! rows on screen and (LJ19.4) when its field had the keyboard. The bar reports them once per
+//! summon, in one call, only when Rust says so (`start_info`'s `timing`, and a summon from ready's
+//! own) — in smoke tests (`LITTLEJOAN_SMOKE_LOG`) — so normal use never calls this. Only the bar may
+//! call it (capabilities/bar.json, and a test).
 
 use serde::Deserialize;
 
@@ -29,11 +30,13 @@ pub struct BarMarks {
     painted: Option<f64>,
     /// The command bar's first rows were painted.
     command_bar: Option<f64>,
+    /// Its field had the keyboard (its document had focus, the field active).
+    focused: Option<f64>,
 }
 
 impl BarMarks {
     /// Each mark with its "ago", in the order they normally come.
-    fn marks(&self) -> [(Mark, Option<f64>); 8] {
+    fn marks(&self) -> [(Mark, Option<f64>); 9] {
         [
             (Mark::BarNavigation, self.navigation),
             (Mark::BarHtml, self.html),
@@ -42,6 +45,7 @@ impl BarMarks {
             (Mark::BarStartInfo, self.start_info),
             (Mark::BarSuggestions, self.suggestions),
             (Mark::BarPainted, self.painted),
+            (Mark::BarFocused, self.focused),
             (Mark::CommandBar, self.command_bar),
         ]
     }
@@ -66,9 +70,10 @@ mod tests {
 
     #[test]
     fn the_known_marks_are_read_and_others_refused() {
-        let marks: BarMarks =
-            serde_json::from_str(r#"{"navigation": 300, "painted": 40.5, "commandBar": 0}"#)
-                .expect("known marks");
+        let marks: BarMarks = serde_json::from_str(
+            r#"{"navigation": 300, "painted": 40.5, "focused": 12, "commandBar": 0}"#,
+        )
+        .expect("known marks");
         let given: Vec<Mark> = marks
             .marks()
             .into_iter()
@@ -76,12 +81,18 @@ mod tests {
             .collect();
         assert_eq!(
             given,
-            [Mark::BarNavigation, Mark::BarPainted, Mark::CommandBar]
+            [
+                Mark::BarNavigation,
+                Mark::BarPainted,
+                Mark::BarFocused,
+                Mark::CommandBar
+            ]
         );
         for other in [
             r#"{"shown": 1}"#,
             r#"{"painted": "soon"}"#,
             r#"{"commandbar": 1}"#,
+            r#"{"barFocused": 1}"#,
             "[]",
             "1",
         ] {

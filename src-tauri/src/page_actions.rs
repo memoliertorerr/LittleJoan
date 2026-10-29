@@ -25,14 +25,22 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        // Nothing while the window rests (LJ19.4: it exists, hidden). The command bar's keys work
+        // as soon as the window is up; the page's need the page webview, which a summon builds
+        // after the bar.
+        if !joan::is_open(&app) {
+            return;
+        }
+        match action {
+            PageAction::OpenLocation => return bar::focus_bar(&app),
+            PageAction::History => return bar::show_history(&app),
+            _ => {}
+        }
         let Some(page) = bar::page(&app) else {
             return;
         };
         let result = match action {
-            PageAction::OpenLocation => {
-                bar::focus_bar(&app);
-                Ok(())
-            }
+            PageAction::OpenLocation | PageAction::History | PageAction::Close => Ok(()),
             PageAction::Reload => {
                 // A reload is a visit that adds nothing to frecency (history.rs).
                 history_store::set_next_kind(&app, VisitKind::Reload);
@@ -48,14 +56,9 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
             PageAction::Forward => page.eval("history.forward()"),
             PageAction::Translate => translate_page(&app),
             PageAction::OpenInBrowser => open_in_browser(&app),
-            PageAction::History => {
-                bar::show_history(&app);
-                Ok(())
-            }
             PageAction::ZoomIn => bar::zoom_page(&app, Step::In),
             PageAction::ZoomOut => bar::zoom_page(&app, Step::Out),
             PageAction::ZoomReset => bar::zoom_page(&app, Step::Reset),
-            PageAction::Close => Ok(()),
         };
         if let Err(err) = result {
             eprintln!("little-joan: page action {action:?} failed: {err}");

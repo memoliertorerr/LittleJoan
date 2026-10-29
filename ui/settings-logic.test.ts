@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_THEME } from "./lib/theme.ts";
 import {
   CLEAR_START,
+  READY_MEMORY_MB,
   TABS,
+  afterCloseChoices,
+  afterCloseFrom,
   changes,
   clearQuestion,
   clearStep,
@@ -32,6 +35,7 @@ const saved: Settings = {
   siteModes: { "127.0.0.1": "desktop" },
   showTrayIcon: true,
   keys: {},
+  afterClose: "ready",
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -173,6 +177,55 @@ describe("settings logic", () => {
     expect(hasChanges(changes(saved, false, privacy, false))).toBe(true);
     // Switched back on: nothing to save.
     expect(hasChanges(changes(saved, false, same(), false))).toBe(false);
+  });
+});
+
+describe("after closing (LJ19.4)", () => {
+  const withAfterClose = (afterClose?: "ready" | "ready15" | "hibernate") =>
+    toInput(
+      saved.shortcut,
+      saved.searchEngine,
+      saved.translateTo,
+      saved.mobileSites,
+      saved.rememberHistory,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      afterClose,
+    );
+
+  it("offers Stay ready first, then for 15 minutes, then Hibernate, with the OS's memory figure", () => {
+    for (const platform of ["macos", "windows", "linux"]) {
+      const choices = afterCloseChoices(platform);
+      expect(choices.map((c) => c.id)).toEqual(["ready", "ready15", "hibernate"]);
+      expect(choices[0]?.name).toContain(`about ${READY_MEMORY_MB[platform]} MB`);
+      expect(choices[0]?.name.startsWith("Stay ready — opens instantly")).toBe(true);
+      expect(choices[2]?.name).toBe("Hibernate — uses no memory while closed; opens a little slower");
+    }
+    expect(afterCloseChoices("plan9")[0]?.name).toContain("some memory");
+  });
+
+  it("reads anything as one of the three, Stay ready by default", () => {
+    expect(afterCloseFrom("hibernate")).toBe("hibernate");
+    expect(afterCloseFrom("ready15")).toBe("ready15");
+    for (const junk of [undefined, null, "", "Ready", 15, "ready30"]) {
+      expect(afterCloseFrom(junk)).toBe("ready");
+    }
+  });
+
+  it("counts a new choice as a change, the saved one as none, and leaves it out unless given", () => {
+    expect(isChanged(saved, withAfterClose("ready"))).toBe(false);
+    expect(isChanged(saved, withAfterClose("hibernate"))).toBe(true);
+    expect("afterClose" in same()).toBe(false);
+    expect(withAfterClose("ready15").afterClose).toBe("ready15");
+  });
+
+  it("follows a change made elsewhere unless the window edited it", () => {
+    const next = { ...saved, afterClose: "hibernate" as const };
+    expect(rebase(saved, saved, next).afterClose).toBe("hibernate");
+    expect(rebase({ ...saved, afterClose: "ready15" }, saved, next).afterClose).toBe("ready15");
   });
 });
 

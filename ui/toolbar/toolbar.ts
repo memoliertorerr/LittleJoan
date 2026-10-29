@@ -32,6 +32,8 @@ export interface Toolbar {
   setStatus(message: unknown): void;
   /** The toolbar is shown (true) or the command bar covers it. */
   setVisible(visible: boolean): void;
+  /** The window closed and rests (LJ19.4): no status is kept for the next summon. */
+  clearStatus(): void;
 }
 
 export function toolbar(root: HTMLElement): Toolbar {
@@ -145,6 +147,10 @@ export function toolbar(root: HTMLElement): Toolbar {
     },
     setVisible(visible: boolean) {
       statuses = withToolbarVisible(statuses, visible, performance.now());
+      refresh();
+    },
+    clearStatus() {
+      statuses = initialStatus(false, performance.now());
       refresh();
     },
   };

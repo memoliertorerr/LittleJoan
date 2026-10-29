@@ -96,7 +96,7 @@
 | LJ19.1 | *(added mid-plan 2026-10-22)* Faster first summon after idle: summon timing in the smoke log, measured per OS (first, warm, idle, cold-after-eviction, the real shortcut), then the summon path optimized where the numbers point; loose CI ceilings | strong | auto | ✅ done (measured, then lj-step-19.1-fix / fix2 — see notes; macOS −6…−17 % warm in CI, Windows −40 % (mostly faster runners; ~90 ms ours), Linux within noise; the rest is the engine starting at every summon) |
 | LJ19.2 | *(added mid-plan 2026-10-22)* Show over full-screen apps and on the current Space: macOS windows join the active Space and may show over other apps' full-screen windows (moveToActiveSpace + fullScreenAuxiliary, the normal level), Linux raises with a fresh X server timestamp, Windows checked; an over-full-screen smoke run on every OS | strong | auto | ✅ done (CI: see notes) |
 | LJ19.3 | *(added mid-plan 2026-10-22)* Open-source polish: issue and PR templates, the Contributor Covenant code of conduct, README badges, a trademark-check note for the owner (PR #30, docs-only, run in a second checkout in parallel with LJ19.1) | standard | auto | ✅ done — PR #30, merged as 60c1db3 |
-| LJ19.4 | *(added mid-plan 2026-10-29)* Summon speed: "After closing" — Stay ready (the owner's default: the hidden window and the trusted bar stay, the page never), for 15 minutes, or Hibernate; the page webview built after the bar; a prewarm after launch; no theme flash; measured per OS and mode (cold vs ready, memory at rest, typed keys, "nothing of the page survives") | strong | auto | ⬜ todo |
+| LJ19.4 | *(added mid-plan 2026-10-29)* Summon speed: "After closing" — Stay ready (the owner's default: the hidden window and the trusted bar stay, the page never), for 15 minutes, or Hibernate; the page webview built after the bar; a prewarm after launch; no theme flash; measured per OS and mode (cold vs ready, memory at rest, typed keys, "nothing of the page survives") | strong | auto | ✅ done (CI numbers: see notes) |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -4039,6 +4039,87 @@ Measure: summon-timing lines with kind and mode, pageBuilt and barFocused; the t
 modes; typed keys; the pinging page; memory at rest per mode per OS; ceilings ≈3× the numbers,
 compared with LJ19.1's baseline on the same runners (main's run 39939125801).
 ```
+
+**Implementation notes (2026-10-29):**
+
+- **Disk:** 8.1 GiB free at the start, 6.4 GiB after the first local verify (`.cache/target`
+  1.3 GB; activity outside the project took the rest).
+- **The state machine** (`toggle.rs`): `WindowState::Ready { usable }` beside Hibernating and Open;
+  `Command::Prewarm` and `Command::Release`; `Action::Summon`, `SummonExtension`, `Close` (was
+  `Destroy`), `Rebuild`, `RebuildExtension`, `Prewarm`, `Release`. joan.rs keeps the request side
+  (dispatch, the lifecycle lock, quit, window events); `joan/rest.rs` builds and closes
+  (`create`, `summon`, `close`, `prewarm`, `release`, the 15-minute timer, `bar_process_ended`,
+  `after_close_changed`). A resting window is `AT_REST` (set by the prewarm and a ready close,
+  cleared by a summon), not `is_visible` (which asks the main thread).
+- **The page webview** (`bar/page.rs`): `ensure_page` builds it if the window has none — for the
+  deferred build, a navigation (`bar::navigate`, `load`, `navigate_pending` all call it: Enter in the
+  command bar, a URL summon, an extension's panel), never on the main thread (it waits for it, and
+  WebView2 can deadlock there; `platform::on_main_thread`, noted at setup for every OS now). One lock
+  (`BUILDING`) keeps a deferred build, a navigation's and a close from overlapping; a summon number
+  keeps a build planned for one summon from running after its close. **When:** a cold summon builds
+  it once the bar's script runs (`BAR_READY`, i.e. `start_info`, at most 3 s) plus 50 ms for its
+  frame — the bar reports its frames only in smoke tests, so the script's first call is the signal
+  every build has; a summon from ready 50 ms after the window shows. **No flash:** on macOS and
+  Linux it is added, hidden and (Linux) taken out of the window's box in one main-thread task (the
+  builder is made there: `WebviewBuilder` isn't `Send`), so nothing paints in between; on Windows it
+  is added zero-sized and hidden from the lifecycle's thread. `focused(false)`: it never takes the
+  keyboard from the bar's field. Linux's page keys moved to `install_bar` (the toplevel's handler,
+  once per window — per page it would have doubled with every summon); the URL watcher and macOS's
+  WebKit-fullscreen watcher stop with the page (nothing runs at rest) and start with the next.
+- **A close** (`rest::close`): `closing <mode>`, size, history, then the page closed always —
+  session cookies kept (Windows), downloads ended — **Windows now cancels them itself**
+  (`DownloadStarting` notes each `ICoreWebView2DownloadOperation`; the window's WebView2
+  environment, which used to take them along, outlives the page) —, macOS navigating it to
+  `about:blank` and waiting for that load (≤ 400 ms) before `Webview::close`. Stay ready: the window
+  hidden first, back to its remembered size (out of an element fullscreen or a maximize), its title
+  "Little Joan" again; the bar's `window.littleJoan.rest()`; Windows' bar hidden and its memory
+  target Low; **macOS `NSApp.hide`**, unless Settings is on screen — a hidden window leaves an
+  accessory app active with no key window, so the keyboard wouldn't go back to the app the user
+  came from (a destroyed window did that by itself); a summon and Settings unhide it first.
+  Hibernate: the window destroyed as before (bar unloaded first on macOS), and the next summon
+  waits until the old window is really gone (at most 2 s) — a rebuild would otherwise find the
+  label taken. Quit (macOS) closes, then releases, and waits up to 2.5 s (was 1.5).
+- **A summon from ready** (`rest::summon`): a new extension session and registry, history loading
+  on its own thread (history stays per summon: Ground Rule 20 unchanged, nothing held at rest), the
+  bar shown with its memory target Normal (Windows), `theme-summon <mode> colors=<n>`, then
+  `window.littleJoan.summoned({theme, timing})` — the bar starts over (its own timing reporter, the
+  theme if it changed, the command bar's first rows, the field focused) without calling
+  `start_info` again (whose `theme` line LJ38's rule ties to a `theme-early`) — then placed, on the
+  current Space, shown, in front, the field focused (`window-created ready`), the page 50 ms later.
+- **The prewarm:** 3 s after setup (`prewarm_after_launch`, Stay ready only; never with the first
+  run's welcome — that window stays ready when it closes — nor while quitting): the window and the
+  bar, no history, no page, the bar's memory target Low (Windows), `prewarmed <mode>`. A summon that
+  came first makes it do nothing (Open).
+- **A gone bar:** WebView2's `ProcessFailed` on the bar (renderer exited or unresponsive, browser
+  exited; GPU / utility restarts don't count), Tauri's app-level `on_web_content_process_terminate`
+  on macOS (which replaces Tauri's default reload, so other webviews are reloaded by hand as before),
+  WebKitGTK's `web-process-terminated` → `bar-gone <why>`; at rest the window is marked unusable and
+  the next summon rebuilds (`released bar-gone`, then a cold summon), on screen the bar reloads.
+- **The theme flash** (the owner, v0.2.0-beta: half of the toolbar in the default colours for a
+  split second while the window opens): the bar painted its theme before its first frame since
+  LJ38, but the colour *under* it — the bar webview's background — was the last painted
+  `--lj-bg-0`, or plain white / near-black before a bar painted in this app run (the first summon
+  after a launch, or after the theme changed), and the native window had none. Now both get the
+  theme's own `--lj-bg-0`, computed in Rust (`theme_color.rs`, the OKLCH math of ui/lib/theme.ts,
+  pinned to the TS values by tests on both sides) before the window is shown. From ready the bar
+  has painted long before and nothing new is built.
+- **Measuring:** `summon-timing` gets `kind` (cold | ready) and `mode`; `pageBuilt`; `barFocused`
+  (the bar notes when its document has focus and the field is active — on its `focus` events, no
+  polling — and reports it with the rest; required only without a URL, since a URL summon gives
+  the page the keyboard); cookies and the agent are now the page builder's marks. The bar's report
+  waits for both the rows and the focus (or its 3 s flush). Two smoke-only knobs (ignored without
+  the smoke log): `LITTLEJOAN_SMOKE_READY_MS` shortens Stay ready for 15 minutes for the ready15
+  rest run, `LITTLEJOAN_SMOKE_WIN_REST=plain` leaves Windows' bar as it is at rest (for an A/B of
+  design 9 through `workflow_dispatch`'s `extra_env`).
+- **Design changes:** none of substance. Details where the code chose: the page waits for the
+  bar's script rather than its painted frame (above); history is read again per summon rather than
+  kept while ready (Rule 20 unchanged; a 3,000-page file is 20–60 ms on its own thread, off the
+  field's path); a close in Stay ready doesn't call `start_info` for the next summon (Rust hands the
+  bar what it needs); the "Settings switch takes effect at once" is unit-tested (toggle + the
+  setting's change) and the owner's check — CI has no driver for Settings' select.
+- `npm run verify`: 682 TS tests, 407 Rust tests (macOS), clippy clean. The Windows and Linux code
+  (ProcessFailed, the memory target, download cancelling, GTK's termination signal, the moved key
+  handler) compiles only in CI.
 
 ---
 

@@ -70,6 +70,8 @@ impl SettingsTab {
 pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        // macOS: the app may be hidden — a ready page window gave the keyboard back (LJ19.4).
+        platform::take_focus_back(&app);
         if let Some(window) = app.get_webview_window(LABEL) {
             let _ = window.unminimize();
             let _ = platform::bring_to_front(&window.as_ref().window());

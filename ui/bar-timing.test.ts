@@ -18,17 +18,18 @@ function harness() {
 }
 
 describe("the bar's summon timing", () => {
-  it("goes out once, with every mark as how long ago, when the command bar's rows are painted", () => {
+  it("goes out once, with every mark as how long ago, when the rows are painted and the field has the keyboard", () => {
     const h = harness();
     h.reporter.saw("navigation", 0);
     h.at(40);
     h.reporter.saw("module", 40);
     h.reporter.saw("painted", 55);
+    h.reporter.saw("focused", 60);
     h.reporter.enable(true);
     expect(h.sent).toEqual([]);
     h.at(90);
     h.reporter.saw("commandBar", 90);
-    expect(h.sent).toEqual([{ navigation: 90, module: 50, painted: 35, commandBar: 0 }]);
+    expect(h.sent).toEqual([{ navigation: 90, module: 50, painted: 35, focused: 30, commandBar: 0 }]);
     // Nothing goes out twice, and later marks stay out.
     h.reporter.saw("suggestions", 95);
     h.reporter.flush();
@@ -39,10 +40,22 @@ describe("the bar's summon timing", () => {
     const h = harness();
     h.at(10);
     h.reporter.saw("commandBar", 10);
+    h.reporter.saw("focused", 10);
     expect(h.sent).toEqual([]);
     h.at(25);
     h.reporter.enable(true);
-    expect(h.sent).toEqual([{ commandBar: 15 }]);
+    expect(h.sent).toEqual([{ commandBar: 15, focused: 15 }]);
+  });
+
+  it("waits for the field to take the keyboard after the rows (a summon from ready), whichever comes last", () => {
+    const h = harness();
+    h.reporter.enable(true);
+    h.at(30);
+    h.reporter.saw("commandBar", 30);
+    expect(h.sent).toEqual([]);
+    h.at(45);
+    h.reporter.saw("focused", 45);
+    expect(h.sent).toEqual([{ commandBar: 15, focused: 0 }]);
   });
 
   it("goes out on a flush without rows (a window opened on a page), also before start_info answered", () => {
@@ -83,8 +96,9 @@ describe("the bar's summon timing", () => {
     const h = harness();
     h.at(5);
     h.reporter.enable(true);
+    h.reporter.saw("focused", 7);
     h.reporter.saw("commandBar", 9);
-    expect(h.sent).toEqual([{ commandBar: 0 }]);
+    expect(h.sent).toEqual([{ focused: 0, commandBar: 0 }]);
   });
 
   it("runs after the frame and a task behind it", () => {

@@ -1,7 +1,8 @@
 //! Settings changes at runtime (LJ42): the one path Settings' Save and the command bar's quick
 //! commands share. `settings::apply_change` decides what the settings become (pure, tested); this
 //! puts the result to work — AppState, a new theme in the bar, the tray icon's rule (LJ41), phone
-//! mode, the extensions' registry — and saves settings.json (atomically).
+//! mode, the extensions' registry, what stays at rest after a close (LJ19.4) — and saves
+//! settings.json (atomically).
 
 use tauri::{AppHandle, Runtime};
 
@@ -55,6 +56,8 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, change: &Change) -> Result<Settings
         // Phone mode on or off, or a site's mode: at once on the open page.
         phone_mode::apply(app, true);
     }
+    // "After closing": at once — a resting window goes, or a hibernating Little Joan prewarms.
+    crate::joan::after_close_changed(app, before.after_close, updated.after_close);
     settings::save(&dir, &updated)
         .map_err(|err| format!("The new settings work now, but couldn't be saved: {err}"))?;
     Ok(updated)

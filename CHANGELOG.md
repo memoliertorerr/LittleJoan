@@ -7,6 +7,16 @@ All notable changes to Little Joan are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Opens instantly: Little Joan stays ready after closing.** A new choice in Settings → General,
+  **After closing**: **Stay ready** (the new default) keeps the hidden window and its command bar
+  after you close it — about 100 MB of memory — so the next summon shows the command bar at once,
+  with its field ready for typing; **Stay ready for 15 minutes, then hibernate**; or **Hibernate**,
+  as before (nothing stays, the next summon takes a moment longer). With Stay ready the window is
+  also prepared a few seconds after Little Joan starts, so even the first summon is quick.
+  Closing still ends the page in every mode — its scripts, sound, network and web process —, and
+  a download under way still ends with it. If the hidden command bar's web process ever ends (it
+  crashed, or the system took its memory), the next summon builds everything again instead of
+  showing an empty window. Changing the setting takes effect at once.
 - **Opens over full-screen apps, on the Space you are on.** Summoning Little Joan while another
   app is full screen — a video, a game, Safari or a browser in full screen — opens it right
   there, in front and ready to type, instead of taking you elsewhere; on a Mac it opens on the
@@ -19,6 +29,11 @@ All notable changes to Little Joan are recorded here. The format follows
   into Little Joan earlier. Windows already did this; CI now checks it on every system.
 
 ### Changed
+- **The page is built after the command bar**, in every mode, so the command bar's web process
+  starts alone and shows sooner; a summon that opens an address builds both at once.
+- **No flash of the default theme while the window opens.** With your own theme, the window and
+  the command bar now start in your theme's colour before anything is drawn, instead of white (or
+  the default colours) for a split second.
 - **Summons faster, also after Little Joan has been idle for a while.** The window now appears
   before Windows' web engine has finished its setup for web pages, the command bar asks for its
   suggestions straight away, and history no longer has to be read before the window can be built
