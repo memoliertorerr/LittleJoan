@@ -60,6 +60,9 @@ on the Space you are on.
 - **Stay ready keeps some memory while Little Joan is closed** — in CI about 30 MB more than
   Hibernate on macOS, 110 MB on Windows, 200 MB on Linux. Choose **Hibernate** under Settings →
   General → After closing to keep nothing.
+- **On a Mac, summoning Little Joan over another app's full screen can now and then switch to the
+  desktop instead** (about 1 in 20 of CI's runs; being looked into). Choosing Hibernate under
+  Settings → General → After closing should avoid it: the window is then built at each summon.
 - **The builds aren't code-signed.** The macOS DMG is ad-hoc signed and not notarized, so macOS
   blocks its first launch (the README's Install section has the one-time step); the Windows
   installer isn't signed, so SmartScreen warns about an unknown publisher (More info → Run anyway).

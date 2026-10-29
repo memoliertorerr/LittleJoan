@@ -9043,6 +9043,21 @@ release on each OS.
   before LJ19.4-fix4, 40942144444 after it), green on the others. One of the page's WebKit helpers
   outlived the close in those runs. Not looked into: check `helpers-after-hibernate.txt` for which
   one, and whether it went later than the sample.
+- **macOS: a Stay-ready summon over another app's full screen can switch to the desktop** (LJ19.2's
+  over-fullscreen rule, "the full-screen app's Space was left"): twice on 2026-10-29 in about 35
+  macOS smoke runs — 40931257236 (during LJ19.4-fix4's diagnostics) and the release PR's
+  40959308249 —, never in LJ19.2's own runs. Both times both summons of the main window (`--show`,
+  then the shortcut) failed and the Settings window, built at its summon, didn't. The unified log
+  shows WindowServer adding the ready window to the desktop Space (`space 1 add window <n>`) when
+  `show` ordered it, then the Dock: "switching to space 1 for window(<n>) ordered on non-visible
+  space"; in passing runs the same window goes to the full-screen Space (`space 92 add window`).
+  The app's own lines are the same in both (behaviour 258 set before the show; `shown … space=true`;
+  `page-adding … space=false` 100 ms later in the failures). Not the launch's timing (the helper's
+  full screen came 129 and 400 ms before the launch in the failures, 514 ms in a pass). Lead, not
+  proven: the ready window is built at prewarm with AppKit's default collection behaviour and only
+  gets `MoveToActiveSpace|FullScreenAuxiliary` at its first summon (a cold window gets it right
+  after it is built) — set it when the window is built, then run the macOS smoke many times (it is
+  about 1 in 20). Listed as a Known issue of 0.2.1-beta.1.
 - **The AppImage's own memory at rest is about twice the `.deb`'s** (surfaced by LJ13's CI): 45.6 MB
   private dirty at start against 19.5 MB, on the same runner and run — the bundled libraries'
   relocated pages are the app's own instead of shared with the system's copies; after a page both
