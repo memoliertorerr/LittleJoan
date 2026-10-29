@@ -157,12 +157,14 @@ export interface Ceilings {
  * Per OS (process.platform), several times what LJ19.1 measured on CI's runners before its changes
  * (ready, ms — first / warm / cold): Linux 280–500 / 210–390 / 330–730, macOS 2,740 / 2,520–2,600
  * / 4,870–5,450 (CI's macOS VMs are slow to start WebKit), Windows 965 / 820–920 / 770–830; and for
- * a summon from ready, about three times what LJ19.4 measured (its notes).
+ * a summon from ready about three times the slowest LJ19.4 measured on its first CI run (rows or
+ * keyboard, ms): Linux 324 (linux-scale-2's first; warm 33–91), macOS 459 (idle; warm 79–85),
+ * Windows 288 (a URL; warm 89–140).
  */
 export const CEILINGS: Record<string, Ceilings> = {
-  linux: { warm: 2000, first: 3000, cold: 5000, ready: 1500 },
-  darwin: { warm: 8000, first: 10_000, cold: 15_000, ready: 4000 },
-  win32: { warm: 4000, first: 5000, cold: 6000, ready: 2000 },
+  linux: { warm: 2000, first: 3000, cold: 5000, ready: 1000 },
+  darwin: { warm: 8000, first: 10_000, cold: 15_000, ready: 1500 },
+  win32: { warm: 4000, first: 5000, cold: 6000, ready: 1000 },
 };
 
 /** Anywhere else: only a summon that is plainly broken fails. */

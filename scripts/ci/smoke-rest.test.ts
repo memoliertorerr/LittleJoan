@@ -29,9 +29,9 @@ function readyRun(over: Partial<RestRun> = {}): RestRun {
       ].join("\n"),
     ),
     samples: [
-      { at: "start", web: 1, engine: 3, memoryMb: 90 },
-      { at: "page", web: 2, engine: 4, memoryMb: 150 },
-      { at: "after-close", web: 1, engine: 3, memoryMb: 95 },
+      { at: "start", web: 1, engine: 3, memoryMb: 90, ownMb: 40 },
+      { at: "page", web: 2, engine: 4, memoryMb: 150, ownMb: 70 },
+      { at: "after-close", web: 1, engine: 3, memoryMb: 95, ownMb: 42 },
     ],
     close: { closingAt: 12000, lastPing: 12100, pingsBefore: 12, pingsAfter: 0, pageWeb: [77], left: { "2s": 1, "10s": 0, "30s": 0 } },
     typed: { sent: true, counts: [1, 3, TYPED_KEYS.length] },
@@ -42,11 +42,13 @@ function readyRun(over: Partial<RestRun> = {}): RestRun {
 
 describe("the rest runs' measurements (LJ19.4)", () => {
   it("sum the app's and its engine's memory, and count web processes", () => {
-    const s = sample("start", 40 * 1024, [
-      { pid: 1, name: "WebKitWebProcess", web: true, rssKb: 30 * 1024 },
-      { pid: 2, name: "WebKitNetworkProcess", web: false, rssKb: 10 * 1024 + 512 },
-    ]);
-    expect(s).toEqual({ at: "start", web: 1, engine: 2, memoryMb: 80.5 });
+    const engine = [
+      { pid: 1, name: "WebKitWebProcess", web: true, rssKb: 30 * 1024, ownKb: 12 * 1024 },
+      { pid: 2, name: "WebKitNetworkProcess", web: false, rssKb: 10 * 1024 + 512, ownKb: 3 * 1024 },
+    ];
+    expect(sample("start", 40 * 1024, engine, 5 * 1024)).toEqual({ at: "start", web: 1, engine: 2, memoryMb: 80.5, ownMb: 20 });
+    // A part that couldn't be read leaves the own figure out rather than short.
+    expect(sample("start", 40 * 1024, engine).ownMb).toBeNull();
   });
 
   it("read the typed counts of the command bar's suggestions", () => {
@@ -67,7 +69,7 @@ describe("the rest runs' rules", () => {
   });
 
   it("allow only the bar's web processes at rest after a close", () => {
-    const more = readyRun({ samples: [...readyRun().samples.slice(0, 2), { at: "after-close", web: 3, engine: 5, memoryMb: 120 }] });
+    const more = readyRun({ samples: [...readyRun().samples.slice(0, 2), { at: "after-close", web: 3, engine: 5, memoryMb: 120, ownMb: 60 }] });
     expect(restFailures(more, "win32")).toEqual(["rest ready: 3 web processes at rest after the close, more than the bar's 1"]);
   });
 
@@ -93,18 +95,23 @@ describe("the rest runs' rules", () => {
       mode: "hibernate",
       events: events("1000 started\n9000 window-created cold\n12000 closing hibernate\n12500 hibernated"),
       samples: [
-        { at: "start", web: 0, engine: 0, memoryMb: 30 },
-        { at: "after-close", web: 0, engine: 0, memoryMb: 34 },
+        { at: "start", web: 0, engine: 0, memoryMb: 30, ownMb: 10 },
+        // The engine's network process may stay (WebKitGTK's web context, WebKit's services).
+        { at: "after-close", web: 0, engine: 1, memoryMb: 34, ownMb: 12 },
       ],
       close: { closingAt: 12000, lastPing: 12050, pingsBefore: 8, pingsAfter: 0, pageWeb: [5, 6], left: { "2s": 2, "10s": 0, "30s": 0 } },
       typed: null,
       killed: null,
     };
     expect(restFailures(hibernate, "linux")).toEqual([]);
-    const busy = { ...hibernate, events: events("1000 started\n4000 prewarmed hibernate"), samples: [{ at: "after-close", web: 1, engine: 2, memoryMb: 80 }] };
+    const busy = {
+      ...hibernate,
+      events: events("1000 started\n4000 prewarmed hibernate"),
+      samples: [{ at: "after-close", web: 1, engine: 2, memoryMb: 80, ownMb: 30 }],
+    };
     expect(restFailures(busy, "linux")).toEqual([
       "rest hibernate: it built the ready window although the setting says Hibernate",
-      "rest hibernate: 2 engine processes of ours at rest after the close (none allowed)",
+      "rest hibernate: 1 web processes of ours at rest after the close (none allowed)",
     ]);
   });
 
@@ -114,7 +121,7 @@ describe("the rest runs' rules", () => {
       events: events(
         "1000 started\n4000 prewarmed ready15\n10000 released timer\n14000 window-created cold\n16000 closing ready15\n16100 hibernated ready15\n22100 released timer",
       ),
-      samples: [{ at: "start", web: 1, engine: 3, memoryMb: 90 }],
+      samples: [{ at: "start", web: 1, engine: 3, memoryMb: 90, ownMb: 40 }],
       close: { closingAt: 16000, lastPing: 16010, pingsBefore: 6, pingsAfter: 0, pageWeb: [], left: { "30s": 0 } },
       typed: null,
       killed: null,
@@ -127,7 +134,7 @@ describe("the rest runs' rules", () => {
   it("draw a table per mode", () => {
     const table = restTable([readyRun()], "linux");
     expect(table).toContain('### At rest per "After closing" mode (linux)');
-    expect(table).toContain("| ready | after-close | 1 | 3 | 95 |");
+    expect(table).toContain("| ready | after-close | 1 | 3 | 95 | 42 |");
     expect(table).toContain("- ready: 12 pings before the close, 0 more than 2000 ms after");
   });
 });

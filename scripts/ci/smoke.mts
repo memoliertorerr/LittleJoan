@@ -548,11 +548,20 @@ function engineProcs(appPid: number, before: readonly number[]): EngineProc[] {
     return [];
   }
   if (os === "win32") {
-    type Row = { ProcessId: number; ParentProcessId: number; Name: string; WorkingSetSize: number; CommandLine: string | null };
+    type Row = {
+      ProcessId: number;
+      ParentProcessId: number;
+      Name: string;
+      WorkingSetSize: number;
+      PrivatePageCount: number | null;
+      CommandLine: string | null;
+    };
     let rows: Row[];
     try {
       const parsed = JSON.parse(
-        powershell("Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, WorkingSetSize, CommandLine | ConvertTo-Json -Compress") || "[]",
+        powershell(
+          "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, WorkingSetSize, PrivatePageCount, CommandLine | ConvertTo-Json -Compress",
+        ) || "[]",
       ) as Row | Row[];
       rows = Array.isArray(parsed) ? parsed : [parsed];
     } catch {
@@ -561,7 +570,13 @@ function engineProcs(appPid: number, before: readonly number[]): EngineProc[] {
     const tree = descendants(rows.map((r) => ({ pid: r.ProcessId, ppid: r.ParentProcessId })), appPid);
     return rows
       .filter((r) => tree.has(r.ProcessId) && r.ProcessId !== appPid && /msedgewebview2/i.test(r.Name))
-      .map((r) => ({ pid: r.ProcessId, name: r.Name, web: (r.CommandLine ?? "").includes("--type=renderer"), rssKb: Math.round(Number(r.WorkingSetSize) / 1024) }));
+      .map((r) => ({
+        pid: r.ProcessId,
+        name: r.Name,
+        web: (r.CommandLine ?? "").includes("--type=renderer"),
+        rssKb: Math.round(Number(r.WorkingSetSize) / 1024),
+        ownKb: r.PrivatePageCount === null ? -1 : Math.round(Number(r.PrivatePageCount) / 1024),
+      }));
   }
   if (os === "linux") {
     const procs = listProcs();
@@ -577,7 +592,7 @@ function engineProcs(appPid: number, before: readonly number[]): EngineProc[] {
         } catch {
           // Gone meanwhile.
         }
-        return { pid: p.pid, name, web: name.startsWith("WebKitWebProces"), rssKb };
+        return { pid: p.pid, name, web: name.startsWith("WebKitWebProces"), rssKb, ownKb: pssKb(p.pid) };
       })
       .filter((p) => p.name.startsWith("WebKit"));
   }
@@ -591,8 +606,41 @@ function engineProcs(appPid: number, before: readonly number[]): EngineProc[] {
       }
       const pid = Number(match[1]);
       const name = match[3].split("/").at(-1) ?? match[3];
-      return old.has(pid) ? [] : [{ pid, name, web: name.includes("WebContent"), rssKb: Number(match[2]) }];
-    });
+      return old.has(pid) ? [] : [{ pid, name, web: name.includes("WebContent"), rssKb: Number(match[2]), ownKb: -1 }];
+    })
+    .map((p) => ({ ...p, ownKb: footprintKb(p.pid) }));
+}
+
+/** Linux: a process's proportional set size (shared pages split between their users), KB; -1 unknown. */
+function pssKb(pid: number): number {
+  const rollup = readIfThere(`/proc/${pid}/smaps_rollup`) ?? "";
+  const pss = /^Pss:\s+(\d+) kB/m.exec(rollup)?.[1];
+  return pss ? Number(pss) : -1;
+}
+
+/** macOS: a process's physical footprint (what Activity Monitor's Memory column shows), KB; -1 unknown. */
+function footprintKb(pid: number): number {
+  const footprint = /Footprint:\s+([\d.]+)\s*(KB|MB|GB)/i.exec(run("footprint", ["-p", String(pid)]));
+  if (!footprint?.[1] || !footprint[2]) {
+    return -1;
+  }
+  const scale: Record<string, number> = { KB: 1, MB: 1024, GB: 1024 * 1024 };
+  return Math.round(Number(footprint[1]) * (scale[footprint[2].toUpperCase()] ?? 1024));
+}
+
+/** The app's own memory as the rest runs count it (private bytes, Pss, the footprint), KB. */
+function appOwnKb(pid: number): number {
+  if (pid <= 0) {
+    return -1;
+  }
+  if (os === "linux") {
+    return pssKb(pid);
+  }
+  if (os === "darwin") {
+    return footprintKb(pid);
+  }
+  const mb = ownMemoryMb(pid);
+  return mb < 0 ? -1 : Math.round(mb * 1024);
 }
 
 /** The pids under `root` (itself included) in a process list. */
@@ -1711,6 +1759,7 @@ for (const mode of ["ready", "hibernate", "ready15"] as const) {
         engine: engineProcs,
         enginePids: enginePidsNow,
         appRssKb: (runPid) => Math.round(memoryMb(runPid) * 1024),
+        appOwnKb,
         kill: killPids,
         pressSummonShortcut,
         typeText,

@@ -9,12 +9,16 @@
 //              (`bar-gone`) and the next summon builds everything anew (`released bar-gone`, a cold
 //              `window-created` and its complete summon-timing line).
 //   hibernate  nothing is built after the launch and nothing of ours runs in the engine at rest;
-//              after a close the pings stop and every web process goes (LJ9's rule, as before).
+//              after a close the pings stop and every web process goes (LJ9's rule, as before — the
+//              engine's network process may stay: WebKitGTK keeps its web context for the app's
+//              lifetime, WebKit its Networking and GPU services; neither runs a page).
 //   ready15    Stay ready for 15 minutes with the minutes shortened (LITTLEJOAN_SMOKE_READY_MS, read
 //              only with the smoke log): the ready window goes by itself (`released timer`), the next
 //              summon is cold, and its close rests again until the timer.
-// Memory at rest is the resident memory of the app and the engine processes it started, summed (the
-// numbers go into summary.json's restRuns and the notes). Pure parts unit-tested
+// Memory at rest is the resident memory of the app and the engine processes it started, summed —
+// and their own memory, which counts shared libraries once (Windows: private bytes, Linux: Pss,
+// macOS: the physical footprint Activity Monitor shows) — (the numbers go into summary.json's
+// restRuns and the notes). Pure parts unit-tested
 // (smoke-rest.test.ts); smoke.mts supplies the driver (process lists, the ping log, keys).
 import type { LogEvent } from "./smoke-log.mts";
 import type { SiteApp } from "./smoke-sitemode.mts";
@@ -31,6 +35,8 @@ export interface EngineProc {
   /** A web (renderer) process — what runs a page's scripts. */
   web: boolean;
   rssKb: number;
+  /** Its own memory: private bytes (Windows), Pss (Linux), the physical footprint (macOS); -1 unknown. */
+  ownKb: number;
 }
 
 /** What the rest runs need from smoke.mts. */
@@ -48,6 +54,8 @@ export interface RestDriver {
   enginePids(): number[];
   /** The app's own resident memory, KB. */
   appRssKb(pid: number): number;
+  /** The app's own memory as `EngineProc.ownKb` counts it, KB (-1 unknown). */
+  appOwnKb(pid: number): number;
   kill(pids: readonly number[]): void;
   pressSummonShortcut(): number | null;
   typeText(text: string, pid: number, activate: boolean): void;
@@ -70,6 +78,8 @@ export interface RestSample {
   engine: number;
   /** The app's and its engine processes' resident memory, MB. */
   memoryMb: number;
+  /** … and their own memory (shared libraries counted once), MB; null when a part is unknown. */
+  ownMb: number | null;
 }
 
 /** A close of the ping page: when it began (the app's `closing` line), the pings after, what was left. */
@@ -100,12 +110,14 @@ function round1(x: number): number {
 }
 
 /** A sample of the engine and the memory now. */
-export function sample(at: string, appKb: number, engine: readonly EngineProc[]): RestSample {
+export function sample(at: string, appKb: number, engine: readonly EngineProc[], appOwnKb = -1): RestSample {
+  const own = [appOwnKb, ...engine.map((p) => p.ownKb)];
   return {
     at,
     web: engine.filter((p) => p.web).length,
     engine: engine.length,
     memoryMb: round1((appKb + engine.reduce((sum, p) => sum + p.rssKb, 0)) / 1024),
+    ownMb: own.some((kb) => kb < 0) ? null : round1(own.reduce((sum, kb) => sum + kb, 0) / 1024),
   };
 }
 
@@ -132,7 +144,7 @@ export async function restRun(d: RestDriver, mode: RestMode): Promise<RestRun> {
   await app.waitFor(`rest ${mode}: started`, (e) => e.some((x) => x.event === "started"), 30_000);
   const take = (at: string): void => {
     const pid = app.pid();
-    run.samples.push(sample(at, d.appRssKb(pid), d.engine(pid, before)));
+    run.samples.push(sample(at, d.appRssKb(pid), d.engine(pid, before), d.appOwnKb(pid)));
   };
   if (mode === "hibernate") {
     // Nothing is built after the launch.
@@ -280,8 +292,8 @@ export function restFailures(run: RestRun, os: string): string[] {
       failures.push(`${name}: ${finalLeft} of the page's ${close.pageWeb.length} web processes were still there 30 s after the close`);
     }
     const after = run.samples.find((s) => s.at === "after-close");
-    if (run.mode === "hibernate" && after && after.engine > 0) {
-      failures.push(`${name}: ${after.engine} engine processes of ours at rest after the close (none allowed)`);
+    if (run.mode === "hibernate" && after && after.web > 0) {
+      failures.push(`${name}: ${after.web} web processes of ours at rest after the close (none allowed)`);
     }
     if (run.mode !== "hibernate" && after && start && after.web > Math.max(start.web, 1)) {
       failures.push(`${name}: ${after.web} web processes at rest after the close, more than the bar's ${start.web}`);
@@ -344,10 +356,15 @@ export function restSummary(run: RestRun) {
 
 /** A Markdown table of the rest runs (the job's summary): memory and processes at rest per mode. */
 export function restTable(runs: readonly RestRun[], os: string): string {
-  const lines = [`### At rest per "After closing" mode (${os})`, "", "| mode | sample | web processes | engine processes | memory (app + engine, MB) |", "|---|---|---|---|---|"];
+  const lines = [
+    `### At rest per "After closing" mode (${os})`,
+    "",
+    "| mode | sample | web processes | engine processes | resident, app + engine (MB) | own, app + engine (MB) |",
+    "|---|---|---|---|---|---|",
+  ];
   for (const run of runs) {
     for (const s of run.samples) {
-      lines.push(`| ${run.mode} | ${s.at} | ${s.web} | ${s.engine} | ${s.memoryMb} |`);
+      lines.push(`| ${run.mode} | ${s.at} | ${s.web} | ${s.engine} | ${s.memoryMb} | ${s.ownMb ?? "–"} |`);
     }
   }
   for (const run of runs) {

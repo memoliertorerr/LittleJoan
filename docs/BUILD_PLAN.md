@@ -4120,6 +4120,23 @@ compared with LJ19.1's baseline on the same runners (main's run 39939125801).
 - `npm run verify`: 682 TS tests, 407 Rust tests (macOS), clippy clean. The Windows and Linux code
   (ProcessFailed, the memory target, download cancelling, GTK's termination signal, the moved key
   handler) compiles only in CI.
+- **CI round 1** (run 40871996407, `lj-step-19.4`): verify red on Windows and Linux — a constant used
+  only on macOS (`BLANK_WAIT`). **`lj-step-19.4-fix`** gated it, and named a release's reason
+  (`released timer | setting | quit`; the ready15 rule reads `timer`). **Round 2** (run 40872587396):
+  verify and package green everywhere; smoke green on Windows; macOS and all seven Linux jobs failed
+  one rule only — "rest hibernate: engine processes of ours at rest after the close": WebKitGTK's
+  network process (its web context lives as long as the app) and WebKit's Networking / GPU services
+  stay after a window is destroyed, as they always did (LJ9 counted web processes only). Everything
+  else passed on every job: the prewarm, the pinging page stopping at every close (0 pings after it,
+  the page's web processes gone within 10 s), the bar's staying, keys typed after the shortcut all
+  landing (typed=6 on all nine jobs, macOS too), the killed bar rebuilt at the next summon, Stay
+  ready for 15 minutes going by itself twice, Hibernate's summons cold, and every earlier rule with
+  Stay ready as the default. **`lj-step-19.4-fix2`:** the Hibernate rule counts web processes (none
+  allowed), as LJ9's did; the rest runs also measure own memory (private bytes / Pss / the physical
+  footprint), since resident memory summed over processes counts shared libraries several times;
+  the ready ceilings set from round 2 (≈3× the slowest: Linux 1 s, macOS 1.5 s, Windows 1 s); and
+  Settings' "After closing" got short names with a note under the list — CI's `settings-general.png`
+  showed the long option text pushing the row past the window's width.
 
 ---
 

@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_THEME } from "./lib/theme.ts";
 import {
   CLEAR_START,
+  AFTER_CLOSE_CHOICES,
   READY_MEMORY_MB,
   TABS,
-  afterCloseChoices,
   afterCloseFrom,
+  afterCloseNote,
   changes,
   clearQuestion,
   clearStep,
@@ -196,15 +197,20 @@ describe("after closing (LJ19.4)", () => {
       afterClose,
     );
 
-  it("offers Stay ready first, then for 15 minutes, then Hibernate, with the OS's memory figure", () => {
+  it("offers Stay ready first, then for 15 minutes, then Hibernate, each explained with the OS's memory figure", () => {
+    expect(AFTER_CLOSE_CHOICES.map((c) => [c.id, c.name])).toEqual([
+      ["ready", "Stay ready"],
+      ["ready15", "Stay ready for 15 minutes"],
+      ["hibernate", "Hibernate"],
+    ]);
     for (const platform of ["macos", "windows", "linux"]) {
-      const choices = afterCloseChoices(platform);
-      expect(choices.map((c) => c.id)).toEqual(["ready", "ready15", "hibernate"]);
-      expect(choices[0]?.name).toContain(`about ${READY_MEMORY_MB[platform]} MB`);
-      expect(choices[0]?.name.startsWith("Stay ready — opens instantly")).toBe(true);
-      expect(choices[2]?.name).toBe("Hibernate — uses no memory while closed; opens a little slower");
+      expect(afterCloseNote("ready", platform)).toBe(
+        `Opens instantly; keeps about ${READY_MEMORY_MB[platform]} MB of memory while closed. Closing always ends the page: nothing of a site keeps running.`,
+      );
     }
-    expect(afterCloseChoices("plan9")[0]?.name).toContain("some memory");
+    expect(afterCloseNote("ready15", "macos")).toMatch(/^Opens instantly within 15 minutes of closing, then hibernates\./);
+    expect(afterCloseNote("hibernate", "linux")).toMatch(/^Uses no memory while closed; opens a little slower\./);
+    expect(afterCloseNote("ready", "plan9")).toContain("keeps some memory while closed");
   });
 
   it("reads anything as one of the three, Stay ready by default", () => {

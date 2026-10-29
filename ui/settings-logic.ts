@@ -46,15 +46,26 @@ export type AfterClose = "ready" | "ready15" | "hibernate";
  */
 export const READY_MEMORY_MB: Readonly<Record<string, number>> = { macos: 90, windows: 140, linux: 110 };
 
-/** General's "After closing" choices, worded for `platform`, drawn as text. */
-export function afterCloseChoices(platform: string): Choice[] {
+/** General's "After closing" choices: short names for the list (drawn as text). */
+export const AFTER_CLOSE_CHOICES: readonly Choice[] = [
+  { id: "ready", name: "Stay ready" },
+  { id: "ready15", name: "Stay ready for 15 minutes" },
+  { id: "hibernate", name: "Hibernate" },
+];
+
+/** What the chosen "After closing" does, under the list, worded for `platform` (drawn as text). */
+export function afterCloseNote(choice: AfterClose, platform: string): string {
   const mb = READY_MEMORY_MB[platform];
   const memory = mb === undefined ? "some memory" : `about ${mb} MB of memory`;
-  return [
-    { id: "ready", name: `Stay ready — opens instantly; keeps ${memory} while closed` },
-    { id: "ready15", name: "Stay ready for 15 minutes, then hibernate" },
-    { id: "hibernate", name: "Hibernate — uses no memory while closed; opens a little slower" },
-  ];
+  const page = "Closing always ends the page: nothing of a site keeps running.";
+  switch (choice) {
+    case "ready":
+      return `Opens instantly; keeps ${memory} while closed. ${page}`;
+    case "ready15":
+      return `Opens instantly within 15 minutes of closing, then hibernates. ${page}`;
+    case "hibernate":
+      return `Uses no memory while closed; opens a little slower. ${page}`;
+  }
 }
 
 /** An "After closing" value from anything: one of the three, else the default, `ready`. */

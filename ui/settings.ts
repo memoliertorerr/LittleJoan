@@ -20,9 +20,10 @@ import { BUILT_INS } from "./answers/index.ts";
 import {
   CLEAR_CHOICES,
   CLEAR_START,
+  AFTER_CLOSE_CHOICES,
   TABS,
-  afterCloseChoices,
   afterCloseFrom,
+  afterCloseNote,
   changes,
   clearQuestion,
   clearStep,
@@ -63,6 +64,14 @@ function element<T extends HTMLElement>(selector: string): T {
 
 const tray = element<HTMLInputElement>("#tray");
 const afterClose = element<HTMLSelectElement>("#after-close");
+const afterCloseText = element<HTMLElement>("#after-close-note");
+/** The platform get_settings named ("" until it answered). */
+let platformName = "";
+
+/** The note under "After closing" says what the chosen one does. */
+function drawAfterClose(): void {
+  afterCloseText.textContent = afterCloseNote(afterCloseFrom(afterClose.value), platformName);
+}
 const trayLabel = element<HTMLElement>("#tray-label");
 const trayNote = element<HTMLElement>("#tray-note");
 const login = element<HTMLInputElement>("#login");
@@ -236,6 +245,7 @@ for (const { id } of TABS) {
 for (const control of [engine, language, mobile, tray, afterClose, login, remember]) {
   control.addEventListener("change", refresh);
 }
+afterClose.addEventListener("change", drawAfterClose);
 
 fill(
   clearRange,
@@ -297,6 +307,7 @@ window.littleJoanSettings = {
     remember.checked = draft.rememberHistory;
     tray.checked = draft.showTrayIcon;
     afterClose.value = afterCloseFrom(draft.afterClose);
+    drawAfterClose();
     if (!sameTheme(draft.theme, shown.theme)) {
       look.load(themeFrom(draft.theme));
     }
@@ -330,7 +341,9 @@ invoke<SettingsView>("get_settings")
     remember.checked = view.settings.rememberHistory;
     tray.checked = view.settings.showTrayIcon;
     trayLabel.textContent = trayLabelFor(view.platform);
-    fill(afterClose, afterCloseChoices(view.platform), afterCloseFrom(view.settings.afterClose));
+    platformName = view.platform;
+    fill(afterClose, AFTER_CLOSE_CHOICES, afterCloseFrom(view.settings.afterClose));
+    drawAfterClose();
     extensionsPanel.load({ disabledExtensions: view.settings.disabledExtensions, developerMode: view.settings.developerMode });
     builtInSites = builtInsFrom(view.builtInSiteModes);
     sites.load(siteModesFrom(view.settings.siteModes), builtInSites);

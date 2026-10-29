@@ -132,9 +132,9 @@ describe("the timing run's rules", () => {
 
   it("hold a summon from ready to its own, tighter ceiling — the rows and the keyboard", () => {
     const slowRows = { ...READY_MARKS, commandBar: CEILINGS["linux"]!.ready + 1 };
-    expect(timingFailures([readyMeasured({}, { marks: slowRows })], "linux")[0]).toMatch(/ready after \d+ ms, over the 1500 ms ceiling/);
+    expect(timingFailures([readyMeasured({}, { marks: slowRows })], "linux")[0]).toMatch(/ready after \d+ ms, over the 1000 ms ceiling/);
     const slowKeys = { ...READY_MARKS, barFocused: CEILINGS["linux"]!.ready + 1 };
-    expect(timingFailures([readyMeasured({}, { marks: slowKeys })], "linux")[0]).toMatch(/keyboard after \d+ ms, over the 1500 ms ceiling/);
+    expect(timingFailures([readyMeasured({}, { marks: slowKeys })], "linux")[0]).toMatch(/keyboard after \d+ ms, over the 1000 ms ceiling/);
   });
 
   it("need a warm summon, and a line for every CLI summon (a shortcut that didn't arrive is fine)", () => {
