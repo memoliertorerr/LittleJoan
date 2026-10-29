@@ -33,6 +33,27 @@ pub enum WindowState {
     },
 }
 
+/// Why a resting window is released (the smoke log's `released <why>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Why {
+    /// Stay ready for 15 minutes ran out.
+    Timer,
+    /// "After closing" switched to Hibernate.
+    Setting,
+    /// Little Joan quits.
+    Quit,
+}
+
+impl Why {
+    pub fn name(self) -> &'static str {
+        match self {
+            Why::Timer => "timer",
+            Why::Setting => "setting",
+            Why::Quit => "quit",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// The global shortcut, or `--toggle`.
@@ -50,7 +71,7 @@ pub enum Command {
     Prewarm,
     /// Drop what stays ready: no window, no webview (Stay ready for 15 minutes' timer, the
     /// setting switching to Hibernate, Quit). An open window stays.
-    Release,
+    Release(Why),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,7 +96,7 @@ pub enum Action {
     /// Build the hidden window and the bar.
     Prewarm,
     /// Destroy the ready window: back to hibernation.
-    Release,
+    Release(Why),
     Resize {
         width: u32,
         height: u32,
@@ -96,7 +117,7 @@ pub fn decide(state: WindowState, command: Command) -> Action {
         (Ready { usable: false }, Command::Toggle) => Action::Rebuild(None),
         (Ready { usable: false }, Command::Show(url)) => Action::Rebuild(url),
         (Ready { usable: false }, Command::Extension(id)) => Action::RebuildExtension(id),
-        (Ready { .. }, Command::Release) => Action::Release,
+        (Ready { .. }, Command::Release(why)) => Action::Release(why),
         (Open { focused: true }, Command::Toggle) => Action::Close,
         (Open { focused: false }, Command::Toggle) => Action::Focus,
         (Open { .. }, Command::Show(None)) => Action::Focus,
@@ -105,9 +126,9 @@ pub fn decide(state: WindowState, command: Command) -> Action {
         (Open { .. }, Command::Resize { width, height }) => Action::Resize { width, height },
         (Open { .. }, Command::Extension(id)) => Action::FocusAndExtension(id),
         (Hibernating | Ready { .. }, Command::Hide | Command::Resize { .. })
-        | (Hibernating, Command::Release)
+        | (Hibernating, Command::Release(_))
         | (Ready { .. } | Open { .. }, Command::Prewarm)
-        | (Open { .. }, Command::Release) => Action::Nothing,
+        | (Open { .. }, Command::Release(_)) => Action::Nothing,
     }
 }
 
@@ -232,14 +253,20 @@ mod tests {
 
     #[test]
     fn release_drops_a_ready_window_never_an_open_one() {
-        assert_eq!(decide(READY, Command::Release), Action::Release);
-        assert_eq!(decide(BAR_GONE, Command::Release), Action::Release);
-        for state in [HIBERNATING, FOCUSED, BACKGROUND] {
+        for why in [Why::Timer, Why::Setting, Why::Quit] {
+            assert_eq!(decide(READY, Command::Release(why)), Action::Release(why));
             assert_eq!(
-                decide(state, Command::Release),
-                Action::Nothing,
-                "{state:?}"
+                decide(BAR_GONE, Command::Release(why)),
+                Action::Release(why)
             );
+            for state in [HIBERNATING, FOCUSED, BACKGROUND] {
+                assert_eq!(
+                    decide(state, Command::Release(why)),
+                    Action::Nothing,
+                    "{state:?}"
+                );
+            }
+            assert!(why.name().chars().all(|c| c.is_ascii_lowercase()));
         }
     }
 

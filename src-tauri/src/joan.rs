@@ -54,7 +54,7 @@ pub fn handle<R: Runtime>(app: &AppHandle<R>, command: Command) {
 
 fn run<R: Runtime>(app: &AppHandle<R>, command: Command, request: Option<Request>) {
     let _lifecycle = LIFECYCLE.lock().unwrap_or_else(PoisonError::into_inner);
-    if QUITTING.load(Ordering::SeqCst) && !matches!(command, Command::Hide | Command::Release) {
+    if QUITTING.load(Ordering::SeqCst) && !matches!(command, Command::Hide | Command::Release(_)) {
         return;
     }
     let action = toggle::decide(window_state(app), command);
@@ -107,8 +107,8 @@ fn run<R: Runtime>(app: &AppHandle<R>, command: Command, request: Option<Request
         Action::FocusAndExtension(id) => focus(app).and_then(|()| open_extension(app, &id)),
         Action::Close => rest::close(app),
         Action::Prewarm => rest::prewarm(app),
-        Action::Release => {
-            rest::release(app, "rest-over");
+        Action::Release(why) => {
+            rest::release(app, why.name());
             Ok(())
         }
         Action::Resize { width, height } => resize(app, width, height),
@@ -169,7 +169,7 @@ pub fn quit<R: Runtime>(app: &AppHandle<R>) {
                     .name("little-joan-quit-close".into())
                     .spawn(move || {
                         handle(&closing, Command::Hide);
-                        handle(&closing, Command::Release);
+                        handle(&closing, Command::Release(toggle::Why::Quit));
                         let _ = done.send(());
                     });
                 if worker.is_ok() && closed.recv_timeout(QUIT_WAIT).is_err() {

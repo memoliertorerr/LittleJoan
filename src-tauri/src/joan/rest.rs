@@ -36,7 +36,7 @@ use crate::settings::{AfterClose, MIN_HEIGHT, MIN_WIDTH};
 use crate::smoke;
 use crate::state;
 use crate::summon_timing::{self, Mark, Source};
-use crate::toggle::Command;
+use crate::toggle::{Command, Why};
 use crate::tray;
 
 /// The window exists but rests: hidden, the bar alive, no page (toggle's `Ready`).
@@ -228,7 +228,7 @@ fn expire_after<R: Runtime>(app: &AppHandle<R>, rest: u64, after: Duration) {
             std::thread::sleep(after);
             if REST.load(Ordering::SeqCst) == rest {
                 smoke::log("release", "timer");
-                super::dispatch(&app, Command::Release, Source::App);
+                super::dispatch(&app, Command::Release(Why::Timer), Source::App);
             }
         });
     if let Err(err) = spawned {
@@ -376,7 +376,7 @@ pub fn after_close_changed<R: Runtime>(app: &AppHandle<R>, before: AfterClose, n
     let rest = REST.fetch_add(1, Ordering::SeqCst) + 1;
     if !now.stays_ready() {
         smoke::log("release", "setting");
-        super::dispatch(app, Command::Release, Source::App);
+        super::dispatch(app, Command::Release(Why::Setting), Source::App);
     } else if !before.stays_ready() {
         super::dispatch(app, Command::Prewarm, Source::App);
     } else if at_rest()

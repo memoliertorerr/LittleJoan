@@ -300,8 +300,10 @@ if (field && rowList && toolbarRoot && historyRoot) {
         applyTheme(raw.theme, reportTheme);
       }
       shownTheme = raw.theme ?? shownTheme;
+      // As at the start: a summon that opened a page draws no rows (and the page has the
+      // keyboard), so its report goes at once; else soon, if the rows or the focus never come.
       markAfterPaint("painted", () => {
-        setTimeout(() => timing.flush(), 3000);
+        setTimeout(() => timing.flush(), document.body.classList.contains("toolbar") ? 0 : 3000);
       });
       command.reset(state.view === "overlay");
       field.focus();

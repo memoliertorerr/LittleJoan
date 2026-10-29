@@ -60,6 +60,7 @@ const BAR_WAIT: Duration = Duration::from_secs(3);
 /// How long after the bar is on screen the page is built: the bar's first frame goes first.
 const AFTER_BAR: Duration = Duration::from_millis(50);
 /// The longest a close waits for the page's `about:blank` (macOS).
+#[cfg(target_os = "macos")]
 const BLANK_WAIT: Duration = Duration::from_millis(400);
 
 fn building() -> std::sync::MutexGuard<'static, ()> {
