@@ -1,11 +1,13 @@
 # Little Joan — Build Plan (v0.1, v0.2, v0.3)
 
 > **Little Joan** is a tiny pop-up browser for Windows, Linux, and macOS, inspired by Little Arc.
-> It **hibernates by default**: after launch it shows no window and loads no page, and sits in
-> the tray / menu bar using as little memory and CPU as it can. A **configurable global keyboard
-> shortcut** brings up a small, resizable window with one URL/search field; press Enter and the
-> page fills the window. Closing the window **discards the page** and returns Little Joan to
-> hibernation.
+> After launch it shows no window and loads no page, and sits in the tray / menu bar. A
+> **configurable global keyboard shortcut** brings up a small, resizable window with one
+> URL/search field; press Enter and the page fills the window. Closing the window **discards the
+> page** — always. What stays at rest is the owner's "After closing" setting (LJ19.4, decided
+> 2026-10-29; Ground Rule 9): **Stay ready** (the default) keeps the hidden window and the
+> trusted bar so the next summon is instant, **Stay ready for 15 minutes** does that and then
+> hibernates, **Hibernate** keeps nothing (no window, no webview — v0.1–v0.2's behaviour).
 >
 > **In scope for v0.1:** hibernation (no webview at rest), global shortcut (configurable),
 > start field (URL or search), the page in a minimal native window with a way to close it,
@@ -17,6 +19,10 @@
 > extensions, downloads UI, find-in-page, zoom controls, start at login, keeping the page after
 > close, popups that stay inside the app (OAuth windows), code signing / notarization, auto-update,
 > Wayland-native global shortcut.
+>
+> *(The "hibernation (no window or webview at rest)" invariants below are v0.1–v0.2's; since LJ19.4
+> the rule is Ground Rule 9 as the owner rewrote it: nothing of a page survives a close, and what
+> stays at rest is the "After closing" setting.)*
 >
 > **v0.2 (planned 2026-10-17, steps LJ11–LJ19, phases 6–11):** start at login and a one-time
 > welcome on the first launch; Linux fullscreen (the AppImage built on Ubuntu 24.04, a stopgap
@@ -90,6 +96,7 @@
 | LJ19.1 | *(added mid-plan 2026-10-22)* Faster first summon after idle: summon timing in the smoke log, measured per OS (first, warm, idle, cold-after-eviction, the real shortcut), then the summon path optimized where the numbers point; loose CI ceilings | strong | auto | ✅ done (measured, then lj-step-19.1-fix / fix2 — see notes; macOS −6…−17 % warm in CI, Windows −40 % (mostly faster runners; ~90 ms ours), Linux within noise; the rest is the engine starting at every summon) |
 | LJ19.2 | *(added mid-plan 2026-10-22)* Show over full-screen apps and on the current Space: macOS windows join the active Space and may show over other apps' full-screen windows (moveToActiveSpace + fullScreenAuxiliary, the normal level), Linux raises with a fresh X server timestamp, Windows checked; an over-full-screen smoke run on every OS | strong | auto | ✅ done (CI: see notes) |
 | LJ19.3 | *(added mid-plan 2026-10-22)* Open-source polish: issue and PR templates, the Contributor Covenant code of conduct, README badges, a trademark-check note for the owner (PR #30, docs-only, run in a second checkout in parallel with LJ19.1) | standard | auto | ✅ done — PR #30, merged as 60c1db3 |
+| LJ19.4 | *(added mid-plan 2026-10-29)* Summon speed: "After closing" — Stay ready (the owner's default: the hidden window and the trusted bar stay, the page never), for 15 minutes, or Hibernate; the page webview built after the bar; a prewarm after launch; no theme flash; measured per OS and mode (cold vs ready, memory at rest, typed keys, "nothing of the page survives") | strong | auto | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -123,11 +130,13 @@
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
 | LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
 | LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ⬜ todo |
-| LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⬜ todo |
-| LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⬜ todo |
-| LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⬜ todo |
-| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action | standard | auto | ⬜ todo |
+| LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
+| LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
+| LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
+| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ⬜ todo |
 | LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ⬜ todo |
+| LJ58 | *(round 4, after v0.3; owner, 2026-10-29)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step) | strong | auto | ⬜ todo — needs the owner's Apple secrets |
+| LJ59 | *(round 4, after v0.3; owner, 2026-10-29)* Auto-update: tauri-plugin-updater, signed update manifests published with the GitHub releases | strong | review | ⬜ todo — needs the owner's updater signing key as a GitHub secret |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
@@ -226,6 +235,21 @@ before Windows' cookie and agent setup, the first suggestions at once, macOS kep
 while a summon builds the window) and set loose per-OS ceilings. Most of a summon is now the web
 engine starting again; keeping it warm for a while bends hibernation and is the owner's call
 (Deferred follow-ups). v0.2.0's tag still waits for the owner.
+
+**LJ19.4 (added 2026-10-29, the owner's "startup time is still too slow … optimization stuff is
+the most important")** is on `lj/p11-stay-ready`, merged by the agent once every job is green (the
+standing exception). LJ19.1 found most of a summon to be the web engine starting again, because
+hibernation destroyed everything at every close. The owner, shown the trade-off (memory held
+while closed vs. speed), decided: **"After closing" becomes a setting whose default is "Stay
+ready"** — Ground Rule 9 is rewritten as that decision —; the page webview is built after the bar
+(in every mode); the theme flash at opening is fixed; a native command bar was considered and
+rejected for now (Deferred follow-ups). **The owner's other decisions that day:** phase 25's new
+bundled extensions (LJ53–LJ55) move to after v0.3 (rows and sections kept), so phase 25 is LJ56
+alone and LJ57's checklist drops them; **signing and updates come right after v0.3** — a round 4
+with LJ58 (LJ18's signing, once the owner adds the Apple secrets) and LJ59 (auto-update, once the
+owner adds an updater signing key; the agent never creates, sees or handles private keys).
+**Execution order from here: 19.4 → (a pre-release the coordinator makes) → 21 → 22 → 23 → 24 → 25
+(LJ56 only) → 26 → round 4 (58 → 59).**
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -393,10 +417,19 @@ phases 7–11 keep their numbers and steps (LJ13–LJ19), adjusted where round 2
     green.
 24. **LJ51 → LJ52** · strong — `lj/p24-saved-logins`. **Security-sensitive (`review`).** Review:
     password saving off by default, removal clears the right profile, no credential handling.
-25. **LJ53 → LJ56** · standard — `lj/p25-more-extensions`. Review: the bundled extensions' rules
-    (no network, text as text), the two platform touch-ups. Merged when green.
+25. **LJ56** · standard — `lj/p25-more-extensions` *(2026-10-29: LJ53–LJ55 moved after v0.3 by
+    the owner, so the phase is LJ56 alone)*. Review: the two platform touch-ups. Merged when green.
 26. **LJ57** · standard — `lj/p26-v0.3-docs`. **Checkpoint:** the owner's v0.3 checklist; a
     pre-release only on their word.
+
+**Round 4 — signing and updates, right after v0.3 (decided by the owner 2026-10-29)** — branches
+from the latest `main` as before:
+
+27. **LJ58** · strong — `lj/p27-macos-signing`: LJ18 as written; it starts only when the owner's
+    Apple secrets exist (`gh secret list` names only). Merged when green.
+28. **LJ59** · strong — `lj/p28-auto-update`: **`review`** (it changes what the app downloads and
+    runs): ready and green, not merged; an independent review, then the owner. It starts only when
+    the owner has added the updater signing key's secrets.
 
 Never start a phase with uncommitted changes in the tree.
 
@@ -453,7 +486,8 @@ Before any work:
        at every stop condition in Ground Rules — list them;
    (d) you write only inside LittleJoan/, source scripts/env.sh before every npm/node/cargo
        command, and never launch the GUI app on this machine;
-   (e) remote web pages never get IPC, and at rest no webview exists.
+   (e) remote web pages never get IPC, and nothing of a page survives a close (at rest only what
+       the owner's "After closing" setting keeps: the hidden window and the trusted bar, or nothing).
 5. Read the Progress Tracker and tell me which phase is next and which steps it covers.
 Then wait for me to say go.
 ```
@@ -516,12 +550,12 @@ Steps: LJa → LJb (plan: docs/BUILD_PLAN.md). Base: <base branch> (stacked PRs 
 | `npm run verify` (tsc, eslint, vitest, UI build, cargo fmt, clippy `-D warnings`, cargo test) | Agent, on the Mac | Clean exit; test counts in the report |
 | Windows + Linux code paths (`#[cfg(windows)]`, `#[cfg(target_os = "linux")]`) | CI (`verify` job on ubuntu-24.04, windows-latest, macos-latest) | All three jobs green on the pushed commit |
 | Installers build | CI `package` job (LJ8) | NSIS `.exe`, universal `.dmg`, `.deb`, `.AppImage` uploaded as artifacts (*LJ18.1:* also the `arm64` `.deb` and the `aarch64` AppImage) |
-| Installed app launches, summons, loads a page, element fullscreen toggles the window, closing frees the webview | CI `smoke` job (LJ9), agent reads the logs and looks at the screenshots | Smoke log shows the expected events; screenshots show the start page and a loaded page |
+| Installed app launches, summons, loads a page, element fullscreen toggles the window, closing frees the page webview (and, in Hibernate, everything) | CI `smoke` job (LJ9; per mode since LJ19.4's rest runs), agent reads the logs and looks at the screenshots | Smoke log shows the expected events; screenshots show the start page and a loaded page |
 | **Nothing regressed** | you, in each PR | Earlier phases' behaviors in the PR's checklist still hold |
 | Global shortcut on real desktops (Windows, macOS, Linux X11; Wayland fallback) | **you** — LJ10 checkpoint | The shortcut summons and dismisses the window; focus lands in the field |
 | Resizing feel, window placement on multi-monitor, theme | **you** — LJ10 | The window opens on the monitor with the cursor, resizes smoothly, remembers its size |
 | Fullscreen video on real hardware (YouTube) | **you** — LJ10 | Video fills the screen, Esc returns to the window, audio/video play |
-| Memory at rest in Task Manager / Activity Monitor / `ps` | **you** — LJ10 (CI gives a first number) | No webview helper processes while hibernating |
+| Memory at rest in Task Manager / Activity Monitor / `ps` | **you** — LJ10, LJ19.4 (CI gives the numbers per mode) | Hibernate: no webview helper processes at rest; Stay ready: only the bar's, about the figure Settings names |
 | Gatekeeper (unsigned macOS), SmartScreen (unsigned Windows), tray on GNOME | **you** — LJ10 | The documented workaround opens the app |
 | *(v0.2)* Login entry written and removed per OS | CI `smoke` (LJ11) | The registry value / LaunchAgent plist / autostart `.desktop` appears after `--start-at-login on`, points at the installed binary, and is gone after `off` |
 | *(v0.2)* Start at login across a real logout or reboot; the first-run welcome | **you** — phase 6 PR | The icon is there after logging in and the shortcut works; a fresh profile shows the welcome once |
@@ -584,9 +618,13 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
    the numbers in the step's implementation notes. Build debug only (never a local release
    build, never another OS's target). Run `cargo clean` when `.cache/target` passes ~2 GB.
    Stop if free space would fall below 3 GB.
-9. **Hibernation is the product.** At rest there is no window and no webview: nothing is
-   created at startup, and closing the window destroys it (the page is discarded). Nothing may
-   pre-create, hide-instead-of-close, or keep a webview alive "for speed".
+9. **Closing always destroys the page** *(rewritten 2026-10-29 as the owner's decision, LJ19.4;
+   until then "Hibernation is the product: at rest no window and no webview")*. No web page's
+   scripts, media, network or process survive a close, in every mode. What stays at rest is the
+   owner's "After closing" setting: **"Stay ready"** (the default) keeps only the hidden window
+   and the trusted bar; **"Stay ready for 15 minutes"** does that, then hibernates;
+   **"Hibernate"** keeps nothing — no window, no webview — as before. Nothing else may be
+   pre-created or kept alive for speed (a page webview never: it is built fresh for every summon).
 10. **Remote pages get no IPC.** Capabilities list only local windows (`joan`, `settings`) and
     never a `remote` URL. App commands are restricted per window through `build.rs`'s
     `AppManifest`. Native code, not page scripts, handles in-page keys.
@@ -621,7 +659,8 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
     (LJ29). The bar renders anything an extension supplies (titles, keywords) as text, never
     as HTML.
 20. *(round 2)* **History never leaves the machine.** It lives in the app's config folder, is
-    loaded only while the window is open (nothing extra at rest), and is never sent anywhere;
+    loaded only while the window is open (nothing extra at rest — also while it stays ready,
+    LJ19.4: every summon reads it again), and is never sent anywhere;
     favicons are loaded by the bar straight from the sites the user visited.
 21. *(round 3)* **Little Joan never changes OS defaults or system settings silently.** It may
     register itself as a candidate (a browser for http / https links, LJ45), read whether it is
@@ -637,8 +676,8 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
     flag, a setting or a command.
 23. *(round 3)* **In-app popups are page trust.** A popup window (`joan-popup-<n>`, LJ47) is an
     IPC-free web page like `joan-page`: no capability names it (`capability_tests.rs` enforces
-    it), it never loads extension or app URLs, it opens no further popups, and hibernating closes
-    it — nothing survives at rest.
+    it), it never loads extension or app URLs, it opens no further popups, and every close closes
+    it — nothing of a page survives a close (Ground Rule 9).
 24. *(round 3, the owner's update 2026-10-18)* **Merging, checkpoints and reviews.** The agent
     merges a phase PR into `main` — a merge commit, never squash, never `--delete-branch` — once
     verify, package and smoke are green on every OS job (CLAUDE.md's standing exception, which
@@ -811,7 +850,8 @@ condition.
   the user to file.
 - **Downloads:** to the OS Downloads folder under a name that never overwrites a file; the URL
   bar shows the status and "Show in folder". No notification plugin. Closing the window during a
-  download cancels it — no webview stays alive for it (Ground Rule 9).
+  download cancels it — no webview stays alive for it (Ground Rule 9; since LJ19.4 the page
+  webview is closed with every close, whatever stays ready, and the download with it).
 - **Zoom:** Ctrl/Cmd + / − / 0, caught natively like the other page keys, applied with
   `Webview::set_zoom`. Per window, reset on the next summon, not saved. Never Tauri's
   `zoom_hotkeys_enabled` (Landmines).
@@ -2755,7 +2795,7 @@ Design (decided with the user; do not relitigate):
   app manifest. LJ16 reuses this status area for the zoom level, and LJ46 for "No other browser",
   so keep it generic (text + optional action).
 - Closing the window during a download cancels it. Nothing keeps a webview alive for it
-  (Ground Rule 9). No notification plugin.
+  (Ground Rule 9 — since LJ19.4 the page webview goes with every close). No notification plugin.
 - Windows: WebView2's own download flyout must not appear on top. Check it in the smoke
   screenshot; if wry doesn't suppress it, set `Handled` on the DownloadStarting event's
   arguments (ICoreWebView2DownloadStartingEventArgs) in platform/win.rs, keeping wry's
@@ -3923,6 +3963,82 @@ above other apps' windows after the user clicks elsewhere (Little Arc isn't alwa
   app's, the helper full screen and active before each; Linux logged `window-present … x11
   server-time` for each. apt (`apt-install.sh`): `update` 4–13 s, the download 2–57 s, no
   failover needed in that run.
+
+### LJ19.4 — Summon speed: Little Joan stays ready after closing · strong · auto
+
+> **Added mid-plan 2026-10-29, the owner's decision** ("startup time is still too slow …
+> optimization stuff is the most important"). LJ19.1 measured most of a summon to be the web engine
+> starting its processes again (macOS ~1.3 s of CI's ~2.5 s before the bar loads, Windows ~650 ms
+> for WebView2's environment and controllers, Linux ~110 ms), because hibernation destroyed the
+> window and both webviews at every close. Shown the trade-off — memory held while closed vs.
+> speed — the owner decided: "After closing" becomes a setting, **default "Always stay ready"**;
+> Ground Rule 9 is rewritten as that decision; the page webview is built after the bar (every
+> mode); the theme flash at opening is fixed. A native (non-web) command bar was considered and
+> rejected for now (a rewrite; Deferred follow-ups). Branch `lj/p11-stay-ready` from the latest
+> `main`; the PR goes into `main`, and the agent merges it once every job is green (Ground Rule 24,
+> the standing exception). The coordinator makes a pre-release after it.
+
+**Verify:** `npm run verify` green, including Rust tests for `toggle.rs` (the Ready state with a
+live or gone bar, Prewarm, Release: a summon from ready never creates, a gone bar never shows,
+nothing but a summon, Prewarm or Release acts on a window at rest), `settings/after_close.rs`
+(tolerant parse, default `ready`), `settings/change.rs` (`afterClose` checked), `summon_timing.rs`
+(`kind` and `mode` in the line, cold and ready marks, `pageBuilt`, `barFocused` only without a
+URL), `commands/timing.rs` (`focused` accepted), `theme_color.rs` (the theme's `--lj-bg-0`, equal to
+ui/lib/theme.ts's for ten themes), `bar/background.rs` (the theme's colour before a bar painted),
+`bar/boot.rs` (still one initialization script, the bar's); vitest for the bar's timing
+(`focused` and the rows, whichever comes last), Settings' "After closing" (choices, parse,
+changes, rebase), `scripts/ci/smoke-rest.mts`, `smoke-timing.mts` (both modes), the smoke page's
+`?ping=`. `capability_tests.rs` unchanged and green. CI (every smoke job): the **rest runs** — one
+launch per mode: Stay ready prewarms (`prewarmed ready`), a pinging page stops within 2 s of the
+close and its web processes go while the bar's stay, keys typed 150 ms after the real shortcut
+all land in the command bar's field (`typed=6`; Windows and Linux, macOS informational), the
+bar's web process killed at rest → `bar-gone`, and the next summon rebuilds (`released bar-gone`,
+`window-created cold`, a complete summon-timing line); Hibernate keeps nothing at rest (no prewarm,
+no engine process of ours), as LJ9 required; Stay ready for 15 minutes (shortened by a smoke-only
+`LITTLEJOAN_SMOKE_READY_MS`) goes by itself after the prewarm and after the close —; the **timing
+runs** in both modes (ready: first after the prewarm, warm ×3, the shortcut, idle, a URL; Hibernate:
+LJ19.1's run), complete lines per kind under per-OS ceilings (≈3× the measured ready numbers); every
+earlier rule green with Stay ready as the default (the main run's page helpers gone after a close,
+the bar's staying; the theme runs' `theme-summon`). Memory at rest per mode per OS in the notes,
+the README and Settings' wording.
+**Human check:** on the owner's Retina Mac — the summon's feel (Stay ready and Hibernate), no flash
+of the default theme while the window opens (a non-default theme), Activity Monitor at rest per
+mode (Stay ready: the app and its WebKit services; Hibernate: none), switching the setting while
+the window is closed (to Hibernate: the processes go at once; back: they come back within seconds),
+typing right after the shortcut, a video's audio stopping at the close.
+**Commit:** `lj-step-19.4: summon speed — Little Joan stays ready after closing (the owner's default), the page is built after the bar, no theme flash`
+
+```text
+The owner (2026-10-29): startup is still too slow; optimization matters most. Decided: "After
+closing" = ready (default) | ready15 | hibernate; the page webview built after the bar in every
+mode; the theme flash fixed; Ground Rule 9 rewritten (closing always destroys the page; what stays
+is the setting). Implement, measure before and after, honestly.
+
+1. settings.afterClose (tolerant, default ready); Settings → General "After closing" with three
+   choices (the memory figure per OS from CI), drawn as text; a change takes effect at once
+   (to Hibernate: a resting window goes; to a ready mode: a prewarm).
+2. toggle.rs: a Ready state (window hidden, bar alive, no page) and its actions, with tests. Every
+   close: size remembered, history saved, the page webview closed (session cookies kept on
+   Windows, downloads ended, macOS about:blank first); Stay ready hides the window and puts the bar
+   back at its summon state; Hibernate destroys everything. Nothing of the page survives.
+3. A summon from ready: placed by placement.rs, on the current Space (macOS), in front with the
+   keyboard (Linux: the X server's time), the bar's field focused, the bar's per-summon data again;
+   the page built after the bar is on screen (at once for a URL). Cookies stay right.
+4. Cold summons (Hibernate, ready15 after its timer, a rebuild): window + bar, the page after the
+   bar's first frame; every page user copes with no page yet; no flash when the page is added.
+5. Prewarm ~3 s after launch (never during the first-run welcome, never while quitting).
+6. ready15: destroyed after 15 idle minutes; a summon cancels the timer.
+7. A dead bar while ready (WebView2 ProcessFailed, WKWebView's content process terminated,
+   WebKitGTK's web-process-terminated) → the next summon rebuilds; a CI kill and its smoke check.
+8. The theme flash: the theme's colour on the window and the bar's webview before they paint.
+9. Windows memory while hidden: MemoryUsageTargetLevel Low + IsVisible false; keep only if the
+   numbers say so.
+10. Security as before: no new IPC command, no capability change, the page IPC-free and fresh per
+    summon.
+Measure: summon-timing lines with kind and mode, pageBuilt and barFocused; the timing runs in both
+modes; typed keys; the pinging page; memory at rest per mode per OS; ceilings ≈3× the numbers,
+compared with LJ19.1's baseline on the same runners (main's run 39939125801).
+```
 
 ---
 
@@ -7587,7 +7703,8 @@ rerun --failed` once: green (Deferred follow-ups).
 ## v0.3 steps
 
 > Planned 2026-10-18 with the owner (decisions: "Design Decisions Already Made → round 3"). They
-> run after LJ19 (v0.2.0), in the order 21 → 22 → 23 → 24 → 25 → 26. Phases 21, 22 and 24 are
+> run after LJ19 (v0.2.0), in the order 21 → 22 → 23 → 24 → 25 → 26 (since 2026-10-29: after LJ19.4,
+> phase 25 is LJ56 alone, and round 4 — LJ58, LJ59 — follows phase 26). Phases 21, 22 and 24 are
 > **security-sensitive**: each ends in a `review` step — the PR is marked ready, green, and NOT
 > merged; an independent read-only review follows (as for phase 16), its findings are fixed in
 > `lj-step-N-fix<k>` commits, and the owner decides the merge. The next phase starts from `main`
@@ -8088,7 +8205,7 @@ Design (decided; do not relitigate):
   passwords and form data…" — a question, then clear_saved_logins (settings capability;
   commands/logins.rs): ICoreWebView2Profile2::ClearBrowsingData(PASSWORD_AUTOSAVE |
   GENERAL_AUTOFILL) on the settings window's own WebView2 profile, so it works while
-  hibernating (no page window, no extra webview — Ground Rule 9). That needs the settings window
+  hibernating or resting (no page webview, no extra webview — Ground Rule 9). That needs the settings window
   to share the page's user data folder: settings_window.rs sets no data_directory today; in
   installed builds both already end up in app_local_data_dir (Tauri forces it), but with
   LITTLEJOAN_DATA_DIR (dev, CI) the page uses <dir>/webview and Settings didn't (Landmines). Give
@@ -8162,6 +8279,9 @@ an independent security review comes next, and the owner decides.
 
 ### LJ53 — More bundled extensions: Reading list and To-do · standard · auto
 
+> **⏸ Moved after v0.3 by the owner (2026-10-29)**, with LJ54 and LJ55: kept as designed, run after
+> round 4 when the owner says so. Phase 25 is LJ56 alone.
+>
 > Phase 25 (v0.3). Branch `lj/p25-more-extensions` from the latest `main`.
 
 **Verify:** `npm run verify` green, including vitest tests for each `logic.js`:
@@ -8210,6 +8330,8 @@ green (Ground Rule 3; two honest fix attempts, then stop). Look at the screensho
 
 ### LJ54 — More bundled extensions: Stopwatch & countdown, Breathing timer, Minesweeper · standard · auto
 
+> **⏸ Moved after v0.3 by the owner (2026-10-29)** (see LJ53).
+
 **Verify:** `npm run verify` green, including vitest tests for each `logic.js`:
 - **Stopwatch & countdown** (`extensions/timer/`, `storage`): the stopwatch (start / stop / laps /
   reset with an injected clock), the countdown from a stored end time (reopening shows the time
@@ -8249,6 +8371,8 @@ Stopwatch & countdown, Breathing timer, Minesweeper". Push and watch CI until ev
 ```
 
 ### LJ55 — More bundled extensions: Password generator, Regex tester, Hash & Base64, Emoji picker · standard · auto
+
+> **⏸ Moved after v0.3 by the owner (2026-10-29)** (see LJ53).
 
 **Verify:** `npm run verify` green, including vitest tests for each `logic.js`:
 - **Password generator** (`extensions/password/`, `clipboard`, `storage` for the options): length
@@ -8300,6 +8424,9 @@ generator, Regex tester, Hash & Base64, Emoji picker". Push and watch CI until e
 
 ### LJ56 — Panels follow theme changes; `--extension` opens a page action · standard · auto
 
+> Phase 25 on its own since 2026-10-29 (LJ53–LJ55 moved after v0.3). Branch
+> `lj/p25-more-extensions` from the latest `main`; this step ends the phase.
+
 **Verify:** `npm run verify` green, including:
 - Rust tests: after the bar reports new theme tokens while the page shows a **committed** panel
   (`NavGate::committed`), Rust tells that panel (`page.eval` of a dispatch of the
@@ -8341,9 +8468,9 @@ Run `source scripts/env.sh && npm run verify`. If it is green, flip LJ56 to ✅,
 notes (with df -h), and commit everything as one commit: "lj-step-56: panels follow theme changes;
 --extension opens a page action". Push and watch CI until every job is green (Ground Rule 3; two
 honest fix attempts, then stop). This ends phase 25. Fill the PR description from the template.
-Needs human check: each of the nine new extensions with the keyboard only, in light and dark;
-change the theme with Snake open — Snake recolors; bind `little-joan --extension reading-list` to a
-key in your OS and save a page with it. Once every job is green, merge the PR into main with a
+Needs human check: change the theme with Snake open — Snake recolors; bind `little-joan --extension
+qr` to a key in your OS and open it over a page (2026-10-29: the nine new extensions, LJ53–LJ55,
+moved after v0.3, so their checks moved with them). Once every job is green, merge the PR into main with a
 merge commit (Ground Rule 24), then stop and report.
 ```
 
@@ -8375,11 +8502,11 @@ this PR (and Windows / Linux where you have them):
 - [ ] Pinned sites lead the command bar; Shift+Delete unpins.
 - [ ] Windows: saving a password and filling it in; removing saved passwords; a passkey with
       Windows Hello. macOS: Privacy says it isn't available.
-- [ ] The nine new extensions, keyboard only, light and dark; Reading list from a page.
-- [ ] Everything from v0.2.0's checklist still holds: summon / hibernate, the command bar,
+- [ ] Everything from v0.2.0's checklist still holds: summon / close (Stay ready and Hibernate), the command bar,
       history, themes, logins surviving close and quit, phone mode and resizing, the Keyboard tab,
       quick commands, downloads, zoom, fullscreen.
-- [ ] Memory at rest: no webview helpers while hibernating, also after a popup was open.
+- [ ] Memory at rest: with Hibernate no webview helpers, also after a popup was open; with Stay
+      ready only the bar's (about the figure Settings names), and no popup's or page's.
 
 Once every CI job is green, merge the PR into main with a merge commit (docs only), then STOP for
 the checklist (Ground Rule 24). Do not start any further work until the owner says go. A
@@ -8398,6 +8525,47 @@ and watch CI until every job is green (two honest fix attempts, then stop). This
 fill the PR with the checklist above, merge it when green, tell the owner exactly what to check
 and where, then stop.
 ```
+
+---
+
+## Round 4 steps — signing and updates (after v0.3)
+
+> Decided by the owner on 2026-10-29: right after v0.3 (phase 26), before the moved bundled
+> extensions (LJ53–LJ55). Neither step starts before the owner has added what it needs; the agent
+> never creates, reads, prints or handles signing keys or their passwords (Ground Rule 16) — they
+> live only in the repository's GitHub Actions secrets, which the owner sets.
+
+### LJ58 — macOS Developer ID signing and notarization · strong · auto
+
+> Phase 27. Branch `lj/p27-macos-signing` from the latest `main`. **LJ18 as written** (its Verify,
+> Commit and prompt), skipped in round 3 for want of the secrets. **Needs from the owner:** the
+> Apple Developer Program membership, a Developer ID Application certificate exported as a .p12
+> with its password, an app-specific password (or an App Store Connect API key) for notarytool, and
+> the team id — added as the GitHub secrets LJ18's pre-step names (`gh secret list` shows names
+> only). Without them the step stays ⬜ and nothing runs. Merged by the agent when green.
+
+**Verify / Commit / prompt:** LJ18's, unchanged (re-read against the code of the day).
+
+### LJ59 — Auto-update · strong · review
+
+> Phase 28. Branch `lj/p28-auto-update` from the latest `main`, after LJ58 (an update for macOS
+> should be a notarized one). **`review`:** the PR ends ready and green, not merged — it changes
+> what the app downloads and runs, so an independent review and the owner's decision come first.
+> **Needs from the owner:** an updater signing key pair the owner creates on their own machine
+> (`tauri signer generate`), its private key and password added as GitHub secrets
+> (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), and the public key given to
+> the agent for `tauri.conf.json` (public, fine to commit).
+
+Design (short): tauri-plugin-updater (a new dependency — named here, so allowed) checks GitHub's
+`releases/latest/download/latest.json` on launch and at most once a day, never while the window is
+open; only a manifest signed with the owner's key is accepted (the plugin verifies it); the user is
+asked in Settings → About (or a quiet line there) before anything installs, never silently;
+pre-releases never update a full release; the release workflow builds the update bundles
+(`createUpdaterArtifacts`), signs them in the one CI step that sees the secrets, and attaches them
+with `latest.json` to the release the owner asks for. Settings gets "Check for updates" (on by
+default only if the owner says so). The smoke job checks the bundles' signatures with the public key
+and that no update check happens with the setting off. Human check: an update from the previous
+release on each OS.
 
 ---
 
@@ -8728,15 +8896,16 @@ and where, then stop.
   run 39774786991, Ctrl+0 in 39779576178 — with nothing in the app's log for the missed key and
   every other key check of those runs passing. Next step: press a zoom key again when, after a few
   seconds, the app logged no `zoom` line at all — the rule unchanged.)*
-- **Stay warm for a while after closing** (surfaced by LJ19.1). Most of a summon is the engine
+- ~~**Stay warm for a while after closing**~~ (surfaced by LJ19.1). Most of a summon is the engine
   starting its processes again (macOS ~1.3 s of CI's 2.5 s before the bar loads, Windows ~650 ms for
   WebView2's environment and controllers, Linux ~110 ms), because hibernation destroys the window
   and its webviews. An optional "keep Little Joan ready for N minutes after closing" — the window
   hidden instead of destroyed, or one blank webview kept — would make a summon within that time
   near-instant, at the cost of the engine's memory (tens to a hundred MB) for those minutes. It
   bends Ground Rule 9 (nothing alive at rest), so it is the owner's decision; off by default if
-  ever built.
-- **Create the page webview only after the bar has painted** (surfaced by LJ19.1). A summon builds
+  ever built. → *Done in LJ19.4: the owner decided "After closing" with Stay ready as the default
+  (2026-10-29) — the hidden window and the bar stay, never the page; Ground Rule 9 rewritten.*
+- ~~**Create the page webview only after the bar has painted**~~ (surfaced by LJ19.1). A summon builds
   the bar and the page webviews together, and the page loads the start page at once, so two web
   processes start side by side (macOS: two WebContent processes; Windows: a second controller
   before the window shows). The page is hidden under the command bar until a page is opened, so it
@@ -8744,7 +8913,19 @@ and where, then stop.
   path that expects the page (navigation, extension panels, the agent, the cookies, the layout and
   the macOS masks, Linux's GtkBox packing) would have to cope with a window without one, and
   adding a webview to a visible window can flash it for a frame. Worth an experiment if the
-  owner's Mac still feels slow; measure with the timing run first.
+  owner's Mac still feels slow; measure with the timing run first. → *Done in LJ19.4, in every
+  mode (bar/page.rs: after the bar's script runs, at once for a URL; added hidden).*
+- **A native command bar** (rejected for now by the owner, 2026-10-29). Drawing the command bar
+  natively (AppKit / Win32 / GTK) instead of in the bar webview would start no web engine at all
+  until a page opens — the fastest possible summon with the least memory — but it is a rewrite of
+  the bar (the command bar, the welcome, the history view, themes, quick commands, extensions'
+  rows) per OS. Revisit only if Stay ready isn't enough.
+- **Drop to hibernation under memory pressure** (not built, 2026-10-29). While Little Joan stays
+  ready, the OS's low-memory signal (macOS `DISPATCH_SOURCE_TYPE_MEMORYPRESSURE`, Windows'
+  `CreateMemoryResourceNotification`, Linux PSI / `memory.pressure`) could release the ready window
+  (`Command::Release`) so the next summon is cold instead of the system swapping. WebView2 already
+  trims a hidden bar (its memory target is low at rest); WebKit may end the bar's process itself,
+  which LJ19.4 rebuilds from.
 - **macOS's engine stall** (surfaced by LJ19.1). On CI's macOS VM the bar's script asked
   `start_info` ~0.9 s after its first report (`barScript` → `barReady`), and once its first frame
   came 1.3 s after its script was ready — the engine, not our code (Linux and Windows don't show
@@ -9130,12 +9311,12 @@ or round 3 picked up point at their step and stay here for the record.
 | Item | Design | What it needs |
 |---|---|---|
 | **Start at login** → *v0.2, LJ11* | Settings checkbox → tauri-plugin-autostart (LaunchAgent / registry Run key / XDG autostart) | New dependency, settings field, per-OS human check |
-| **Keep the page after close** | Settings "Keep page for N minutes": hide instead of destroy, destroy on a timer | Breaks the "no webview at rest" invariant for N minutes — needs a measured memory budget |
+| **Keep the page after close** | Settings "Keep page for N minutes": hide instead of destroy, destroy on a timer | Still Later: since LJ19.4 Little Joan may keep its hidden window and trusted bar after a close ("Stay ready"), but the page is destroyed on every close (Ground Rule 9) — keeping it would be a new decision of the owner's, with a measured memory budget |
 | **Downloads** → *v0.2, LJ15 (status in the URL bar, no notifications)* | `on_download` → save to the OS Downloads folder, tray notification | Handler + notification permission per OS |
 | **Find in page** (zoom → *v0.2, LJ16: done*) → *v0.3, LJ49* | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
 | **Popups inside the app (OAuth)** → *v0.3, LJ47–LJ48* | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too. Some "Sign in with …" flows break today because the popup opens in the default browser |
 | **Code signing / notarization / SmartScreen reputation** → *macOS: v0.2, LJ18* | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Windows: SignPath Foundation if the user's application is approved (Deferred follow-ups) |
-| **Auto-update and GitHub Releases** | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys, release workflow |
+| **Auto-update and GitHub Releases** → *round 4, LJ59 (owner, 2026-10-29)* | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys (the owner's, as a GitHub secret), release workflow |
 | **Wayland-native global shortcut** → *v0.2, LJ17: done* | XDG GlobalShortcuts portal (via ashpd) when `WAYLAND_DISPLAY` is set | New dependency, portal support varies by desktop |
 | **rpm package, MSI, Windows ARM64, ~~Linux ARM64~~** (Linux ARM64 → *LJ18.1: done* — an `arm64` `.deb` and an `aarch64` AppImage, built and smoke-tested on GitHub's arm64 runners) | Extra `--bundles` / targets in the package job | CI time + smoke coverage per artifact |
 | **Hide Tauri's IPC object from remote pages** | Remote pages can see `__TAURI_INTERNALS__` (every call is denied); a future Tauri option or a separate content webview without IPC injection | Upstream support or a multi-webview layout |
