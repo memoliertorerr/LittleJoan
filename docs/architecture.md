@@ -1486,8 +1486,11 @@ Space did change and app did activate — a window's state with it, the key, exi
 with the call stack that posted them; LJ19.4-fix4), `wk-context <page-adding|page-added|shown>
 <window's state>` (macOS: the page window just before and after the page's webview is added, and
 once a summon's show and raise ran on the main thread; LJ19.4-fix4), and next to the logs
-`fs-unified.log` (macOS: the unified log of the fullscreen launches — the Dock, Stage Manager,
-WebKit's Fullscreen category, AppKit's full-screen lines),
+`unified.log` (macOS: the unified log of the whole smoke run — the Dock and Stage Manager without
+their per-frame chatter, WebKit's Fullscreen category, AppKit's full-screen lines) and, with
+`LJ_DOCK_PROBE=1` in a run's `extra_env` (CI experiments only), `dock-probe.jsonl` (before each
+launch a Swift probe's window enters and leaves native full screen: whether the Dock gave it a
+Space),
 `summon-timing {"source":…,"kind":"cold|ready","mode":"ready|ready15|hibernate","url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}`
 (LJ19.1, LJ19.4: one line per summon — `cold` built the window, `ready` showed the ready one —,
 each mark in ms after the request on the monotonic clock — the window code's `dispatched`,

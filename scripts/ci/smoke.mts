@@ -261,25 +261,29 @@ async function waitFor(
 
 /**
  * macOS (LJ19.4-fix4): the unified log since `since` from the Dock (which makes a window's
- * full-screen Space, or refuses), WebKit's Fullscreen category, AppKit and Stage Manager — what the
- * app's own log can't say when WebKit leaves a page's fullscreen by itself.
+ * full-screen Space, or refuses) and Stage Manager, without their per-frame and Dock-tile chatter,
+ * with WebKit's Fullscreen category and AppKit's full-screen lines — what the app's own log can't
+ * say when WebKit leaves a page's fullscreen by itself, and what came before it.
  */
 function unifiedLog(since: Date): string {
   const minutes = Math.ceil((Date.now() - since.getTime()) / 60_000) + 1;
   const predicate = [
-    'process == "Dock"',
-    'process == "WindowManager"',
-    '(subsystem == "com.apple.WebKit" AND category == "Fullscreen")',
+    '(process == "Dock" AND NOT (eventMessage BEGINSWITH "Total reveal") AND NOT (category IN {"dock-bar-additions", "dock-tiles", "bookmark", "XPC", "foundation", "datasep", "cas", "framework"}) AND NOT (eventMessage BEGINSWITH "Update system control value") AND NOT (eventMessage BEGINSWITH "Skipping show all windows"))',
+    '(process == "WindowManager" AND NOT (category IN {"model", "windowserverconnection", "persistence"}))',
+    '(subsystem == "com.apple.WebKit" AND category == "Fullscreen" AND NOT (eventMessage CONTAINS "PlaybackSession") AND NOT (eventMessage CONTAINS "VideoPresentation"))',
     '(subsystem == "com.apple.AppKit" AND (category CONTAINS[c] "full" OR eventMessage CONTAINS[c] "full screen" OR eventMessage CONTAINS[c] "fullscreen"))',
   ].join(" OR ");
   const args = ["show", "--last", `${minutes}m`, "--info", "--debug", "--style", "compact", "--predicate", predicate];
   try {
-    return execFileSync("log", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000, maxBuffer: 64 * 1024 * 1024 });
+    return execFileSync("log", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 300_000, maxBuffer: 256 * 1024 * 1024 });
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string; message: string };
     return `(log show failed: ${e.stderr ?? e.message})\n${e.stdout ?? ""}`;
   }
 }
+
+/** When this smoke run began (the unified log's start, macOS). */
+const smokeStarted = new Date();
 
 function run(command: string, args: string[]): string {
   try {
@@ -860,6 +864,7 @@ const GDB_AFTER = ["-ex", "bt 40", "-ex", "thread apply all bt 8"];
  * timing run: gdb slows every thread and library the app starts).
  */
 function launch(withEnv: NodeJS.ProcessEnv = env, gdb = true): ChildProcess {
+  dockProbe(withEnv.LITTLEJOAN_SMOKE_LOG ?? "");
   const underGdb = gdb && os === "linux" && process.env.LJ_SMOKE_GDB === "1";
   const [command, args] =
     underGdb && !appImage ? ["gdb", ["-q", "-batch", "-ex", "run", ...GDB_AFTER, "--args", app as string]] : [app as string, []];
@@ -871,6 +876,63 @@ function launch(withEnv: NodeJS.ProcessEnv = env, gdb = true): ChildProcess {
     void attachGdb(child);
   }
   return child;
+}
+
+/**
+ * macOS, CI experiments only (LJ19.4-fix4; `LJ_DOCK_PROBE=1` in LJ_SMOKE_EXTRA_ENV): before each
+ * launch, a regular app's window enters native full screen and leaves it (a Swift probe built once
+ * with swiftc), and `dock-probe.jsonl` says whether the Dock gave it a Space — to find the step
+ * after which the Dock refuses every full-screen request.
+ */
+const DOCK_PROBE = `import AppKit
+let app = NSApplication.shared
+app.setActivationPolicy(.regular)
+final class Probe: NSObject, NSWindowDelegate {
+  var started = Date()
+  var entered = -1
+  func ms() -> Int { Int(Date().timeIntervalSince(started) * 1000) }
+  func finish(_ ok: Bool, _ what: String) {
+    print("{\\"ok\\":\\(ok),\\"what\\":\\"\\(what)\\",\\"enteredMs\\":\\(entered),\\"ms\\":\\(ms())}")
+    fflush(stdout)
+    exit(0)
+  }
+  func windowDidEnterFullScreen(_ note: Notification) {
+    entered = ms()
+    (note.object as? NSWindow)?.toggleFullScreen(nil)
+  }
+  func windowDidFailToEnterFullScreen(_ window: NSWindow) { finish(false, "failed-to-enter") }
+  func windowDidExitFullScreen(_ note: Notification) { finish(true, "entered-and-left") }
+}
+let probe = Probe()
+let window = NSWindow(contentRect: NSRect(x: 120, y: 120, width: 320, height: 200), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+window.title = "LJ dock probe"
+window.collectionBehavior = [.fullScreenPrimary]
+window.delegate = probe
+window.makeKeyAndOrderFront(nil)
+app.activate(ignoringOtherApps: true)
+DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { probe.started = Date(); window.toggleFullScreen(nil) }
+DispatchQueue.main.asyncAfter(deadline: .now() + 8) { probe.finish(false, "timeout") }
+app.run()
+`;
+let dockProbeBinary: string | null | undefined;
+function dockProbe(before: string): void {
+  if (os !== "darwin" || extraEnv.LJ_DOCK_PROBE !== "1") {
+    return;
+  }
+  if (dockProbeBinary === undefined) {
+    const source = join(out, "dock-probe.swift");
+    writeFileSync(source, DOCK_PROBE);
+    const binary = join(out, "dock-probe");
+    run("swiftc", ["-O", "-o", binary, source]);
+    dockProbeBinary = existsSync(binary) ? binary : null;
+  }
+  if (!dockProbeBinary) {
+    return;
+  }
+  const result = run(dockProbeBinary, []).trim() || '{"ok":false,"what":"no answer"}';
+  const line = JSON.stringify({ t: Date.now(), before: before.split("/").at(-1) ?? before, result });
+  appendFileSync(join(out, "dock-probe.jsonl"), `${line}\n`);
+  console.log(`dock-probe before ${before.split("/").at(-1) ?? before}: ${result}`);
 }
 
 /**
@@ -1549,11 +1611,7 @@ const fullscreenDriver: FsDriver = {
 };
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
-const fullscreenStarted = new Date();
 const fullscreenCheck = await fullscreenRun(fullscreenDriver, true);
-if (os === "darwin") {
-  writeFileSync(join(out, "fs-unified.log"), unifiedLog(fullscreenStarted));
-}
 // The resize run (LJ39, smoke-resize.mts): its own launch, on the same driver.
 const resizeCheck = await resizeRun(fullscreenDriver);
 console.log(`resize: ${JSON.stringify(resizeSummary(resizeCheck.results))}`);
@@ -1927,6 +1985,9 @@ const summary = {
 };
 writeFileSync(join(out, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 console.log(JSON.stringify(summary, null, 2));
+if (os === "darwin") {
+  writeFileSync(join(out, "unified.log"), unifiedLog(smokeStarted));
+}
 
 // macOS runners may refuse synthetic clicks (no Accessibility permission), so fullscreen is
 // required there only if the click visibly reached the page; Windows and Linux must pass.
