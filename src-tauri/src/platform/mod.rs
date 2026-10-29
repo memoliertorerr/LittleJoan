@@ -230,6 +230,28 @@ pub fn system_shortcuts() -> Vec<crate::system_shortcuts::SystemShortcut> {
     Vec::new()
 }
 
+/// macOS, smoke mode only (CI): AppKit's notifications about key windows, native full-screen
+/// transitions and the app's activation, with the stacks that posted them (`wk-note …`).
+#[cfg(target_os = "macos")]
+pub fn install_smoke_notes() {
+    mac::install_notes();
+}
+
+/// Windows and Linux: nothing to observe.
+#[cfg(not(target_os = "macos"))]
+pub fn install_smoke_notes() {}
+
+/// macOS, smoke mode only (CI), on the main thread: `wk-context <what> …`, the window's key,
+/// visible, Space and collection-behaviour state and whether the app is active (mac/notes.rs).
+#[cfg(target_os = "macos")]
+pub fn smoke_context<R: Runtime>(window: &Window<R>, what: &str) {
+    mac::smoke_context(window, what);
+}
+
+/// Windows and Linux: nothing to say.
+#[cfg(not(target_os = "macos"))]
+pub fn smoke_context<R: Runtime>(_window: &Window<R>, _what: &str) {}
+
 /// macOS, smoke mode only (CI): logs WebKit's element-fullscreen state (`wk-fullscreen …`) while
 /// the page window exists. Nothing elsewhere: Windows and Linux report fullscreen through their
 /// hooks.
@@ -325,6 +347,18 @@ pub fn join_active_space<R: Runtime>(window: &Window<R>) {
 /// summon raises it.
 #[cfg(not(target_os = "macos"))]
 pub fn join_active_space<R: Runtime>(_window: &Window<R>) {}
+
+/// macOS: a summon while WebKit shows the page in element fullscreen brings the app (and so that
+/// full-screen page) to the front without ordering `window` (LJ19.4-fix4, mac/spaces.rs: ordered
+/// front, the window would join WebKit's full-screen Space, and the Dock can break when that Space
+/// closes with it inside). Windows and Linux have no such fullscreen window: nothing to do.
+#[cfg(target_os = "macos")]
+pub fn activate_app<R: Runtime>(window: &Window<R>) {
+    mac::activate_app(window);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn activate_app<R: Runtime>(_window: &Window<R>) {}
 
 /// Linux: raises and focuses a window being shown, with a fresh X server timestamp on X11, so the
 /// window manager doesn't refuse it as focus stealing (linux/front.rs, LJ19.2).

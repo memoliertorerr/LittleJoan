@@ -96,7 +96,7 @@
 | LJ19.1 | *(added mid-plan 2026-10-22)* Faster first summon after idle: summon timing in the smoke log, measured per OS (first, warm, idle, cold-after-eviction, the real shortcut), then the summon path optimized where the numbers point; loose CI ceilings | strong | auto | ✅ done (measured, then lj-step-19.1-fix / fix2 — see notes; macOS −6…−17 % warm in CI, Windows −40 % (mostly faster runners; ~90 ms ours), Linux within noise; the rest is the engine starting at every summon) |
 | LJ19.2 | *(added mid-plan 2026-10-22)* Show over full-screen apps and on the current Space: macOS windows join the active Space and may show over other apps' full-screen windows (moveToActiveSpace + fullScreenAuxiliary, the normal level), Linux raises with a fresh X server timestamp, Windows checked; an over-full-screen smoke run on every OS | strong | auto | ✅ done (CI: see notes) |
 | LJ19.3 | *(added mid-plan 2026-10-22)* Open-source polish: issue and PR templates, the Contributor Covenant code of conduct, README badges, a trademark-check note for the owner (PR #30, docs-only, run in a second checkout in parallel with LJ19.1) | standard | auto | ✅ done — PR #30, merged as 60c1db3 |
-| LJ19.4 | *(added mid-plan 2026-10-29)* Summon speed: "After closing" — Stay ready (the owner's default: the hidden window and the trusted bar stay, the page never), for 15 minutes, or Hibernate; the page webview built after the bar; a prewarm after launch; no theme flash; measured per OS and mode (cold vs ready, memory at rest, typed keys, "nothing of the page survives") | strong | auto | ✅ done (CI numbers: see notes) |
+| LJ19.4 | *(added mid-plan 2026-10-29)* Summon speed: "After closing" — Stay ready (the owner's default: the hidden window and the trusted bar stay, the page never), for 15 minutes, or Hibernate; the page webview built after the bar; a prewarm after launch; no theme flash; measured per OS and mode (cold vs ready, memory at rest, typed keys, "nothing of the page survives") | strong | auto | ✅ done (CI numbers: see notes; fix4: a summon during the page's macOS fullscreen broke the Dock — see notes) |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -4188,6 +4188,46 @@ compared with LJ19.1's baseline on the same runners (main's run 39939125801).
   the prewarmed bar), Hibernate 11 / 2 / 37. Linux's figures are Xvfb's software rendering; a real
   desktop may differ. The pinging page stopped at every close (no ping later than 2 s after it in
   any mode, on any job), and its web processes were gone within 10 s (2 s on most).
+- **`lj-step-19.4-fix4` — macOS element fullscreen "leaving by itself"** (PR #36; 5 of the 24 macOS
+  smoke runs of LJ19.4's code, a339f23's 40877932319 and release PR #35's 40893118808 among them,
+  none of LJ19.2's 13). Every element fullscreen of both fullscreen launches failed 40–150 ms
+  after entering, while the main run's own fullscreen a few minutes earlier had worked. The smoke
+  log got the detail to find it (AppKit's key / full-screen / activation notifications with their
+  call stacks and each window's Space and collection behaviour, `wk-note` / `wk-context`; the
+  unified log of the Dock, Stage Manager, WebKit and AppKit, `unified.log`; and, for experiments, a
+  Dock probe before every launch, `LJ_DOCK_PROBE=1`). **The cause: macOS's Dock refused the
+  full-screen Space** — AppKit's `_doFailedToEnterFullScreen` came from the Dock's answer
+  ("Finished full screen transition, tileSpaceID=0"), WebKit's failure path then made the Little
+  Joan window key again — and it refused **every app** (the probe, a plain Swift app, too; in two
+  runs the spaces run's helper app couldn't go full screen 10 minutes later). **The main run broke
+  it:** its `--show <url>` while WebKit showed the smoke page fullscreen ordered the page window
+  front, which LJ19.2's `MoveToActiveSpace` moved into WebKit's full-screen Space; the navigation
+  then closed that Space with the window inside, the Dock put the windows back into the closing
+  Space (`xpcAddWindowsToSpace … to: <that Space>`, where a clean exit says `to: 1`), and from then
+  on it refused full-screen Spaces (the probes: refused before every launch from the main run's end
+  to the fullscreen launch in 5 of 6 runs). **Not new in LJ19.4:** LJ19.2's own build (installers
+  39939125801) broke the Dock the same way in 3 of 3 probe runs. What differs is the next step: in
+  every probe run the Dock refused up to the fullscreen launch and then let that launch's first
+  request through (it recovered there), and LJ19.2's build always got through (13 of 13 runs; at
+  LJ19.4's rate that is about a 5 % chance) while LJ19.4's didn't in about one run in five — and
+  once our page's request failed, the Dock stayed broken for the rest of the run. Why the Dock
+  decides differently for the two builds is not in any log (the app's, AppKit's, WebKit's and the Dock's lines are the same up to the Dock's
+  answer), so no LJ19.4 piece was reverted: the fix removes the break itself. **Fix:** a summon while
+  WebKit shows the page in element fullscreen orders no window — `joan::focus` activates the app
+  (`platform::activate_app`; the full-screen page comes forward with the keyboard), and a
+  navigation that follows ends the fullscreen, after which WebKit puts the page back in the window
+  and makes it key (smoke log `summon-fullscreen activated`; the smoke requires it when the main
+  run's page was in WebKit's fullscreen, `summonDuringFullscreenFailures`). **With it** (93e52dd): the
+  main run's exit goes back to the user's Space (`to: 1`), the Dock accepted every probe in three
+  probe runs (40942132254, 40942137764, 40942144444 — before every launch, the fullscreen launches
+  included), every element fullscreen of the fullscreen launches entered and held (PR run
+  40940661661 and those three), and the macOS smoke job passed three times on the merged head
+  (PR #36 names the runs). One probe run failed an unrelated rule, "webview helper processes of the
+  page left after hibernating: 1" (also seen once before the fix, run 40931268551; Deferred
+  follow-ups).
+  Also seen in these runs, unrelated and known: LJ29's extension race step on macOS (Deferred
+  follow-ups), and once each "webview helper processes of the page left after hibernating: 1" and
+  LJ19.2's "over-fullscreen: the full-screen app's Space was left" (green on the next run).
 - **What CI can't show:** the theme flash (a screenshot comes ~1 s after the summon; the owner's
   eyes), the summon's feel on a Retina Mac, Activity Monitor's numbers on a real machine, switching
   the setting in Settings (unit-tested; no CI driver for its list).
@@ -8992,7 +9032,13 @@ release on each OS.
   racing page alive, the panel's load came 5 s after `extension-opened hello`, the start-page
   detour didn't show, no `ljext` request was answered for the panel, and hello never reported — the
   security rules held (every racer refused). If it recurs, look at the main thread's load during
-  the race (the detour's 1 s limit) first.
+  the race (the detour's 1 s limit) first. *(Recurred once more on 2026-10-29, run 40920554558,
+  during LJ19.4-fix4's diagnostics — same symptoms.)*
+- **macOS: "webview helper processes of the page left after hibernating: 1"** (the main run's rule
+  since LJ9, Stay ready since LJ19.4): twice on 2026-10-29 in about 25 macOS smoke runs (40931268551
+  before LJ19.4-fix4, 40942144444 after it), green on the others. One of the page's WebKit helpers
+  outlived the close in those runs. Not looked into: check `helpers-after-hibernate.txt` for which
+  one, and whether it went later than the sample.
 - **The AppImage's own memory at rest is about twice the `.deb`'s** (surfaced by LJ13's CI): 45.6 MB
   private dirty at start against 19.5 MB, on the same runner and run — the bundled libraries'
   relocated pages are the app's own instead of shared with the system's copies; after a page both
@@ -9471,6 +9517,15 @@ Populated from real friction, not speculation:
 - *(LJ19.4)* **WebView2's downloads go with the environment, not the page's controller**: once the
   window (and the bar) outlives the page, closing the page must cancel them itself
   (`ICoreWebView2DownloadOperation::Cancel`, noted on `DownloadStarting`).
+- *(LJ19.4-fix4)* **macOS: a window with `MoveToActiveSpace` ordered front while WebKit shows a page
+  in element fullscreen joins WebKit's full-screen Space — and if that Space closes with the window
+  inside, the Dock can refuse every app's full-screen Space for minutes.** The symptom shows up
+  elsewhere and later: an element fullscreen "leaves by itself" 40–150 ms after entering
+  (`_doFailedToEnterFullScreen` in `wk-note`'s stacks, `tileSpaceID=0` in `unified.log`), and a
+  request that fails while the Dock is like that keeps it so. Never order the page window front
+  during WebKit's fullscreen (`joan::focus` activates the app instead). To see the Dock's state,
+  dispatch a smoke run with `LJ_DOCK_PROBE=1` in `extra_env` and read `dock-probe.jsonl` and
+  `unified.log`.
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the

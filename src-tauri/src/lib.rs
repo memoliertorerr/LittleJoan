@@ -123,6 +123,8 @@ pub fn run() {
             smoke::log("started", "");
             // Setup runs on the main thread (Windows: nothing may wait there for WebView2).
             platform::note_main_thread();
+            // Smoke mode only, macOS: AppKit's key-window and full-screen notifications.
+            platform::install_smoke_notes();
 
             // A menu-bar utility: no Dock icon on macOS.
             #[cfg(target_os = "macos")]
