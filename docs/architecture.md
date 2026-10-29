@@ -387,6 +387,11 @@ src-tauri/src/platform/mac/downloads.rs    macOS: the page's WKDownloads noted (
 src-tauri/src/platform/mac/spaces.rs       macOS: a window's collection behaviour set before it is
                                    first shown (the active Space, over full-screen apps; LJ19.2),
                                    and the smoke log's key / on-top / on-the-active-Space check
+src-tauri/src/platform/mac/notes.rs        macOS, smoke log only: AppKit's key-window, native
+                                   full-screen and activation notifications with the stacks that
+                                   posted them and each window's state, NSWorkspace's Space and
+                                   frontmost-app changes (`wk-note`), a window's state at a moment
+                                   (`wk-context`; LJ19.4-fix4)
 src-tauri/src/platform/portal.rs   Linux: the summon shortcut through the XDG GlobalShortcuts portal
                                    (ashpd): the host registry, a session, BindShortcuts, Activated
                                    → toggle, ShortcutsChanged (LJ17)
@@ -569,7 +574,13 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
   like any window after a click elsewhere. AppKit allows one of fullScreenPrimary / Auxiliary /
   None, so Little Joan's own window can't be made a full-screen Space (its green button zooms);
   a page's element fullscreen is WebKit's own window and is untouched (LJ36's guard as before).
-  The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
+  **A summon while WebKit shows the page in element fullscreen orders no window** (LJ19.4-fix4,
+  `joan::focus`): the app is activated (`activate_app`), which brings that full-screen page to the
+  front with the keyboard, and a navigation that follows (`--show <url>`, an extension) ends the
+  fullscreen, after which WebKit puts the page back in the window and makes it key. Ordered front,
+  the window would join WebKit's full-screen Space (`MoveToActiveSpace`); when that Space closed
+  with it inside, CI's Dock afterwards refused every app's full-screen Space for minutes
+  (Landmines). The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
   other apps' full-screen Spaces. **Windows:** tao's `set_focus` already does what's needed:
   `SetForegroundWindow`, and when the foreground lock refuses it (a background process), an Alt
   tap through `SendInput` and again; the global shortcut's `WM_HOTKEY` grants the right anyway,
@@ -1464,7 +1475,9 @@ download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't t
 `zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
 `window-spaces <label> behavior=<names> was=<names> level=<n>` (macOS: a window's collection
-behaviour was set before it was first shown, and what it had before; LJ19.2), `window-front
+behaviour was set before it was first shown, and what it had before; LJ19.2), `summon-fullscreen
+activated` (macOS: a summon found the page in WebKit's element fullscreen and activated the app
+instead of ordering the window front; LJ19.4-fix4), `window-front
 <label> focused=<bool> top=<bool>[ space=<bool>]` or `window-front <label> unknown` (about a second
 after a summon brought a window to the front: the key window of the active app / the foreground
 window / GTK's active window; nothing covering its centre, or the top of the window manager's
@@ -1473,7 +1486,19 @@ stack; macOS: on the active Space), `window-present <label> x11 server-time | cu
 key=<bool> space=<bool> front=<own|other>` (macOS, while a page window exists, on each change: the
 app active, the menu bar shown, the Little Joan window key and on the active Space, the frontmost
 app — around WebKit's element fullscreen; with `LITTLEJOAN_SMOKE_SPACES_BITS=<n>` in a smoke run
-the windows get those collection-behaviour bits instead, for CI experiments only),
+the windows get those collection-behaviour bits instead, for CI experiments only), `wk-note <name>
+<object's class> [key=<bool> visible=<bool> space=<bool> behavior=<n> level=<n> active=<bool>]
+[app=<pid|own>] [stack=<module:symbol < …>]` (macOS: AppKit's window did become / resign key, will /
+did enter / exit full screen, the app did become / resign active or hide, NSWorkspace's active
+Space did change and app did activate — a window's state with it, the key, exit and resign ones
+with the call stack that posted them; LJ19.4-fix4), `wk-context <page-adding|page-added|shown>
+<window's state>` (macOS: the page window just before and after the page's webview is added, and
+once a summon's show and raise ran on the main thread; LJ19.4-fix4), and next to the logs
+`unified.log` (macOS: the unified log of the whole smoke run — the Dock and Stage Manager without
+their per-frame chatter, WebKit's Fullscreen category, AppKit's full-screen lines) and, with
+`LJ_DOCK_PROBE=1` in a run's `extra_env` (CI experiments only), `dock-probe.jsonl` (before each
+launch a Swift probe's window enters and leaves native full screen: whether the Dock gave it a
+Space),
 `summon-timing {"source":…,"kind":"cold|ready","mode":"ready|ready15|hibernate","url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}`
 (LJ19.1, LJ19.4: one line per summon — `cold` built the window, `ready` showed the ready one —,
 each mark in ms after the request on the monotonic clock — the window code's `dispatched`,
