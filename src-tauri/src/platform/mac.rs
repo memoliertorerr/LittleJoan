@@ -31,6 +31,9 @@ pub use activity::{SummonActivity, nap_state};
 /// Spaces and other apps' full-screen windows (LJ19.2).
 mod spaces;
 pub use spaces::{front, join_active_space};
+/// Smoke mode: AppKit's window and app notifications, for WebKit's fullscreen (LJ19.4-fix4).
+mod notes;
+pub use notes::install as install_notes;
 
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {
     let result = page.with_webview(move |webview| {

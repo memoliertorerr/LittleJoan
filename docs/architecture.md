@@ -387,6 +387,9 @@ src-tauri/src/platform/mac/downloads.rs    macOS: the page's WKDownloads noted (
 src-tauri/src/platform/mac/spaces.rs       macOS: a window's collection behaviour set before it is
                                    first shown (the active Space, over full-screen apps; LJ19.2),
                                    and the smoke log's key / on-top / on-the-active-Space check
+src-tauri/src/platform/mac/notes.rs        macOS, smoke log only: AppKit's key-window, native
+                                   full-screen and activation notifications with the stacks that
+                                   posted them (`wk-note`, LJ19.4-fix4)
 src-tauri/src/platform/portal.rs   Linux: the summon shortcut through the XDG GlobalShortcuts portal
                                    (ashpd): the host registry, a session, BindShortcuts, Activated
                                    → toggle, ShortcutsChanged (LJ17)
@@ -1473,7 +1476,10 @@ stack; macOS: on the active Space), `window-present <label> x11 server-time | cu
 key=<bool> space=<bool> front=<own|other>` (macOS, while a page window exists, on each change: the
 app active, the menu bar shown, the Little Joan window key and on the active Space, the frontmost
 app — around WebKit's element fullscreen; with `LITTLEJOAN_SMOKE_SPACES_BITS=<n>` in a smoke run
-the windows get those collection-behaviour bits instead, for CI experiments only),
+the windows get those collection-behaviour bits instead, for CI experiments only), `wk-note <name>
+<object's class> [key=<bool>] [stack=<module:symbol < …>]` (macOS: AppKit's window did become /
+resign key, will / did enter / exit full screen, the app did become / resign active or hide — the
+key, exit and resign ones with the call stack that posted them; LJ19.4-fix4),
 `summon-timing {"source":…,"kind":"cold|ready","mode":"ready|ready15|hibernate","url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}`
 (LJ19.1, LJ19.4: one line per summon — `cold` built the window, `ready` showed the ready one —,
 each mark in ms after the request on the monotonic clock — the window code's `dispatched`,

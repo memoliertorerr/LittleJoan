@@ -230,6 +230,17 @@ pub fn system_shortcuts() -> Vec<crate::system_shortcuts::SystemShortcut> {
     Vec::new()
 }
 
+/// macOS, smoke mode only (CI): AppKit's notifications about key windows, native full-screen
+/// transitions and the app's activation, with the stacks that posted them (`wk-note …`).
+#[cfg(target_os = "macos")]
+pub fn install_smoke_notes() {
+    mac::install_notes();
+}
+
+/// Windows and Linux: nothing to observe.
+#[cfg(not(target_os = "macos"))]
+pub fn install_smoke_notes() {}
+
 /// macOS, smoke mode only (CI): logs WebKit's element-fullscreen state (`wk-fullscreen …`) while
 /// the page window exists. Nothing elsewhere: Windows and Linux report fullscreen through their
 /// hooks.
