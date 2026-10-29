@@ -55,6 +55,31 @@ pub fn join_active_space<R: Runtime>(window: &Window<R>) {
     }
 }
 
+/// A summon while WebKit shows the page in element fullscreen (LJ19.4-fix4): the app comes to the
+/// front with the keyboard (`activateIgnoringOtherApps:`, as tao's `set_focus` does) and no window
+/// is ordered. The page is on screen already, in WebKit's own full-screen window and Space; ordering
+/// the page window front would move it into that Space (`summoned`'s `MoveToActiveSpace`), and
+/// when the Space then closes with the window inside it — the page leaving fullscreen — macOS's
+/// Dock can refuse every app's full-screen Space for minutes. Queued on the main thread.
+pub fn activate_app<R: Runtime>(window: &Window<R>) {
+    let queued = window.run_on_main_thread(|| {
+        let Some(application) = AnyClass::get(c"NSApplication") else {
+            return;
+        };
+        // SAFETY: main thread; +sharedApplication returns the app (or nil), and
+        // -activateIgnoringOtherApps: takes a BOOL.
+        unsafe {
+            let app: Option<Retained<AnyObject>> = msg_send![application, sharedApplication];
+            if let Some(app) = app {
+                let _: () = msg_send![&*app, activateIgnoringOtherApps: true];
+            }
+        }
+    });
+    if let Err(err) = queued {
+        eprintln!("little-joan: could not bring Little Joan to the front: {err}");
+    }
+}
+
 /// CI experiments only (smoke mode): `LITTLEJOAN_SMOKE_SPACES_BITS=<n>` sets these collection
 /// behaviour bits instead of `spaces::summoned`'s, to compare AppKit's default and the parts of
 /// the setting on one runner (ci.yml's `extra_env`). Ignored without the smoke log.

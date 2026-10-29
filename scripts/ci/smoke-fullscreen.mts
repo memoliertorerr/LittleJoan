@@ -300,6 +300,23 @@ export function webkitStates(events: LogEvent[]): string[] {
 }
 
 /**
+ * macOS (LJ19.4-fix4): the main run's `--show <url>` comes while WebKit shows the smoke page in
+ * element fullscreen. The summon must bring the app forward without ordering the window (it logs
+ * `summon-fullscreen`): ordered front, the window joins WebKit's full-screen Space, the navigation
+ * closes that Space with it inside, and the Dock may then refuse every app's full screen for
+ * minutes — the fullscreen launches a few minutes later fail with it. Only when the page was in
+ * WebKit's fullscreen (`wk-fullscreen in`: the click reached it).
+ */
+export function summonDuringFullscreenFailures(main: LogEvent[], os: string): string[] {
+  if (os !== "darwin" || !main.some((e) => e.event === "wk-fullscreen" && e.detail === "in")) {
+    return [];
+  }
+  return main.some((e) => e.event === "summon-fullscreen")
+    ? []
+    : ["fullscreen: the summon during the page's WebKit fullscreen ordered the window front (no summon-fullscreen line)"];
+}
+
+/**
  * The rules:
  * - every element-fullscreen path enters, holds until the page's own exit and leaves when asked —
  *   required on Windows and Linux; on macOS whenever the click reached the page (it reported);

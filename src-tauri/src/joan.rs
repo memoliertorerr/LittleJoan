@@ -221,6 +221,18 @@ fn window_state<R: Runtime>(app: &AppHandle<R>) -> WindowState {
 
 fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(window) = app.get_window(LABEL) {
+        // macOS: WebKit shows the page in element fullscreen, on screen in its own window and Space.
+        // The app comes to the front instead of this window, which, ordered front, would join that
+        // Space (LJ19.2's collection behaviour) — and when the Space closed with it inside (a
+        // summon with a URL leaves the fullscreen at once), the Dock could refuse every app's full
+        // screen for minutes (LJ19.4-fix4). A navigation that follows ends the fullscreen; WebKit
+        // then puts the page back in this window and makes it key.
+        if bar::page_in_webkit_fullscreen(app) {
+            platform::activate_app(&window);
+            smoke::log("summon-fullscreen", "activated");
+            platform::report_front(&window);
+            return Ok(());
+        }
         window.unminimize()?;
         window.show()?;
         platform::bring_to_front(&window)?;

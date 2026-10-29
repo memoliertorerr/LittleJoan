@@ -574,7 +574,13 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
   like any window after a click elsewhere. AppKit allows one of fullScreenPrimary / Auxiliary /
   None, so Little Joan's own window can't be made a full-screen Space (its green button zooms);
   a page's element fullscreen is WebKit's own window and is untouched (LJ36's guard as before).
-  The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
+  **A summon while WebKit shows the page in element fullscreen orders no window** (LJ19.4-fix4,
+  `joan::focus`): the app is activated (`activate_app`), which brings that full-screen page to the
+  front with the keyboard, and a navigation that follows (`--show <url>`, an extension) ends the
+  fullscreen, after which WebKit puts the page back in the window and makes it key. Ordered front,
+  the window would join WebKit's full-screen Space (`MoveToActiveSpace`); when that Space closed
+  with it inside, CI's Dock afterwards refused every app's full-screen Space for minutes
+  (Landmines). The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
   other apps' full-screen Spaces. **Windows:** tao's `set_focus` already does what's needed:
   `SetForegroundWindow`, and when the foreground lock refuses it (a background process), an Alt
   tap through `SendInput` and again; the global shortcut's `WM_HOTKEY` grants the right anyway,
@@ -1469,7 +1475,9 @@ download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't t
 `zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
 `window-spaces <label> behavior=<names> was=<names> level=<n>` (macOS: a window's collection
-behaviour was set before it was first shown, and what it had before; LJ19.2), `window-front
+behaviour was set before it was first shown, and what it had before; LJ19.2), `summon-fullscreen
+activated` (macOS: a summon found the page in WebKit's element fullscreen and activated the app
+instead of ordering the window front; LJ19.4-fix4), `window-front
 <label> focused=<bool> top=<bool>[ space=<bool>]` or `window-front <label> unknown` (about a second
 after a summon brought a window to the front: the key window of the active app / the foreground
 window / GTK's active window; nothing covering its centre, or the top of the window manager's

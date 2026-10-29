@@ -348,6 +348,18 @@ pub fn join_active_space<R: Runtime>(window: &Window<R>) {
 #[cfg(not(target_os = "macos"))]
 pub fn join_active_space<R: Runtime>(_window: &Window<R>) {}
 
+/// macOS: a summon while WebKit shows the page in element fullscreen brings the app (and so that
+/// full-screen page) to the front without ordering `window` (LJ19.4-fix4, mac/spaces.rs: ordered
+/// front, the window would join WebKit's full-screen Space, and the Dock can break when that Space
+/// closes with it inside). Windows and Linux have no such fullscreen window: nothing to do.
+#[cfg(target_os = "macos")]
+pub fn activate_app<R: Runtime>(window: &Window<R>) {
+    mac::activate_app(window);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn activate_app<R: Runtime>(_window: &Window<R>) {}
+
 /// Linux: raises and focuses a window being shown, with a fresh X server timestamp on X11, so the
 /// window manager doesn't refuse it as focus stealing (linux/front.rs, LJ19.2).
 #[cfg(target_os = "linux")]

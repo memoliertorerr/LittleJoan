@@ -103,7 +103,7 @@ import {
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
-import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } from "./smoke-fullscreen.mts";
+import { fullscreenFailures, fullscreenRun, fullscreenSummary, summonDuringFullscreenFailures, type FsDriver } from "./smoke-fullscreen.mts";
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
@@ -881,8 +881,9 @@ function launch(withEnv: NodeJS.ProcessEnv = env, gdb = true): ChildProcess {
 /**
  * macOS, CI experiments only (LJ19.4-fix4; `LJ_DOCK_PROBE=1` in LJ_SMOKE_EXTRA_ENV): before each
  * launch, a regular app's window enters native full screen and leaves it (a Swift probe built once
- * with swiftc), and `dock-probe.jsonl` says whether the Dock gave it a Space — to find the step
- * after which the Dock refuses every full-screen request.
+ * with swiftc), and `dock-probe.jsonl` says whether the Dock gave it a Space (`enteredMs` ≥ 0) — to
+ * find the step after which the Dock refuses every full-screen request (it found the main run's
+ * summon during the page's WebKit fullscreen).
  */
 const DOCK_PROBE = `import AppKit
 let app = NSApplication.shared
@@ -898,7 +899,8 @@ final class Probe: NSObject, NSWindowDelegate {
   }
   func windowDidEnterFullScreen(_ note: Notification) {
     entered = ms()
-    (note.object as? NSWindow)?.toggleFullScreen(nil)
+    let window = note.object as? NSWindow
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { window?.toggleFullScreen(nil) }
   }
   func windowDidFailToEnterFullScreen(_ window: NSWindow) { finish(false, "failed-to-enter") }
   func windowDidExitFullScreen(_ note: Notification) { finish(true, "entered-and-left") }
@@ -911,7 +913,7 @@ window.delegate = probe
 window.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps: true)
 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { probe.started = Date(); window.toggleFullScreen(nil) }
-DispatchQueue.main.asyncAfter(deadline: .now() + 8) { probe.finish(false, "timeout") }
+DispatchQueue.main.asyncAfter(deadline: .now() + 8) { probe.finish(probe.entered >= 0, "timeout") }
 app.run()
 `;
 let dockProbeBinary: string | null | undefined;
@@ -2013,6 +2015,7 @@ const failures = evaluate(
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(fullscreenFailures(fullscreenCheck, os, fullscreenOff))
+  .concat(summonDuringFullscreenFailures(log, os))
   .concat(fullscreenOffFailures(fullscreenOff, { main: log, fullscreen: fullscreenCheck }))
   .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(siteModeFailures(siteModeCheck, os))
