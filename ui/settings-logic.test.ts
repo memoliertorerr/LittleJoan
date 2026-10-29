@@ -205,12 +205,12 @@ describe("after closing (LJ19.4)", () => {
     ]);
     for (const platform of ["macos", "windows", "linux"]) {
       expect(afterCloseNote("ready", platform)).toBe(
-        `Opens instantly; keeps about ${READY_MEMORY_MB[platform]} MB of memory while closed. Closing always ends the page: nothing of a site keeps running.`,
+        `Opens instantly; holds about ${READY_MEMORY_MB[platform]} MB more memory while closed than Hibernate. Closing always ends the page: nothing of a site keeps running.`,
       );
     }
     expect(afterCloseNote("ready15", "macos")).toMatch(/^Opens instantly within 15 minutes of closing, then hibernates\./);
-    expect(afterCloseNote("hibernate", "linux")).toMatch(/^Uses no memory while closed; opens a little slower\./);
-    expect(afterCloseNote("ready", "plan9")).toContain("keeps some memory while closed");
+    expect(afterCloseNote("hibernate", "linux")).toMatch(/^Uses the least memory while closed; opens a little slower\./);
+    expect(afterCloseNote("ready", "plan9")).toContain("holds some more memory while closed");
   });
 
   it("reads anything as one of the three, Stay ready by default", () => {

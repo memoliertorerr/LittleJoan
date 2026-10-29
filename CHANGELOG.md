@@ -9,9 +9,11 @@ All notable changes to Little Joan are recorded here. The format follows
 ### Added
 - **Opens instantly: Little Joan stays ready after closing.** A new choice in Settings → General,
   **After closing**: **Stay ready** (the new default) keeps the hidden window and its command bar
-  after you close it — about 100 MB of memory — so the next summon shows the command bar at once,
-  with its field ready for typing; **Stay ready for 15 minutes, then hibernate**; or **Hibernate**,
-  as before (nothing stays, the next summon takes a moment longer). With Stay ready the window is
+  after you close it — some memory while closed: in CI about 30 MB more than Hibernate on macOS,
+  110 MB on Windows, 200 MB on Linux — so the next summon shows the command bar at once, with its
+  field ready for typing (in CI 40–250 ms from the request instead of 0.3–3 s); **Stay ready for 15
+  minutes**, then hibernate; or **Hibernate**, as before (nothing stays, the next summon takes a
+  moment longer). With Stay ready the window is
   also prepared a few seconds after Little Joan starts, so even the first summon is quick.
   Closing still ends the page in every mode — its scripts, sound, network and web process —, and
   a download under way still ends with it. If the hidden command bar's web process ever ends (it

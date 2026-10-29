@@ -10,9 +10,10 @@ Little Joan waits in the tray or menu bar with no page loaded. Press a global ke
 a small, resizable window appears at once with its command bar open, ready to type. Type an
 address or a search, press Enter, and the page fills the window. Close it and the page is thrown
 away — nothing of a site keeps running in the background. By default Little Joan **stays ready**
-after closing: it keeps its hidden window and command bar (about 100 MB of memory) so the next
-summon is instant. If you'd rather it use no memory while closed, choose **Hibernate** in Settings →
-General → After closing (or "Stay ready for 15 minutes, then hibernate").
+after closing: it keeps its hidden window and command bar so the next summon is instant, which
+holds some memory while closed (in CI about 30 MB more than Hibernate on macOS, 110 MB on Windows,
+200 MB on Linux). If you'd rather it hold as little as possible, choose **Hibernate** in Settings →
+General → After closing (or "Stay ready for 15 minutes", which hibernates after that).
 
 It uses the web engine your system already has (WebView2 on Windows, WebKit on macOS,
 WebKitGTK on Linux), which keeps the download to a few megabytes.

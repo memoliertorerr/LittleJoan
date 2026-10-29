@@ -4137,6 +4137,60 @@ compared with LJ19.1's baseline on the same runners (main's run 39939125801).
   the ready ceilings set from round 2 (≈3× the slowest: Linux 1 s, macOS 1.5 s, Windows 1 s); and
   Settings' "After closing" got short names with a note under the list — CI's `settings-general.png`
   showed the long option text pushing the row past the window's width.
+- **CI round 3** (run 40877932319, `fix2`): verify, package and all seven Linux smoke jobs green;
+  Windows failed one rule — the keymap run's synthetic Ctrl+Shift+K reached nothing (the app logged
+  nothing for it; the known Windows synthetic-key flake, Deferred follow-ups) —, and macOS LJ36's
+  fullscreen run: WebKit left every element fullscreen by itself 100–300 ms after entering (no
+  `page-bounds` during it, the guard held; the same app as round 2, whose fullscreen run passed
+  with every entry held ~3.5 s). Both had passed in round 2 with the same app; `lj-step-19.4-fix3`
+  (the measured figures, below) is their re-run.
+- **Windows' bar at rest (design 9), A/B** — round 2's installers smoke-tested again with
+  `LITTLEJOAN_SMOKE_WIN_REST=plain` (run 40877045010: the bar left visible, its memory target
+  Normal): at rest after a close the app and its msedgewebview2 processes held a working set of
+  324 MB plain against 263–264 MB with the bar hidden and its target Low (rounds 2 and 3), and the
+  summons from ready were no slower with it (the rows 89–191 ms warm against 154–194 plain; the
+  field 33–123 ms against 47–104). **Kept.**
+- **Measured — a summon from ready vs. one that builds the window** (ms from the request to the
+  command bar's rows / to its field taking the keyboard; rounds 2 and 3; LJ19.1's baseline is
+  `main`'s run 39939125801 for f5278e4, which hibernated after every close):
+
+  | Job | baseline (LJ19.1, rows) first / warm | Hibernate now: first / warm (rows) | **Stay ready: first / warm / idle (rows · field)** |
+  |---|---|---|---|
+  | macos | 2,950 / 2,052–2,365 | 2,637–2,651 / 2,472–3,165 | **90–249 / 79–245 / 261–459 · field 21–232** |
+  | windows | 491 / 435–464 | 534–623 / 421–570 | **48–55 / 89–191 / 188–199 · field 33–123** |
+  | linux | 369 / 265–292 | 376 / 266–290 | **169–183 / 56–60 / 61–63 · field 6–12** |
+  | linux-scale-2 | 566 / 418–432 | 456–561 / 326–426 | **241–324 / 64–91 / 63–82 · field 8–18** |
+  | linux-appimage | 344 / 250–254 | 332–472 / 271–334 | **184–233 / 45–62 / 60–64 · field 7–11** |
+  | linux-22.04 | 494 / 295–355 | 444–526 / 238–362 | **213 / 44–80 / 64–89 · field 6–14** |
+  | linux-arm64 | 434 / 335–348 | 419–440 / 340–361 | **244–249 / 46–56 / 46–57 · field 8–16** |
+  | linux-22.04-arm64 | 384 / 303–321 | 267–357 / 194–314 | **166–174 / 33–47 / 44–45 · field 7–15** |
+  | linux-appimage-arm64 | 421 / 348–358 | 397–426 / 337–365 | **231–240 / 39–50 / 51–54 · field 6–15** |
+
+  A summon from ready shows the command bar 5–30× sooner than before (macOS ~30×: the engine's
+  start is gone from the summon); the field takes the keyboard within 6–20 ms on Linux, 20–230 ms on
+  macOS, 30–120 ms on Windows. "First" from ready is the prewarmed window's first show (its page
+  webview and some of WebKit's first-frame work come then). **Hibernate** — the page now built after
+  the bar — is about where LJ19.1 left it: Linux and Windows within the runners' noise; macOS
+  2.5–3.2 s against the baseline's 2.1–2.4 s, but that VM's numbers moved by half a second between
+  two runs of the same app (Landmines: a poor stopwatch for WebKit), so no gain or loss is claimed.
+  Keys typed 150 ms after the real shortcut all landed (`typed=6`) on all nine jobs in both rounds
+  (macOS too, where the check is informational).
+- **Memory at rest after a close** (the app and its engine processes; resident memory summed /
+  their own memory — private bytes, Pss, the physical footprint; round 3):
+
+  | | Stay ready | Hibernate | Stay ready holds more |
+  |---|---|---|---|
+  | macOS (footprint) | 207 MB / **61 MB** (app + WebContent + Networking + GPU) | 150 / 34 (WebKit's Networking and GPU stay, as before) | ~27 MB → Settings says 30 |
+  | Windows (private bytes) | 264 / **112** (app + 6 msedgewebview2) | 28 / 5 (nothing of WebView2's) | ~107 → 110 |
+  | Linux (Pss, Xvfb) | 460–531 / **295–367** (app + bar's WebKitWebProcess + network) | 197–231 / 122–163 (the network process stays, as before) | ~170–205 → 200 |
+
+  Before any window (the launch): Stay ready 60 / 99 / 245–367 MB own (macOS / Windows / Linux,
+  the prewarmed bar), Hibernate 11 / 2 / 37. Linux's figures are Xvfb's software rendering; a real
+  desktop may differ. The pinging page stopped at every close (no ping later than 2 s after it in
+  any mode, on any job), and its web processes were gone within 10 s (2 s on most).
+- **What CI can't show:** the theme flash (a screenshot comes ~1 s after the summon; the owner's
+  eyes), the summon's feel on a Retina Mac, Activity Monitor's numbers on a real machine, switching
+  the setting in Settings (unit-tested; no CI driver for its list).
 
 ---
 
@@ -8993,7 +9047,9 @@ release on each OS.
   key twice, rather than loosen the rule. *(LJ19.1: it recurred twice in a row — Ctrl+= missed in
   run 39774786991, Ctrl+0 in 39779576178 — with nothing in the app's log for the missed key and
   every other key check of those runs passing. Next step: press a zoom key again when, after a few
-  seconds, the app logged no `zoom` line at all — the rule unchanged.)*
+  seconds, the app logged no `zoom` line at all — the rule unchanged.)* *(LJ19.4: the keymap run's
+  Ctrl+Shift+K missed the same way once — run 40877932319, nothing in the app's log — after
+  passing in the round before with the same app.)*
 - ~~**Stay warm for a while after closing**~~ (surfaced by LJ19.1). Most of a summon is the engine
   starting its processes again (macOS ~1.3 s of CI's 2.5 s before the bar loads, Windows ~650 ms for
   WebView2's environment and controllers, Linux ~110 ms), because hibernation destroys the window
@@ -9394,6 +9450,27 @@ Populated from real friction, not speculation:
   fullScreenAuxiliary adds there; it proves the bits (`window-spaces`) and that nothing broke.
 - *(LJ19.2)* **On Windows a file PowerShell's `Add-Content` is writing can't be read** (node's
   `readFileSync`: `EBUSY`) — read helper status files in a try and keep the last good read.
+- *(LJ19.4)* **WebKit's engine processes that run no page outlive a destroyed window** — WebKitGTK's
+  network process (Tauri keeps the web context for the app's lifetime), WebKit's Networking and GPU
+  services — as they always did; "nothing of ours at rest" checks count *web* processes
+  (WebKitWebProcess, WebContent, msedgewebview2 `--type=renderer`).
+- *(LJ19.4)* **Resident memory summed over a browser's processes counts its shared libraries several
+  times** (Linux: 510 MB resident against 337 MB Pss for the same ready window). Compare modes by
+  own memory: Windows' private bytes, Linux's Pss, macOS's physical footprint (Activity Monitor's).
+- *(LJ19.4)* **A webview added to a window on screen shows before it is laid out** — Linux packs it into
+  the window's box beside the bar, Windows and macOS put it on top. Add it, hide it and (Linux) take
+  it out of the box in one task on the main thread (macOS, Linux; `WebviewBuilder` isn't `Send`, so
+  the builder is made inside it), or zero-sized from another thread (Windows, where building on the
+  main thread can deadlock). And `focused(false)`, or it takes the keyboard from the bar.
+- *(LJ19.4)* **macOS: hiding an accessory app's only window leaves the app active with no key window**
+  — the keyboard doesn't go back to the app the user came from (destroying the window did that by
+  itself). `NSApp.hide` after the hide (not while Settings is on screen), `NSApp.unhide` before the
+  next show.
+- *(LJ19.4)* **Tauri's app-level `on_web_content_process_terminate` replaces its own default** (a reload
+  of the webview whose WebContent process ended): reload the others by hand.
+- *(LJ19.4)* **WebView2's downloads go with the environment, not the page's controller**: once the
+  window (and the bar) outlives the page, closing the page must cancel them itself
+  (`ICoreWebView2DownloadOperation::Cancel`, noted on `DownloadStarting`).
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the

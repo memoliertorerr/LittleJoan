@@ -40,11 +40,13 @@ export interface Settings {
 export type AfterClose = "ready" | "ready15" | "hibernate";
 
 /**
- * About how much memory "Stay ready" keeps while the window is closed, per OS — the app's and its
- * web engine's processes together (resident memory), as CI's smoke runs measured it (LJ19.4's
- * notes). A rough figure on purpose: it varies with the machine.
+ * About how much more memory "Stay ready" holds while the window is closed than "Hibernate", per OS
+ * — the app's and its web engine's own memory (macOS: the footprint Activity Monitor shows, Windows:
+ * private bytes, Linux: Pss), Stay ready's minus Hibernate's after a close, as CI's smoke runs
+ * measured it (LJ19.4's notes: macOS 61 − 34 MB, Windows 112 − 5 MB, Linux 295–367 − 122–163 MB). A
+ * rough figure on purpose: it varies with the machine.
  */
-export const READY_MEMORY_MB: Readonly<Record<string, number>> = { macos: 90, windows: 140, linux: 110 };
+export const READY_MEMORY_MB: Readonly<Record<string, number>> = { macos: 30, windows: 110, linux: 200 };
 
 /** General's "After closing" choices: short names for the list (drawn as text). */
 export const AFTER_CLOSE_CHOICES: readonly Choice[] = [
@@ -56,15 +58,15 @@ export const AFTER_CLOSE_CHOICES: readonly Choice[] = [
 /** What the chosen "After closing" does, under the list, worded for `platform` (drawn as text). */
 export function afterCloseNote(choice: AfterClose, platform: string): string {
   const mb = READY_MEMORY_MB[platform];
-  const memory = mb === undefined ? "some memory" : `about ${mb} MB of memory`;
+  const memory = mb === undefined ? "some more memory" : `about ${mb} MB more memory`;
   const page = "Closing always ends the page: nothing of a site keeps running.";
   switch (choice) {
     case "ready":
-      return `Opens instantly; keeps ${memory} while closed. ${page}`;
+      return `Opens instantly; holds ${memory} while closed than Hibernate. ${page}`;
     case "ready15":
       return `Opens instantly within 15 minutes of closing, then hibernates. ${page}`;
     case "hibernate":
-      return `Uses no memory while closed; opens a little slower. ${page}`;
+      return `Uses the least memory while closed; opens a little slower. ${page}`;
   }
 }
 
