@@ -259,6 +259,28 @@ async function waitFor(
   return false;
 }
 
+/**
+ * macOS (LJ19.4-fix4): the unified log since `since` from the Dock (which makes a window's
+ * full-screen Space, or refuses), WebKit's Fullscreen category, AppKit and Stage Manager — what the
+ * app's own log can't say when WebKit leaves a page's fullscreen by itself.
+ */
+function unifiedLog(since: Date): string {
+  const minutes = Math.ceil((Date.now() - since.getTime()) / 60_000) + 1;
+  const predicate = [
+    'process == "Dock"',
+    'process == "WindowManager"',
+    '(subsystem == "com.apple.WebKit" AND category == "Fullscreen")',
+    '(subsystem == "com.apple.AppKit" AND (category CONTAINS[c] "full" OR eventMessage CONTAINS[c] "full screen" OR eventMessage CONTAINS[c] "fullscreen"))',
+  ].join(" OR ");
+  const args = ["show", "--last", `${minutes}m`, "--info", "--debug", "--style", "compact", "--predicate", predicate];
+  try {
+    return execFileSync("log", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000, maxBuffer: 64 * 1024 * 1024 });
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; message: string };
+    return `(log show failed: ${e.stderr ?? e.message})\n${e.stdout ?? ""}`;
+  }
+}
+
 function run(command: string, args: string[]): string {
   try {
     return execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 });
@@ -1527,7 +1549,11 @@ const fullscreenDriver: FsDriver = {
 };
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
+const fullscreenStarted = new Date();
 const fullscreenCheck = await fullscreenRun(fullscreenDriver, true);
+if (os === "darwin") {
+  writeFileSync(join(out, "fs-unified.log"), unifiedLog(fullscreenStarted));
+}
 // The resize run (LJ39, smoke-resize.mts): its own launch, on the same driver.
 const resizeCheck = await resizeRun(fullscreenDriver);
 console.log(`resize: ${JSON.stringify(resizeSummary(resizeCheck.results))}`);

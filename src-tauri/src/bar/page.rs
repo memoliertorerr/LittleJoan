@@ -181,11 +181,13 @@ fn add<R: Runtime>(
     let (sent, done) = std::sync::mpsc::channel();
     let target = window.clone();
     window.run_on_main_thread(move || {
+        platform::smoke_context(&target, "page-adding");
         let added = target.add_child(
             page_builder(data_dir),
             LogicalPosition::new(rect.x, rect.y),
             LogicalSize::new(rect.width, rect.height),
         );
+        platform::smoke_context(&target, "page-added");
         if let Ok(page) = &added {
             let _ = page.hide();
             if let Some(bar) = target.app_handle().get_webview(BAR) {

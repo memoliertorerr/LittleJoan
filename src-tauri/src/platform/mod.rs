@@ -241,6 +241,17 @@ pub fn install_smoke_notes() {
 #[cfg(not(target_os = "macos"))]
 pub fn install_smoke_notes() {}
 
+/// macOS, smoke mode only (CI), on the main thread: `wk-context <what> …`, the window's key,
+/// visible, Space and collection-behaviour state and whether the app is active (mac/notes.rs).
+#[cfg(target_os = "macos")]
+pub fn smoke_context<R: Runtime>(window: &Window<R>, what: &str) {
+    mac::smoke_context(window, what);
+}
+
+/// Windows and Linux: nothing to say.
+#[cfg(not(target_os = "macos"))]
+pub fn smoke_context<R: Runtime>(_window: &Window<R>, _what: &str) {}
+
 /// macOS, smoke mode only (CI): logs WebKit's element-fullscreen state (`wk-fullscreen …`) while
 /// the page window exists. Nothing elsewhere: Windows and Linux report fullscreen through their
 /// hooks.

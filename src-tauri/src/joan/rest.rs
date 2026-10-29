@@ -115,6 +115,11 @@ fn show<R: Runtime>(
     window.show()?;
     // In front with the keyboard (on Linux with a fresh X server timestamp; LJ19.2).
     platform::bring_to_front(window)?;
+    // CI only (macOS): the window's and the app's state once the show and the raise ran.
+    if smoke::enabled() {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || platform::smoke_context(&target, "shown"));
+    }
     summon_timing::mark(Mark::Shown);
     bar::apply_layout(window);
     // The window opens with the command bar (bar.rs); this puts the keyboard in its field.

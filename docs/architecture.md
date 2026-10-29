@@ -389,7 +389,9 @@ src-tauri/src/platform/mac/spaces.rs       macOS: a window's collection behaviou
                                    and the smoke log's key / on-top / on-the-active-Space check
 src-tauri/src/platform/mac/notes.rs        macOS, smoke log only: AppKit's key-window, native
                                    full-screen and activation notifications with the stacks that
-                                   posted them (`wk-note`, LJ19.4-fix4)
+                                   posted them and each window's state, NSWorkspace's Space and
+                                   frontmost-app changes (`wk-note`), a window's state at a moment
+                                   (`wk-context`; LJ19.4-fix4)
 src-tauri/src/platform/portal.rs   Linux: the summon shortcut through the XDG GlobalShortcuts portal
                                    (ashpd): the host registry, a session, BindShortcuts, Activated
                                    → toggle, ShortcutsChanged (LJ17)
@@ -1477,9 +1479,15 @@ key=<bool> space=<bool> front=<own|other>` (macOS, while a page window exists, o
 app active, the menu bar shown, the Little Joan window key and on the active Space, the frontmost
 app — around WebKit's element fullscreen; with `LITTLEJOAN_SMOKE_SPACES_BITS=<n>` in a smoke run
 the windows get those collection-behaviour bits instead, for CI experiments only), `wk-note <name>
-<object's class> [key=<bool>] [stack=<module:symbol < …>]` (macOS: AppKit's window did become /
-resign key, will / did enter / exit full screen, the app did become / resign active or hide — the
-key, exit and resign ones with the call stack that posted them; LJ19.4-fix4),
+<object's class> [key=<bool> visible=<bool> space=<bool> behavior=<n> level=<n> active=<bool>]
+[app=<pid|own>] [stack=<module:symbol < …>]` (macOS: AppKit's window did become / resign key, will /
+did enter / exit full screen, the app did become / resign active or hide, NSWorkspace's active
+Space did change and app did activate — a window's state with it, the key, exit and resign ones
+with the call stack that posted them; LJ19.4-fix4), `wk-context <page-adding|page-added|shown>
+<window's state>` (macOS: the page window just before and after the page's webview is added, and
+once a summon's show and raise ran on the main thread; LJ19.4-fix4), and next to the logs
+`fs-unified.log` (macOS: the unified log of the fullscreen launches — the Dock, Stage Manager,
+WebKit's Fullscreen category, AppKit's full-screen lines),
 `summon-timing {"source":…,"kind":"cold|ready","mode":"ready|ready15|hibernate","url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}`
 (LJ19.1, LJ19.4: one line per summon — `cold` built the window, `ready` showed the ready one —,
 each mark in ms after the request on the monotonic clock — the window code's `dispatched`,
