@@ -6,11 +6,14 @@
 
 A tiny pop-up browser for Windows, Linux, and macOS that stays out of the way until you call it.
 
-Little Joan hibernates by default: after launch there is no window and no loaded page, just an
-icon in the tray or menu bar. Press a global keyboard shortcut and a small, resizable window
-appears with its command bar open. Type an address or a search, press Enter, and the page fills
-the window. Close it and Little Joan goes back to sleep — the page is thrown away, so nothing keeps
-using memory in the background.
+Little Joan waits in the tray or menu bar with no page loaded. Press a global keyboard shortcut and
+a small, resizable window appears at once with its command bar open, ready to type. Type an
+address or a search, press Enter, and the page fills the window. Close it and the page is thrown
+away — nothing of a site keeps running in the background. By default Little Joan **stays ready**
+after closing: it keeps its hidden window and command bar so the next summon is instant, which
+holds some memory while closed (in CI about 30 MB more than Hibernate on macOS, 110 MB on Windows,
+200 MB on Linux). If you'd rather it hold as little as possible, choose **Hibernate** in Settings →
+General → After closing (or "Stay ready for 15 minutes", which hibernates after that).
 
 It uses the web engine your system already has (WebView2 on Windows, WebKit on macOS,
 WebKitGTK on Linux), which keeps the download to a few megabytes.
@@ -84,7 +87,8 @@ steps below get past it.
 
 The very first launch opens the window once with a short welcome: the shortcut, where the icon
 is, and a "Start Little Joan at login" checkbox. Every launch after that only shows the tray /
-menu-bar icon — that's hibernation. To have the shortcut ready after every restart, turn on
+menu-bar icon (and, unless you chose Hibernate, readies its hidden window a few seconds later, so
+even the first summon is instant). To have the shortcut ready after every restart, turn on
 **Start Little Joan at login** (in the welcome or in Settings; it's off until you do). On macOS,
 move Little Joan to Applications first: an app opened straight from the disk image or from
 Downloads runs from a temporary copy, so Little Joan won't add a login item for it.
@@ -175,13 +179,16 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   the agent), though a few sites tie a session to it. In `settings.json` this is `"siteModes"`,
   e.g. `{ "youtube.com": "auto", "example.com": "desktop" }`.
 - **Dismiss:** press the shortcut again, press Ctrl/Cmd+W, close the window, or press Esc in the
-  empty command bar before opening anything. The page is discarded and Little Joan goes back to sleep. The window remembers its
-  size.
+  empty command bar before opening anything. The page is discarded — its scripts, sound and network
+  stop — and the window remembers its size. What stays is your choice in Settings → General →
+  **After closing**: **Stay ready** (the default: the hidden window and the command bar, so the next
+  summon is instant), **Stay ready for 15 minutes, then hibernate**, or **Hibernate** (nothing stays:
+  no window, no web engine — the next summon takes a moment longer).
 - **Keys on a page:**
 
   | | Windows / Linux | macOS |
   |---|---|---|
-  | Close (hibernate) | Ctrl+W | Cmd+W |
+  | Close | Ctrl+W | Cmd+W |
   | Edit the address | Ctrl+L | Cmd+L |
   | Reload | Ctrl+R, F5 | Cmd+R |
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |

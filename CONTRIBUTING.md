@@ -33,7 +33,10 @@ one and drives the installed app (`scripts/ci/smoke.mts`). A pull request needs 
   what it needs (`src-tauri/capabilities/`). The page webview (`joan-page`) gets no capability at
   all, not even for local pages (`capability_tests.rs` enforces it). Don't add `remote` URLs to a
   capability or inject scripts into web pages.
-- **Nothing runs at rest.** No window or webview may exist while Little Joan hibernates.
+- **Nothing of a page survives a close.** Closing always destroys the page webview — no web page's
+  scripts, media, network or process outlive it, in every "After closing" mode. At rest only the
+  owner's setting decides what stays: "Stay ready" (the default) keeps the hidden window and the
+  trusted bar, "Hibernate" keeps nothing — no window, no webview.
 - Keep decisions in small, tested, pure modules (`src-tauri/src/*.rs` without Tauri types,
   `ui/*-logic.ts`, an extension's `logic.js`); keep the native glue thin.
 - **Extensions** are plain JavaScript with no build step: a bundled one lives in

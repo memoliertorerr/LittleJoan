@@ -86,3 +86,14 @@ describe("the early theme (LJ38)", () => {
     ]);
   });
 });
+
+describe("summons from the ready window (LJ19.4)", () => {
+  it("hand the bar the run's theme again, and fail on another one", () => {
+    const ready = `${GOOD_LIGHT}12 window-created ready\n12 theme-summon light colors=2\n`;
+    expect(themeFailures(light, parseLog(ready))).toEqual([]);
+    const wrong = `${GOOD_LIGHT}12 window-created ready\n12 theme-summon dark colors=1\n`;
+    expect(themeFailures(light, parseLog(wrong))).toEqual([
+      "theme-light: a summon from ready handed the bar a dark theme with 1 colors, not light with 2",
+    ]);
+  });
+});

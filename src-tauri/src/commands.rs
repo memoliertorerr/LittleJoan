@@ -308,6 +308,10 @@ pub struct SettingsInput {
     /// keymap::validate. Left out, the saved one stays.
     #[serde(default)]
     keys: Option<Value>,
+    /// Settings → General's "After closing" (LJ19.4): `ready`, `ready15` or `hibernate`. Left out,
+    /// the saved one stays.
+    #[serde(default)]
+    after_close: Option<String>,
 }
 
 /// Validates and applies new settings: every part is checked first (settings::apply_change), the
@@ -334,6 +338,7 @@ pub async fn save_settings<R: Runtime>(
         site_modes: settings.site_modes,
         show_tray_icon: settings.show_tray_icon,
         keys: settings.keys,
+        after_close: settings.after_close,
     };
     // A refused part changes nothing — not even the shortcut.
     let current = state::with(&app, |s| s.settings.clone());

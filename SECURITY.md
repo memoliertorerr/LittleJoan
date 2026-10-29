@@ -18,7 +18,9 @@ fix is ready, the advisory can be published with credit to you if you'd like.
 
 Things that matter most here: anything that lets a web page call into Little Joan (pages are
 meant to get no IPC at all), open non-web URLs or local files, or keep running after the window
-is closed.
+is closed — in every "After closing" mode a close discards the page; only Little Joan's own
+hidden window and command bar may stay ("Stay ready"), never a web page's scripts, media,
+network or process.
 
 Extensions (experimental) have their own model — one origin each, a strict Content-Security-Policy,
 no IPC, and a small API that checks every request (see `docs/architecture.md`, "Extensions"). Also

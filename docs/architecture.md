@@ -7,9 +7,20 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
 
 ## Process model
 
-- **At rest (hibernating):** one native process with a tray / menu-bar icon. There is no
-  window and no webview, so no webview helper processes exist (WebView2's `msedgewebview2.exe`,
-  WebKit's `WebContent`/`WebKitWebProcess`). `tauri.conf.json` declares `"windows": []`.
+- **At rest — the owner's "After closing" setting (LJ19.4; `settings.afterClose`):** one native
+  process with a tray / menu-bar icon, and
+  - **Stay ready** (`ready`, the default): the page window, hidden, with only its trusted bar
+    webview (`joan-bar`) loaded — no page webview, so no web page's process. Built ~3 s after
+    the launch (the prewarm) and kept after every close; its engine helpers (the bar's renderer,
+    WebKit's Networking / GPU, WebView2's browser) stay with it.
+  - **Stay ready for 15 minutes** (`ready15`): the same, destroyed 15 minutes after the close (or
+    the launch's prewarm) unless a summon came: then as Hibernate until the next close.
+  - **Hibernate** (`hibernate`): no window and no webview, so no webview helper processes exist
+    (WebView2's `msedgewebview2.exe`, WebKit's `WebContent`/`WebKitWebProcess`), as before LJ19.4.
+
+  In every mode **a close destroys the page webview**: no web page's scripts, media, network or
+  process survive it (Ground Rule 9 as the owner rewrote it). `tauri.conf.json` declares
+  `"windows": []`.
 - **Closing the last window never quits.** `RunEvent::ExitRequested` without an exit code is
   prevented; only Quit in the tray menu, the command bar's **Quit Little Joan** and `--quit` (all
   `joan::quit`), and Cmd+Q on macOS (the app menu's standard Quit item), exit.
@@ -24,7 +35,7 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
   working brings the icon back) and logs `tray-visible <bool>` the first time and on each
   change. It uses the tray's own `set_visible` — macOS removes the status item and builds it again,
   Windows hides the notification icon, Linux sets the AppIndicator's status to Passive /
-  Active (tray-icon 0.25.1). Hiding creates nothing; at rest it is the same single process.
+  Active (tray-icon 0.25.1). Hiding the icon creates nothing; what rests is the same as with it.
   Without the icon: the shortcut, a second launch (no flags = `--show`), and the command bar's
   **Settings** and **Quit Little Joan** rows.
 - **macOS:** `ActivationPolicy::Accessory` — a menu-bar icon and no Dock icon.
@@ -216,17 +227,31 @@ src-tauri/src/suggest.rs           what the command bar suggests: top sites or t
                                    history matches and a search row (pure, tested)
 src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is; a Linux Wayland
                                    session (pure)
-src-tauri/src/joan.rs              the page window: create / focus / destroy, window events
-src-tauri/src/bar.rs               its two webviews (bar + page): build, pushing the page's
-                                   address to the bar, focus, navigation
+src-tauri/src/joan.rs              the page window's lifecycle: requests through `toggle`, focus,
+                                   resize, quit, window events
+src-tauri/src/joan/rest.rs         what a summon builds and a close leaves (LJ19.4): cold create,
+                                   summon from ready, close (rest or destroy), prewarm, release,
+                                   Stay ready for 15 minutes' timer, the bar's process ending
+src-tauri/src/joan/window.rs       the window itself: macOS's traffic lights, the remembered size
+                                   (saved on close, restored when it rests)
+src-tauri/src/bar.rs               its two webviews: the bar (built with the window), pushing the
+                                   page's address to the bar, focus, navigation; the bar's rest /
+                                   summon state (LJ19.4)
+src-tauri/src/bar/page.rs          the page webview (LJ19.4): built after the bar (or at once for a
+                                   URL; `ensure_page` for whatever needs it), added hidden so it
+                                   never flashes, closed with every close (session cookies kept,
+                                   downloads ended, macOS unloads it first)
 src-tauri/src/bar/view.rs          the view state: toolbar / overlay / element fullscreen,
                                    applied to the webviews — only what changed since the last
                                    layout; macOS autoresizing masks per mode
 src-tauri/src/bar/watch.rs         the once-a-second check of the page's address
 src-tauri/src/bar/boot.rs          the bar's first paint: its theme script (checked, tested), the
                                    theme pushed to it, whether its script runs yet (`Ready`)
-src-tauri/src/bar/background.rs    the bar webview's own background: the theme's `--lj-bg-0` it
-                                   painted last, else white / near-black (pure part tested)
+src-tauri/src/bar/background.rs    the bar webview's and the window's own background: the theme's
+                                   `--lj-bg-0` it painted last, else the theme's own (theme_color.rs;
+                                   pure part tested)
+src-tauri/src/theme_color.rs       a theme's `--lj-bg-0` computed as ui/lib/theme.ts does (OKLCH,
+                                   pure, tested against the TS values; LJ19.4's theme flash)
 src-tauri/src/bar/download.rs      downloads at run time: on_download (WebView2, WKWebView), the
                                    Downloads folder, the toolbar's status, the window closing ends
                                    them (LJ15)
@@ -311,8 +336,8 @@ src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on 
                                    links to the default browser
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/summon_timing.rs     smoke mode only: a summon's marks from the request to the command
-                                   bar on screen, one `summon-timing` line per summon (pure part
-                                   tested, LJ19.1)
+                                   bar on screen and its field taking keys, one `summon-timing` line
+                                   per summon, cold or from ready (pure part tested, LJ19.1, LJ19.4)
 src-tauri/src/spaces.rs            where a summoned window shows up (LJ19.2): macOS's collection
                                    behaviour (`summoned`: moveToActiveSpace + fullScreenAuxiliary,
                                    AppKit's exclusive groups kept to one member), the bits' names,
@@ -338,6 +363,8 @@ src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → k
                                    ContainsFullScreenElementChanged → window fullscreen; phone
                                    mode's agent through the DevTools protocol (SetUserAgent as the
                                    fallback), Page.getLayoutMetrics
+src-tauri/src/platform/win/rest.rs  Windows (LJ19.4): the bar's ProcessFailed, its memory target
+                                   and visibility at rest, the page's downloads noted and cancelled
 src-tauri/src/platform/win/front.rs  Windows: the smoke log's check that a summoned window is the
                                    foreground window and on top at its centre (LJ19.2)
 src-tauri/src/platform/mac.rs      macOS: WKWebView customUserAgent (phone mode), autoresizing
@@ -383,7 +410,10 @@ src-tauri/src/settings/change.rs   one settings change (Save's or a quick comman
                                    checked, all or nothing — `apply_change` (pure, tested)
 src-tauri/src/settings/site_modes.rs  the `siteModes` field: host → auto | phone | desktop, keys,
                                    the lookup that walks a name up to its last two labels (tested)
-src-tauri/src/toggle.rs            the toggle table: (window state, command) → action
+src-tauri/src/settings/after_close.rs  the `afterClose` field (LJ19.4): ready | ready15 | hibernate,
+                                   tolerant parse (default ready), what each keeps (tested)
+src-tauri/src/toggle.rs            the toggle table: (window state — hibernating, ready, open —,
+                                   command) → action (pure, tested)
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
                                    --start-at-login on|off / --settings [tab] / --extension <id> /
                                    --quit parsing
@@ -422,9 +452,14 @@ scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a se
 scripts/ci/smoke-downloads.mts     CI: the downloads run (two attachments, one refused while a
                                    panel shows, the window closed during a slow one) and its rules;
                                    unit-tested
-scripts/ci/smoke-timing.mts        CI: the summon-timing run (first, warm, idle, cold after the file
-                                   cache was emptied, the real shortcut; timing.md), its rules and
-                                   ceilings; unit-tested (LJ19.1)
+scripts/ci/smoke-timing.mts        CI: the summon-timing runs — Stay ready's (from the ready window)
+                                   and Hibernate's (first, warm, idle, cold after the file cache was
+                                   emptied, the real shortcut; timing.md) —, their rules and
+                                   ceilings; unit-tested (LJ19.1, LJ19.4)
+scripts/ci/smoke-rest.mts          CI: the rest runs, one per "After closing" mode (LJ19.4): what
+                                   stays at rest, a pinging page stopping at the close, memory at
+                                   rest, keys typed right after the shortcut, the ready bar's web
+                                   process killed (rest.md); unit-tested
 scripts/ci/smoke-spaces.mts        CI: the over-full-screen run (Little Joan summoned over another
                                    app's full-screen window: `--show`, the real shortcut,
                                    `--settings`; macOS probes) and its rules; unit-tested (LJ19.2)
@@ -457,15 +492,20 @@ tests/smoke/ext-probe.mjs          the smoke page's ?ext=probe: a web page tryin
 ## Lifecycle
 
 ```
-launch ──► hibernating: tray icon + global shortcut, no window, no webview
+launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewarm: the hidden window
+           and the bar, no page ──► ready          (Hibernate: nothing ──► hibernating)
               │  shortcut / --toggle / --show [url] / second launch
               ▼
-           joan window created with the command bar open (the bar covers the window, focused)
+           ready: the window shown (cold: built first), the command bar open over it, its field
+           focused; then the page webview, built after the bar (at once for a URL)
               │  type ──Enter──► the page loads; the bar becomes the 40 px toolbar above it
               │  Ctrl/Cmd+L ──► the command bar again (Esc: back to the page)
               │  shortcut while focused / Esc with no page / close button / --hide
               ▼
-           window + webview destroyed (page discarded, size remembered) ──► hibernating
+           the page webview closed (always: nothing of the page survives), size remembered;
+           Stay ready: the window hidden, the bar back at its summon state ──► ready
+           (for 15 minutes: then destroyed ──► hibernating)
+           Hibernate: the window and the bar destroyed ──► hibernating
 ```
 
 - **First launch:** when `settings.json` doesn't exist as `state::init` runs (a file that exists
@@ -483,17 +523,40 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
 - Every request goes through `toggle::decide` (table below) and `joan::handle`, which runs off
   the main thread (`joan::dispatch`): building a webview window from the main thread can
   deadlock on Windows. A lifecycle mutex keeps two quick presses from creating two windows.
-- **A summon, in order** (`joan::create`; LJ19.1 measured and shortened it): the hidden window;
-  history.json starts loading on its own thread; the bar and the page webviews; the window
-  placed, shown and focused, the command bar's field focused; then — still before any web page
-  loads, since the start page under the command bar needs neither — the kept session cookies
-  (Windows) and the page's user agent for its width (on Windows both wait for WebView2, which
-  kept the window hidden some 50 ms longer before); then the URL, if one was asked for. The bar
-  asks for its first suggestions as soon as its script runs, without waiting for the page's
-  address. **macOS:** a summon that builds the window holds an `NSProcessInfo` activity
-  (user-initiated, latency-critical; `platform/mac/activity.rs`) from the request until the
-  window is up, so App Nap — which may have throttled the idle, windowless app — doesn't slow
-  it; nothing holds one at rest.
+- **A cold summon, in order** (`joan/rest.rs` `create`; LJ19.1 measured and shortened it, LJ19.4
+  moved the page after the bar): the hidden window, with the theme's own background colour
+  (`theme_color.rs`: no flash of white or of the default theme while it opens); history.json
+  starts loading on its own thread; the bar webview; the window placed, shown and focused, the
+  command bar's field focused; then, once the bar's script runs (`start_info`, at most 3 s) and
+  its frame went out (50 ms), the **page webview** (`bar/page.rs`) — and with it, still before any
+  web page loads, the kept session cookies (Windows) and the page's user agent for its width. A
+  summon with a URL builds the page at once and navigates; anything that needs the page before
+  it exists (Enter in the command bar, an extension's panel, a navigation) builds it then
+  (`ensure_page`, never on the main thread). The bar asks for its first suggestions as soon as its
+  script runs. **macOS:** a summon holds an `NSProcessInfo` activity (user-initiated,
+  latency-critical; `platform/mac/activity.rs`) from the request until the window is up, so App
+  Nap — which may have throttled the idle app — doesn't slow it; nothing holds one at rest.
+- **A summon from ready** (`summon`, LJ19.4): the window and the bar are there. A new extension
+  session and registry, history loading on its own thread, the bar's webview shown again with
+  its memory target back to normal (Windows), then `window.littleJoan.summoned({theme, timing})`
+  — the bar starts over: the theme if it changed meanwhile, the command bar's first rows, its
+  field focused — and the window placed by the same rules as a cold summon (the remembered size,
+  centred on the monitor under the cursor), joined to the current Space (macOS, LJ19.2), shown
+  and brought to front with the keyboard (Linux: the X server's time), the bar's field focused;
+  the page webview 50 ms later, in the background (at once for a URL). macOS unhides the app first
+  (a close hid it).
+- **The prewarm** (`prewarm_after_launch`, Stay ready only): `PREWARM_AFTER` (3 s) after setup,
+  after the tray and the shortcut, `Command::Prewarm` builds the hidden window and the bar — no
+  page, no history, nothing shown, nothing focused, the bar's memory target low (Windows). Never
+  on the first run's welcome (that window stays ready when it closes) nor while quitting; a
+  summon that came first makes it do nothing. Switching "After closing" to a ready mode prewarms
+  at once; switching to Hibernate destroys a resting window at once (`after_close_changed`).
+- **A gone bar:** the engines report the bar's web process ending — WebView2's `ProcessFailed`
+  (the renderer exited or hangs, or the browser process exited), WKWebView's
+  `webViewWebContentProcessDidTerminate:` (Tauri's `on_web_content_process_terminate`), WebKitGTK's
+  `web-process-terminated` — and `bar_process_ended` marks a resting window unusable: the next
+  summon destroys it and builds everything anew (`toggle`'s Rebuild; smoke log `bar-gone`, then
+  `released bar-gone`), never a blank window. A bar on screen is reloaded instead.
 - **Where the window shows up (LJ19.2): where the user is, in front with the keyboard — over
   another app's full-screen window too — and never always-on-top.** Like Little Arc: it opens
   where you are and goes behind other windows once you click them. **macOS:** before the window
@@ -524,12 +587,23 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   size the user left it (logical pixels, saved on close unless fullscreen/maximized/minimized).
 - **Every close goes through the same path.** The close button, Cmd+W / Alt+F4
   (`CloseRequested` is prevented and turned into `--hide`), Esc in the command bar with no page,
-  the shortcut, and `--hide` all end in `joan::destroy`: remember the size, keep the session cookies (Windows,
-  below), release the page, destroy the window.
-- **Quit** (tray, `--quit`, Cmd+Q) is `joan::quit`. On macOS it first closes an open window
-  through `destroy` (so the page is unloaded) and waits for that at most 1.5 s: after a plain
-  `app.exit` (`process::exit`, webviews never unloaded) CI saw the next launch's WebKit never
-  load a page. Windows and Linux exit at once — their stores came through without it.
+  the shortcut, and `--hide` all end in `joan/rest.rs` `close`: remember the size, save history,
+  then **the page webview is closed** (`bar/page.rs`: its session cookies kept on Windows, a
+  download under way ended — WebView2's noted and cancelled, since the window's environment now
+  outlives the page —, macOS navigating it to `about:blank` and waiting for that, at most 400 ms,
+  then `Webview::close`). **Stay ready:** the window is hidden first, put back to its remembered
+  size (not fullscreen, maximized or minimized), its title "Little Joan"; the bar goes back to its
+  summon state (`window.littleJoan.rest()`: the command bar, an empty field, no rows, history view,
+  welcome or status); Windows hides the bar's controller and sets its memory target low
+  (`ICoreWebView2_19`); macOS hides the app (`NSApp.hide`) so the app the user came from gets the
+  keyboard back — unless Settings is on screen. For 15 minutes: a timer, cancelled by a summon,
+  destroys the window then. **Hibernate:** the bar is unloaded too (macOS) and the window destroyed,
+  as before.
+- **Quit** (tray, `--quit`, Cmd+Q) is `joan::quit`. Nothing new is built from then on. On macOS
+  it first closes an open window (so the page is unloaded) and destroys a ready one (the bar
+  unloaded), waiting for that at most 2.5 s: after a plain `app.exit` (`process::exit`, webviews
+  never unloaded) CI saw the next launch's WebKit never load a page. Windows and Linux exit at
+  once — their stores came through without it.
 - **The page's address comes from its load events** (`page_address.rs`, `bar::page_url`): the
   `Started` / `Finished` events carry it, and the app's own navigations set it at once. wry 0.57
   unwraps WKWebView's address, which is unset until the first navigation commits (and again
@@ -537,10 +611,11 @@ launch ──► hibernating: tray icon + global shortcut, no window, no webview
   (`Webview::url`) only by the once-a-second check for in-page changes, and only while the last
   load event was `Finished`; an answer that raced with a newer navigation is dropped.
 - **Releasing the page on macOS:** WKWebView's page processes were measured outliving a
-  destroyed window by minutes (which would also let a video's audio keep playing). On macOS
-  the window is hidden at once, navigated to `about:blank`, and destroyed 400 ms later; CI then
-  sees the `WebContent` processes gone within 30 s and no growth across summon cycles. WebView2
-  and WebKitGTK release theirs on destroy without help.
+  destroyed window by minutes (which would also let a video's audio keep playing). On macOS the
+  page is navigated to `about:blank` and closed once that loaded (at most 400 ms); a window being
+  destroyed gets its bar unloaded too and 400 ms more. CI's rest runs check that a pinging page
+  stops within 2 s of the close and that its web processes go, in every mode (LJ19.4). WebView2
+  and WebKitGTK release a page's processes when its webview goes without help.
 - **Single instance:** `tauri-plugin-single-instance` forwards a second launch's arguments to
   the running app (`--toggle`, `--show [url]`, `--hide`, `--start-at-login on|off`,
   `--settings [tab]`, `--quit`; no flags = `--show`). On Linux it needs a D-Bus session bus; on macOS it uses a socket in `/tmp`.
@@ -697,7 +772,8 @@ from the sites visited.
   clearing, closing) waits for that read first, at most 10 s, and a read that ends after its
   window closed keeps nothing —, kept in `AppState` while it exists,
   saved atomically (temp file + rename) when it closes, every 30 s while there are unsaved
-  visits, and on Quit; dropped from memory on hibernate, so nothing extra is held at rest.
+  visits, and on Quit; dropped from memory on every close — also while the window stays ready
+  (LJ19.4: each summon reads it again, on its own thread), so it is never held at rest.
 - **Format:** `{ "version": 1, "entries": [ { "url", "title", "host", "visitCount", "visits":
   [ { "at": <unix ms>, "kind": "typed" | "link" | "reload" } ] } ] }` — one record per URL (the
   fragment dropped, the query kept), `host` lower case without `www.` (with a non-default
@@ -750,7 +826,7 @@ all fields, whichever tab they are on):
 
 | Tab | Holds |
 |---|---|
-| General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login |
+| General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, **After closing** (LJ19.4, `afterClose`: **Stay ready** / **Stay ready for 15 minutes** / **Hibernate**, with a note under the list saying what the chosen one does — "Opens instantly; holds about N MB more memory while closed than Hibernate" with this OS's figure from `READY_MEMORY_MB` (CI's own-memory numbers: macOS 30, Windows 110, Linux 200), "… then hibernates", "Uses the least memory while closed; opens a little slower" — and that closing always ends the page; drawn as text; it takes effect on Save, at once — `after_close_changed`), search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login |
 | Keyboard | **Summon Little Joan** — the global shortcut's recorder (moved here from General; it pauses the shortcut while it listens, as before), Reset when it isn't the default; on a Linux Wayland session without the portal a note to bind `little-joan --toggle` instead; while the portal holds the shortcut (LJ17) the desktop's key as text instead of the recorder (no Reset, no problems: the desktop's key is never judged, so it can't block Save, and Reset all leaves the preferred trigger alone), with "Change it in your desktop's keyboard settings." — and General's line shows that key with the same note instead of **Change…** — then **Little Joan's keys**: every keymap action (`keymap_info`) with its key as a recorder button (the next key with a modifier, or an F-key; a letter is the one the key types in the user's layout; Esc cancels, Backspace means no key), **No key**, **Reset** when it isn't the default, its problems under it; **Reset all** at the bottom (every key and the summon shortcut). Problems (`keyboard-logic.ts`, the keymap's own rules): errors block Save and say why — "⌘L is already Open Location", "That's the shortcut that summons Little Joan", "Plain keys type text — add ⌘ or ⌃", "On macOS a key needs ⌘ or ⌃", the editing keys ("⌘C is used for editing in pages") —; warnings don't — the OSes' reserved shortcuts ("macOS uses ⌘Space for Spotlight", `reserved-shortcuts.ts`, curated from the OSes' documentation; `Super+*` on Windows and Linux), "Ctrl+Alt is AltGr on many keyboards". **On macOS the user's own changes refine the curated table** (decided by a CI runner's export, LJ44): Rust reads the `com.apple.symbolichotkeys` domain (NSUserDefaults, read-only; `system_shortcuts.rs`), which lists only entries that were written — an entry switched off (or moved to another key) drops that curated warning (curated macOS entries carry their domain id: Spotlight 64, input sources 60 / 61, screenshots 28 / 30 / 184, …), and an entry that is on with a key warns there (under the curated name when its id is known, else "one of its keyboard shortcuts"); entries without a key say nothing, so the curated defaults stay. A saved summon shortcut that isn't one shows as written and is an error until it is recorded again or Reset. On Windows a note says WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these. The summon recorder gets the same rules (one of Little Joan's keys → error, a reserved one → warning). When the saved shortcut couldn't be registered at launch (`shortcut::settle` keeps `AppState::shortcut_problem`: what was wanted, what is active instead, `taken` or `invalid`; `get_settings` and `keymap_info` report it), Keyboard and General say so: "⌘⇧K couldn't be registered: another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little Joan has no shortcut now."); a Save whose shortcut registers clears it. Save sends `keys` only when they were edited |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
 | Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
@@ -1324,12 +1400,23 @@ no-shortcut | ended | failed> [<error>]` (then global-hotkey takes it), `shortcu
 registered | unregistered <error>` (the portal's host registry and Little Joan's app id),
 `shortcut-portal-changed <trigger | none>` (the desktop changed the key), `shortcut-failed <reason>`, `tray-visible <bool>`
 (the icon shown or hidden: at startup and on each change, LJ41),
-`window-created`, `suggestions <rows> first=<site> typed=<characters>` (each `suggest` call:
+`suggestions <rows> first=<site> typed=<characters>` (each `suggest` call:
 counts and the first row's site, never the typed text), `overlay <true|false>` (the command bar opened or closed; once right after
 `window-created` for the state a new window starts in), `title <page title>`, `page-loaded <url>`, `fullscreen <true|false>` (any
 engine: the window's fullscreen state changed), `element-fullscreen <true|false>` (Windows: the
 app changed it for a fullscreen element), `bar-loaded` (the URL bar's page finished loading),
-`bar-url <address | start>` (what the bar was told to show), `hibernated`,
+`bar-url <address | start>` (what the bar was told to show), `closing <mode>` (a close began,
+LJ19.4), `hibernated [ready | ready15]` (the window closed: destroyed, or with the mode it rests in),
+`prewarmed <mode>` (the ready window was built after the launch, or when the setting switched),
+`released <timer | setting | bar-gone | rest-over>` (a resting window was destroyed) and `release
+<why>` (asked for), `page-built` / `page-closed` (the page webview, built after the bar and closed
+with every close), `page-wait bar-timeout` (a cold summon's page didn't wait for the bar's script
+past 3 s), `page-unload timeout` (macOS: its `about:blank` didn't load within 400 ms),
+`bar-gone <why>` (the bar's web process ended; `… reload` on screen), `bar-process-failed kind=<n>
+(restarts)` (Windows: a GPU or utility process WebView2 restarts), `bar-rest <low | normal |
+plain>` (Windows: the bar's controller at rest), `theme-summon <mode> colors=<n>` (a summon from
+ready handed the bar its theme), `after-close <mode>` (the setting changed), `window-created
+<cold | ready>` (a summon brought the window up), 
 `start-at-login <true|false>` (the login entry read back after a change),
 `start-at-login-failed <reason>`, `settings-window <tab | focus>` (Settings opened on a tab, or
 was focused / switched), `settings-loaded` (its page asked for the settings), `first-run` (no
@@ -1387,13 +1474,15 @@ key=<bool> space=<bool> front=<own|other>` (macOS, while a page window exists, o
 app active, the menu bar shown, the Little Joan window key and on the active Space, the frontmost
 app — around WebKit's element fullscreen; with `LITTLEJOAN_SMOKE_SPACES_BITS=<n>` in a smoke run
 the windows get those collection-behaviour bits instead, for CI experiments only),
-`summon-timing {"source":…,"url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}` (LJ19.1: one
-line per summon that built the window, each mark in ms after the request on the monotonic clock —
-the window code's `dispatched`, `windowBuilt`, `webviewsAdded`, `shown`, `cookiesRestored`,
-`agentSet`, `created`; `historyLoaded` (its own thread); the bar's `barNavigation`, `barHtml`,
-`barLoaded`, `barModule`, `barScript`, `barThemeAnswered`, `barReady`, `barStartInfo`,
-`barPainted`, `barSuggestions`, then `commandBar`, or with a URL `pageStarted` — the bar's own
-reported once at the end through `report_timing`; `nap` macOS's App Nap state at the request
+`summon-timing {"source":…,"kind":"cold|ready","mode":"ready|ready15|hibernate","url":…,"at":<unix ms>,"nap":…,"partial":…,"marks":{…}}`
+(LJ19.1, LJ19.4: one line per summon — `cold` built the window, `ready` showed the ready one —,
+each mark in ms after the request on the monotonic clock — the window code's `dispatched`,
+`windowBuilt` and `webviewsAdded` (cold only: the bar's webview), `shown`, `created`;
+`historyLoaded` (its own thread); the page builder's `pageBuilt`, `cookiesRestored`, `agentSet`;
+the bar's `barNavigation`, `barHtml`, `barLoaded`, `barModule`, `barScript`, `barThemeAnswered`,
+`barReady`, `barStartInfo` (cold only), `barPainted` (a ready summon: its first frame after the
+summon), `barFocused` (its field had the keyboard), `barSuggestions`, then `commandBar`, or with
+a URL `pageStarted` — the bar's own reported once per summon through `report_timing`; `nap` macOS's App Nap state at the request
 (`active=<0|1> lowpri= timer= disk=`, the task's suppression policy), else `null`. The line
 comes once every mark the summon waits for is in, in whatever order (on Windows the bar loads,
 runs and paints inside `add_child`, before the window code's later marks); `partial` when one is
@@ -1416,19 +1505,26 @@ The modules below hold every decision the app makes; the native glue only calls 
   already translated.
 - **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
   mobileSites, rememberHistory, theme, developerMode, disabledExtensions, siteModes,
-  showTrayIcon, keys}` (camelCase
+  showTrayIcon, keys, afterClose}` (camelCase
   JSON; `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once; `siteModes` keeps
   at most 500 valid `host: auto|phone|desktop` entries). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; `theme` = `{mode, colors, intensity, grain}`, each part on its own too
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
-- **toggle** — what a shortcut press or a command-line request does:
+- **toggle** — what a shortcut press, a command-line request or Little Joan itself does (LJ19.4
+  added the ready state, `Prewarm` and `Release`):
 
-  | State             | Toggle  | Show(None) | Show(url)          | Hide    |
-  |-------------------|---------|------------|--------------------|---------|
-  | Hibernating       | Create  | Create     | Create(url)        | Nothing |
-  | Open, focused     | Destroy | Focus      | FocusAndNavigate   | Destroy |
-  | Open, not focused | Focus   | Focus      | FocusAndNavigate   | Destroy |
+  | State             | Toggle  | Show(None) | Show(url)          | Hide    | Prewarm | Release |
+  |-------------------|---------|------------|--------------------|---------|---------|---------|
+  | Hibernating       | Create  | Create     | Create(url)        | Nothing | Prewarm | Nothing |
+  | Ready, bar alive  | Summon  | Summon     | Summon(url)        | Nothing | Nothing | Release |
+  | Ready, bar gone   | Rebuild | Rebuild    | Rebuild(url)       | Nothing | Nothing | Release |
+  | Open, focused     | Close   | Focus      | FocusAndNavigate   | Close   | Nothing | Nothing |
+  | Open, not focused | Focus   | Focus      | FocusAndNavigate   | Close   | Nothing | Nothing |
+
+  `Close` leaves the window ready or destroys it as "After closing" says.
+- **after_close** — `afterClose`: `ready` (default) | `ready15` | `hibernate`, anything else the
+  default; whether a close keeps the window and the bar, and for how long.
 
 - **spaces** — macOS's collection behaviour for Little Joan's windows: `summoned(current)` sets
   `MoveToActiveSpace` and `FullScreenAuxiliary`, clears the other members of their exclusive
@@ -1535,7 +1631,9 @@ and pushes to `main`:
   `settings-privacy.png`, `settings-appearance.png`, `welcome.png`, and the theme runs'
   `theme/*.png`), the logs, and
   The app runs on a fresh `LITTLEJOAN_DATA_DIR` that already holds the default `settings.json`,
-  so it starts hibernating (memory at rest is measured before any window opens). Then the
+  so it starts at rest — since LJ19.4 Stay ready: the run waits for `prewarmed`, and measures
+  memory at rest with the ready bar before any window opens; the page's helpers are the ones that
+  came after the bar's, and none may outlive the close. Then the
   **login-persistence check**: the smoke page's `?persist=set&t=<token>` sets a persistent
   cookie (`Max-Age` a year), a session cookie and a localStorage value; `--hide` and `--show
   ?persist=check` must report `LJ-PERSIST p=1 s=1 l=1`; new values, `--quit` within 1 s of
@@ -1678,9 +1776,14 @@ and pushes to `main`:
   environment (still Xvfb's X11 underneath, but a Wayland session to Little Joan, where the X11
   shortcut can't fire) must log `tray-visible true` despite the setting (logs `smoke-tray.log`,
   `smoke-tray-settings.log`, `smoke-tray-wayland.log`; `summary.json`'s `trayRun`). Then the
-  **summon-timing run** (`smoke-timing.mts`, LJ19.1), its own launch — without gdb on Linux, which
-  slows every thread and library the app starts — on a data folder holding a 3,000-page
-  `history.json` (300 sites under `.test`, which never resolve): the first summon after the launch,
+  **summon-timing runs** (`smoke-timing.mts`, LJ19.1, LJ19.4), each its own launch — without gdb on
+  Linux, which slows every thread and library the app starts — on a data folder holding a 3,000-page
+  `history.json` (300 sites under `.test`, which never resolve). **Stay ready's** (`timing-ready`,
+  LJ19.4): after the prewarm, the first summon, three warm ones, the real shortcut, one after 60 s
+  of quiet and a `--show <url>` — every one a `ready` summon with its complete marks (the native
+  ones and the page builder's in order), its rows and its field taking the keyboard under the
+  `ready` ceiling. **Hibernate's** (`timing`, LJ19.1's run with `"afterClose": "hibernate"`): the
+  first summon after the launch,
   three warm ones 3 s apart, one through the real global shortcut (xdotool's XTEST, SendKeys, a
   CGEvent; best effort), one after 60 s of quiet, one after the OS's file cache was emptied (macOS
   `sudo -n purge`, Linux `drop_caches`; Windows has no such command, so a 180 s gap), the same with
@@ -1692,8 +1795,8 @@ and pushes to `main`:
   vary) —; the shortcut summons count only when the key arrived (`sent→request` is the key's
   latency to the app). The table, with macOS's App Nap state per summon under it, goes into
   `timing.md` and the job's summary (log
-  `smoke-timing.log`, `summary.json`'s `timingRun`; the main run's own lines are its
-  `mainRunTimings`). Then the **over-full-screen run** (`smoke-spaces.mts`, LJ19.2): another
+  `smoke-timing.log` and `smoke-timing-ready.log`, `summary.json`'s `timingRun` per mode; the main
+  run's own lines are its `mainRunTimings`). Then the **over-full-screen run** (`smoke-spaces.mts`, LJ19.2): another
   app's full-screen window first (`smoke-spaces-helpers.mts` — macOS: a Swift app in native full
   screen, its own Space; Windows: a borderless WinForms window covering the screen, not topmost;
   Linux: an X11 window with `_NET_WM_STATE_FULLSCREEN`, through Python's ctypes and libX11, under
@@ -1710,11 +1813,33 @@ and pushes to `main`:
   default behaviour, with Little Joan's, and with Little Joan's + canJoinAllApplications, ordered
   front over the full-screen window. Screenshots `over-fullscreen.png`,
   `over-fullscreen-shortcut.png`, `over-fullscreen-settings.png` (log `smoke-spaces.log`, the
-  helper's `fs-helper.jsonl`; `summary.json`'s `spacesRun`). Last comes the
+  helper's `fs-helper.jsonl`; `summary.json`'s `spacesRun`). Then the **rest runs**
+  (`smoke-rest.mts`, LJ19.4), one launch per "After closing" mode. Each summons the smoke page's
+  `?ping=<id>` (a ping to the smoke server every 250 ms while it runs), closes it, and requires no
+  ping later than 2 s after the app's `closing` line and none of the web processes that came with
+  the page left 30 s after (sampled at 2, 10, 30 s); memory at rest — the resident memory of the
+  app and the engine processes it started, summed (Windows: its msedgewebview2 tree, Linux: its
+  WebKitGTK children, macOS: the WebKit services that weren't running before the launch), and their
+  own memory, which counts shared libraries once (private bytes, Pss, the physical footprint) —
+  before and after. **ready:** `prewarmed ready` after the launch and a web process for the bar at rest,
+  no more web processes at rest after the close than the bar's; the real shortcut, then 150 ms
+  later `ljkeys` typed without activating anything — the command bar must see `typed=6` (Windows
+  and Linux; macOS's synthetic keys are informational); then the bar's web processes killed at
+  rest (SIGKILL / taskkill): the engine must say so (`bar-gone`) and the next `--show` must log
+  `released bar-gone`, `window-created cold` and a complete `summon-timing` line (screenshots
+  `rest-ready-page.png`, `rest-ready-typed.png`, `rest-ready-rebuilt.png`). **hibernate:** no
+  prewarm, no engine process of ours after the launch, and no web process after a close (LJ9's
+  rule — WebKitGTK's network process and WebKit's Networking / GPU services stay after a window was
+  destroyed, as they always did: they run no page). **ready15:** with
+  `LITTLEJOAN_SMOKE_READY_MS=6000` (read only with the smoke log) the ready window must go by
+  itself twice (`released timer`: after the launch's prewarm and after the close), the summon
+  between them cold. Logs `smoke-rest-<mode>.log`; the table goes into `rest.md` and the job's
+  summary, `summary.json`'s `restRuns`. Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
-  on the same folder: `settings.json` must exist and no window may open within 5 s (logs
-  `smoke-first-run.log`, `smoke-relaunch.log`).
+  on the same folder: `settings.json` must exist and no window may open within 5 s (the prewarm,
+  which builds a hidden one, logs `prewarmed`, never `window-created`; logs `smoke-first-run.log`,
+  `smoke-relaunch.log`).
   `summary.json` (memory — resident and the app's own: private bytes / private dirty /
   physical footprint —, helper counts sampled for 60 s and after three summon cycles, codecs,
   the login entries found)

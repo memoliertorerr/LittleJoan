@@ -2,7 +2,11 @@
 //! page paints and, on Windows, in the strip a fast drag uncovers before WebView2 repaints (white
 //! by default, a white gutter beside a dark toolbar). It is the `--lj-bg-0` the bar painted last,
 //! kept in `AppState` across windows (a few bytes, memory only): set when a window's bar is built
-//! and again whenever the bar paints another theme (`Webview::set_background_color`).
+//! and again whenever the bar paints another theme (`Webview::set_background_color`). Before any
+//! bar painted — the first summon after a launch, or after the theme changed — it is the theme's
+//! own `--lj-bg-0`, computed in Rust (theme_color.rs, LJ19.4), and so is the window's background:
+//! the owner saw the default colours for a split second while the window opened with another
+//! theme, which was the plain white / near-black here.
 //!
 //! The page webview keeps the engine's white. A page without a background of its own is drawn
 //! over the webview's color on every engine (WebView2's `DefaultBackgroundColor`, WebKitGTK's
@@ -78,13 +82,28 @@ fn color([r, g, b]: [u8; 3]) -> Color {
     Color(r, g, b, 255)
 }
 
-/// The background a new window's bar is built with, for `theme` (the theme it paints first): the
-/// last painted one when it fits, else the scheme's plain color.
+/// What the bar's webview and the window show under the bar before it paints `theme`: the last
+/// painted `--lj-bg-0` when it fits the scheme, else `theme`'s own (theme_color.rs).
+pub fn first_background(painted: Option<&Tokens>, theme: &Theme, dark: bool) -> [u8; 3] {
+    let scheme = if dark { "dark" } else { "light" };
+    if painted.is_some_and(|tokens| tokens.scheme == scheme) {
+        return background_for(painted, dark);
+    }
+    crate::theme_color::base_background(theme, dark)
+}
+
+/// The background a new window's bar is built with, for `theme` (the theme it paints first).
 pub fn bar_background<R: Runtime>(window: &Window<R>, theme: &Theme) -> Color {
+    window_background(window, theme)
+}
+
+/// The window's own background before its bar paints `theme` (LJ19.4): the same colour.
+pub fn window_background<R: Runtime>(window: &Window<R>, theme: &Theme) -> Color {
     let system_dark = matches!(window.theme(), Ok(tauri::Theme::Dark));
     let painted = state::with(window.app_handle(), |s| s.painted_background.clone());
-    color(background_for(
+    color(first_background(
         painted.as_ref(),
+        theme,
         shows_dark(theme.mode, system_dark),
     ))
 }
@@ -176,6 +195,30 @@ mod tests {
         assert_eq!(kept.scheme, "dark");
         assert_eq!(kept.vars.len(), 1);
         assert_eq!(background_for(Some(&kept), true), [0x1f, 0x24, 0x30]);
+    }
+
+    #[test]
+    fn before_a_bar_painted_the_theme_gives_the_colour() {
+        let theme = Theme {
+            mode: ThemeMode::Dark,
+            colors: vec!["#9d8fd0".into(), "#e0a2a0".into()],
+            intensity: 0.6,
+            grain: 0.4,
+        };
+        // Nothing painted yet: the theme's own --lj-bg-0 (theme_color.rs), never plain white.
+        assert_eq!(first_background(None, &theme, true), [0x2d, 0x25, 0x45]);
+        assert_eq!(first_background(None, &theme, false), [0xe2, 0xdb, 0xff]);
+        // Painted in this scheme: what the bar painted.
+        let dark = tokens("dark", "#1f2430");
+        assert_eq!(
+            first_background(Some(&dark), &theme, true),
+            [0x1f, 0x24, 0x30]
+        );
+        // Painted in the other one (the system switched since): the theme's again.
+        assert_eq!(
+            first_background(Some(&dark), &theme, false),
+            [0xe2, 0xdb, 0xff]
+        );
     }
 
     #[test]

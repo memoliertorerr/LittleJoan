@@ -6,7 +6,7 @@
 
 use serde_json::Value;
 
-use super::{Settings, ThemeMode, disabled_extensions, keys, site_modes, theme};
+use super::{AfterClose, Settings, ThemeMode, disabled_extensions, keys, site_modes, theme};
 use crate::input::SearchEngine;
 use crate::keymap;
 use crate::keys::Platform;
@@ -35,6 +35,8 @@ pub struct Change {
     /// The user's own keys (LJ43): the whole table, checked by keymap::validate against the global
     /// shortcut it would sit beside.
     pub keys: Option<Value>,
+    /// What stays at rest after a close (LJ19.4): `ready`, `ready15` or `hibernate`.
+    pub after_close: Option<String>,
 }
 
 impl Change {
@@ -99,6 +101,10 @@ pub fn apply_change(current: &Settings, change: &Change) -> Result<Settings, Str
     }
     if let Some(on) = change.show_tray_icon {
         next.show_tray_icon = on;
+    }
+    if let Some(mode) = &change.after_close {
+        next.after_close = AfterClose::from_name(mode)
+            .ok_or_else(|| "Pick what happens after closing from the list.".to_owned())?;
     }
     if let Some(value) = &change.keys {
         next.keys = keys::from_input(value)
@@ -184,8 +190,36 @@ mod tests {
                 shortcut: Some("  ".into()),
                 ..Change::default()
             },
+            Change {
+                after_close: Some("ready30".into()),
+                mobile_sites: Some(false),
+                ..Change::default()
+            },
         ] {
             assert!(apply_change(&current, &bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn after_closing_takes_one_of_its_three_names() {
+        let current = Settings::default();
+        for mode in AfterClose::ALL {
+            let next = apply_change(
+                &current,
+                &Change {
+                    after_close: Some(mode.name().into()),
+                    ..Change::default()
+                },
+            )
+            .expect("valid");
+            assert_eq!(next.after_close, mode);
+            assert_eq!(
+                Settings {
+                    after_close: current.after_close,
+                    ..next
+                },
+                current
+            );
         }
     }
 

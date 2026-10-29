@@ -1,7 +1,8 @@
 //! Per-OS native hooks installed on the page window's two webviews (bar.rs), the Linux portal
-//! that holds the summon shortcut in a Wayland session (portal.rs, LJ17), and where a summoned
+//! that holds the summon shortcut in a Wayland session (portal.rs, LJ17), where a summoned
 //! window shows up — the current Space, in front, over another app's full-screen window (LJ19.2,
-//! spaces.rs).
+//! spaces.rs) —, and the ready window at rest (LJ19.4): the bar's engine process ending, Windows'
+//! memory target while hidden, macOS giving the keyboard back when the window hides.
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -13,6 +14,8 @@ mod portal;
 mod win;
 
 use std::path::PathBuf;
+use std::sync::OnceLock;
+use std::thread::ThreadId;
 use std::time::Duration;
 
 use tauri::{AppHandle, Runtime, Webview, Window};
@@ -58,16 +61,16 @@ pub fn install_page<R: Runtime>(page: &Webview<R>) {
     linux::install_page(page);
 }
 
-/// Linux: the command bar's overlay. The bar fills the window's GtkBox and the page widget is
-/// hidden, or both go back (see linux.rs).
+/// Linux: the command bar's overlay. The bar fills the window's GtkBox and the page widget (if
+/// the window has one yet) is hidden, or both go back (see linux.rs).
 #[cfg(target_os = "linux")]
-pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: &Webview<R>, on: bool) {
+pub fn set_overlay<R: Runtime>(bar: &Webview<R>, page: Option<&Webview<R>>, on: bool) {
     linux::set_overlay(bar, page, on);
 }
 
 /// Windows and macOS place child webviews by bounds, so bar.rs's layout does it all.
 #[cfg(not(target_os = "linux"))]
-pub fn set_overlay<R: Runtime>(_bar: &Webview<R>, _page: &Webview<R>, _on: bool) {}
+pub fn set_overlay<R: Runtime>(_bar: &Webview<R>, _page: Option<&Webview<R>>, _on: bool) {}
 
 /// macOS: the webview's autoresizing mask (`layout::mask_for`, for AppKit's unflipped
 /// coordinates), so AppKit resizes it in its own layout pass while the window is dragged.
@@ -107,10 +110,12 @@ pub fn cancel_downloads<R: Runtime>(app: &AppHandle<R>, partial: Vec<PathBuf>) {
     mac::cancel_downloads(app, partial);
 }
 
-/// Windows: a download goes with the window's WebView2 environment (CI: the transfer stops and
-/// no file is left).
+/// Windows: cancels the page's noted downloads (LJ19.4: the window's WebView2 environment, which
+/// used to take them along when it closed, now outlives the page while Little Joan stays ready).
 #[cfg(windows)]
-pub fn cancel_downloads<R: Runtime>(_app: &AppHandle<R>, _partial: Vec<PathBuf>) {}
+pub fn cancel_downloads<R: Runtime>(app: &AppHandle<R>, _partial: Vec<PathBuf>) {
+    win::cancel_downloads(app);
+}
 
 /// Whether the window is fullscreen right now, however it got there. On Linux WebKitGTK
 /// fullscreens the GTK window itself for a page's fullscreen element, which tao's own state
@@ -148,15 +153,56 @@ pub fn page_fits<R: Runtime>(_page: &Webview<R>) -> Option<bool> {
     None
 }
 
-/// Windows: remembers the main thread (setup), where nothing may wait for the engine's answers.
-#[cfg(windows)]
+/// The main thread (set up in lib.rs).
+static MAIN_THREAD: OnceLock<ThreadId> = OnceLock::new();
+
+/// Remembers the main thread (setup), where nothing may wait for the engine's answers or for a
+/// task queued on the main thread (Windows: WebView2's).
 pub fn note_main_thread() {
+    let _ = MAIN_THREAD.set(std::thread::current().id());
+    #[cfg(windows)]
     win::note_main_thread();
 }
 
-/// macOS and Linux: nothing waits for the engine that way.
+/// Whether this is the main thread (false before setup noted it).
+pub fn on_main_thread() -> bool {
+    MAIN_THREAD.get() == Some(&std::thread::current().id())
+}
+
+/// Windows: the bar's WebView2 at rest (LJ19.4) — `rest`: the window hides, the bar's controller is
+/// made invisible and its memory target low (`ICoreWebView2_19`), so WebView2 can trim what it
+/// holds; or back to normal and visible before the window shows. macOS and Linux: nothing (no
+/// public API for it).
+#[cfg(windows)]
+pub fn bar_at_rest<R: Runtime>(bar: &Webview<R>, rest: bool) {
+    win::bar_at_rest(bar, rest);
+}
+
 #[cfg(not(windows))]
-pub fn note_main_thread() {}
+pub fn bar_at_rest<R: Runtime>(_bar: &Webview<R>, _rest: bool) {}
+
+/// macOS: the window hid while Little Joan stays ready (LJ19.4): an accessory app with no window on
+/// screen gives up the keyboard (`NSApp.hide`), so the app the user came from has it again, as a
+/// destroyed window does. Not while another Little Joan window (Settings) is on screen. Windows and
+/// Linux hand the focus on themselves when a window hides.
+#[cfg(target_os = "macos")]
+pub fn give_back_focus<R: Runtime>(app: &AppHandle<R>, other_window_shown: bool) {
+    if !other_window_shown {
+        let _ = app.hide();
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn give_back_focus<R: Runtime>(_app: &AppHandle<R>, _other_window_shown: bool) {}
+
+/// macOS: before a ready window shows again, the app is unhidden (`give_back_focus` hid it).
+#[cfg(target_os = "macos")]
+pub fn take_focus_back<R: Runtime>(app: &AppHandle<R>) {
+    let _ = app.show();
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn take_focus_back<R: Runtime>(_app: &AppHandle<R>) {}
 
 /// Gives the page webview a phone user agent (`mobile`) or the engine's own one (phone.rs).
 #[cfg(target_os = "linux")]

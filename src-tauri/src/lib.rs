@@ -1,7 +1,8 @@
 //! Little Joan: a tiny pop-up browser that hibernates until a global shortcut calls it.
 //!
-//! At rest the process has a tray icon and nothing else — no window and no webview. See
-//! docs/architecture.md for the lifecycle.
+//! At rest the process has a tray icon and, as the owner's "After closing" setting says (LJ19.4),
+//! the hidden page window with its trusted bar ("Stay ready", the default) or nothing at all
+//! ("Hibernate"). A web page never survives a close. See docs/architecture.md for the lifecycle.
 
 pub mod autostart;
 pub mod back_stack;
@@ -35,6 +36,7 @@ pub mod state;
 pub mod suggest;
 pub mod summon_timing;
 pub mod system_shortcuts;
+pub mod theme_color;
 pub mod toggle;
 pub mod translate;
 pub mod welcome;
@@ -54,7 +56,7 @@ use crate::toggle::Command;
 
 /// Builds and runs the app. Returns only when the user quits.
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // First: a second launch hands its arguments to the running instance and exits.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let args = cli::parse_args(&argv);
@@ -171,9 +173,26 @@ pub fn run() {
                 // names the desktop's key — or explains `--toggle` when there is none.
                 joan::dispatch(handle, Command::Show(None), Source::Launch);
             }
+            // Stay ready (LJ19.4): the hidden window and the bar a few seconds from now, so even
+            // the first summon is fast — not during the first run's welcome, not when quitting.
+            if !args.quit {
+                joan::prewarm_after_launch(handle, welcome);
+            }
             Ok(())
-        })
-        .build(tauri::generate_context!());
+        });
+    // macOS: a WebContent process that ended (crashed, killed) is the bar's — a resting window is
+    // built anew at the next summon, one on screen reloads it (LJ19.4) — or another webview's,
+    // which reloads, as Tauri does without a handler. Windows and Linux report through their hooks
+    // (platform/).
+    #[cfg(target_os = "macos")]
+    let builder = builder.on_web_content_process_terminate(|webview| {
+        if webview.label() == bar::BAR {
+            joan::bar_process_ended(tauri::Manager::app_handle(webview), "web-content");
+        } else {
+            let _ = webview.reload();
+        }
+    });
+    let app = builder.build(tauri::generate_context!());
 
     let app = match app {
         Ok(app) => app,

@@ -1,45 +1,51 @@
-//! How long a summon takes (LJ19.1), for the smoke log only: from the request — the shortcut, the
-//! tray's Open, a forwarded `--show`, a launch's own flags — to the command bar on screen, with a
-//! mark for each step on the way. Recorded only while smoke logging is on (`smoke::enabled`): in
-//! normal use nothing is measured, kept or logged, and the bar is never asked for its part.
+//! How long a summon takes (LJ19.1, LJ19.4), for the smoke log only: from the request — the
+//! shortcut, the tray's Open, a forwarded `--show`, a launch's own flags — to the command bar on
+//! screen with its field taking keys, with a mark for each step on the way. Recorded only while
+//! smoke logging is on (`smoke::enabled`): in normal use nothing is measured, kept or logged, and
+//! the bar is never asked for its part.
 //!
-//! One line per summon that built the window, once its last mark is in (or the window closes
-//! first, `"partial":true`):
-//! `summon-timing {"source":"cli","url":false,"at":<unix ms>,"nap":…,"partial":false,"marks":{...}}`,
-//! each mark in milliseconds after the request, on the monotonic clock (`Instant`); `nap` is
-//! macOS's App Nap state at the request (`platform::nap_state`; `null` elsewhere). The marks, in
-//! the order they normally come (since LJ19.1's changes):
+//! One line per summon, once its last mark is in (or the window closes first, `"partial":true`):
+//! `summon-timing {"source":"cli","kind":"ready","mode":"ready","url":false,"at":<unix ms>,
+//! "nap":…,"partial":false,"marks":{...}}`, each mark in milliseconds after the request, on the
+//! monotonic clock (`Instant`). `kind` is `cold` (the window and the bar were built for it) or
+//! `ready` (the hidden window and its bar were there already, LJ19.4); `mode` is the "After
+//! closing" setting; `nap` is macOS's App Nap state at the request (`platform::nap_state`; `null`
+//! elsewhere). The marks, in the order they normally come:
 //!
-//! | Mark | When |
-//! |---|---|
-//! | `dispatched` | the window code runs (off the main thread, after the lifecycle lock) |
-//! | `windowBuilt` | the native window exists (hidden) |
-//! | `webviewsAdded` | the bar and the page webviews exist |
-//! | `shown` | the window is on screen and focused |
-//! | `cookiesRestored` | the kept session cookies are set again (Windows; nothing elsewhere) |
-//! | `agentSet` | the page's user agent for its width (Windows: a DevTools call) |
-//! | `created` | the window code is done (with a URL: its navigation started) |
-//! | `historyLoaded` | history.json read and parsed (on its own thread, any time after `dispatched`) |
-//! | `barNavigation` | the bar's navigation started (the engine's timing; the bar says so) |
-//! | `barHtml` | bar.html arrived (the bar says so) |
-//! | `barLoaded` | the bar's page finished loading (the engine's load event) |
-//! | `barModule` | ui/bar.ts runs (the bar says so) |
-//! | `barScript` | its early theme report reached Rust |
-//! | `barThemeAnswered` | … and its answer reached the bar (the bar says so) |
-//! | `barReady` | the bar asked `start_info` |
-//! | `barStartInfo` | … and its answer reached the bar (the bar says so) |
-//! | `barPainted` | the bar's first frame was painted (the bar says so) |
-//! | `barSuggestions` | the first suggestions were drawn into the command bar (the bar says so) |
-//! | `commandBar` | the command bar's first rows were painted (the bar says so) |
-//! | `pageStarted` | with a URL: the web page started loading |
+//! | Mark | When | Kind |
+//! |---|---|---|
+//! | `dispatched` | the window code runs (off the main thread, after the lifecycle lock) | both |
+//! | `windowBuilt` | the native window exists (hidden) | cold |
+//! | `webviewsAdded` | the bar's webview exists (since LJ19.4 the page comes after the bar) | cold |
+//! | `shown` | the window is on screen and focused | both |
+//! | `created` | the window code is done (with a URL: its navigation started) | both |
+//! | `historyLoaded` | history.json read and parsed (on its own thread, any time after `dispatched`) | both |
+//! | `pageBuilt` | the page webview exists (after the bar is on screen, or at once for a URL) | both |
+//! | `cookiesRestored` | the kept session cookies are set again (Windows; nothing elsewhere) | both |
+//! | `agentSet` | the page's user agent for its width (Windows: a DevTools call) | both |
+//! | `barNavigation` | the bar's navigation started (the engine's timing; the bar says so) | cold |
+//! | `barHtml` | bar.html arrived (the bar says so) | cold |
+//! | `barLoaded` | the bar's page finished loading (the engine's load event) | cold |
+//! | `barModule` | ui/bar.ts runs (the bar says so) | cold |
+//! | `barScript` | its early theme report reached Rust | cold |
+//! | `barThemeAnswered` | … and its answer reached the bar (the bar says so) | cold |
+//! | `barReady` | the bar asked `start_info` | cold |
+//! | `barStartInfo` | … and its answer reached the bar (the bar says so) | cold |
+//! | `barPainted` | the bar's first frame (a ready summon: its first frame after the summon) | both |
+//! | `barFocused` | the bar's field has the keyboard: its document has focus (the bar says so) | both |
+//! | `barSuggestions` | the first suggestions were drawn into the command bar (the bar says so) | both |
+//! | `commandBar` | the command bar's first rows were painted (the bar says so) | both |
+//! | `pageStarted` | with a URL: the web page started loading | both |
 //!
-//! A summon is logged once every mark it waits for is in (`EXPECTED`, plus `commandBar` without a
-//! URL or `pageStarted` with one — the command bar closes for the page, so it draws no rows),
-//! whatever order they came in: they come from the window code, the history thread, the engine's
-//! events and the bar, and on Windows the bar loads, runs and can even paint its rows before
-//! `add_child` returns. One that misses a mark is logged as it is (`"partial":true`) when the
-//! window closes, or `GIVE_UP` after the request. The bar reports its marks once, in one call, at
-//! the end (commands/timing.rs); its diagnostic ones (`barNavigation` …) aren't waited for.
+//! A summon is logged once every mark its kind waits for is in (`EXPECTED_COLD` or
+//! `EXPECTED_READY`, plus `commandBar` and `barFocused` without a URL, or `pageStarted` with one —
+//! the command bar closes for the page, so it draws no rows and the keyboard goes to the page),
+//! whatever order they came in: they come from the
+//! window code, the history thread, the page's builder, the engine's events and the bar, and on
+//! Windows the bar loads, runs and can even paint its rows before `add_child` returns. One that
+//! misses a mark is logged as it is (`"partial":true`) when the window closes, or `GIVE_UP` after
+//! the request. The bar reports its marks once per summon, in one call (commands/timing.rs); its
+//! diagnostic ones (`barNavigation` …) aren't waited for.
 
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -84,6 +90,7 @@ pub enum Mark {
     AgentSet,
     Shown,
     Created,
+    PageBuilt,
     BarNavigation,
     BarHtml,
     BarLoaded,
@@ -93,6 +100,7 @@ pub enum Mark {
     BarReady,
     BarStartInfo,
     BarPainted,
+    BarFocused,
     BarSuggestions,
     CommandBar,
     PageStarted,
@@ -109,6 +117,7 @@ impl Mark {
             Mark::AgentSet => "agentSet",
             Mark::Shown => "shown",
             Mark::Created => "created",
+            Mark::PageBuilt => "pageBuilt",
             Mark::BarNavigation => "barNavigation",
             Mark::BarHtml => "barHtml",
             Mark::BarLoaded => "barLoaded",
@@ -118,6 +127,7 @@ impl Mark {
             Mark::BarReady => "barReady",
             Mark::BarStartInfo => "barStartInfo",
             Mark::BarPainted => "barPainted",
+            Mark::BarFocused => "barFocused",
             Mark::BarSuggestions => "barSuggestions",
             Mark::CommandBar => "commandBar",
             Mark::PageStarted => "pageStarted",
@@ -149,19 +159,60 @@ impl Request {
     }
 }
 
-/// The marks every summon waits for before it is logged (with `commandBar` or `pageStarted`).
-pub const EXPECTED: [Mark; 12] = [
+/// What a summon started from (the smoke log's `kind`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// The window and its bar were built for this summon.
+    Cold,
+    /// The hidden window and its bar were ready (LJ19.4): shown, the page built after the bar.
+    Ready,
+}
+
+impl Kind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Kind::Cold => "cold",
+            Kind::Ready => "ready",
+        }
+    }
+
+    /// The marks a summon of this kind waits for before it is logged (with `commandBar` or
+    /// `pageStarted`).
+    pub fn expected(self) -> &'static [Mark] {
+        match self {
+            Kind::Cold => &EXPECTED_COLD,
+            Kind::Ready => &EXPECTED_READY,
+        }
+    }
+}
+
+/// A cold summon's marks (with `commandBar` or `pageStarted`).
+pub const EXPECTED_COLD: [Mark; 13] = [
     Mark::Dispatched,
     Mark::WindowBuilt,
     Mark::WebviewsAdded,
     Mark::Shown,
-    Mark::CookiesRestored,
-    Mark::AgentSet,
     Mark::Created,
     Mark::HistoryLoaded,
+    Mark::PageBuilt,
+    Mark::CookiesRestored,
+    Mark::AgentSet,
     Mark::BarLoaded,
     Mark::BarScript,
     Mark::BarReady,
+    Mark::BarPainted,
+];
+
+/// A summon from ready's marks (with `commandBar` or `pageStarted`): no window, bar or early
+/// theme to wait for — they were there.
+pub const EXPECTED_READY: [Mark; 8] = [
+    Mark::Dispatched,
+    Mark::Shown,
+    Mark::Created,
+    Mark::HistoryLoaded,
+    Mark::PageBuilt,
+    Mark::CookiesRestored,
+    Mark::AgentSet,
     Mark::BarPainted,
 ];
 
@@ -172,6 +223,9 @@ const GIVE_UP: Duration = Duration::from_secs(20);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Summon {
     source: Source,
+    kind: Kind,
+    /// The "After closing" setting's name at the request.
+    mode: &'static str,
     url: bool,
     at_unix_ms: u128,
     /// App Nap's state at the request (macOS), as `platform::nap_state` words it.
@@ -180,14 +234,22 @@ pub struct Summon {
 }
 
 impl Summon {
-    pub fn new(source: Source, url: bool, at_unix_ms: u128) -> Summon {
+    pub fn new(source: Source, kind: Kind, url: bool, at_unix_ms: u128) -> Summon {
         Summon {
             source,
+            kind,
+            mode: "ready",
             url,
             at_unix_ms,
             nap: None,
             marks: Vec::new(),
         }
+    }
+
+    /// With the "After closing" setting's name (`ready` until told).
+    pub fn with_mode(mut self, mode: &'static str) -> Summon {
+        self.mode = mode;
+        self
     }
 
     /// With App Nap's state at the request.
@@ -211,12 +273,16 @@ impl Summon {
 
     /// Whether every mark it waits for is in, in whatever order they came (the module's doc).
     pub fn complete(&self) -> bool {
-        let last = if self.url {
-            Mark::PageStarted
+        let last: &[Mark] = if self.url {
+            &[Mark::PageStarted]
         } else {
-            Mark::CommandBar
+            &[Mark::CommandBar, Mark::BarFocused]
         };
-        EXPECTED.iter().all(|&mark| self.has(mark)) && self.has(last)
+        self.kind
+            .expected()
+            .iter()
+            .chain(last)
+            .all(|&mark| self.has(mark))
     }
 
     /// The smoke log's JSON: the marks in the order they were recorded.
@@ -231,8 +297,10 @@ impl Summon {
             |nap| serde_json::to_string(nap).unwrap_or_else(|_| "null".to_owned()),
         );
         format!(
-            "{{\"source\":\"{}\",\"url\":{},\"at\":{},\"nap\":{nap},\"partial\":{partial},\"marks\":{{{}}}}}",
+            "{{\"source\":\"{}\",\"kind\":\"{}\",\"mode\":\"{}\",\"url\":{},\"at\":{},\"nap\":{nap},\"partial\":{partial},\"marks\":{{{}}}}}",
             self.source.name(),
+            self.kind.name(),
+            self.mode,
             self.url,
             self.at_unix_ms,
             marks.join(",")
@@ -265,9 +333,10 @@ fn current() -> std::sync::MutexGuard<'static, Option<(Instant, Summon)>> {
     CURRENT.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The window is being built for `request` (with a URL to open, or not): measuring starts, at
-/// `dispatched`. A summon still open from before is logged as it is first. Smoke mode only.
-pub fn begin(request: Request, url: bool) {
+/// A summon of `kind` (with a URL to open, or not) runs for `request`, with "After closing" on
+/// `mode`: measuring starts, at `dispatched`. A summon still open from before is logged as it is
+/// first. Smoke mode only.
+pub fn begin(request: Request, kind: Kind, mode: &'static str, url: bool) {
     if !smoke::enabled() {
         return;
     }
@@ -276,7 +345,9 @@ pub fn begin(request: Request, url: bool) {
     if let Some((_, old)) = slot.take() {
         smoke::log("summon-timing", &old.to_json(true));
     }
-    let mut summon = Summon::new(request.source, url, request.at_unix_ms).with_nap(request.nap);
+    let mut summon = Summon::new(request.source, kind, url, request.at_unix_ms)
+        .with_mode(mode)
+        .with_nap(request.nap);
     summon.mark(Mark::Dispatched, millis_between(request.received, now));
     let received = request.received;
     *slot = Some((received, summon));
@@ -363,11 +434,47 @@ mod tests {
 
     #[test]
     fn a_summon_without_a_url_waits_for_every_mark_and_the_command_bar() {
-        let mut summon = Summon::new(Source::Shortcut, false, 1_000);
-        let done = mark_all(&mut summon, &EXPECTED);
-        assert!(done.iter().all(|d| !d), "not before its rows");
-        assert!(summon.mark(Mark::CommandBar, 400));
+        for kind in [Kind::Cold, Kind::Ready] {
+            let mut summon = Summon::new(Source::Shortcut, kind, false, 1_000);
+            let done = mark_all(&mut summon, kind.expected());
+            assert!(done.iter().all(|d| !d), "{kind:?}: not before its rows");
+            assert!(summon.mark(Mark::CommandBar, 400));
+            assert!(
+                !summon.complete(),
+                "{kind:?}: not before the field has the keyboard"
+            );
+            assert!(summon.mark(Mark::BarFocused, 410));
+            assert!(summon.complete(), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn a_summon_from_ready_needs_none_of_the_cold_marks() {
+        let mut summon = Summon::new(Source::Shortcut, Kind::Ready, false, 1_000);
+        mark_all(&mut summon, &EXPECTED_READY);
+        summon.mark(Mark::BarFocused, 60);
+        summon.mark(Mark::CommandBar, 90);
         assert!(summon.complete());
+        for cold_only in [
+            Mark::WindowBuilt,
+            Mark::WebviewsAdded,
+            Mark::BarLoaded,
+            Mark::BarScript,
+            Mark::BarReady,
+        ] {
+            assert!(EXPECTED_COLD.contains(&cold_only), "{cold_only:?}");
+            assert!(!EXPECTED_READY.contains(&cold_only), "{cold_only:?}");
+        }
+        // Every ready mark is a cold one too: a ready summon is a cold one minus the building.
+        assert!(
+            EXPECTED_READY
+                .iter()
+                .all(|mark| EXPECTED_COLD.contains(mark))
+        );
+        // Both wait for the page webview (and, without a URL, the field taking keys: above).
+        for kind in [Kind::Cold, Kind::Ready] {
+            assert!(kind.expected().contains(&Mark::PageBuilt));
+        }
     }
 
     #[test]
@@ -382,20 +489,22 @@ mod tests {
             Mark::BarScript,
             Mark::BarReady,
             Mark::BarPainted,
+            Mark::BarFocused,
             Mark::CommandBar,
             Mark::WebviewsAdded,
             Mark::Shown,
+            Mark::Created,
+            Mark::PageBuilt,
             Mark::CookiesRestored,
             Mark::AgentSet,
-            Mark::Created,
         ];
-        let mut summon = Summon::new(Source::Cli, false, 1_000);
+        let mut summon = Summon::new(Source::Cli, Kind::Cold, false, 1_000);
         let done = mark_all(&mut summon, &order);
         assert_eq!(done.iter().filter(|d| **d).count(), 1);
         assert_eq!(done.last(), Some(&true));
         // Any mark missing keeps it open, whichever it is.
         for missing in order {
-            let mut summon = Summon::new(Source::Cli, false, 1_000);
+            let mut summon = Summon::new(Source::Cli, Kind::Cold, false, 1_000);
             let rest: Vec<Mark> = order.iter().copied().filter(|m| *m != missing).collect();
             mark_all(&mut summon, &rest);
             assert!(!summon.complete(), "{missing:?}");
@@ -404,20 +513,22 @@ mod tests {
 
     #[test]
     fn a_summon_with_a_url_waits_for_the_page_not_the_rows() {
-        let mut summon = Summon::new(Source::Cli, true, 1_000);
-        mark_all(&mut summon, &EXPECTED);
+        let mut summon = Summon::new(Source::Cli, Kind::Cold, true, 1_000);
+        mark_all(&mut summon, &EXPECTED_COLD);
         assert!(!summon.complete());
         summon.mark(Mark::CommandBar, 300);
         assert!(!summon.complete(), "the command bar closes for the page");
+        // The keyboard goes to the page: the bar's field taking it isn't waited for.
         summon.mark(Mark::PageStarted, 310);
         assert!(summon.complete());
     }
 
     #[test]
     fn the_bars_diagnostic_marks_are_not_waited_for() {
-        let mut summon = Summon::new(Source::Cli, false, 1_000);
-        mark_all(&mut summon, &EXPECTED);
+        let mut summon = Summon::new(Source::Cli, Kind::Cold, false, 1_000);
+        mark_all(&mut summon, &EXPECTED_COLD);
         summon.mark(Mark::CommandBar, 300);
+        summon.mark(Mark::BarFocused, 300);
         assert!(summon.complete());
         for diagnostic in [
             Mark::BarNavigation,
@@ -427,25 +538,27 @@ mod tests {
             Mark::BarStartInfo,
             Mark::BarSuggestions,
         ] {
-            assert!(!EXPECTED.contains(&diagnostic));
+            assert!(!EXPECTED_COLD.contains(&diagnostic));
+            assert!(!EXPECTED_READY.contains(&diagnostic));
             assert!(!summon.has(diagnostic));
         }
     }
 
     #[test]
     fn the_first_time_of_a_mark_counts() {
-        let mut summon = Summon::new(Source::Tray, false, 5);
+        let mut summon = Summon::new(Source::Tray, Kind::Ready, false, 5);
         assert!(summon.mark(Mark::BarLoaded, 70));
         assert!(!summon.mark(Mark::BarLoaded, 900));
         assert_eq!(
             summon.to_json(false),
-            r#"{"source":"tray","url":false,"at":5,"nap":null,"partial":false,"marks":{"barLoaded":70}}"#
+            r#"{"source":"tray","kind":"ready","mode":"ready","url":false,"at":5,"nap":null,"partial":false,"marks":{"barLoaded":70}}"#
         );
     }
 
     #[test]
     fn the_json_keeps_the_order_of_the_marks() {
-        let mut summon = Summon::new(Source::Launch, true, 1_760_000_000_123)
+        let mut summon = Summon::new(Source::Launch, Kind::Cold, true, 1_760_000_000_123)
+            .with_mode("hibernate")
             .with_nap(Some("active=1 \"x\"".to_owned()));
         summon.mark(Mark::Dispatched, 0);
         summon.mark(Mark::WindowBuilt, 12);
@@ -453,7 +566,7 @@ mod tests {
         let json = summon.to_json(true);
         assert_eq!(
             json,
-            r#"{"source":"launch","url":true,"at":1760000000123,"nap":"active=1 \"x\"","partial":true,"marks":{"dispatched":0,"windowBuilt":12,"pageStarted":200}}"#
+            r#"{"source":"launch","kind":"cold","mode":"hibernate","url":true,"at":1760000000123,"nap":"active=1 \"x\"","partial":true,"marks":{"dispatched":0,"windowBuilt":12,"pageStarted":200}}"#
         );
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
         assert_eq!(parsed["marks"]["windowBuilt"], 12);
@@ -471,6 +584,7 @@ mod tests {
             Mark::AgentSet,
             Mark::Shown,
             Mark::Created,
+            Mark::PageBuilt,
             Mark::BarNavigation,
             Mark::BarHtml,
             Mark::BarLoaded,
@@ -480,6 +594,7 @@ mod tests {
             Mark::BarReady,
             Mark::BarStartInfo,
             Mark::BarPainted,
+            Mark::BarFocused,
             Mark::BarSuggestions,
             Mark::CommandBar,
             Mark::PageStarted,
@@ -493,6 +608,9 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), marks.len());
+        for kind in [Kind::Cold, Kind::Ready] {
+            assert!(kind.name().chars().all(|c| c.is_ascii_lowercase()));
+        }
         for source in [
             Source::Shortcut,
             Source::Tray,

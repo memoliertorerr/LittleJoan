@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_THEME } from "./lib/theme.ts";
 import {
   CLEAR_START,
+  AFTER_CLOSE_CHOICES,
+  READY_MEMORY_MB,
   TABS,
+  afterCloseFrom,
+  afterCloseNote,
   changes,
   clearQuestion,
   clearStep,
@@ -32,6 +36,7 @@ const saved: Settings = {
   siteModes: { "127.0.0.1": "desktop" },
   showTrayIcon: true,
   keys: {},
+  afterClose: "ready",
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -173,6 +178,60 @@ describe("settings logic", () => {
     expect(hasChanges(changes(saved, false, privacy, false))).toBe(true);
     // Switched back on: nothing to save.
     expect(hasChanges(changes(saved, false, same(), false))).toBe(false);
+  });
+});
+
+describe("after closing (LJ19.4)", () => {
+  const withAfterClose = (afterClose?: "ready" | "ready15" | "hibernate") =>
+    toInput(
+      saved.shortcut,
+      saved.searchEngine,
+      saved.translateTo,
+      saved.mobileSites,
+      saved.rememberHistory,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      afterClose,
+    );
+
+  it("offers Stay ready first, then for 15 minutes, then Hibernate, each explained with the OS's memory figure", () => {
+    expect(AFTER_CLOSE_CHOICES.map((c) => [c.id, c.name])).toEqual([
+      ["ready", "Stay ready"],
+      ["ready15", "Stay ready for 15 minutes"],
+      ["hibernate", "Hibernate"],
+    ]);
+    for (const platform of ["macos", "windows", "linux"]) {
+      expect(afterCloseNote("ready", platform)).toBe(
+        `Opens instantly; holds about ${READY_MEMORY_MB[platform]} MB more memory while closed than Hibernate. Closing always ends the page: nothing of a site keeps running.`,
+      );
+    }
+    expect(afterCloseNote("ready15", "macos")).toMatch(/^Opens instantly within 15 minutes of closing, then hibernates\./);
+    expect(afterCloseNote("hibernate", "linux")).toMatch(/^Uses the least memory while closed; opens a little slower\./);
+    expect(afterCloseNote("ready", "plan9")).toContain("holds some more memory while closed");
+  });
+
+  it("reads anything as one of the three, Stay ready by default", () => {
+    expect(afterCloseFrom("hibernate")).toBe("hibernate");
+    expect(afterCloseFrom("ready15")).toBe("ready15");
+    for (const junk of [undefined, null, "", "Ready", 15, "ready30"]) {
+      expect(afterCloseFrom(junk)).toBe("ready");
+    }
+  });
+
+  it("counts a new choice as a change, the saved one as none, and leaves it out unless given", () => {
+    expect(isChanged(saved, withAfterClose("ready"))).toBe(false);
+    expect(isChanged(saved, withAfterClose("hibernate"))).toBe(true);
+    expect("afterClose" in same()).toBe(false);
+    expect(withAfterClose("ready15").afterClose).toBe("ready15");
+  });
+
+  it("follows a change made elsewhere unless the window edited it", () => {
+    const next = { ...saved, afterClose: "hibernate" as const };
+    expect(rebase(saved, saved, next).afterClose).toBe("hibernate");
+    expect(rebase({ ...saved, afterClose: "ready15" }, saved, next).afterClose).toBe("ready15");
   });
 });
 

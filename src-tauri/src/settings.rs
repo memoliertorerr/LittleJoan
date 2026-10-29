@@ -15,11 +15,13 @@ use serde_json::Value;
 use crate::input::SearchEngine;
 use crate::translate::is_valid_lang;
 
+pub mod after_close;
 pub mod change;
 pub mod keys;
 pub mod site_modes;
 pub mod theme;
 
+pub use after_close::AfterClose;
 pub use change::{Change, apply_change};
 pub use site_modes::SiteMode;
 pub use theme::{Theme, ThemeMode};
@@ -66,6 +68,9 @@ pub struct Settings {
     /// The user's own keys for Little Joan's actions (settings/keys.rs, keymap.rs): action id →
     /// accelerator, `""` = no key; actions not named keep their defaults.
     pub keys: BTreeMap<String, String>,
+    /// What stays at rest after the window closes (LJ19.4, settings/after_close.rs): the hidden
+    /// window and the bar (`ready`, the default), the same for 15 minutes (`ready15`), or nothing.
+    pub after_close: AfterClose,
 }
 
 impl Default for Settings {
@@ -85,6 +90,7 @@ impl Default for Settings {
             site_modes: BTreeMap::new(),
             show_tray_icon: true,
             keys: BTreeMap::new(),
+            after_close: AfterClose::default(),
         }
     }
 }
@@ -163,6 +169,7 @@ pub fn parse(json: &str) -> Settings {
         site_modes: site_modes::parse(map.get("siteModes")),
         show_tray_icon,
         keys: keys::parse(map.get("keys")),
+        after_close: after_close::parse(map.get("afterClose")),
     }
 }
 
@@ -283,6 +290,7 @@ mod tests {
                 intensity: 0.6,
                 grain: 0.4,
             },
+            after_close: AfterClose::Ready15,
             ..Settings::default()
         };
         save(&dir, &settings).expect("save");
@@ -290,6 +298,7 @@ mod tests {
         assert!(!dir.join("settings.json.tmp").exists());
         let json = fs::read_to_string(dir.join(SETTINGS_FILE)).expect("written");
         assert!(json.contains("\"searchEngine\": \"brave\""), "{json}");
+        assert!(json.contains("\"afterClose\": \"ready15\""), "{json}");
         fs::remove_dir_all(&dir).expect("cleanup");
     }
 
@@ -410,6 +419,22 @@ mod tests {
         );
         let json = serde_json::to_string(&Settings::default()).expect("json");
         assert!(json.contains(r#""showTrayIcon":true"#), "{json}");
+    }
+
+    #[test]
+    fn after_closing_stays_ready_unless_set_otherwise() {
+        assert_eq!(Settings::default().after_close, AfterClose::Ready);
+        assert_eq!(
+            parse("{}").after_close,
+            AfterClose::Ready,
+            "settings from before LJ19.4"
+        );
+        let s = parse(r#"{"afterClose": "hibernate", "mobileSites": false}"#);
+        assert_eq!(s.after_close, AfterClose::Hibernate);
+        assert!(!s.mobile_sites);
+        assert_eq!(parse(r#"{"afterClose": 3}"#).after_close, AfterClose::Ready);
+        let json = serde_json::to_string(&Settings::default()).expect("json");
+        assert!(json.contains(r#""afterClose":"ready""#), "{json}");
     }
 
     #[test]

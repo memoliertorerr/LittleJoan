@@ -78,7 +78,7 @@ pub fn overlay() -> bool {
 /// webviews' bounds this layout set (CI: at most 2 per resize).
 pub fn apply_layout<R: Runtime>(window: &Window<R>) {
     let app = window.app_handle();
-    let (Some(bar), Some(page)) = (app.get_webview(BAR), app.get_webview(PAGE)) else {
+    let Some(bar) = app.get_webview(BAR) else {
         return;
     };
     let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) else {
@@ -96,6 +96,23 @@ pub fn apply_layout<R: Runtime>(window: &Window<R>) {
     if let Some(masks) = masks {
         platform::set_autoresizing(&bar, masks.bar);
     }
+    let Some(page) = app.get_webview(PAGE) else {
+        // No page webview yet (it comes after the bar, LJ19.4): its part counts as hidden, so the
+        // page added later gets its bounds and shows when a layout says so (`page_added`).
+        *applied() = Some(Applied {
+            layout: Layout {
+                page: None,
+                ..wanted
+            },
+            scale,
+            mode,
+        });
+        smoke::log(
+            "bounds-set",
+            &usize::from(change.bar.bounds.is_some()).to_string(),
+        );
+        return;
+    };
     if platform::page_in_webkit_fullscreen(&page) {
         // WebKit has the page: it is left alone, and laid out again in full afterwards.
         *applied() = None;
@@ -197,12 +214,28 @@ fn change_overlay<R: Runtime>(app: &AppHandle<R>, on: bool) -> bool {
     if OVERLAY.swap(on, Ordering::Relaxed) == on {
         return false;
     }
-    if let (Some(bar), Some(page)) = (app.get_webview(BAR), app.get_webview(PAGE)) {
-        platform::set_overlay(&bar, &page, on);
+    if let Some(bar) = app.get_webview(BAR) {
+        platform::set_overlay(&bar, app.get_webview(PAGE).as_ref(), on);
         tell_overlay(&bar, on);
     }
     log_overlay();
     true
+}
+
+/// A page webview was just added to the window (bar/page.rs, LJ19.4), hidden: it is packed for the
+/// current view (Linux), gets its autoresizing mask (macOS), and the layout shows and places it if
+/// the view has a page (the toolbar view; the command bar's overlay keeps it hidden).
+pub(super) fn page_added<R: Runtime>(window: &Window<R>, page: &Webview<R>) {
+    if let Some(known) = applied().as_mut() {
+        known.layout.page = None;
+    }
+    if let Some(bar) = window.app_handle().get_webview(BAR) {
+        platform::set_overlay(&bar, Some(page), overlay());
+    }
+    if let Some(masks) = layout::mask_for(mode()) {
+        platform::set_autoresizing(page, masks.page);
+    }
+    apply_layout(window);
 }
 
 /// Tells the bar's page which view it is in.
