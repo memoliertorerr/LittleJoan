@@ -22,6 +22,12 @@
 // front over the full-screen window): what this runner does without the setting. Screenshots
 // over-fullscreen.png, over-fullscreen-shortcut.png, over-fullscreen-settings.png. smoke.mts
 // supplies the driver; the rules are pure and unit-tested (smoke-spaces.test.ts).
+//
+// CI experiments (LJ19.6): `LJ_SPACES_REPEAT=<n>` in the workflow's `extra_env` runs the launch n
+// times in one job (`spacesRepeat`), each a fresh helper in full screen and a fresh Little Joan
+// launch (`smoke-spaces-<i>.log`, no probes or screenshots after the first), and reports each
+// one's rules (`repeatSummary`): a failure seen about once in 20 macOS runs becomes countable.
+// Off by default (one launch).
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -333,11 +339,38 @@ function activePid(d: SpacesDriver, helper: Helper): number | null {
   return helper.latest()?.frontPid ?? null;
 }
 
-/** Runs the over-full-screen launch. */
-export async function spacesRun(d: SpacesDriver): Promise<SpacesRun> {
+/** How many over-full-screen launches `LJ_SPACES_REPEAT` asks for: 1 (the default) to 200. */
+export function spacesRepeat(value: string | undefined): number {
+  const n = Number((value ?? "").trim());
+  return Number.isInteger(n) && n >= 1 ? Math.min(n, 200) : 1;
+}
+
+/** One launch of the run: its log's name (`smoke-<name>.log`), and whether it probes and screenshots. */
+export interface SpacesLaunch {
+  name: string;
+  probes: boolean;
+  shots: boolean;
+}
+
+/** The normal launch: `spaces`, with the probes and the screenshots. */
+export const FIRST_LAUNCH: SpacesLaunch = { name: "spaces", probes: true, shots: true };
+
+/** The `index`-th launch (2, 3, …) of a repeated run (LJ19.6): its own log, nothing else. */
+export function repeatLaunch(index: number): SpacesLaunch {
+  return { name: `spaces-${index}`, probes: false, shots: false };
+}
+
+/** What summary.json records of a repeated run: how many launches failed, and each one's rules. */
+export function repeatSummary(runs: { name: string; run: SpacesRun }[], os: string) {
+  const results = runs.map(({ name, run }) => ({ name, helperUp: run.helperUp !== null, rules: spacesFailures(run, os) }));
+  return { launches: results.length, failed: results.filter((r) => r.rules.length > 0).length, results };
+}
+
+/** Runs the over-full-screen launch (the normal one, or one launch of a repeated run). */
+export async function spacesRun(d: SpacesDriver, launch: SpacesLaunch = FIRST_LAUNCH): Promise<SpacesRun> {
   const helper = startHelper(d);
   const up = await helperUp(d, helper, d.os === "darwin" ? 45_000 : 20_000);
-  const app = await d.launch("spaces", {});
+  const app = await d.launch(launch.name, {});
   await app.waitFor("spaces: started, shortcut", (e) => e.some((x) => x.event === "started") && e.some((x) => x.event.startsWith("shortcut-")), 30_000);
   await d.sleep(1500);
   const pid = app.pid();
@@ -355,7 +388,9 @@ export async function spacesRun(d: SpacesDriver): Promise<SpacesRun> {
     const trigger = await ask(from);
     await app.waitFor(`spaces: ${name}: window-front ${label}`, (e) => e.slice(from).some((x) => x.event === "window-front" && x.detail.startsWith(`${label} `)), 20_000);
     await d.sleep(800);
-    d.screenshot(shot);
+    if (launch.shots) {
+      d.screenshot(shot);
+    }
     summons.push({ name, trigger, label, helperActiveBefore, events: app.events().slice(from), helperAfter: helper.latest(), activePid: activePid(d, helper) });
   };
 
@@ -385,7 +420,7 @@ export async function spacesRun(d: SpacesDriver): Promise<SpacesRun> {
   await app.quit();
 
   const probes: Probe[] = [];
-  if (d.os === "darwin" && up) {
+  if (d.os === "darwin" && up && launch.probes) {
     for (const bits of PROBE_BITS) {
       focusHelper(d, helper);
       await d.sleep(2000);

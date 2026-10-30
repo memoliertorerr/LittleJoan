@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
 import {
+  FIRST_LAUNCH,
   PROBE_BITS,
   frontOf,
   parseFront,
   parseSpaces,
   parseStatus,
+  repeatLaunch,
+  repeatSummary,
   spacesFailures,
+  spacesRepeat,
   spacesSummary,
   type HelperStatus,
   type SpacesRun,
@@ -151,5 +155,45 @@ describe("the over-full-screen run's rules (LJ19.2)", () => {
       helperDuring: { active: false, fullscreen: true, onActiveSpace: false, frontPid: undefined, top: undefined },
     });
     expect(summary.rules).toEqual([]);
+  });
+});
+
+describe("the repeated over-full-screen run (LJ19.6, LJ_SPACES_REPEAT)", () => {
+  it("is one launch unless asked for more, at most 200", () => {
+    expect(spacesRepeat(undefined)).toBe(1);
+    expect(spacesRepeat("")).toBe(1);
+    expect(spacesRepeat("abc")).toBe(1);
+    expect(spacesRepeat("0")).toBe(1);
+    expect(spacesRepeat("-3")).toBe(1);
+    expect(spacesRepeat("2.5")).toBe(1);
+    expect(spacesRepeat(" 60 ")).toBe(60);
+    expect(spacesRepeat("1000")).toBe(200);
+  });
+
+  it("names each launch's log; only the first probes and screenshots", () => {
+    expect(FIRST_LAUNCH).toEqual({ name: "spaces", probes: true, shots: true });
+    expect(repeatLaunch(2)).toEqual({ name: "spaces-2", probes: false, shots: false });
+    expect(repeatLaunch(60).name).toBe("spaces-60");
+  });
+
+  it("counts the launches whose rules failed", () => {
+    const left = good(MAC);
+    left.summons = left.summons.map((s, i) => (i < 2 ? { ...s, helperAfter: status({ onActiveSpace: false }) } : s));
+    const summary = repeatSummary(
+      [
+        { name: "spaces", run: good(MAC) },
+        { name: "spaces-2", run: left },
+        { name: "spaces-3", run: good(MAC, { helperUp: null }) },
+      ],
+      "darwin",
+    );
+    expect(summary.launches).toBe(3);
+    expect(summary.failed).toBe(1);
+    expect(summary.results.map((r) => [r.name, r.helperUp, r.rules.length])).toEqual([
+      ["spaces", true, 0],
+      ["spaces-2", true, 2],
+      ["spaces-3", false, 0],
+    ]);
+    expect(summary.results[1]?.rules[0]).toContain("(show): the full-screen app's Space was left");
   });
 });
