@@ -4356,6 +4356,20 @@ shortcut → the video back in the window, still playing, the command bar open; 
   (the page was gone), the second press a summon from ready; Linux (every 24.04 job) — the same,
   `closing` 1.2 s after the click; macOS — `summon-fullscreen activated`, no command bar, WebKit's
   fullscreen left only when the smoke page itself gave up 6 s later; the second press then closed.
+- **CI round 1** (PR run 41047983238, `lj-step-19.7`'s head): verify, package and eight smoke jobs
+  green — the summon during the fullscreen passed on macOS (`summon-fullscreen leaving`, WebKit
+  `exiting` 0.1 s later and `not` at 0.7 s, `left 709`, then `overlay true`, the window in front
+  with the keyboard and on the Space on screen, the letter typed reached the field even there, the
+  page still pinging — fewer pings, WebKit slows a hidden page's timers —, the second press closed)
+  and on all seven Linux jobs with fullscreen (`left 50`–`53` ms); the main run's `--show <url>`
+  left the fullscreen first on every OS too —; Windows failed one rule only: its
+  first press was right (`summon-fullscreen left 51`, `overlay true`, the letter typed reached the
+  field, the pings went on), but the second `--toggle` found the window without the keyboard and
+  only focused it (`window-front … focused=true` after it): a forwarded `--toggle` comes from a
+  second process, which on Windows takes the keyboard from the window before the request arrives —
+  the user's second press is the global shortcut. **`lj-step-19.5-fix2`:** on Windows the second
+  press is the real shortcut (pressed once more if nothing at all came, Windows' lost synthetic
+  keys); `--toggle` stays the second press on macOS and Linux, where it passed.
 - **CI:** the fullscreen run ends its first launch with the summon during a fullscreen
   (`smoke-fullscreen.mts` `summonRun`, rules in `smoke-fullscreen-summon.mts`): the page pings
   (`?fs=both&ping=fs-fullscreen`; smoke.html now pings alongside `?fs=both`), "Element fullscreen"
@@ -4447,6 +4461,9 @@ Settings, and the app exits by itself within LJ20's quit limits, its data saved 
   `only_settings_may_quit_from_settings` requires exactly the settings window's capability to grant
   it (no webview scope, no `allow-quit-app` there); `only_the_bar_may_quit` still keeps `quit_app`
   the bar's alone. The page webview has no capability, as before.
+- **CI round 1** (PR run 41047983238): the Settings quit passed on all nine smoke jobs — e.g. macOS
+  and Windows `settings-quit-click`, `settings-quit`, `quit`, the process gone by itself, and after
+  the relaunch `LJ-PERSIST p=1 s=0 l=1`.
 - **CI:** the tray run's Settings launch now sets a login on the smoke page first, opens Settings →
   General (the screenshot as before), and 4 s later its Quit button is clicked through the page's
   own handler — a smoke-only knob, `LITTLEJOAN_SMOKE_SETTINGS_QUIT=1` (ignored without the smoke

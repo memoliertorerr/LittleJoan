@@ -5,8 +5,9 @@
 // way under an iPhone agent) and its own exit —, then (LJ19.5) the summon during the page's
 // fullscreen at 720: "Element fullscreen" clicked, and while the page is in it `--toggle` (the
 // shortcut's own command) must leave the fullscreen (the page goes on: its pings), open the command
-// bar with the keyboard in its field (a typed letter reaches it), and a second `--toggle` close the
-// window as usual (`summonRun`, `fsSummonFailures`) —, then a second launch whose settings say
+// bar with the keyboard in its field (a typed letter reaches it), and a second press close the
+// window as usual — `--toggle` again, the real shortcut on Windows — (`summonRun`; the rules in
+// smoke-fullscreen-summon.mts) —, then a second launch whose settings say
 // `"siteModes": { "127.0.0.1": "desktop" }` at 390×600. Only clicks, never keys: the owner's bug
 // was about clicks. scripts/ci/smoke.mts supplies the driver; the parsing and the rules are pure
 // and unit-tested (smoke-fullscreen.test.ts). The page reports `LJ-FS …` titles
@@ -204,6 +205,8 @@ export interface FsDriver {
   typeText?(text: string, pid: number, activate: boolean): void;
   /** The unix ms of each ping the smoke server got from a `?ping=<id>` page. */
   pings?(id: string): number[];
+  /** Presses the global shortcut as a keyboard would (the summon run's second press on Windows). */
+  pressSummonShortcut?(): number | null;
 }
 
 /** The logs of the fullscreen launches. */
@@ -280,7 +283,9 @@ async function launchWithPage(d: FsDriver, name: string, settings: Record<string
  * The summon during the page's fullscreen (LJ19.5), at the last size (720): "Element fullscreen"
  * clicked; once the page is in it, `--toggle` — the global shortcut's own command, without the
  * synthetic key (Windows loses some) —; a screenshot (fs/summon-command-bar.png); a letter typed
- * into whatever has the keyboard; then `--toggle` again. Not run where fullscreen is off.
+ * into whatever has the keyboard; then the second press: `--toggle` again, on Windows the real
+ * shortcut (a forwarded `--toggle` arrives with the keyboard gone to its own process there). Not
+ * run where fullscreen is off.
  */
 async function summonRun(d: FsDriver, app: FsApp): Promise<FsSummon | undefined> {
   const size = FS_SIZES.at(-1);
@@ -313,8 +318,22 @@ async function summonRun(d: FsDriver, app: FsApp): Promise<FsSummon | undefined>
   await d.sleep(500);
   const second = index();
   const secondAt = Date.now();
-  await app.forward(["--toggle"]);
-  await app.waitFor("fullscreen summon: the second press closed the window", (e) => e.slice(from + second).some((x) => x.event === "hibernated"), 10_000);
+  const closed = (e: LogEvent[]) => e.slice(from + second).some((x) => x.event === "hibernated");
+  if (d.os === "win32" && d.pressSummonShortcut) {
+    // Windows: the real shortcut, as the user presses it again — a forwarded `--toggle` comes
+    // from a second process, and the window has lost the keyboard to it by then (CI saw `Focus`).
+    // A synthetic key now and then never arrives (Deferred follow-ups): once more if nothing came.
+    d.pressSummonShortcut();
+    if (!(await app.waitFor("fullscreen summon: the second press (the shortcut) closed the window", closed, 6_000))) {
+      if (!app.events().slice(from + second).some((x) => x.event === "window-front" || x.event === "closing")) {
+        d.pressSummonShortcut();
+      }
+      await app.waitFor("fullscreen summon: the second press closed the window", closed, 10_000);
+    }
+  } else {
+    await app.forward(["--toggle"]);
+    await app.waitFor("fullscreen summon: the second press closed the window", closed, 10_000);
+  }
   await d.sleep(1000);
   return { entered, events: app.events().slice(from), first, second, firstAt, secondAt, pings: d.pings(`${FS_PING}-fullscreen`) };
 }

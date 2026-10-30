@@ -1615,6 +1615,7 @@ const fullscreenDriver: FsDriver = {
   fullscreenOff,
   typeText,
   pings: (id) => pingLog.filter((p) => p.id === id).map((p) => p.t),
+  pressSummonShortcut: () => pressSummonShortcut(),
 };
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
