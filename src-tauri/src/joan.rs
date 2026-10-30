@@ -242,7 +242,7 @@ fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<bool> {
         return Ok(false);
     };
     let left = fullscreen::leave(app, &window);
-    if !left && bar::page_in_webkit_fullscreen(app) {
+    if left == (fullscreen::Leave::GaveUp { webkit: true }) {
         platform::activate_app(&window);
         smoke::log("summon-fullscreen", "activated");
         platform::report_front(&window);
@@ -254,7 +254,7 @@ fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<bool> {
     window.show()?;
     platform::bring_to_front(&window)?;
     platform::report_front(&window);
-    Ok(left)
+    Ok(left == fullscreen::Leave::Done)
 }
 
 /// `--size`: the open window becomes width × height logical pixels (within the allowed range).

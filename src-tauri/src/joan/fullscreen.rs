@@ -49,16 +49,26 @@ pub const EXIT_SCRIPT: &str = "(() => { const d = document; try { \
     if (v.webkitDisplayingFullscreen && v.webkitExitFullscreen) { v.webkitExitFullscreen(); } } \
     } catch (e) {} })();";
 
+/// How a summon's leave went.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Leave {
+    /// The page is back in the window (or it showed no fullscreen).
+    Done,
+    /// The page was still in its fullscreen after `LIMIT` — on macOS in WebKit's (`webkit`): then
+    /// nothing may order the window.
+    GaveUp { webkit: bool },
+}
+
 /// Leaves the page's element fullscreen, if it shows one, and waits until the page is back in
-/// `window` (the module's docs). Returns false when it isn't after `LIMIT`. Off the main thread
-/// (it waits; the engines answer on the main thread).
-pub(super) fn leave<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) -> bool {
+/// `window` (the module's docs). Off the main thread (it waits; the engines answer on the main
+/// thread).
+pub(super) fn leave<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) -> Leave {
     let webkit = bar::page_in_webkit_fullscreen(app);
     if !webkit && !bar::element_fullscreen() {
-        return true;
+        return Leave::Done;
     }
     let Some(page) = bar::page(app) else {
-        return true;
+        return Leave::Done;
     };
     let started = Instant::now();
     smoke::log("summon-fullscreen", "leaving");
@@ -91,14 +101,14 @@ pub(super) fn leave<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) -> bool 
                 "summon-fullscreen",
                 &format!("gave-up {}", waited.as_millis()),
             );
-            return false;
+            return Leave::GaveUp { webkit };
         }
     }
     smoke::log(
         "summon-fullscreen",
         &format!("left {}", started.elapsed().as_millis()),
     );
-    true
+    Leave::Done
 }
 
 /// Windows and Linux: the page's fullscreen ended; the window leaves its own (WebView2's hook,
