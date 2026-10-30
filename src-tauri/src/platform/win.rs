@@ -47,7 +47,7 @@ use crate::state;
 
 /// A summoned window in front, for the smoke log (LJ19.2).
 mod front;
-pub use front::front;
+pub use front::{foreground, front};
 /// The bar's processes failing, its rest, the page's downloads (LJ19.4).
 mod rest;
 pub use rest::{bar_at_rest, cancel_downloads};

@@ -1506,7 +1506,9 @@ behaviour was set before it was first shown, and what it had before; LJ19.2), `s
 leaving | forcing | left <ms> | gave-up <ms> | window-stays-fullscreen <ms> | activated` (a summon
 found the page in element fullscreen and asked it to leave; macOS asked WebKit itself; the page
 was back in the window after `<ms>`, or the summon gave up; Windows / Linux: the window kept its
-own fullscreen; macOS: it then only activated the app; LJ19.5, LJ19.4-fix4), `window-front
+own fullscreen; macOS: it then only activated the app; LJ19.5, LJ19.4-fix4), `window-state open
+focused=<bool> page-fullscreen=<bool> tao-focused=<bool>` (what the toggle saw for a request on an
+open window, and tao's own focus; LJ19.5), `window-front
 <label> focused=<bool> top=<bool>[ space=<bool>]` or `window-front <label> unknown` (about a second
 after a summon brought a window to the front: the key window of the active app / the foreground
 window / GTK's active window; nothing covering its centre, or the top of the window manager's
@@ -1578,7 +1580,10 @@ The modules below hold every decision the app makes; the native glue only calls 
   | Open, focused          | Close           | Focus           | FocusAndNavigate | Close   | Nothing | Nothing |
   | Open, not focused      | Focus           | Focus           | FocusAndNavigate | Close   | Nothing | Nothing |
 
-  `Close` leaves the window ready or destroys it as "After closing" says. "Page full screen" is
+  `Close` leaves the window ready or destroys it as "After closing" says. "Focused" is
+  `platform::has_keyboard`: on Windows the window is the foreground window (tao's `is_focused`
+  follows the top-level window's own focus messages and says false once a webview inside has the
+  keyboard; LJ19.5), on macOS the key window, on Linux GTK's toplevel focus. "Page full screen" is
   the page showing an element fullscreen, focused or not: `LeaveFullscreen` takes the page out of
   it, then focuses the window with the command bar open; every focus leaves it first
   (joan/fullscreen.rs), so a URL loads after it.

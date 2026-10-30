@@ -221,10 +221,28 @@ fn window_state<R: Runtime>(app: &AppHandle<R>) -> WindowState {
         Some(_) if rest::at_rest() => WindowState::Ready {
             usable: rest::bar_usable(),
         },
-        Some(window) => WindowState::Open {
-            focused: window.is_focused().unwrap_or(false),
-            page_fullscreen: bar::element_fullscreen() || bar::page_in_webkit_fullscreen(app),
-        },
+        Some(window) => {
+            let state = WindowState::Open {
+                focused: platform::has_keyboard(&window),
+                page_fullscreen: bar::element_fullscreen() || bar::page_in_webkit_fullscreen(app),
+            };
+            // CI: what the toggle saw (and tao's own focus, which differs on Windows: LJ19.5).
+            if smoke::enabled()
+                && let WindowState::Open {
+                    focused,
+                    page_fullscreen,
+                } = state
+            {
+                smoke::log(
+                    "window-state",
+                    &format!(
+                        "open focused={focused} page-fullscreen={page_fullscreen} tao-focused={}",
+                        window.is_focused().unwrap_or(false)
+                    ),
+                );
+            }
+            state
+        }
     }
 }
 

@@ -15,7 +15,7 @@ mod win;
 
 /// A summon leaving the page's element fullscreen (LJ19.5).
 mod leave;
-pub use leave::{close_media_presentations, fullscreen_now, webkit_fullscreen_exit};
+pub use leave::{close_media_presentations, fullscreen_now, has_keyboard, webkit_fullscreen_exit};
 
 use std::path::PathBuf;
 use std::sync::OnceLock;

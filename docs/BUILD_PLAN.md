@@ -4370,6 +4370,17 @@ shortcut → the video back in the window, still playing, the command bar open; 
   the user's second press is the global shortcut. **`lj-step-19.5-fix2`:** on Windows the second
   press is the real shortcut (pressed once more if nothing at all came, Windows' lost synthetic
   keys); `--toggle` stays the second press on macOS and Linux, where it passed.
+- **CI round 2** (PR run 41051831701, `fix2`'s head): everything green but Windows, which failed the
+  same rule with the real shortcut too (`window-front … focused=true` after the press, no
+  `closing`): the window *was* in front with the keyboard in the command bar's field (the letter
+  had reached it), but the toggle's "focused" is tao's `is_focused`, which on Windows follows the
+  top-level window's own `WM_SETFOCUS` / `WM_KILLFOCUS` — and turns false as soon as a webview's
+  child window takes the keyboard (`bar::focus_bar` hands it to the bar's WebView2). So the press
+  only focused. **`lj-step-19.5-fix3`:** the toggle asks `platform::has_keyboard` — on Windows
+  whether the window is the foreground window (`GetForegroundWindow`, what the over-fullscreen
+  check's `focused=` has read since LJ19.2), elsewhere tao's `is_focused` as before (macOS's key
+  window, GTK's toplevel focus: both passed); the smoke log's `window-state open focused=
+  page-fullscreen= tao-focused=` records both for every request on an open window.
 - **CI:** the fullscreen run ends its first launch with the summon during a fullscreen
   (`smoke-fullscreen.mts` `summonRun`, rules in `smoke-fullscreen-summon.mts`): the page pings
   (`?fs=both&ping=fs-fullscreen`; smoke.html now pings alongside `?fs=both`), "Element fullscreen"

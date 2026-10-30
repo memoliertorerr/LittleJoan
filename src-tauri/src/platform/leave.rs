@@ -1,5 +1,6 @@
 //! A summon leaving the page's element fullscreen (LJ19.5, joan/fullscreen.rs): what WebKit says
-//! while it waits (macOS), WebKit's own way out, and whether the window is still fullscreen.
+//! while it waits (macOS), WebKit's own way out, whether the window is still fullscreen, and
+//! whether it has the keyboard (the toggle's "focused").
 
 use tauri::{Runtime, Webview, Window};
 
@@ -61,4 +62,18 @@ pub fn fullscreen_now<R: Runtime>(window: &Window<R>) -> bool {
 #[cfg(not(target_os = "linux"))]
 pub fn fullscreen_now<R: Runtime>(window: &Window<R>) -> bool {
     window.is_fullscreen().unwrap_or(false)
+}
+
+/// Whether the open window has the keyboard (the toggle's "focused": a press then closes it).
+/// Windows: it is the foreground window (`win::foreground`; tao's `is_focused` turns false as soon
+/// as a webview inside took the keyboard — CI's LJ19.5 run saw the second press only focus).
+/// macOS (the key window) and Linux (GTK's toplevel focus): tao's `is_focused`.
+#[cfg(windows)]
+pub fn has_keyboard<R: Runtime>(window: &Window<R>) -> bool {
+    super::win::foreground(window).unwrap_or_else(|| window.is_focused().unwrap_or(false))
+}
+
+#[cfg(not(windows))]
+pub fn has_keyboard<R: Runtime>(window: &Window<R>) -> bool {
+    window.is_focused().unwrap_or(false)
 }
