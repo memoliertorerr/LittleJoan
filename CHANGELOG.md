@@ -6,6 +6,15 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **The shortcut works while a video is full screen.** Pressing it — or `--show`, or the tray's
+  Open — while a page in Little Joan shows a video (or anything else) full screen now brings the
+  page back into the window, the video still playing, and opens the command bar ready for typing;
+  press the shortcut again to close Little Joan as usual. Before, on a Mac the video simply stayed
+  full screen and the command bar never came; on Windows and Linux the shortcut closed the window
+  (and the video with it). An address opened that way (`--show <url>`) also leaves full screen
+  first, then loads.
+
 ## [0.2.1-beta.1] — 2026-10-29
 
 A pre-release of v0.2.1: Little Joan opens instantly. It now stays ready after you close it (your

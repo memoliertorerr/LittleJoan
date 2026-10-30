@@ -97,7 +97,7 @@
 | LJ19.2 | *(added mid-plan 2026-10-22)* Show over full-screen apps and on the current Space: macOS windows join the active Space and may show over other apps' full-screen windows (moveToActiveSpace + fullScreenAuxiliary, the normal level), Linux raises with a fresh X server timestamp, Windows checked; an over-full-screen smoke run on every OS | strong | auto | ✅ done (CI: see notes) |
 | LJ19.3 | *(added mid-plan 2026-10-22)* Open-source polish: issue and PR templates, the Contributor Covenant code of conduct, README badges, a trademark-check note for the owner (PR #30, docs-only, run in a second checkout in parallel with LJ19.1) | standard | auto | ✅ done — PR #30, merged as 60c1db3 |
 | LJ19.4 | *(added mid-plan 2026-10-29)* Summon speed: "After closing" — Stay ready (the owner's default: the hidden window and the trusted bar stay, the page never), for 15 minutes, or Hibernate; the page webview built after the bar; a prewarm after launch; no theme flash; measured per OS and mode (cold vs ready, memory at rest, typed keys, "nothing of the page survives") | strong | auto | ✅ done (CI numbers: see notes; fix4: a summon during the page's macOS fullscreen broke the Dock — see notes) |
-| LJ19.5 | *(v0.2.1; owner, 2026-10-30)* The shortcut while a page is full screen: the page leaves full screen (its video keeps playing in the window), then the command bar opens, ready to type — every OS; never ordering the window into WebKit's full-screen Space | strong | auto | ⬜ todo |
+| LJ19.5 | *(v0.2.1; owner, 2026-10-30)* The shortcut while a page is full screen: the page leaves full screen (its video keeps playing in the window), then the command bar opens, ready to type — every OS; never ordering the window into WebKit's full-screen Space | strong | auto | ✅ done (CI: see notes) |
 | LJ19.6 | *(v0.2.1; owner, 2026-10-30)* The ready window over another app's full screen: find why it sometimes lands on the desktop Space (about 1 in 20 macOS runs), fix it, prove it with a repeated over-fullscreen launch | strong | auto | ⬜ todo |
 | LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ⬜ todo |
 | LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | ⬜ todo |
@@ -4306,6 +4306,57 @@ rule green, `summonDuringFullscreenFailures` updated to the new line.
 **Human check (LJ19.8's checklist):** YouTube full screen in Little Joan on the owner's Mac → the
 shortcut → the video back in the window, still playing, the command bar open; again → closed.
 **Commit:** `lj-step-19.5: the shortcut while a page is full screen leaves full screen and opens the command bar`
+
+**Implementation notes (2026-10-30):**
+
+- **Disk:** 14 GiB free at the start (`.cache/target` 1.1 GB).
+- **The decision** (`toggle.rs`): `WindowState::Open { focused, page_fullscreen }` and
+  `Action::LeaveFullscreen`. A page in element fullscreen — focused or not — turns Toggle and
+  Show(None) into LeaveFullscreen; Show(url) stays FocusAndNavigate, Hide stays Close, Extension
+  FocusAndExtension, because **every focus leaves the page's fullscreen first** (`joan::focus`).
+  After the leave the window is focused with no fullscreen: the next Toggle is Close. joan.rs reads
+  `page_fullscreen` as `bar::element_fullscreen()` (Windows' and Linux's hooks) or
+  `bar::page_in_webkit_fullscreen` (macOS).
+- **The leave** (`joan/fullscreen.rs`, every OS): the page is asked as its own Exit button would ask
+  — `document.exitFullscreen()` (prefixed for old WebKit, and a video's `webkitExitFullscreen` for
+  WebKit's video fullscreen) evaluated in the page, no IPC, nothing reported back. On macOS that is
+  WebKit's normal, animated exit, the one the fullscreen runs' Exit clicks take and that leaves the
+  Dock healthy. WKWebView's public `closeAllMediaPresentationsWithCompletionHandler:` (macOS 12+, so
+  inside the 12.3 minimum; nullable handler) also closes element fullscreen — WebKit's
+  `WebFullScreenManagerProxy::close`, the quick exit used when a page closes or crashes (the
+  fullscreen window controller is closed and dropped) — so it is the fallback, used only if WebKit
+  hasn't begun leaving 1.2 s after the page was asked (`forcing`). Then the wait (50 ms polls, at
+  most 4 s): **macOS** until `fullscreenState` is not-in-fullscreen, the page's WKWebView is back in
+  the Little Joan window and that window `isOnActiveSpace` (`fullscreen::webkit_fullscreen_over`,
+  tested; `platform::webkit_fullscreen_exit` asks the main thread) — only then is anything ordered,
+  so the window can't join WebKit's closing Space (LJ19.4-fix4's Landmine); **Windows / Linux** until
+  `element_fullscreen` is false (WebView2's `ContainsFullScreenElementChanged`, WebKitGTK's
+  `leave-fullscreen`), then up to 1 s for the window to leave the fullscreen the page gave it
+  (`platform::fullscreen_now`: Linux reads the GDK state on the main thread). Smoke log
+  `summon-fullscreen leaving`, `forcing`, `left <ms>` / `gave-up <ms>`. Giving up: macOS only
+  activates the app, as LJ19.4-fix4 did (the full-screen page has the keyboard); Windows and Linux
+  bring the window forward without opening the command bar (nothing may take the keyboard from a
+  page still in fullscreen). Then the usual focus (unminimize, show, front) and, for
+  LeaveFullscreen, `bar::focus_bar` (the command bar's overlay, the keyboard in its field, its
+  text selected). A URL summon leaves, focuses, then navigates (the bar closed for the page, as
+  before). `set_element_fullscreen` now logs before it changes the state, so `element-fullscreen
+  false` comes before the summon's `left`.
+- **What a summon did before** (from the code; the CI record below): the window state had no
+  fullscreen in it. **Windows** — WebView2's element fullscreen makes the window fullscreen, and that
+  window has the keyboard, so the shortcut was Toggle on a focused window → **Close**: the window
+  closed and the page (the video) with it; `--show` and the tray's Open were Focus → unminimize,
+  show, `set_focus` on a window already in front: **nothing visible**, the video stayed full screen,
+  no command bar. **Linux** — WebKitGTK fullscreens the toplevel window itself, which keeps the
+  keyboard: the same — the shortcut **closed** the window, `--show` changed nothing. **macOS** —
+  WebKit's own fullscreen window has the keyboard, so the Little Joan window wasn't focused: the
+  shortcut was Focus → LJ19.4-fix4's `activate_app` → nothing (the owner's finding).
+- **CI:** the fullscreen run ends its first launch with the summon during a fullscreen
+  (`smoke-fullscreen.mts` `summonRun`, rules in `smoke-fullscreen-summon.mts`): the page pings
+  (`?fs=both&ping=fs-fullscreen`; smoke.html now pings alongside `?fs=both`), "Element fullscreen"
+  at 720, `--toggle` (the shortcut's own command, without Windows' lost synthetic keys), a
+  screenshot `fs/summon-command-bar.png`, a letter typed, `--toggle` again. The main run's
+  `summonDuringFullscreenFailures` now asks every OS for `summon-fullscreen left` when its page was
+  in fullscreen at the `--show <url>`.
 
 ### LJ19.6 — The ready window over another app's full screen · strong · auto
 
@@ -9733,7 +9784,9 @@ Populated from real friction, not speculation:
   elsewhere and later: an element fullscreen "leaves by itself" 40–150 ms after entering
   (`_doFailedToEnterFullScreen` in `wk-note`'s stacks, `tileSpaceID=0` in `unified.log`), and a
   request that fails while the Dock is like that keeps it so. Never order the page window front
-  during WebKit's fullscreen (`joan::focus` activates the app instead). To see the Dock's state,
+  during WebKit's fullscreen (since LJ19.5 `joan::focus` takes the page out of it first and orders
+  nothing until WebKit has put the page back in the window and that window is on the Space on
+  screen; if that never comes, it only activates the app, as LJ19.4-fix4 did). To see the Dock's state,
   dispatch a smoke run with `LJ_DOCK_PROBE=1` in `extra_env` and read `dock-probe.jsonl` and
   `unified.log`.
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s

@@ -16,7 +16,7 @@ use objc2_foundation::NSString;
 use tauri::{AppHandle, Runtime, Webview};
 
 use crate::bar;
-use crate::fullscreen::WebKitFullscreen;
+use crate::fullscreen::{WebKitExit, WebKitFullscreen};
 use crate::keys::Platform;
 use crate::layout;
 use crate::phone;
@@ -118,6 +118,64 @@ pub fn webkit_fullscreen<R: Runtime>(
     .ok()?;
     // On the main thread with_webview has run already; elsewhere the main thread answers soon.
     answer.recv_timeout(Duration::from_millis(500)).ok()
+}
+
+/// A summon waiting for WebKit's element fullscreen to end (LJ19.5): `fullscreenState`, whether
+/// the page's WKWebView is back in the Little Joan window, and whether that window is on the Space
+/// on screen (`isOnActiveSpace`; false while the view is elsewhere). Main thread (`with_webview`);
+/// `None` when it didn't answer within 500 ms.
+pub fn webkit_fullscreen_exit<R: Runtime>(page: &Webview<R>) -> Option<WebKitExit> {
+    let ours = page.window().ns_window().ok()? as usize;
+    let (sent, answer) = mpsc::channel();
+    page.with_webview(move |webview| {
+        let view = webview.inner().cast::<AnyObject>();
+        if view.is_null() {
+            return;
+        }
+        let current = webview.ns_window().cast::<AnyObject>();
+        let state = fullscreen_state(view);
+        note_state(state.unwrap_or(WebKitFullscreen::Not));
+        let in_window = !current.is_null() && current as usize == ours;
+        // SAFETY: `current` is the view's own window, alive while the view is in it (main thread);
+        // -isOnActiveSpace returns a BOOL.
+        let on_screen = in_window && unsafe { msg_send![&*current, isOnActiveSpace] };
+        let _ = sent.send(WebKitExit {
+            state,
+            in_window,
+            on_screen,
+        });
+    })
+    .ok()?;
+    answer.recv_timeout(Duration::from_millis(500)).ok()
+}
+
+/// WebKit ends the page's element fullscreen (and picture in picture) itself: WKWebView's public
+/// `closeAllMediaPresentationsWithCompletionHandler:` (macOS 12+; nullable handler, none given),
+/// its quick exit. Only where the view has it. Queued on the main thread.
+pub fn close_media_presentations<R: Runtime>(page: &Webview<R>) {
+    let result = page.with_webview(|webview| {
+        let view = webview.inner().cast::<AnyObject>();
+        if view.is_null() {
+            return;
+        }
+        // SAFETY: `view` is the live WKWebView of this webview (main thread); respondsToSelector:
+        // takes a selector, and the method (sent only when it exists) takes a nullable block —
+        // nil here — and returns nothing.
+        unsafe {
+            let view = &*view;
+            let known: bool = msg_send![
+                view,
+                respondsToSelector: sel!(closeAllMediaPresentationsWithCompletionHandler:)
+            ];
+            if known {
+                let none: Option<&AnyObject> = None;
+                let _: () = msg_send![view, closeAllMediaPresentationsWithCompletionHandler: none];
+            }
+        }
+    });
+    if let Err(err) = result {
+        eprintln!("little-joan: could not end the page's fullscreen: {err}");
+    }
 }
 
 /// `[view fullscreenState]` where the WKWebView has it (macOS 13+).

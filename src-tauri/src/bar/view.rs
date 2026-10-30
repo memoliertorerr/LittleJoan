@@ -301,8 +301,9 @@ pub fn after_webkit_fullscreen<R: Runtime>(app: &AppHandle<R>) {
 /// The page entered or left element fullscreen: hide or bring back the bar. Starting it closes
 /// the overlay (fullscreen always wins).
 pub fn set_element_fullscreen<R: Runtime>(app: &AppHandle<R>, on: bool) {
-    ELEMENT_FULLSCREEN.store(on, Ordering::Relaxed);
+    // Logged first: a summon waiting for the change (joan/fullscreen.rs) logs after it.
     smoke::log("element-fullscreen", if on { "true" } else { "false" });
+    ELEMENT_FULLSCREEN.store(on, Ordering::Relaxed);
     if on {
         change_overlay(app, false);
     }

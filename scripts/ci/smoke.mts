@@ -103,7 +103,8 @@ import {
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
-import { fsSummonFailures, fullscreenFailures, fullscreenRun, fullscreenSummary, summonDuringFullscreenFailures, type FsDriver } from "./smoke-fullscreen.mts";
+import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } from "./smoke-fullscreen.mts";
+import { fsSummonFailures, summonDuringFullscreenFailures } from "./smoke-fullscreen-summon.mts";
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";

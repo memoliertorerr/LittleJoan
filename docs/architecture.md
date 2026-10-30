@@ -229,6 +229,9 @@ src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray ico
                                    session (pure)
 src-tauri/src/joan.rs              the page window's lifecycle: requests through `toggle`, focus,
                                    resize, quit, window events
+src-tauri/src/joan/fullscreen.rs   a summon while the page is in element fullscreen (LJ19.5): the
+                                   page asked to leave (its own exit; macOS: WebKit closes it if it
+                                   won't), the wait until the page is back in the window
 src-tauri/src/joan/rest.rs         what a summon builds and a close leaves (LJ19.4): cold create,
                                    summon from ready, close (rest or destroy), prewarm, release,
                                    Stay ready for 15 minutes' timer, the bar's process ending
@@ -345,7 +348,8 @@ src-tauri/src/spaces.rs            where a summoned window shows up (LJ19.2): ma
                                    tested)
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen;
                                    WebKitFullscreen (WKWebView's fullscreenState);
-                                   needs_fullscreen_off (WebKitGTK older than 2.52; tested)
+                                   needs_fullscreen_off (WebKitGTK older than 2.52); when a summon's
+                                   wait for WebKit's fullscreen to end is over (LJ19.5; tested)
 src-tauri/src/keys.rs              keys and presses: `Key` (what the recorder records) from
                                    KeyboardEvent.code names, Windows virtual keys and GDK key
                                    names; `Mods`; the app origin (pure, tested)
@@ -417,8 +421,8 @@ src-tauri/src/settings/site_modes.rs  the `siteModes` field: host → auto | pho
                                    the lookup that walks a name up to its last two labels (tested)
 src-tauri/src/settings/after_close.rs  the `afterClose` field (LJ19.4): ready | ready15 | hibernate,
                                    tolerant parse (default ready), what each keeps (tested)
-src-tauri/src/toggle.rs            the toggle table: (window state — hibernating, ready, open —,
-                                   command) → action (pure, tested)
+src-tauri/src/toggle.rs            the toggle table: (window state — hibernating, ready, open, the
+                                   page in fullscreen —, command) → action (pure, tested)
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
                                    --start-at-login on|off / --settings [tab] / --extension <id> /
                                    --quit parsing
@@ -438,8 +442,11 @@ scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which pane
 scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report, the probe),
                                    unit-tested
 scripts/ci/smoke-fullscreen.mts    CI: the fullscreen run (the smoke page's ?fs=both buttons,
-                                   clicked where `page-screen` puts them) and its rules;
-                                   unit-tested
+                                   clicked where `page-screen` puts them, then the summon during a
+                                   fullscreen) and its rules; unit-tested
+scripts/ci/smoke-fullscreen-summon.mts  CI: the rules of a summon during the page's fullscreen
+                                   (LJ19.5: the fullscreen run's `--toggle`, the main run's
+                                   `--show <url>`); unit-tested
 scripts/ci/smoke-fullscreen-off.mts  CI: the rules for fullscreen switched off (LJ14.1: the
                                    `linux-22.04` job, and nowhere else); unit-tested
 scripts/ci/smoke-resize.mts        CI: the resize run (bursts of `--size`, the phone-mode
@@ -574,13 +581,22 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
   like any window after a click elsewhere. AppKit allows one of fullScreenPrimary / Auxiliary /
   None, so Little Joan's own window can't be made a full-screen Space (its green button zooms);
   a page's element fullscreen is WebKit's own window and is untouched (LJ36's guard as before).
-  **A summon while WebKit shows the page in element fullscreen orders no window** (LJ19.4-fix4,
-  `joan::focus`): the app is activated (`activate_app`), which brings that full-screen page to the
-  front with the keyboard, and a navigation that follows (`--show <url>`, an extension) ends the
-  fullscreen, after which WebKit puts the page back in the window and makes it key. Ordered front,
-  the window would join WebKit's full-screen Space (`MoveToActiveSpace`); when that Space closed
-  with it inside, CI's Dock afterwards refused every app's full-screen Space for minutes
-  (Landmines). The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
+  **A summon while the page shows an element fullscreen leaves it first** (LJ19.5, the owner's
+  decision; `joan/fullscreen.rs`, every OS): the shortcut, `--show` and the tray's Open take the
+  page out of its fullscreen — the page stays, a video keeps playing in the window — and then
+  open the command bar with the keyboard in its field; the next press closes as usual (a summon
+  with a URL leaves, then loads it). The page is asked as its own Exit button would ask
+  (`document.exitFullscreen()` evaluated in it; no IPC). **macOS orders no window until WebKit has
+  put the page back in it and that window is on the Space on screen** (`fullscreenState` not in
+  fullscreen, the view in the window, `isOnActiveSpace`; LJ19.4-fix4's rule): ordered front during
+  WebKit's fullscreen, the window would join WebKit's full-screen Space (`MoveToActiveSpace`), and
+  when that Space closed with it inside, CI's Dock afterwards refused every app's full-screen Space
+  for minutes (Landmines). A page that hasn't begun leaving after 1.2 s is closed by WebKit itself
+  (`closeAllMediaPresentationsWithCompletionHandler:`, macOS 12+); after 4 s the summon gives up
+  and only activates the app (the full-screen page with the keyboard), as LJ19.4-fix4 did. Windows
+  and Linux wait for the page's fullscreen to end (WebView2's hook, WebKitGTK's
+  `leave-fullscreen`) and up to a second for the window to leave its own. Before LJ19.5 the
+  shortcut closed the window there (it had the keyboard), and `--show` changed nothing. The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
   other apps' full-screen Spaces. **Windows:** tao's `set_focus` already does what's needed:
   `SetForegroundWindow`, and when the foreground lock refuses it (a background process), an Alt
   tap through `SendInput` and again; the global shortcut's `WM_HOTKEY` grants the right anyway,
@@ -1382,7 +1398,9 @@ HTML5 element fullscreen (a video's fullscreen button) must fill the screen:
 | WebKitGTK older than 2.52 (Ubuntu 22.04's 2.50.4, the `.deb` there) | **Element fullscreen is switched off** (LJ14.1): this engine aborts the process (SIGABRT inside WebKitGTK) as a page enters element fullscreen — with WebKitGTK's own handling, and also when an `enter-fullscreen` handler returns TRUE to decline it, with or without fullscreening the window itself (LJ14's experiment), so no stopgap through that signal exists. With WebKitSettings' `enable-fullscreen` off the bare window survives the same click (LJ14.1's experiment), so the page webview gets it off whenever the runtime WebKitGTK (`webkit_get_major/minor_version`: the library actually loaded) is older than 2.52 — `fullscreen::needs_fullscreen_off`, smoke log `fullscreen-off <version>`: a page's request is refused, a video stays in the window, nothing crashes. 2.52 and newer (24.04, the AppImage's bundled 2.52) keep fullscreen. A report for Ubuntu is drafted in `docs/upstream/`. | `platform/linux.rs` + `fullscreen.rs` |
 
 `FullscreenTracker` only undoes a fullscreen it caused, so a window the user made fullscreen
-stays fullscreen when a video leaves it.
+stays fullscreen when a video leaves it. The shortcut (or `--show`, the tray's Open) during an
+element fullscreen takes the page out of it first, on every engine, then opens the command bar
+(LJ19.5; Lifecycle, "Where the window shows up").
 
 **Codecs** come from the engine: WebView2 has Edge's (H.264, AAC, VP9, AV1); WKWebView has
 Safari's (H.264, HEVC, VP9 on recent macOS); WebKitGTK uses GStreamer, so Linux needs
@@ -1476,8 +1494,10 @@ download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't t
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
 `window-spaces <label> behavior=<names> was=<names> level=<n>` (macOS: a window's collection
 behaviour was set before it was first shown, and what it had before; LJ19.2), `summon-fullscreen
-activated` (macOS: a summon found the page in WebKit's element fullscreen and activated the app
-instead of ordering the window front; LJ19.4-fix4), `window-front
+leaving | forcing | left <ms> | gave-up <ms> | window-stays-fullscreen <ms> | activated` (a summon
+found the page in element fullscreen and asked it to leave; macOS asked WebKit itself; the page
+was back in the window after `<ms>`, or the summon gave up; Windows / Linux: the window kept its
+own fullscreen; macOS: it then only activated the app; LJ19.5, LJ19.4-fix4), `window-front
 <label> focused=<bool> top=<bool>[ space=<bool>]` or `window-front <label> unknown` (about a second
 after a summon brought a window to the front: the key window of the active app / the foreground
 window / GTK's active window; nothing covering its centre, or the top of the window manager's
@@ -1537,17 +1557,21 @@ The modules below hold every decision the app makes; the native glue only calls 
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
 - **toggle** — what a shortcut press, a command-line request or Little Joan itself does (LJ19.4
-  added the ready state, `Prewarm` and `Release`):
+  added the ready state, `Prewarm` and `Release`; LJ19.5 the page in fullscreen):
 
-  | State             | Toggle  | Show(None) | Show(url)          | Hide    | Prewarm | Release |
-  |-------------------|---------|------------|--------------------|---------|---------|---------|
-  | Hibernating       | Create  | Create     | Create(url)        | Nothing | Prewarm | Nothing |
-  | Ready, bar alive  | Summon  | Summon     | Summon(url)        | Nothing | Nothing | Release |
-  | Ready, bar gone   | Rebuild | Rebuild    | Rebuild(url)       | Nothing | Nothing | Release |
-  | Open, focused     | Close   | Focus      | FocusAndNavigate   | Close   | Nothing | Nothing |
-  | Open, not focused | Focus   | Focus      | FocusAndNavigate   | Close   | Nothing | Nothing |
+  | State                  | Toggle          | Show(None)      | Show(url)        | Hide    | Prewarm | Release |
+  |------------------------|-----------------|-----------------|------------------|---------|---------|---------|
+  | Hibernating            | Create          | Create          | Create(url)      | Nothing | Prewarm | Nothing |
+  | Ready, bar alive       | Summon          | Summon          | Summon(url)      | Nothing | Nothing | Release |
+  | Ready, bar gone        | Rebuild         | Rebuild         | Rebuild(url)     | Nothing | Nothing | Release |
+  | Open, page full screen | LeaveFullscreen | LeaveFullscreen | FocusAndNavigate | Close   | Nothing | Nothing |
+  | Open, focused          | Close           | Focus           | FocusAndNavigate | Close   | Nothing | Nothing |
+  | Open, not focused      | Focus           | Focus           | FocusAndNavigate | Close   | Nothing | Nothing |
 
-  `Close` leaves the window ready or destroys it as "After closing" says.
+  `Close` leaves the window ready or destroys it as "After closing" says. "Page full screen" is
+  the page showing an element fullscreen, focused or not: `LeaveFullscreen` takes the page out of
+  it, then focuses the window with the command bar open; every focus leaves it first
+  (joan/fullscreen.rs), so a URL loads after it.
 - **after_close** — `afterClose`: `ready` (default) | `ready15` | `hibernate`, anything else the
   default; whether a close keeps the window and the bar, and for how long.
 
@@ -1733,7 +1757,16 @@ and pushes to `main`:
   `smoke-fullscreen-site.log`). The rules: every element-fullscreen path enters, holds until the
   page's own exit and leaves when asked (required on Windows and Linux; on macOS whenever the
   click reached the page), the player's iOS route under an iPhone agent is informational, and on
-  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Then the
+  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Last in
+  the first launch (LJ19.5), the **summon during the fullscreen**: the page (it pings the smoke
+  server, `?ping=fs-fullscreen`) enters "Element fullscreen" at 720, then `--toggle` — the
+  shortcut's own command — must not close the window but leave the fullscreen (`summon-fullscreen
+  left`, after `wk-fullscreen not` on macOS, `element-fullscreen false` elsewhere), then open the
+  command bar (`overlay true`); the page goes on (no `page-started`, pings a second later); a
+  letter typed then reaches the command bar's field (`typed=1`; Windows and Linux, macOS recorded);
+  a second `--toggle` closes the window (`fs/summon-command-bar.png`; `summary.json`'s
+  `fullscreenRun.summon`). The main run's `--show <url>` during its page's fullscreen must leave
+  the fullscreen first too (`summon-fullscreen left`, every OS). Then the
   **resize run** (`smoke-resize.mts`, LJ39), its own launch in a dark two-color theme with the
   window created 820×600 (so every width stays on the runner's screen): the smoke page, `--size
   380x600`, a burst of 12 `--size` steps from 380 to 820 px wide sent through single-instance 30 ms
