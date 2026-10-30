@@ -167,6 +167,38 @@ pub fn saved_changed<R: Runtime>(
     }
 }
 
+/// Smoke tests only (LJ19.7; `LITTLEJOAN_SMOKE_SETTINGS_QUIT=1` in the app's environment, ignored
+/// without the smoke log): `SMOKE_QUIT_AFTER` after the settings page asked for its settings, its
+/// "Quit Little Joan" button is clicked — the page's own handler runs and calls
+/// `quit_from_settings` as a click would. CI has no driver for the window's controls (the button
+/// sits below the fold of the General tab).
+pub fn smoke_click_quit<R: Runtime>(app: &AppHandle<R>) {
+    if !smoke::enabled()
+        || std::env::var("LITTLEJOAN_SMOKE_SETTINGS_QUIT")
+            .ok()
+            .as_deref()
+            != Some("1")
+    {
+        return;
+    }
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("little-joan-smoke-quit".into())
+        .spawn(move || {
+            std::thread::sleep(SMOKE_QUIT_AFTER);
+            if let Some(window) = app.get_webview_window(LABEL) {
+                smoke::log("settings-quit-click", "");
+                let _ = window.eval("document.getElementById(\"quit\")?.click()");
+            }
+        });
+    if let Err(err) = spawned {
+        eprintln!("little-joan: could not plan the smoke test's click: {err}");
+    }
+}
+
+/// How long after Settings loaded the smoke test's click comes (its screenshot is taken first).
+const SMOKE_QUIT_AFTER: std::time::Duration = std::time::Duration::from_secs(4);
+
 /// When the window closes: the shortcut it may have paused while recording comes back, and a
 /// theme it was previewing without saving (Cancel, or the close button) gives way to the saved
 /// one in the page window.

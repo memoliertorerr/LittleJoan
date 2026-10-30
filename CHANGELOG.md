@@ -6,6 +6,27 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Quit Little Joan from Settings.** Settings → General now ends with a **Quit** button, the same
+  quit as the tray's and the command bar's. Changes in Settings you haven't saved are dropped, as
+  with Cancel; the note under the button says so.
+
+### Fixed
+- **The shortcut works while a video is full screen.** Pressing it — or `--show`, or the tray's
+  Open — while a page in Little Joan shows a video (or anything else) full screen now brings the
+  page back into the window, the video still playing, and opens the command bar ready for typing;
+  press the shortcut again to close Little Joan as usual. Before, on a Mac the video simply stayed
+  full screen and the command bar never came; on Windows and Linux the shortcut closed the window
+  (and the video with it). An address opened that way (`--show <url>`) also leaves full screen
+  first, then loads.
+- **On a Mac, summoning Little Joan over another app's full screen no longer switches to the
+  desktop now and then** (0.2.1-beta.1's known issue, about 1 in 50 of CI's runs): the window that
+  stays ready is now prepared for the Space you are on from the moment it is built. None in 150
+  runs since.
+- **On Windows, pressing the shortcut while Little Joan is in front closes it every time.** In
+  testing (after a video's full screen, with the keyboard in the command bar) it sometimes only
+  brought the window forward.
+
 ## [0.2.1-beta.1] — 2026-10-29
 
 A pre-release of v0.2.1: Little Joan opens instantly. It now stays ready after you close it (your

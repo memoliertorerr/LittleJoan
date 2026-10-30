@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-quit-from-settings"
+description = "Enables the quit_from_settings command without any pre-configured scope."
+commands.allow = ["quit_from_settings"]
+
+[[permission]]
+identifier = "deny-quit-from-settings"
+description = "Denies the quit_from_settings command without any pre-configured scope."
+commands.deny = ["quit_from_settings"]

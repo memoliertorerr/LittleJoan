@@ -182,6 +182,8 @@ ui/settings/reserved-shortcuts.ts  the OSes' own shortcuts and the editing keys 
 ui/settings/sites-logic.ts         General's "Phone or desktop per site": the user's entries and
                                    the built-in ones, Remove / Reset, the draft (pure, unit-tested)
 ui/settings/sites.ts               that list in the General tab; DOM glue only
+ui/settings/quit.ts                General's "Quit Little Joan" (LJ19.7): the button calls
+                                   quit_from_settings once (unit-tested with a fake button)
 docs/extensions.md                 the extension authors' guide (experimental)
 docs/trademark-check.md            where to check that the name is free before a wider launch or a
                                    store listing (a note for the owner, not legal advice)
@@ -204,7 +206,8 @@ src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_
                                    report_timing; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, clear history, preview a theme, list / reload
-                                   extensions, show their folder, close
+                                   extensions, show their folder, read the keys, quit
+                                   (quit_from_settings, LJ19.7), close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
@@ -229,6 +232,9 @@ src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray ico
                                    session (pure)
 src-tauri/src/joan.rs              the page window's lifecycle: requests through `toggle`, focus,
                                    resize, quit, window events
+src-tauri/src/joan/fullscreen.rs   a summon while the page is in element fullscreen (LJ19.5): the
+                                   page asked to leave (its own exit; macOS: WebKit closes it if it
+                                   won't), the wait until the page is back in the window
 src-tauri/src/joan/rest.rs         what a summon builds and a close leaves (LJ19.4): cold create,
                                    summon from ready, close (rest or destroy), prewarm, release,
                                    Stay ready for 15 minutes' timer, the bar's process ending
@@ -295,7 +301,8 @@ src-tauri/src/phone/agent.rs       Windows' phone agent with client hints: CDP
                                    check (pure, tested; built on Windows and in tests)
 src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the built-in sites for
                                    Settings
-src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan")
+src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan");
+                                   Settings: quit_from_settings (General's, LJ19.7)
 src-tauri/src/commands/timing.rs   the bar: report_timing (its start's marks; smoke tests only,
                                    LJ19.1)
 src-tauri/src/commands/downloads.rs  the bar: reveal_download (the toolbar's "Show in folder")
@@ -345,7 +352,8 @@ src-tauri/src/spaces.rs            where a summoned window shows up (LJ19.2): ma
                                    tested)
 src-tauri/src/fullscreen.rs        FullscreenTracker: element fullscreen ↔ window fullscreen;
                                    WebKitFullscreen (WKWebView's fullscreenState);
-                                   needs_fullscreen_off (WebKitGTK older than 2.52; tested)
+                                   needs_fullscreen_off (WebKitGTK older than 2.52); when a summon's
+                                   wait for WebKit's fullscreen to end is over (LJ19.5; tested)
 src-tauri/src/keys.rs              keys and presses: `Key` (what the recorder records) from
                                    KeyboardEvent.code names, Windows virtual keys and GDK key
                                    names; `Mods`; the app origin (pure, tested)
@@ -417,8 +425,8 @@ src-tauri/src/settings/site_modes.rs  the `siteModes` field: host → auto | pho
                                    the lookup that walks a name up to its last two labels (tested)
 src-tauri/src/settings/after_close.rs  the `afterClose` field (LJ19.4): ready | ready15 | hibernate,
                                    tolerant parse (default ready), what each keeps (tested)
-src-tauri/src/toggle.rs            the toggle table: (window state — hibernating, ready, open —,
-                                   command) → action (pure, tested)
+src-tauri/src/toggle.rs            the toggle table: (window state — hibernating, ready, open, the
+                                   page in fullscreen —, command) → action (pure, tested)
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
                                    --start-at-login on|off / --settings [tab] / --extension <id> /
                                    --quit parsing
@@ -438,8 +446,11 @@ scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which pane
 scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report, the probe),
                                    unit-tested
 scripts/ci/smoke-fullscreen.mts    CI: the fullscreen run (the smoke page's ?fs=both buttons,
-                                   clicked where `page-screen` puts them) and its rules;
-                                   unit-tested
+                                   clicked where `page-screen` puts them, then the summon during a
+                                   fullscreen) and its rules; unit-tested
+scripts/ci/smoke-fullscreen-summon.mts  CI: the rules of a summon during the page's fullscreen
+                                   (LJ19.5: the fullscreen run's `--toggle`, the main run's
+                                   `--show <url>`); unit-tested
 scripts/ci/smoke-fullscreen-off.mts  CI: the rules for fullscreen switched off (LJ14.1: the
                                    `linux-22.04` job, and nowhere else); unit-tested
 scripts/ci/smoke-resize.mts        CI: the resize run (bursts of `--size`, the phone-mode
@@ -452,8 +463,8 @@ scripts/ci/smoke-quick.mts         CI: the quick-commands run ("mobile", "dark",
 scripts/ci/smoke-keymap.mts        CI: the keymap run (History on Ctrl/Cmd+Shift+K: the new key,
                                    the old one, macOS's menu) and its rules; unit-tested
 scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a second launch, Quit
-                                   from the command bar, a Wayland session) and its rules;
-                                   unit-tested
+                                   from the command bar, Settings' Quit and a relaunch, a Wayland
+                                   session) and its rules; unit-tested
 scripts/ci/smoke-downloads.mts     CI: the downloads run (two attachments, one refused while a
                                    panel shows, the window closed during a slow one) and its rules;
                                    unit-tested
@@ -552,7 +563,10 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
   (a close hid it).
 - **The prewarm** (`prewarm_after_launch`, Stay ready only): `PREWARM_AFTER` (3 s) after setup,
   after the tray and the shortcut, `Command::Prewarm` builds the hidden window and the bar — no
-  page, no history, nothing shown, nothing focused, the bar's memory target low (Windows). Never
+  page, no history, nothing shown, nothing focused, the bar's memory target low (Windows). On
+  macOS the window gets its collection behaviour as it is built (LJ19.6; every window does, cold
+  ones again before the show) and no `orderOut` (it was never shown): until its first summon
+  WindowServer hears of it exactly as of a window built at its summon. Never
   on the first run's welcome (that window stays ready when it closes) nor while quitting; a
   summon that came first makes it do nothing. Switching "After closing" to a ready mode prewarms
   at once; switching to Hibernate destroys a resting window at once (`after_close_changed`).
@@ -564,8 +578,9 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
   `released bar-gone`), never a blank window. A bar on screen is reloaded instead.
 - **Where the window shows up (LJ19.2): where the user is, in front with the keyboard — over
   another app's full-screen window too — and never always-on-top.** Like Little Arc: it opens
-  where you are and goes behind other windows once you click them. **macOS:** before the window
-  (and Settings) is first shown, `platform/mac/spaces.rs` gives its NSWindow the collection
+  where you are and goes behind other windows once you click them. **macOS:** as the page window
+  is built (LJ19.6: the ready window seconds or hours before its first summon) and again before
+  every show (and Settings before it is first shown), `platform/mac/spaces.rs` gives its NSWindow the collection
   behaviour `spaces::summoned` — `MoveToActiveSpace` (made active, it comes to the Space on
   screen instead of taking the user to its own; not `CanJoinAllSpaces`, which would put the open
   window on every desktop and full-screen Space at once) and `FullScreenAuxiliary` (it may show on
@@ -574,13 +589,22 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
   like any window after a click elsewhere. AppKit allows one of fullScreenPrimary / Auxiliary /
   None, so Little Joan's own window can't be made a full-screen Space (its green button zooms);
   a page's element fullscreen is WebKit's own window and is untouched (LJ36's guard as before).
-  **A summon while WebKit shows the page in element fullscreen orders no window** (LJ19.4-fix4,
-  `joan::focus`): the app is activated (`activate_app`), which brings that full-screen page to the
-  front with the keyboard, and a navigation that follows (`--show <url>`, an extension) ends the
-  fullscreen, after which WebKit puts the page back in the window and makes it key. Ordered front,
-  the window would join WebKit's full-screen Space (`MoveToActiveSpace`); when that Space closed
-  with it inside, CI's Dock afterwards refused every app's full-screen Space for minutes
-  (Landmines). The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
+  **A summon while the page shows an element fullscreen leaves it first** (LJ19.5, the owner's
+  decision; `joan/fullscreen.rs`, every OS): the shortcut, `--show` and the tray's Open take the
+  page out of its fullscreen — the page stays, a video keeps playing in the window — and then
+  open the command bar with the keyboard in its field; the next press closes as usual (a summon
+  with a URL leaves, then loads it). The page is asked as its own Exit button would ask
+  (`document.exitFullscreen()` evaluated in it; no IPC). **macOS orders no window until WebKit has
+  put the page back in it and that window is on the Space on screen** (`fullscreenState` not in
+  fullscreen, the view in the window, `isOnActiveSpace`; LJ19.4-fix4's rule): ordered front during
+  WebKit's fullscreen, the window would join WebKit's full-screen Space (`MoveToActiveSpace`), and
+  when that Space closed with it inside, CI's Dock afterwards refused every app's full-screen Space
+  for minutes (Landmines). A page that hasn't begun leaving after 1.2 s is closed by WebKit itself
+  (`closeAllMediaPresentationsWithCompletionHandler:`, macOS 12+); after 4 s the summon gives up
+  and only activates the app (the full-screen page with the keyboard), as LJ19.4-fix4 did. Windows
+  and Linux wait for the page's fullscreen to end (WebView2's hook, WebKitGTK's
+  `leave-fullscreen`) and up to a second for the window to leave its own. Before LJ19.5 the
+  shortcut closed the window there (it had the keyboard), and `--show` changed nothing. The accessory activation policy (no Dock icon) stays — it is what lets an app's windows join
   other apps' full-screen Spaces. **Windows:** tao's `set_focus` already does what's needed:
   `SetForegroundWindow`, and when the foreground lock refuses it (a background process), an Alt
   tap through `SendInput` and again; the global shortcut's `WM_HOTKEY` grants the right anyway,
@@ -679,7 +703,7 @@ permission, and capabilities grant them per webview label or window:
 | Capability | Scope | Grants |
 |---|---|---|
 | `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `allow-keymap-info` (the bar and Settings only, a test says), `allow-reveal-download` (the toolbar's "Show in folder"; only the bar, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
-| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `allow-keymap-info`, `core:window:allow-close` |
+| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `allow-keymap-info`, `allow-quit-from-settings` (General's Quit Little Joan; only Settings, a test says), `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
@@ -717,6 +741,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `keymap_info()` | Settings' Keyboard tab (LJ44); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut, shortcutProblem, portalShortcut, systemShortcuts }` — `portalShortcut` `{ trigger }` while the XDG GlobalShortcuts portal holds the summon shortcut (LJ17), else `null` — — the last macOS's own shortcuts as read from its preferences (`[{ id, enabled, accelerator }]`, empty elsewhere; smoke log `system-shortcuts <n> keys=<k>`) — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
 | `reveal_download()` | the toolbar's **Show in folder**, after a download was saved (LJ15) | shows the last file saved in this window in the file manager, selected (`tauri_plugin_opener::reveal_item_in_dir`) — which file is Rust's, never the bar's; an error when there is none |
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
+| `quit_from_settings()` | Settings → General's **Quit Little Joan** (LJ19.7) | the same `joan::quit`; logs `settings-quit`, then `quit`. A command of its own so the settings window gets no bar command: `capability_tests.rs` allows it to the settings window's capability only (never the bar's, which keeps `quit_app`, never the page). What Settings hasn't saved goes with its window, as with Cancel |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) and its **Settings** row (tab `general`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
@@ -837,7 +862,7 @@ all fields, whichever tab they are on):
 
 | Tab | Holds |
 |---|---|
-| General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, **After closing** (LJ19.4, `afterClose`: **Stay ready** / **Stay ready for 15 minutes** / **Hibernate**, with a note under the list saying what the chosen one does — "Opens instantly; holds about N MB more memory while closed than Hibernate" with this OS's figure from `READY_MEMORY_MB` (CI's own-memory numbers: macOS 30, Windows 110, Linux 200), "… then hibernates", "Uses the least memory while closed; opens a little slower" — and that closing always ends the page; drawn as text; it takes effect on Save, at once — `after_close_changed`), search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login |
+| General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, **After closing** (LJ19.4, `afterClose`: **Stay ready** / **Stay ready for 15 minutes** / **Hibernate**, with a note under the list saying what the chosen one does — "Opens instantly; holds about N MB more memory while closed than Hibernate" with this OS's figure from `READY_MEMORY_MB` (CI's own-memory numbers: macOS 30, Windows 110, Linux 200), "… then hibernates", "Uses the least memory while closed; opens a little slower" — and that closing always ends the page; drawn as text; it takes effect on Save, at once — `after_close_changed`), search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login, and last **Quit Little Joan** (LJ19.7: a Quit button, `quit_from_settings`; the note under it says that changes not saved are dropped, as with Cancel — the window goes with the app; `ui/settings/quit.ts`, tested) |
 | Keyboard | **Summon Little Joan** — the global shortcut's recorder (moved here from General; it pauses the shortcut while it listens, as before), Reset when it isn't the default; on a Linux Wayland session without the portal a note to bind `little-joan --toggle` instead; while the portal holds the shortcut (LJ17) the desktop's key as text instead of the recorder (no Reset, no problems: the desktop's key is never judged, so it can't block Save, and Reset all leaves the preferred trigger alone), with "Change it in your desktop's keyboard settings." — and General's line shows that key with the same note instead of **Change…** — then **Little Joan's keys**: every keymap action (`keymap_info`) with its key as a recorder button (the next key with a modifier, or an F-key; a letter is the one the key types in the user's layout; Esc cancels, Backspace means no key), **No key**, **Reset** when it isn't the default, its problems under it; **Reset all** at the bottom (every key and the summon shortcut). Problems (`keyboard-logic.ts`, the keymap's own rules): errors block Save and say why — "⌘L is already Open Location", "That's the shortcut that summons Little Joan", "Plain keys type text — add ⌘ or ⌃", "On macOS a key needs ⌘ or ⌃", the editing keys ("⌘C is used for editing in pages") —; warnings don't — the OSes' reserved shortcuts ("macOS uses ⌘Space for Spotlight", `reserved-shortcuts.ts`, curated from the OSes' documentation; `Super+*` on Windows and Linux), "Ctrl+Alt is AltGr on many keyboards". **On macOS the user's own changes refine the curated table** (decided by a CI runner's export, LJ44): Rust reads the `com.apple.symbolichotkeys` domain (NSUserDefaults, read-only; `system_shortcuts.rs`), which lists only entries that were written — an entry switched off (or moved to another key) drops that curated warning (curated macOS entries carry their domain id: Spotlight 64, input sources 60 / 61, screenshots 28 / 30 / 184, …), and an entry that is on with a key warns there (under the curated name when its id is known, else "one of its keyboard shortcuts"); entries without a key say nothing, so the curated defaults stay. A saved summon shortcut that isn't one shows as written and is an error until it is recorded again or Reset. On Windows a note says WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these. The summon recorder gets the same rules (one of Little Joan's keys → error, a reserved one → warning). When the saved shortcut couldn't be registered at launch (`shortcut::settle` keeps `AppState::shortcut_problem`: what was wanted, what is active instead, `taken` or `invalid`; `get_settings` and `keymap_info` report it), Keyboard and General say so: "⌘⇧K couldn't be registered: another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little Joan has no shortcut now."); a Save whose shortcut registers clears it. Save sends `keys` only when they were edited |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
 | Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
@@ -1382,7 +1407,9 @@ HTML5 element fullscreen (a video's fullscreen button) must fill the screen:
 | WebKitGTK older than 2.52 (Ubuntu 22.04's 2.50.4, the `.deb` there) | **Element fullscreen is switched off** (LJ14.1): this engine aborts the process (SIGABRT inside WebKitGTK) as a page enters element fullscreen — with WebKitGTK's own handling, and also when an `enter-fullscreen` handler returns TRUE to decline it, with or without fullscreening the window itself (LJ14's experiment), so no stopgap through that signal exists. With WebKitSettings' `enable-fullscreen` off the bare window survives the same click (LJ14.1's experiment), so the page webview gets it off whenever the runtime WebKitGTK (`webkit_get_major/minor_version`: the library actually loaded) is older than 2.52 — `fullscreen::needs_fullscreen_off`, smoke log `fullscreen-off <version>`: a page's request is refused, a video stays in the window, nothing crashes. 2.52 and newer (24.04, the AppImage's bundled 2.52) keep fullscreen. A report for Ubuntu is drafted in `docs/upstream/`. | `platform/linux.rs` + `fullscreen.rs` |
 
 `FullscreenTracker` only undoes a fullscreen it caused, so a window the user made fullscreen
-stays fullscreen when a video leaves it.
+stays fullscreen when a video leaves it. The shortcut (or `--show`, the tray's Open) during an
+element fullscreen takes the page out of it first, on every engine, then opens the command bar
+(LJ19.5; Lifecycle, "Where the window shows up").
 
 **Codecs** come from the engine: WebView2 has Edge's (H.264, AAC, VP9, AV1); WKWebView has
 Safari's (H.264, HEVC, VP9 on recent macOS); WebKitGTK uses GStreamer, so Linux needs
@@ -1476,8 +1503,12 @@ download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't t
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
 `window-spaces <label> behavior=<names> was=<names> level=<n>` (macOS: a window's collection
 behaviour was set before it was first shown, and what it had before; LJ19.2), `summon-fullscreen
-activated` (macOS: a summon found the page in WebKit's element fullscreen and activated the app
-instead of ordering the window front; LJ19.4-fix4), `window-front
+leaving | forcing | left <ms> | gave-up <ms> | window-stays-fullscreen <ms> | activated` (a summon
+found the page in element fullscreen and asked it to leave; macOS asked WebKit itself; the page
+was back in the window after `<ms>`, or the summon gave up; Windows / Linux: the window kept its
+own fullscreen; macOS: it then only activated the app; LJ19.5, LJ19.4-fix4), `window-state open
+focused=<bool> page-fullscreen=<bool> tao-focused=<bool>` (what the toggle saw for a request on an
+open window, and tao's own focus; LJ19.5), `window-front
 <label> focused=<bool> top=<bool>[ space=<bool>]` or `window-front <label> unknown` (about a second
 after a summon brought a window to the front: the key window of the active app / the foreground
 window / GTK's active window; nothing covering its centre, or the top of the window manager's
@@ -1491,9 +1522,10 @@ the windows get those collection-behaviour bits instead, for CI experiments only
 [app=<pid|own>] [stack=<module:symbol < …>]` (macOS: AppKit's window did become / resign key, will /
 did enter / exit full screen, the app did become / resign active or hide, NSWorkspace's active
 Space did change and app did activate — a window's state with it, the key, exit and resign ones
-with the call stack that posted them; LJ19.4-fix4), `wk-context <page-adding|page-added|shown>
-<window's state>` (macOS: the page window just before and after the page's webview is added, and
-once a summon's show and raise ran on the main thread; LJ19.4-fix4), and next to the logs
+with the call stack that posted them; LJ19.4-fix4), `wk-context <page-adding|page-added|before-show|shown>
+<window's state>` (macOS: the page window just before and after the page's webview is added, just
+before a summon orders it — `space=` then says whether ordering it puts it on the Space on screen,
+LJ19.6 —, and once a summon's show and raise ran on the main thread; LJ19.4-fix4), and next to the logs
 `unified.log` (macOS: the unified log of the whole smoke run — the Dock and Stage Manager without
 their per-frame chatter, WebKit's Fullscreen category, AppKit's full-screen lines) and, with
 `LJ_DOCK_PROBE=1` in a run's `extra_env` (CI experiments only), `dock-probe.jsonl` (before each
@@ -1537,17 +1569,24 @@ The modules below hold every decision the app makes; the native glue only calls 
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
 - **toggle** — what a shortcut press, a command-line request or Little Joan itself does (LJ19.4
-  added the ready state, `Prewarm` and `Release`):
+  added the ready state, `Prewarm` and `Release`; LJ19.5 the page in fullscreen):
 
-  | State             | Toggle  | Show(None) | Show(url)          | Hide    | Prewarm | Release |
-  |-------------------|---------|------------|--------------------|---------|---------|---------|
-  | Hibernating       | Create  | Create     | Create(url)        | Nothing | Prewarm | Nothing |
-  | Ready, bar alive  | Summon  | Summon     | Summon(url)        | Nothing | Nothing | Release |
-  | Ready, bar gone   | Rebuild | Rebuild    | Rebuild(url)       | Nothing | Nothing | Release |
-  | Open, focused     | Close   | Focus      | FocusAndNavigate   | Close   | Nothing | Nothing |
-  | Open, not focused | Focus   | Focus      | FocusAndNavigate   | Close   | Nothing | Nothing |
+  | State                  | Toggle          | Show(None)      | Show(url)        | Hide    | Prewarm | Release |
+  |------------------------|-----------------|-----------------|------------------|---------|---------|---------|
+  | Hibernating            | Create          | Create          | Create(url)      | Nothing | Prewarm | Nothing |
+  | Ready, bar alive       | Summon          | Summon          | Summon(url)      | Nothing | Nothing | Release |
+  | Ready, bar gone        | Rebuild         | Rebuild         | Rebuild(url)     | Nothing | Nothing | Release |
+  | Open, page full screen | LeaveFullscreen | LeaveFullscreen | FocusAndNavigate | Close   | Nothing | Nothing |
+  | Open, focused          | Close           | Focus           | FocusAndNavigate | Close   | Nothing | Nothing |
+  | Open, not focused      | Focus           | Focus           | FocusAndNavigate | Close   | Nothing | Nothing |
 
-  `Close` leaves the window ready or destroys it as "After closing" says.
+  `Close` leaves the window ready or destroys it as "After closing" says. "Focused" is
+  `platform::has_keyboard`: on Windows the window is the foreground window (tao's `is_focused`
+  follows the top-level window's own focus messages and says false once a webview inside has the
+  keyboard; LJ19.5), on macOS the key window, on Linux GTK's toplevel focus. "Page full screen" is
+  the page showing an element fullscreen, focused or not: `LeaveFullscreen` takes the page out of
+  it, then focuses the window with the command bar open; every focus leaves it first
+  (joan/fullscreen.rs), so a URL loads after it.
 - **after_close** — `afterClose`: `ready` (default) | `ready15` | `hibernate`, anything else the
   default; whether a close keeps the window and the bar, and for how long.
 
@@ -1733,7 +1772,16 @@ and pushes to `main`:
   `smoke-fullscreen-site.log`). The rules: every element-fullscreen path enters, holds until the
   page's own exit and leaves when asked (required on Windows and Linux; on macOS whenever the
   click reached the page), the player's iOS route under an iPhone agent is informational, and on
-  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Then the
+  macOS no `page-bounds` / `page-visible` line may come while `wk-fullscreen` isn't `not`. Last in
+  the first launch (LJ19.5), the **summon during the fullscreen**: the page (it pings the smoke
+  server, `?ping=fs-fullscreen`) enters "Element fullscreen" at 720, then `--toggle` — the
+  shortcut's own command — must not close the window but leave the fullscreen (`summon-fullscreen
+  left`, after `wk-fullscreen not` on macOS, `element-fullscreen false` elsewhere), then open the
+  command bar (`overlay true`); the page goes on (no `page-started`, pings a second later); a
+  letter typed then reaches the command bar's field (`typed=1`; Windows and Linux, macOS recorded);
+  a second `--toggle` closes the window (`fs/summon-command-bar.png`; `summary.json`'s
+  `fullscreenRun.summon`). The main run's `--show <url>` during its page's fullscreen must leave
+  the fullscreen first too (`summon-fullscreen left`, every OS). Then the
   **resize run** (`smoke-resize.mts`, LJ39), its own launch in a dark two-color theme with the
   window created 820×600 (so every width stays on the runner's screen): the smoke page, `--size
   380x600`, a burst of 12 `--size` steps from 380 to 820 px wide sent through single-instance 30 ms
@@ -1796,8 +1844,14 @@ and pushes to `main`:
   `tray-visible false` after `shortcut-registered` (and never `true`); a second launch without
   flags must log `window-created`; typing `quit` in its command bar, ↓ ↓ Enter (the search row,
   then "Quit Little Joan"; `command-quit.png`) must log `quit` and the process must end by itself
-  (Windows, Linux; best effort on macOS); a relaunch opens Settings → General with the switch off
-  (`settings-general-tray.png`); and on Linux a launch with `XDG_SESSION_TYPE=wayland` in its
+  (Windows, Linux; best effort on macOS); a relaunch sets a login on the smoke page
+  (`?persist=set`) and opens Settings → General with the switch off (`settings-general-tray.png`),
+  and 4 s after Settings loaded its **Quit Little Joan** button is clicked (LJ19.7; a smoke-only
+  click, `LITTLEJOAN_SMOKE_SETTINGS_QUIT=1` — CI has no driver for Settings' controls — through the
+  page's own handler: `settings-quit-click`): the app must log `settings-quit` and `quit` and end by
+  itself within 15 s, and a relaunch on the same data folder (`smoke-tray-settings-after.log`) must
+  be a later launch whose page still has the login (persistent cookie and localStorage, no session
+  cookie; every OS); and on Linux a launch with `XDG_SESSION_TYPE=wayland` in its
   environment (still Xvfb's X11 underneath, but a Wayland session to Little Joan, where the X11
   shortcut can't fire) must log `tray-visible true` despite the setting (logs `smoke-tray.log`,
   `smoke-tray-settings.log`, `smoke-tray-wayland.log`; `summary.json`'s `trayRun`). Then the
@@ -1838,7 +1892,12 @@ and pushes to `main`:
   default behaviour, with Little Joan's, and with Little Joan's + canJoinAllApplications, ordered
   front over the full-screen window. Screenshots `over-fullscreen.png`,
   `over-fullscreen-shortcut.png`, `over-fullscreen-settings.png` (log `smoke-spaces.log`, the
-  helper's `fs-helper.jsonl`; `summary.json`'s `spacesRun`). Then the **rest runs**
+  helper's `fs-helper.jsonl`; `summary.json`'s `spacesRun`). For CI experiments (LJ19.6),
+  `LJ_SPACES_REPEAT=<n>` in a dispatched run's `extra_env` runs that launch n times in all, each
+  with a fresh full-screen helper and a fresh Little Joan launch (`smoke-spaces-<i>.log`, no probes
+  or screenshots after the first), with every launch's rules (`summary.json`'s `spacesRepeat`, a line
+  `over-fullscreen launches: <failed> of <n> failed` in the job summary); one launch by default.
+  Then the **rest runs**
   (`smoke-rest.mts`, LJ19.4), one launch per "After closing" mode. Each summons the smoke page's
   `?ping=<id>` (a ping to the smoke server every 250 ms while it runs), closes it, and requires no
   ping later than 2 s after the app's `closing` line and none of the web processes that came with

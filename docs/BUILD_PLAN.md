@@ -97,6 +97,11 @@
 | LJ19.2 | *(added mid-plan 2026-10-22)* Show over full-screen apps and on the current Space: macOS windows join the active Space and may show over other apps' full-screen windows (moveToActiveSpace + fullScreenAuxiliary, the normal level), Linux raises with a fresh X server timestamp, Windows checked; an over-full-screen smoke run on every OS | strong | auto | ✅ done (CI: see notes) |
 | LJ19.3 | *(added mid-plan 2026-10-22)* Open-source polish: issue and PR templates, the Contributor Covenant code of conduct, README badges, a trademark-check note for the owner (PR #30, docs-only, run in a second checkout in parallel with LJ19.1) | standard | auto | ✅ done — PR #30, merged as 60c1db3 |
 | LJ19.4 | *(added mid-plan 2026-10-29)* Summon speed: "After closing" — Stay ready (the owner's default: the hidden window and the trusted bar stay, the page never), for 15 minutes, or Hibernate; the page webview built after the bar; a prewarm after launch; no theme flash; measured per OS and mode (cold vs ready, memory at rest, typed keys, "nothing of the page survives") | strong | auto | ✅ done (CI numbers: see notes; fix4: a summon during the page's macOS fullscreen broke the Dock — see notes) |
+| LJ19.5 | *(v0.2.1; owner, 2026-10-30)* The shortcut while a page is full screen: the page leaves full screen (its video keeps playing in the window), then the command bar opens, ready to type — every OS; never ordering the window into WebKit's full-screen Space | strong | auto | ✅ done (CI: see notes) |
+| LJ19.6 | *(v0.2.1; owner, 2026-10-30)* The ready window over another app's full screen: find why it sometimes lands on the desktop Space (about 1 in 20 macOS runs), fix it, prove it with a repeated over-fullscreen launch | strong | auto | ✅ done (CI: see notes) |
+| LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ✅ done (CI: see notes) |
+| LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | ⬜ todo |
+| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -135,8 +140,9 @@
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ⬜ todo |
 | LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ⬜ todo |
-| LJ58 | *(round 4, after v0.3; owner, 2026-10-29)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step) | strong | auto | ⬜ todo — needs the owner's Apple secrets |
+| LJ58 | *(moved into v0.2.1 by the owner, 2026-10-30; was round 4)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step; the owner has the Developer account since 2026-10-30) | strong | auto | ⬜ todo — needs the owner's Apple secrets |
 | LJ59 | *(round 4, after v0.3; owner, 2026-10-29)* Auto-update: tauri-plugin-updater, signed update manifests published with the GitHub releases | strong | review | ⬜ todo — needs the owner's updater signing key as a GitHub secret |
+| LJ60 | *(after round 4; owner, 2026-10-30)* A Mac App Store build: the App Sandbox and its entitlements, login through SMAppService, single-instance inside the container, no updater, Apple Distribution signing; App Review's questions answered before submitting | strong | review | ⬜ todo — needs the owner's App Store certificates, profile and app record |
 
 **Overall status: v0.1.0 (2026-10-17). LJ1–LJ10 passed the user's own check on macOS. Added
 mid-plan: LJ10.1–LJ10.2 (the always-visible URL bar and the project files) and LJ10.3 (phone mode
@@ -251,9 +257,28 @@ owner adds an updater signing key; the agent never creates, sees or handles priv
 **Execution order from here: 19.4 → (a pre-release the coordinator makes) → 21 → 22 → 23 → 24 → 25
 (LJ56 only) → 26 → round 4 (58 → 59).** LJ19.4 is PR #34, merged as 77a9623 (main's CI
 40887886884 green, 18 jobs). On the owner's word (2026-10-29: "let me see the new release with
-guided setup") the coordinator publishes it as the **pre-release `v0.2.1-beta.1`**, built from the
-merge commit of the release PR on `lj/release-0.2.1-beta.1` (v0.2.0 stays the Latest release until the
-owner's test); then the work pauses, and phase 21 starts on the owner's go.
+guided setup") the coordinator published it as the **pre-release `v0.2.1-beta.1`** on 2026-10-29,
+from 5cadb9b, the merge commit of the release PR #35 (main's CI 40968397265 green, 18 jobs; 7
+assets, the DMG's checksum verified; v0.2.0 stays the Latest release). Its macOS smoke had first
+caught a rare over-fullscreen failure, recorded as a Known issue (LJ19.6).
+
+**The owner's test of 0.2.1-beta.1 (2026-10-30):** everything passed except one thing: with a
+YouTube video full screen in Little Joan (macOS), the shortcut did nothing — the video stayed full
+screen and the command bar never came (LJ19.4-fix4 made such a summon only activate the app).
+**The owner's decisions that day:** the shortcut during a page's full screen leaves full screen and
+opens the command bar (LJ19.5); a **v0.2.1** comes first — LJ19.5, LJ19.6 (the over-fullscreen
+Space bug), LJ19.7 ("Quit Little Joan" in Settings) and **LJ58, moved here from round 4** (the owner
+now has an Apple Developer account; it runs once they add the secrets) — released by LJ19.8 on
+their word; then **Liquid Glass on macOS 26+ only** (LJ19.9: Off / Clear / Tinted, tinted by the
+theme); then v0.3 from phase 21; a **Mac App Store build after round 4** (LJ60). **Execution order
+from here: 19.5 → 19.6 → 19.7 (phase 12, `lj/p12-v021-fixes`) → 58 (once the secrets exist) → 19.8
+(checkpoint) → 19.9 (checkpoint) → 21 → 22 → 23 → 24 → 25 (LJ56) → 26 → 59 → 60.**
+**Phase 12 (2026-10-30)** is PR #37 on `lj/p12-v021-fixes`, merged by the agent once every job is
+green (the standing exception): the shortcut during a page's full screen leaves it and opens the
+command bar on every OS (and on Windows a press closes a window that is in front), the ready
+window no longer lands on the desktop Space over another app's full screen (2 of 100 repeated
+launches before, 0 of 150 after), and Settings → General has Quit Little Joan. Next: LJ58 once the
+owner's Apple secrets exist, then LJ19.8 (the v0.2.1 release, a checkpoint).
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -4235,6 +4260,298 @@ compared with LJ19.1's baseline on the same runners (main's run 39939125801).
 - **What CI can't show:** the theme flash (a screenshot comes ~1 s after the summon; the owner's
   eyes), the summon's feel on a Retina Mac, Activity Monitor's numbers on a real machine, switching
   the setting in Settings (unit-tested; no CI driver for its list).
+
+### Phase 12 — v0.2.1 fixes (LJ19.5–LJ19.7)
+
+> **Added 2026-10-30, the owner's decisions after testing 0.2.1-beta.1.** One branch,
+> `lj/p12-v021-fixes` from the latest `main` (its first commit is this plan's update), one commit
+> per step, one PR into `main`, merged by the agent once every job is green (Ground Rule 24, the
+> standing exception). None of the three is security-sensitive: no new IPC for the page, nothing
+> the page can reach (LJ19.7's command is for the Settings window only, and `capability_tests.rs`
+> says so). Then LJ58 (once the owner's Apple secrets exist), then LJ19.8.
+
+### LJ19.5 — The shortcut while a page is full screen · strong · auto
+
+> **The owner's finding (0.2.1-beta.1, macOS):** with a YouTube video full screen in Little Joan,
+> the shortcut does nothing — the video stays full screen and the command bar never comes.
+> LJ19.4-fix4 made a summon during WebKit's element fullscreen only activate the app (ordering the
+> window then moved it into WebKit's full-screen Space, and that Space closing with it inside broke
+> the Dock — the Landmine). **The owner's decision:** the shortcut (and `--show`, the tray's Show)
+> while a page is full screen **leaves full screen first — the video keeps playing in the window —,
+> then opens the command bar, ready to type**; pressing it again closes as usual. Every OS behaves
+> the same.
+
+Design:
+- macOS: when a summon finds the page in WebKit's element fullscreen (`bar::page_in_webkit_fullscreen`),
+  end it from Rust — WKWebView's public `closeAllMediaPresentationsWithCompletionHandler:` (check
+  its availability against the 12.3 minimum and what it closes; else `document.exitFullscreen()`
+  evaluated in the page, which the page could refuse to honour only by re-entering) — and **order
+  nothing** until WebKit has put the page back in the window (its fullscreen state gone, the page
+  window key again; with a time limit, after which the summon gives up and logs it). Then the usual
+  focus: the window in front, the command bar's overlay open with the keyboard in its field. The
+  page window is never ordered while WebKit's full-screen window or Space exists (LJ19.4-fix4).
+  A summon with a URL keeps its order (leave fullscreen, then navigate) and also ends with the bar
+  closed as today (the URL loads in the page).
+- Windows (WebView2 drives the window's own fullscreen) and Linux (WebKitGTK's enter-fullscreen
+  makes the window fullscreen): first record what a summon does today with the page full screen
+  (CI's fullscreen runs), then make it the same: leave the element fullscreen through the engine
+  (WebView2: the page's `document.exitFullscreen()`; WebKitGTK: `webkit_web_view_leave_fullscreen`
+  or the same script), the window back to its size, then the command bar.
+- `toggle.rs` stays the pure decision: a new `WindowState::Open { focused, page_fullscreen }` (or an
+  equivalent) and an `Action` for "leave fullscreen, then focus with the command bar", unit-tested
+  (a focused fullscreen page and an unfocused one both leave fullscreen; a second press then closes).
+
+**Verify:** `npm run verify` green (the new toggle cases). CI, every fullscreen run (macOS's element
+and phone runs, Windows', Linux's): while the page is in element fullscreen, the real shortcut — or
+`--show` without a URL where synthetic keys are unreliable — leaves fullscreen (`wk-fullscreen out`
+or the engine's own line), then `overlay true` and the bar focused (`focused` mark), the smoke
+page's ping still going (the video's page wasn't reloaded), a screenshot of the command bar over
+the page; on macOS the Dock still accepts the next element fullscreen (its tileSpaceID non-zero,
+LJ19.4-fix4's probe if it is on) and the main run's exit returns to the user's Space. Every earlier
+rule green, `summonDuringFullscreenFailures` updated to the new line.
+**Human check (LJ19.8's checklist):** YouTube full screen in Little Joan on the owner's Mac → the
+shortcut → the video back in the window, still playing, the command bar open; again → closed.
+**Commit:** `lj-step-19.5: the shortcut while a page is full screen leaves full screen and opens the command bar`
+
+**Implementation notes (2026-10-30):**
+
+- **Disk:** 14 GiB free at the start (`.cache/target` 1.1 GB).
+- **The decision** (`toggle.rs`): `WindowState::Open { focused, page_fullscreen }` and
+  `Action::LeaveFullscreen`. A page in element fullscreen — focused or not — turns Toggle and
+  Show(None) into LeaveFullscreen; Show(url) stays FocusAndNavigate, Hide stays Close, Extension
+  FocusAndExtension, because **every focus leaves the page's fullscreen first** (`joan::focus`).
+  After the leave the window is focused with no fullscreen: the next Toggle is Close. joan.rs reads
+  `page_fullscreen` as `bar::element_fullscreen()` (Windows' and Linux's hooks) or
+  `bar::page_in_webkit_fullscreen` (macOS).
+- **The leave** (`joan/fullscreen.rs`, every OS): the page is asked as its own Exit button would ask
+  — `document.exitFullscreen()` (prefixed for old WebKit, and a video's `webkitExitFullscreen` for
+  WebKit's video fullscreen) evaluated in the page, no IPC, nothing reported back. On macOS that is
+  WebKit's normal, animated exit, the one the fullscreen runs' Exit clicks take and that leaves the
+  Dock healthy. WKWebView's public `closeAllMediaPresentationsWithCompletionHandler:` (macOS 12+, so
+  inside the 12.3 minimum; nullable handler) also closes element fullscreen — WebKit's
+  `WebFullScreenManagerProxy::close`, the quick exit used when a page closes or crashes (the
+  fullscreen window controller is closed and dropped) — so it is the fallback, used only if WebKit
+  hasn't begun leaving 1.2 s after the page was asked (`forcing`). Then the wait (50 ms polls, at
+  most 4 s): **macOS** until `fullscreenState` is not-in-fullscreen, the page's WKWebView is back in
+  the Little Joan window and that window `isOnActiveSpace` (`fullscreen::webkit_fullscreen_over`,
+  tested; `platform::webkit_fullscreen_exit` asks the main thread) — only then is anything ordered,
+  so the window can't join WebKit's closing Space (LJ19.4-fix4's Landmine); **Windows / Linux** until
+  `element_fullscreen` is false (WebView2's `ContainsFullScreenElementChanged`, WebKitGTK's
+  `leave-fullscreen`), then up to 1 s for the window to leave the fullscreen the page gave it
+  (`platform::fullscreen_now`: Linux reads the GDK state on the main thread). Smoke log
+  `summon-fullscreen leaving`, `forcing`, `left <ms>` / `gave-up <ms>`. Giving up: macOS only
+  activates the app, as LJ19.4-fix4 did (the full-screen page has the keyboard); Windows and Linux
+  bring the window forward without opening the command bar (nothing may take the keyboard from a
+  page still in fullscreen). Then the usual focus (unminimize, show, front) and, for
+  LeaveFullscreen, `bar::focus_bar` (the command bar's overlay, the keyboard in its field, its
+  text selected). A URL summon leaves, focuses, then navigates (the bar closed for the page, as
+  before). `set_element_fullscreen` now logs before it changes the state, so `element-fullscreen
+  false` comes before the summon's `left`.
+- **What a summon did before** (from the code, then recorded by CI — the diagnostic fullscreen run
+  on `main`'s installers, runs 41045349374 / 41045360494): the window state had no
+  fullscreen in it. **Windows** — WebView2's element fullscreen makes the window fullscreen, and that
+  window has the keyboard, so the shortcut was Toggle on a focused window → **Close**: the window
+  closed and the page (the video) with it; `--show` and the tray's Open were Focus → unminimize,
+  show, `set_focus` on a window already in front: **nothing visible**, the video stayed full screen,
+  no command bar. **Linux** — WebKitGTK fullscreens the toplevel window itself, which keeps the
+  keyboard: the same — the shortcut **closed** the window, `--show` changed nothing. **macOS** —
+  WebKit's own fullscreen window has the keyboard, so the Little Joan window wasn't focused: the
+  shortcut was Focus → LJ19.4-fix4's `activate_app` → nothing (the owner's finding). **CI's record**
+  (`fullscreenRun.summon`, `--toggle` 1 s after the page entered element fullscreen): Windows —
+  `closing ready` 1.0 s after the click, `fullscreen false`, `hibernated ready`, no ping after it
+  (the page was gone), the second press a summon from ready; Linux (every 24.04 job) — the same,
+  `closing` 1.2 s after the click; macOS — `summon-fullscreen activated`, no command bar, WebKit's
+  fullscreen left only when the smoke page itself gave up 6 s later; the second press then closed.
+- **CI round 1** (PR run 41047983238, `lj-step-19.7`'s head): verify, package and eight smoke jobs
+  green — the summon during the fullscreen passed on macOS (`summon-fullscreen leaving`, WebKit
+  `exiting` 0.1 s later and `not` at 0.7 s, `left 709`, then `overlay true`, the window in front
+  with the keyboard and on the Space on screen, the letter typed reached the field even there, the
+  page still pinging — fewer pings, WebKit slows a hidden page's timers —, the second press closed)
+  and on all seven Linux jobs with fullscreen (`left 50`–`53` ms); the main run's `--show <url>`
+  left the fullscreen first on every OS too —; Windows failed one rule only: its
+  first press was right (`summon-fullscreen left 51`, `overlay true`, the letter typed reached the
+  field, the pings went on), but the second `--toggle` found the window without the keyboard and
+  only focused it (`window-front … focused=true` after it): a forwarded `--toggle` comes from a
+  second process, which on Windows takes the keyboard from the window before the request arrives —
+  the user's second press is the global shortcut. **`lj-step-19.5-fix2`:** on Windows the second
+  press is the real shortcut (pressed once more if nothing at all came, Windows' lost synthetic
+  keys); `--toggle` stays the second press on macOS and Linux, where it passed.
+- **CI round 2** (PR run 41051831701, `fix2`'s head): everything green but Windows, which failed the
+  same rule with the real shortcut too (`window-front … focused=true` after the press, no
+  `closing`): the window *was* in front with the keyboard in the command bar's field (the letter
+  had reached it), but the toggle's "focused" is tao's `is_focused` — on Windows the top-level
+  window's own activation and `WM_SETFOCUS` / `WM_KILLFOCUS`, which a webview's child window taking
+  the keyboard can turn off — and it said no, so the press only focused. The three after-fix
+  repeat runs below, on `fix2`'s installers, failed the same way: 5 of 5 Windows runs. **`lj-step-19.5-fix3`:**
+  the toggle asks `platform::has_keyboard` — on Windows whether the window is the foreground window
+  (`GetForegroundWindow`, what the over-fullscreen check's `focused=` has read since LJ19.2),
+  elsewhere tao's `is_focused` as before (macOS's key window, GTK's toplevel focus: both passed);
+  the smoke log's `window-state open focused= page-fullscreen= tao-focused=` records both for
+  every request on an open window.
+- **CI round 3** (PR run 41055710136, `fix3`'s head): **all 18 jobs green**. Windows' second press
+  closed (`closing ready` 1 s after it); its `window-state` line said `focused=true` and
+  `tao-focused=true` — so this run doesn't show tao's flag off: why it was off in the five runs
+  before isn't in the logs (each had the letter typed into the field just before, as here). Two
+  more smoke runs on the same installers (41059842982, 41059853884), all 9 smoke jobs green in
+  both: there Windows' second press found `focused=true tao-focused=false` — the window in front
+  with the keyboard, tao saying otherwise — and closed, as the old decision would not have. So tao's
+  flag was off in 7 of 8 Windows runs at that moment, and the foreground check closes in all three
+  runs that have it.
+- **CI:** the fullscreen run ends its first launch with the summon during a fullscreen
+  (`smoke-fullscreen.mts` `summonRun`, rules in `smoke-fullscreen-summon.mts`): the page pings
+  (`?fs=both&ping=fs-fullscreen`; smoke.html now pings alongside `?fs=both`), "Element fullscreen"
+  at 720, `--toggle` (the shortcut's own command, without Windows' lost synthetic keys), a
+  screenshot `fs/summon-command-bar.png`, a letter typed, `--toggle` again. The main run's
+  `summonDuringFullscreenFailures` now asks every OS for `summon-fullscreen left` when its page was
+  in fullscreen at the `--show <url>`.
+
+### LJ19.6 — The ready window over another app's full screen · strong · auto
+
+> **Seen in CI on 2026-10-29** (Deferred follow-ups, "a Stay-ready summon over another app's full
+> screen can switch to the desktop"): about 1 in 20 macOS smoke runs, both summons of the ready
+> window in that launch, while the Settings window — built at its summon — is fine. WindowServer
+> adds the ready window to the desktop Space when `show` orders it, and the Dock switches to it.
+> Lead, not proven: the ready window is built at prewarm with AppKit's default collection
+> behaviour and gets `MoveToActiveSpace|FullScreenAuxiliary` only at its first summon.
+
+Plan: (1) make it reproducible — a smoke-only `LJ_SPACES_REPEAT=<n>` (for CI experiments, like
+`LJ_DOCK_PROBE`) runs the over-fullscreen launch n times in one job, each a fresh launch with its
+helper full screen first, and reports each one's result; run it on `main`'s code until it fails at
+the rate seen (expect a few failures in ~40 launches; if none in 60, record that and test the lead
+anyway). (2) The fix the evidence points to — at first the lead: the ready window gets its
+collection behaviour when it is built (prewarm and every rebuild), the same bits a cold window gets
+right after it is built; if the evidence says otherwise, follow it. (3) Prove it: the repeated
+launch with the fix, at least 60 launches without a failure (≈95 % confidence the rate fell below
+1 in 20), then the normal CI. Keep `LJ_SPACES_REPEAT` for later experiments (off by default).
+**Verify:** `npm run verify` green. The repeat runs and their counts (before / after) in the notes;
+every CI job green; the Known issue in CHANGELOG's next section removed if proven, with the
+Deferred follow-up struck through.
+**Commit:** `lj-step-19.6: the ready window joins the active Space from the start (over-fullscreen summons no longer switch to the desktop)`
+
+**Implementation notes (2026-10-30):**
+
+- **Reproduced** (`lj-step-19.6-diag`, `LJ_SPACES_REPEAT`): two dispatched runs on `main`'s own
+  installers (5cadb9b, run 40968397265; `installers_from_run`, `extra_env` `LJ_SPACES_REPEAT=50`),
+  runs 41045349374 and 41045360494: **macOS 2 of 100 launches failed** (`spaces-27`, `spaces-36`),
+  each time both summons of the main window (`--show`, then the shortcut) and never Settings;
+  Windows 0 of 100, every Linux job 0 of 50 per run. With the release PR's failure and the earlier
+  diagnostics that is about 1 in 50 on CI's macOS runners, not 1 in 20.
+- **What the logs show** (the failing launches' `smoke-spaces-<i>.log` and `unified.log`, and the
+  release PR's 40959308249 next to `main`'s passing 40968397265): WindowServer gives a window its
+  Space at its **first order**, never at its creation or at the prewarm: the passing launches'
+  first show logs `space <the full-screen Space> add window <n>`, the failing ones `space 1 add
+  window <n>` ~40 ms after the request, at once followed by the Dock's "switching to space 1 for
+  window(<n>) … ordered on non-visible space". The window then stays on Space 1, so the next
+  summon (from a close) goes there too — both summons fail, always in the same launch. The app's
+  own lines are the same in both (`window-spaces … was=default`, behaviour 258 set before the show;
+  `shown … space=true`, then `page-adding … space=false` in the failures); the Settings window,
+  built at its summon and given the behaviour before its first show, never failed (about 140
+  launches). The one difference between the two windows before their first show is the ready
+  window's past: built at the prewarm with AppKit's default collection behaviour, its bar loaded
+  and drawn into it while hidden, and given `MoveToActiveSpace|FullScreenAuxiliary` only seconds
+  later, just before that first show.
+- **The fix — the lead:** `joan/rest.rs` `build` sets the collection behaviour as the window is
+  built (`platform::join_active_space`, queued on the main thread before the bar is added), for the
+  prewarm, a cold summon and a rebuild alike; `show` sets it again (no change for a ready window).
+  And the prewarm no longer hides a window it never showed on macOS (`rest_now(…, hide)`: an
+  `orderOut` that showed in one failing run's unified log; Windows and Linux hide as before), so
+  until its first summon WindowServer hears of the ready window exactly as of one built at its
+  summon. A smoke-only `wk-context before-show … space=` line (AppKit's `isOnActiveSpace`, which
+  for a window off screen says whether ordering it puts it on the Space on screen) records what
+  AppKit expects just before each order.
+- **Proven:** three dispatched runs on the fix's installers (PR run 41051831701, `0b955bf` +
+  `lj-step-19.5-fix2`; `LJ_SPACES_REPEAT=50` each), runs 41053002550, 41053011704, 41053020777:
+  **macOS 0 of 150 launches failed** (before: 2 of 100) — at the before rate of about 1 in 50,
+  150 clean launches would come by chance about 5 % of the time, so about 95 % confidence the rate
+  fell; Windows 0 of 150, Linux 0 of 50 on every job of every run. The PR runs' own over-fullscreen
+  launch passed on every job since. The three runs' only failure was Windows' second press of the
+  fullscreen summon (the installers had `lj-step-19.5-fix2`, not `fix3`).
+- `LJ_SPACES_REPEAT` stays for later experiments (off by default; architecture.md, CI).
+
+### LJ19.7 — "Quit Little Joan" in Settings · standard · auto
+
+> **The owner's request (2026-10-30).** Settings → General gets a **Quit Little Joan** button at
+> the bottom (the tray's quit and the command bar's Quit already exist, LJ41): the same
+> `joan::quit` — history flushed, on macOS the window closed first. Unsaved changes in Settings are
+> dropped, as with Cancel; the note under the button says so. A new Tauri command for it is
+> allowed to the Settings window's capability only — never the bar's or the page's
+> (`capability_tests.rs` gains that check).
+**Verify:** `npm run verify` green (the capability test; vitest for the button's wiring). CI: the
+tray-settings run (or the Settings run) clicks it, or invokes the command the way the smoke drives
+Settings, and the app exits by itself within LJ20's quit limits, its data saved (the persist check).
+**Commit:** `lj-step-19.7: Quit Little Joan in Settings → General`
+
+**Implementation notes (2026-10-30):**
+
+- **The button:** the last row of Settings → General, "Quit Little Joan" with a **Quit** button, and
+  under it "Little Joan stops until you open it again. Changes here that you haven't saved are
+  dropped, as with Cancel." (`ui/settings.html`). `ui/settings/quit.ts` wires it: a click stops a
+  key recording, disables the button and calls `quit_from_settings`; a failed call enables it
+  again and shows the reason (vitest with a fake button; a markup test that it is the General tab's
+  last control, its note under it).
+- **The command:** `commands::app::quit_from_settings` — the same `joan::quit` as the tray's, the
+  command bar's and `--quit` (history saved, on macOS the window closed first) — logs
+  `settings-quit`. A new command rather than `quit_app`, so Settings gets nothing of the bar's:
+  `capabilities/settings.json` grants `allow-quit-from-settings`, and `capability_tests.rs`'s
+  `only_settings_may_quit_from_settings` requires exactly the settings window's capability to grant
+  it (no webview scope, no `allow-quit-app` there); `only_the_bar_may_quit` still keeps `quit_app`
+  the bar's alone. The page webview has no capability, as before.
+- **CI round 1** (PR run 41047983238): the Settings quit passed on all nine smoke jobs — e.g. macOS
+  and Windows `settings-quit-click`, `settings-quit`, `quit`, the process gone by itself, and after
+  the relaunch `LJ-PERSIST p=1 s=0 l=1`.
+- **CI:** the tray run's Settings launch now sets a login on the smoke page first, opens Settings →
+  General (the screenshot as before), and 4 s later its Quit button is clicked through the page's
+  own handler — a smoke-only knob, `LITTLEJOAN_SMOKE_SETTINGS_QUIT=1` (ignored without the smoke
+  log), since CI has no driver for Settings' controls and the button sits below the fold —; the app
+  must log `settings-quit-click`, `settings-quit` and `quit`, end by itself within 15 s (LJ20's quit
+  limit), and a relaunch on the same data folder be a later launch whose page still has the login
+  (p=1 s=0 l=1) — `smoke-tray.mts` `settingsQuitFailures`, every OS.
+- **What CI can't show:** a real click on the button and the window's look with it (the screenshot
+  shows the tab's top); the owner's check in LJ19.8's checklist.
+
+### LJ19.8 — Release v0.2.1 · standard · checkpoint
+
+> After phase 12 and — if the owner has added the Apple secrets by then — LJ58 (so the DMG is
+> notarized and the README drops the Gatekeeper step; without them the release stays ad-hoc signed
+> and says so). LJ19's recipe: versions `0.2.1`, the CHANGELOG `[0.2.1]` (everything since 0.2.0:
+> 0.2.1-beta.1's entries and phase 12's), README, the owner's checklist (LJ19.5's and LJ19.7's
+> checks, the beta's items they hadn't tried). The PR may be merged once green; **the tag and the
+> release wait for the owner's word**, then `--latest`.
+
+### LJ19.9 — Liquid Glass on macOS 26+ · strong · checkpoint
+
+> **The owner's request (2026-10-30):** a Liquid Glass option "on top of themes", with the same
+> settings macOS and iOS give it — macOS 26.1's System Settings → Appearance → Liquid Glass:
+> **Clear** (more transparent) and **Tinted** (more opaque, more contrast). **Their decision:** real
+> glass on **macOS 26 Tahoe and later only**; the option is hidden on older Macs, Windows and Linux.
+> After v0.2.1; branch `lj/p14-liquid-glass`; merged when green, then the owner looks at it (a
+> pre-release only on their word); phase 21 starts on their go.
+
+Design (to be confirmed by the step's research and written into its notes first):
+- Settings → Appearance: **Liquid Glass — Off / Clear / Tinted** (default Off), only when Rust
+  reports support (macOS ≥ 26 and `NSGlassEffectView` present — checked at run time, so one build
+  serves 12.3 → 26). Saved as `glass` in settings.json (tolerant parse, default `off`), part of the
+  theme the bar reads before it paints (LJ38), so a summon never flashes the solid theme first.
+- The glass: AppKit's public `NSGlassEffectView` (macOS 26: `style` regular / clear, `tintColor`,
+  `cornerRadius`) behind the **toolbar and the command bar** (its card and panels); the page stays
+  the site's own. Clear → the clear style with a light tint; Tinted → the regular style with a
+  stronger tint. The theme's colours tint it (its main colour at the intensity the theme sets); the
+  grain stays off on glass. The bar's webview draws no background where glass shows (how — the
+  `drawsBackground` key is undocumented: record it, it matters to LJ60's App Review) and the window
+  is made non-opaque only if the glass must show what is behind the window (public NSWindow API;
+  `macOSPrivateApi` stays off — it would rule out the Mac App Store).
+- Accessibility: with Reduce Transparency or Increase Contrast on (NSWorkspace), Little Joan shows
+  the solid theme, and follows changes while open — as macOS hides its own Liquid Glass setting then.
+- Nothing changes for Off, older Macs, Windows or Linux (their themes stay as they are, pixel for
+  pixel in the existing screenshots).
+**Verify:** `npm run verify` green (the setting's parse and change rules; the support check; the
+theme the bar reads). CI: if GitHub has a macOS 26 runner image, a smoke run there with Clear and
+Tinted (the glass view in the window's hierarchy with the chosen style, the bar's background clear,
+screenshots), else unit tests plus the summon's timing unchanged on macOS 15 with the option hidden;
+every earlier rule green; summon timing not worse with glass on.
+**Human check (the owner, macOS 26):** Clear and Tinted on light and dark pages and several themes,
+the summon's speed with glass on, Reduce Transparency switching it to solid.
+**Commit:** `lj-step-19.9: Liquid Glass on macOS 26+ — Off / Clear / Tinted, tinted by the theme`
 
 ---
 
@@ -8729,11 +9046,16 @@ and where, then stop.
 > Decided by the owner on 2026-10-29: right after v0.3 (phase 26), before the moved bundled
 > extensions (LJ53–LJ55). Neither step starts before the owner has added what it needs; the agent
 > never creates, reads, prints or handles signing keys or their passwords (Ground Rule 16) — they
-> live only in the repository's GitHub Actions secrets, which the owner sets.
+> live only in the repository's GitHub Actions secrets, which the owner sets. *2026-10-30, the
+> owner: LJ58 moves into v0.2.1 (before LJ19.8); LJ59 stays here; LJ60, the Mac App Store build,
+> follows LJ59.*
 
 ### LJ58 — macOS Developer ID signing and notarization · strong · auto
 
-> Phase 27. Branch `lj/p27-macos-signing` from the latest `main`. **LJ18 as written** (its Verify,
+> **Moved into v0.2.1 by the owner on 2026-10-30** (they have an Apple Developer account now): it
+> runs after phase 12, as phase 13 on `lj/p13-macos-signing`, as soon as `gh secret list` shows
+> LJ18's six names, and before LJ19.8 — otherwise LJ19.8 goes ahead ad-hoc signed and this step
+> follows when the secrets come. (Was: phase 27, `lj/p27-macos-signing`.) **LJ18 as written** (its Verify,
 > Commit and prompt), skipped in round 3 for want of the secrets. **Needs from the owner:** the
 > Apple Developer Program membership, a Developer ID Application certificate exported as a .p12
 > with its password, an app-specific password (or an App Store Connect API key) for notarytool, and
@@ -8762,6 +9084,41 @@ with `latest.json` to the release the owner asks for. Settings gets "Check for u
 default only if the owner says so). The smoke job checks the bundles' signatures with the public key
 and that no update check happens with the setting off. Human check: an update from the previous
 release on each OS.
+
+### LJ60 — A Mac App Store build · strong · review
+
+> **The owner's decision (2026-10-30):** after round 4. Phase 29, branch `lj/p29-mac-app-store`.
+> **`review`:** the sandbox changes what the app may touch, so an independent review and the
+> owner's decision come before merge, and **submitting to App Review is the owner's own act**.
+> **Needs from the owner:** in their Apple Developer account, an **Apple Distribution** and a
+> **Mac Installer Distribution** certificate (.p12 + password each), a Mac App Store **provisioning
+> profile** for `io.github.memoliertorerr.littlejoan`, and an **app record** in App Store Connect
+> (name, privacy labels, a privacy policy URL, screenshots) — added as GitHub secrets the step names
+> (names only; the agent never sees values).
+
+Design (the step's research confirms each point before building):
+- A second macOS flavour from the same code (a Cargo feature / a Tauri config overlay), so the
+  direct-download DMG stays exactly as it is: **no updater** in the store build (the store
+  updates it), the App Sandbox on, entitlements only as needed — `network.client`, the Downloads
+  folder (`files.downloads.read-write`, LJ15), user-selected files where a picker is used — each
+  with its reason in the notes.
+- What the sandbox breaks, and the fixes: start at login through `SMAppService` (macOS 13+; the
+  current LaunchAgent plist is outside the container); single-instance (`--show`, `--quit`, links)
+  through a socket or Apple-event path inside the app's container or an app group; the data
+  directory inside the container (and what happens to a direct-download user's data — the store
+  build can't read it: say so); the CLI flags documented for the store build.
+- App Review's questions, answered in the notes before submitting: the global shortcut (Carbon
+  hotkeys work in the sandbox, no Accessibility permission); extensions — bundled ones are web
+  content in the bar, but developer mode loads unpacked extensions from folders, which guideline
+  2.5.2 (no downloaded or installed code that adds features) may forbid: likely off in the store
+  build; Liquid Glass's undocumented `drawsBackground` (LJ19.9) — replace or justify; no private API
+  (`macOSPrivateApi` stays off).
+- CI: the store flavour builds and signs as a `.pkg` (`productbuild`) on pushes to `main` and on a
+  dispatch, with the secrets present; its own smoke job runs the sandboxed app as the other smoke
+  jobs do (the installed app, the real shortcut). Uploading to App Store Connect (`altool` /
+  Transporter with an API key) only on a dispatch the owner starts.
+**Verify:** the review's findings answered; both macOS flavours green in CI; the store build's
+smoke run; nothing changed in the direct-download build.
 
 ---
 
@@ -9043,7 +9400,7 @@ release on each OS.
   before LJ19.4-fix4, 40942144444 after it), green on the others. One of the page's WebKit helpers
   outlived the close in those runs. Not looked into: check `helpers-after-hibernate.txt` for which
   one, and whether it went later than the sample.
-- **macOS: a Stay-ready summon over another app's full screen can switch to the desktop** (LJ19.2's
+- ~~**macOS: a Stay-ready summon over another app's full screen can switch to the desktop**~~ (LJ19.2's
   over-fullscreen rule, "the full-screen app's Space was left"): twice on 2026-10-29 in about 35
   macOS smoke runs — 40931257236 (during LJ19.4-fix4's diagnostics) and the release PR's
   40959308249 —, never in LJ19.2's own runs. Both times both summons of the main window (`--show`,
@@ -9057,7 +9414,9 @@ release on each OS.
   proven: the ready window is built at prewarm with AppKit's default collection behaviour and only
   gets `MoveToActiveSpace|FullScreenAuxiliary` at its first summon (a cold window gets it right
   after it is built) — set it when the window is built, then run the macOS smoke many times (it is
-  about 1 in 20). Listed as a Known issue of 0.2.1-beta.1.
+  about 1 in 20). Listed as a Known issue of 0.2.1-beta.1. → *LJ19.6 (the owner, 2026-10-30).*
+  *Done in LJ19.6: reproduced 2 times in 100 launches on `main`'s installers, none in 150 with the
+  window's behaviour set as it is built (and no `orderOut` at the prewarm) — the step's notes.*
 - **The AppImage's own memory at rest is about twice the `.deb`'s** (surfaced by LJ13's CI): 45.6 MB
   private dirty at start against 19.5 MB, on the same runner and run — the bundled libraries'
   relocated pages are the app's own instead of shared with the system's copies; after a page both
@@ -9542,7 +9901,9 @@ Populated from real friction, not speculation:
   elsewhere and later: an element fullscreen "leaves by itself" 40–150 ms after entering
   (`_doFailedToEnterFullScreen` in `wk-note`'s stacks, `tileSpaceID=0` in `unified.log`), and a
   request that fails while the Dock is like that keeps it so. Never order the page window front
-  during WebKit's fullscreen (`joan::focus` activates the app instead). To see the Dock's state,
+  during WebKit's fullscreen (since LJ19.5 `joan::focus` takes the page out of it first and orders
+  nothing until WebKit has put the page back in the window and that window is on the Space on
+  screen; if that never comes, it only activates the app, as LJ19.4-fix4 did). To see the Dock's state,
   dispatch a smoke run with `LJ_DOCK_PROBE=1` in `extra_env` and read `dock-probe.jsonl` and
   `unified.log`.
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s

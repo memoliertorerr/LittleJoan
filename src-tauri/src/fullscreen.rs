@@ -91,9 +91,71 @@ pub fn page_layout_allowed(webkit_state: Option<WebKitFullscreen>, in_own_window
     in_own_window && webkit_state.is_none_or(|state| state == WebKitFullscreen::Not)
 }
 
+/// What macOS says while a summon waits for WebKit's element fullscreen to end (LJ19.5):
+/// WKWebView's `fullscreenState` (`None` on macOS 12), whether the page's view is back in the
+/// Little Joan window, and whether that window is on the Space on screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WebKitExit {
+    pub state: Option<WebKitFullscreen>,
+    pub in_window: bool,
+    pub on_screen: bool,
+}
+
+/// A summon waiting for WebKit's element fullscreen to end (LJ19.5): whether it has — the page
+/// back in the Little Joan window (`page_layout_allowed`) and that window on the Space on screen
+/// (`on_screen`: WebKit's full-screen Space has closed), so ordering the window front can't put it
+/// into WebKit's Space (LJ19.4-fix4).
+pub fn webkit_fullscreen_over(
+    webkit_state: Option<WebKitFullscreen>,
+    in_own_window: bool,
+    on_screen: bool,
+) -> bool {
+    page_layout_allowed(webkit_state, in_own_window) && on_screen
+}
+
+/// Whether WebKit hasn't begun leaving its element fullscreen — still entering or in it (on macOS
+/// 12, which lacks `fullscreenState`: the page still outside the window). A summon that asked the
+/// page to leave asks WebKit itself after a while (joan/fullscreen.rs).
+pub fn webkit_still_in(webkit_state: Option<WebKitFullscreen>, in_own_window: bool) -> bool {
+    match webkit_state {
+        Some(WebKitFullscreen::Entering | WebKitFullscreen::In) => true,
+        Some(WebKitFullscreen::Exiting | WebKitFullscreen::Not) => false,
+        None => !in_own_window,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_summon_waits_for_the_page_back_in_the_window_on_screen() {
+        use WebKitFullscreen::{Entering, Exiting, In, Not};
+        assert!(webkit_fullscreen_over(Some(Not), true, true));
+        // WebKit still has the page, or its full-screen Space is still the one on screen.
+        for state in [Entering, In, Exiting] {
+            assert!(
+                !webkit_fullscreen_over(Some(state), true, true),
+                "{state:?}"
+            );
+        }
+        assert!(!webkit_fullscreen_over(Some(Not), false, true));
+        assert!(!webkit_fullscreen_over(Some(Not), true, false));
+        // macOS 12: the view's window tells.
+        assert!(webkit_fullscreen_over(None, true, true));
+        assert!(!webkit_fullscreen_over(None, false, true));
+    }
+
+    #[test]
+    fn webkit_is_asked_itself_only_while_it_hasnt_begun_leaving() {
+        use WebKitFullscreen::{Entering, Exiting, In, Not};
+        assert!(webkit_still_in(Some(Entering), false));
+        assert!(webkit_still_in(Some(In), false));
+        assert!(!webkit_still_in(Some(Exiting), false));
+        assert!(!webkit_still_in(Some(Not), true));
+        assert!(webkit_still_in(None, false));
+        assert!(!webkit_still_in(None, true));
+    }
 
     #[test]
     fn element_fullscreen_round_trip() {

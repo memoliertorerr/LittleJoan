@@ -110,8 +110,16 @@ fn show<R: Runtime>(
     kind: &str,
 ) -> tauri::Result<()> {
     placement::place(app, window, width, height);
-    // macOS: on the Space the user is on, a full-screen app's too, before it is shown (LJ19.2).
+    // macOS: on the Space the user is on, a full-screen app's too, before it is shown (LJ19.2;
+    // a ready window has it since it was built, LJ19.6 — set again, it changes nothing).
     platform::join_active_space(window);
+    // CI only (macOS): where ordering the hidden window would put it (`space=`: AppKit's
+    // isOnActiveSpace, which for a window off screen says whether ordering it front puts it on
+    // the Space on screen; LJ19.6).
+    if smoke::enabled() {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || platform::smoke_context(&target, "before-show"));
+    }
     window.show()?;
     // In front with the keyboard (on Linux with a fresh X server timestamp; LJ19.2).
     platform::bring_to_front(window)?;
@@ -154,6 +162,10 @@ fn build<R: Runtime>(app: &AppHandle<R>, history: bool) -> tauri::Result<Window<
         .visible(false)
         .build()?;
     summon_timing::mark(Mark::WindowBuilt);
+    // macOS: the collection behaviour that joins the Space the user is on, from the start (LJ19.6)
+    // — a ready window is built here seconds before its first summon (the prewarm), and until then
+    // it had AppKit's default.
+    platform::join_active_space(&window);
     // The theme's own colour under everything before the bar paints (LJ19.4: no flash of the
     // default theme, or of white, while the window opens).
     let _ = window.set_background_color(Some(bar::window_background(&window, &theme)));
@@ -190,14 +202,17 @@ pub(super) fn prewarm<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         return Ok(());
     }
     let window = build(app, false)?;
-    rest_now(app, &window);
+    // macOS: never shown, so not hidden either (LJ19.6) — until its first summon WindowServer gets
+    // no order for the window at all, as for one built at its summon. Windows and Linux hide it
+    // as before.
+    rest_now(app, &window, !cfg!(target_os = "macos"));
     smoke::log("prewarmed", mode(app).name());
     Ok(())
 }
 
-/// The window is at rest now: hidden, the bar at its summon state, its memory target low
-/// (Windows), and Stay ready for 15 minutes' timer started.
-fn rest_now<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
+/// The window is at rest now: hidden (`hide`: it was on screen), the bar at its summon state, its
+/// memory target low (Windows), and Stay ready for 15 minutes' timer started.
+fn rest_now<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, hide: bool) {
     AT_REST.store(true, Ordering::SeqCst);
     let rest = REST.fetch_add(1, Ordering::SeqCst) + 1;
     // Nothing of the page stays: not even its title on the hidden window.
@@ -206,7 +221,11 @@ fn rest_now<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
     if let Some(bar) = bar::bar(app) {
         platform::bar_at_rest(&bar, true);
     }
-    let _ = window.hide();
+    // Again after a close: putting the window back to its size may have shown it (Windows'
+    // unminimize).
+    if hide {
+        let _ = window.hide();
+    }
     if let Some(after) = rest_for(mode(app)) {
         expire_after(app, rest, after);
     }
@@ -265,7 +284,7 @@ pub(super) fn close<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     extensions::session::reset();
     extensions::registry::forget();
     forget_fullscreen();
-    rest_now(app, &window);
+    rest_now(app, &window, true);
     let settings_shown = app
         .get_window(crate::settings_window::LABEL)
         .is_some_and(|w| w.is_visible().unwrap_or(false));

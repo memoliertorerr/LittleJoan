@@ -1,13 +1,21 @@
 //! What a shortcut press, a command-line request or Little Joan itself does, given the state of the
 //! page window.
 //!
-//! | State                  | Toggle      | Show(None) | Show(Some(u))       | Hide    | Prewarm | Release |
-//! |------------------------|-------------|------------|---------------------|---------|---------|---------|
-//! | Hibernating            | Create      | Create     | Create(u)           | Nothing | Prewarm | Nothing |
-//! | Ready (bar alive)      | Summon      | Summon     | Summon(u)           | Nothing | Nothing | Release |
-//! | Ready (bar gone)       | Rebuild     | Rebuild    | Rebuild(u)          | Nothing | Nothing | Release |
-//! | Open, focused          | Close       | Focus      | FocusAndNavigate(u) | Close   | Nothing | Nothing |
-//! | Open, not focused      | Focus       | Focus      | FocusAndNavigate(u) | Close   | Nothing | Nothing |
+//! | State                  | Toggle          | Show(None)      | Show(Some(u))       | Hide    | Prewarm | Release |
+//! |------------------------|-----------------|-----------------|---------------------|---------|---------|---------|
+//! | Hibernating            | Create          | Create          | Create(u)           | Nothing | Prewarm | Nothing |
+//! | Ready (bar alive)      | Summon          | Summon          | Summon(u)           | Nothing | Nothing | Release |
+//! | Ready (bar gone)       | Rebuild         | Rebuild         | Rebuild(u)          | Nothing | Nothing | Release |
+//! | Open, page full screen | LeaveFullscreen | LeaveFullscreen | FocusAndNavigate(u) | Close   | Nothing | Nothing |
+//! | Open, focused          | Close           | Focus           | FocusAndNavigate(u) | Close   | Nothing | Nothing |
+//! | Open, not focused      | Focus           | Focus           | FocusAndNavigate(u) | Close   | Nothing | Nothing |
+//!
+//! **Page full screen** (LJ19.5, the owner's decision): while the page shows an element fullscreen
+//! (a video's), the shortcut, `--show` and the tray's Open leave that fullscreen first — the page
+//! stays, a video keeps playing in the window — and then open the command bar with the keyboard in
+//! its field, whether the window had the keyboard or not; the next press finds a focused window
+//! and closes it as usual. A summon with a URL leaves the fullscreen too, then loads the URL
+//! (every focus leaves it first: joan.rs).
 //!
 //! `Extension(id)` (`--extension <id>`) opens that extension's panel: `CreateExtension(id)` while
 //! hibernating, `SummonExtension(id)` from ready (`RebuildExtension(id)` when its bar is gone),
@@ -25,11 +33,12 @@ pub enum WindowState {
     Hibernating,
     /// The window exists, hidden, with the bar and no page. `usable`: the bar's web process is
     /// alive (false once the engine said it ended: the next summon builds everything anew).
-    Ready {
-        usable: bool,
-    },
+    Ready { usable: bool },
     Open {
         focused: bool,
+        /// The page shows an element fullscreen (WebView2's and WebKitGTK's hooks; on macOS,
+        /// WebKit's own fullscreen window).
+        page_fullscreen: bool,
     },
 }
 
@@ -80,7 +89,12 @@ pub enum Action {
     Create(Option<Url>),
     /// Show the ready window — its bar is loaded already —, then navigate to the URL if given.
     Summon(Option<Url>),
+    /// Bring the open window to the front (leaving the page's fullscreen first, if it shows one).
     Focus,
+    /// The page shows an element fullscreen: leave it — the page stays, a video keeps playing in
+    /// the window —, then bring the window to the front with the command bar open, the keyboard in
+    /// its field.
+    LeaveFullscreen,
     FocusAndNavigate(Url),
     /// Create the window, then open the extension's panel.
     CreateExtension(String),
@@ -118,8 +132,15 @@ pub fn decide(state: WindowState, command: Command) -> Action {
         (Ready { usable: false }, Command::Show(url)) => Action::Rebuild(url),
         (Ready { usable: false }, Command::Extension(id)) => Action::RebuildExtension(id),
         (Ready { .. }, Command::Release(why)) => Action::Release(why),
-        (Open { focused: true }, Command::Toggle) => Action::Close,
-        (Open { focused: false }, Command::Toggle) => Action::Focus,
+        (
+            Open {
+                page_fullscreen: true,
+                ..
+            },
+            Command::Toggle | Command::Show(None),
+        ) => Action::LeaveFullscreen,
+        (Open { focused: true, .. }, Command::Toggle) => Action::Close,
+        (Open { focused: false, .. }, Command::Toggle) => Action::Focus,
         (Open { .. }, Command::Show(None)) => Action::Focus,
         (Open { .. }, Command::Show(Some(url))) => Action::FocusAndNavigate(url),
         (Open { .. }, Command::Hide) => Action::Close,
@@ -139,9 +160,33 @@ mod tests {
     const HIBERNATING: WindowState = WindowState::Hibernating;
     const READY: WindowState = WindowState::Ready { usable: true };
     const BAR_GONE: WindowState = WindowState::Ready { usable: false };
-    const FOCUSED: WindowState = WindowState::Open { focused: true };
-    const BACKGROUND: WindowState = WindowState::Open { focused: false };
-    const ALL: [WindowState; 5] = [HIBERNATING, READY, BAR_GONE, FOCUSED, BACKGROUND];
+    const FOCUSED: WindowState = WindowState::Open {
+        focused: true,
+        page_fullscreen: false,
+    };
+    const BACKGROUND: WindowState = WindowState::Open {
+        focused: false,
+        page_fullscreen: false,
+    };
+    /// The page in element fullscreen: on Windows and Linux the window has the keyboard; on macOS
+    /// WebKit's own fullscreen window has it.
+    const FULLSCREEN_FOCUSED: WindowState = WindowState::Open {
+        focused: true,
+        page_fullscreen: true,
+    };
+    const FULLSCREEN_BACKGROUND: WindowState = WindowState::Open {
+        focused: false,
+        page_fullscreen: true,
+    };
+    const ALL: [WindowState; 7] = [
+        HIBERNATING,
+        READY,
+        BAR_GONE,
+        FOCUSED,
+        BACKGROUND,
+        FULLSCREEN_FOCUSED,
+        FULLSCREEN_BACKGROUND,
+    ];
 
     fn url() -> Url {
         Url::parse("https://example.com/").expect("valid")
@@ -188,6 +233,35 @@ mod tests {
     }
 
     #[test]
+    fn a_page_in_fullscreen_leaves_it_and_opens_the_command_bar() {
+        for state in [FULLSCREEN_FOCUSED, FULLSCREEN_BACKGROUND] {
+            assert_eq!(
+                decide(state, Command::Toggle),
+                Action::LeaveFullscreen,
+                "{state:?}"
+            );
+            assert_eq!(
+                decide(state, Command::Show(None)),
+                Action::LeaveFullscreen,
+                "{state:?}"
+            );
+            // A URL loads after the fullscreen is left (every focus leaves it first).
+            assert_eq!(
+                decide(state, Command::Show(Some(url()))),
+                Action::FocusAndNavigate(url())
+            );
+            assert_eq!(decide(state, Command::Hide), Action::Close);
+            assert_eq!(
+                decide(state, Command::Extension("hello".into())),
+                Action::FocusAndExtension("hello".into())
+            );
+        }
+        // Then the page is back in the window and the window has the keyboard: the next press
+        // closes it as usual.
+        assert_eq!(decide(FOCUSED, Command::Toggle), Action::Close);
+    }
+
+    #[test]
     fn resize_applies_to_an_open_window_only() {
         let resize = Command::Resize {
             width: 390,
@@ -196,7 +270,12 @@ mod tests {
         for state in [HIBERNATING, READY, BAR_GONE] {
             assert_eq!(decide(state, resize.clone()), Action::Nothing, "{state:?}");
         }
-        for state in [FOCUSED, BACKGROUND] {
+        for state in [
+            FOCUSED,
+            BACKGROUND,
+            FULLSCREEN_FOCUSED,
+            FULLSCREEN_BACKGROUND,
+        ] {
             assert_eq!(
                 decide(state, resize.clone()),
                 Action::Resize {
@@ -242,7 +321,7 @@ mod tests {
     #[test]
     fn prewarm_builds_only_from_hibernation() {
         assert_eq!(decide(HIBERNATING, Command::Prewarm), Action::Prewarm);
-        for state in [READY, BAR_GONE, FOCUSED, BACKGROUND] {
+        for state in ALL.into_iter().skip(1) {
             assert_eq!(
                 decide(state, Command::Prewarm),
                 Action::Nothing,
@@ -259,7 +338,13 @@ mod tests {
                 decide(BAR_GONE, Command::Release(why)),
                 Action::Release(why)
             );
-            for state in [HIBERNATING, FOCUSED, BACKGROUND] {
+            for state in [
+                HIBERNATING,
+                FOCUSED,
+                BACKGROUND,
+                FULLSCREEN_FOCUSED,
+                FULLSCREEN_BACKGROUND,
+            ] {
                 assert_eq!(
                     decide(state, Command::Release(why)),
                     Action::Nothing,

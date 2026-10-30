@@ -2,7 +2,12 @@
 // run's memory numbers don't move): the smoke page in `?fs=both` mode at 390×600 (phone agent) and
 // at 720×600 (desktop agent), each button clicked in turn — "Element fullscreen" (requestFullscreen
 // on a container, as desktop YouTube), its Exit 2 s later, then "Phone player" (m.youtube.com's
-// way under an iPhone agent) and its own exit —, then a second launch whose settings say
+// way under an iPhone agent) and its own exit —, then (LJ19.5) the summon during the page's
+// fullscreen at 720: "Element fullscreen" clicked, and while the page is in it `--toggle` (the
+// shortcut's own command) must leave the fullscreen (the page goes on: its pings), open the command
+// bar with the keyboard in its field (a typed letter reaches it), and a second press close the
+// window as usual — `--toggle` again, the real shortcut on Windows — (`summonRun`; the rules in
+// smoke-fullscreen-summon.mts) —, then a second launch whose settings say
 // `"siteModes": { "127.0.0.1": "desktop" }` at 390×600. Only clicks, never keys: the owner's bug
 // was about clicks. scripts/ci/smoke.mts supplies the driver; the parsing and the rules are pure
 // and unit-tested (smoke-fullscreen.test.ts). The page reports `LJ-FS …` titles
@@ -12,6 +17,7 @@
 // state).
 import { FS_BUTTONS, centre } from "../../tests/smoke/fullscreen-logic.mjs";
 import type { LogEvent } from "./smoke-log.mts";
+import { FS_PING, enteredFullscreen, fsSummonSummary, type FsSummon } from "./smoke-fullscreen-summon.mts";
 
 /** One `LJ-FS <path> …` report of the smoke page. */
 export interface FsReport {
@@ -171,6 +177,8 @@ export const SITE_SIZE: FsSize = { width: 390, ua: "desktop", paths: ["phone"], 
 
 /** One launch of the app, as smoke.mts drives it. */
 export interface FsApp {
+  /** The app's process (for typing into it). */
+  pid?(): number;
   forward(args: string[]): Promise<void>;
   events(): LogEvent[];
   waitFor(what: string, test: (events: LogEvent[]) => boolean, timeoutMs: number): Promise<boolean>;
@@ -193,6 +201,12 @@ export interface FsDriver {
    * request is refused, so there is no Exit to click.
    */
   fullscreenOff?: boolean;
+  /** Types `text` into whatever has the keyboard (the summon run's letter; smoke.mts's typeText). */
+  typeText?(text: string, pid: number, activate: boolean): void;
+  /** The unix ms of each ping the smoke server got from a `?ping=<id>` page. */
+  pings?(id: string): number[];
+  /** Presses the global shortcut as a keyboard would (the summon run's second press on Windows). */
+  pressSummonShortcut?(): number | null;
 }
 
 /** The logs of the fullscreen launches. */
@@ -200,6 +214,8 @@ export interface FsRunEvents {
   main: LogEvent[];
   /** The siteModes launch (undefined: not run). */
   site?: LogEvent[];
+  /** The summon during the page's fullscreen (LJ19.5; undefined: not run). */
+  summon?: FsSummon;
 }
 
 /** Waits until the page reports `ready` at `width` with `ua` and stays that way for 1.5 s. */
@@ -258,9 +274,68 @@ async function launchWithPage(d: FsDriver, name: string, settings: Record<string
   const app = await d.launch(name, settings);
   await app.waitFor(`${name}: started`, (e) => e.some((x) => x.event === "started"), 30_000);
   await d.sleep(1500);
-  await app.forward(["--show", `${d.pageUrl}?fs=both`]);
+  await app.forward(["--show", `${d.pageUrl}?fs=both&ping=${FS_PING}-${name}`]);
   await app.waitFor(`${name}: the page`, (e) => e.some((x) => x.event === "title" && x.detail.startsWith("LJ-FS ready")), 30_000);
   return app;
+}
+
+/**
+ * The summon during the page's fullscreen (LJ19.5), at the last size (720): "Element fullscreen"
+ * clicked; once the page is in it, `--toggle` — the global shortcut's own command, without the
+ * synthetic key (Windows loses some) —; a screenshot (fs/summon-command-bar.png); a letter typed
+ * into whatever has the keyboard; then the second press: `--toggle` again, on Windows the real
+ * shortcut (a forwarded `--toggle` arrives with the keyboard gone to its own process there). Not
+ * run where fullscreen is off.
+ */
+async function summonRun(d: FsDriver, app: FsApp): Promise<FsSummon | undefined> {
+  const size = FS_SIZES.at(-1);
+  if (d.fullscreenOff || !size || !d.pings || !d.typeText || !app.pid) {
+    return undefined;
+  }
+  const screen = pageScreenFor(app.events(), size.width);
+  if (!screen) {
+    console.log("fullscreen summon: no page-screen line, so no click");
+    return undefined;
+  }
+  const from = app.events().length;
+  const index = () => app.events().length - from;
+  d.clickAt(clickPoint(screen, FS_BUTTONS.element, d.os));
+  const entered = await app.waitFor("fullscreen summon: the page in element fullscreen", (e) => enteredFullscreen(e.slice(from), d.os), 6_000);
+  await d.sleep(1000);
+  const first = index();
+  const firstAt = Date.now();
+  await app.forward(["--toggle"]);
+  await app.waitFor(
+    "fullscreen summon: the command bar (or the window closed)",
+    (e) => e.slice(from + first).some((x) => (x.event === "overlay" && x.detail === "true") || x.event === "closing" || (x.event === "summon-fullscreen" && x.detail.startsWith("gave-up"))),
+    10_000,
+  );
+  await d.sleep(1500);
+  d.screenshot("fs/summon-command-bar.png");
+  // Ready to type: the letter goes to whatever has the keyboard (no activation first).
+  d.typeText("a", app.pid(), false);
+  await app.waitFor("fullscreen summon: typed into the command bar", (e) => e.slice(from + first).some((x) => x.event === "suggestions" && x.detail.endsWith("typed=1")), 5_000);
+  await d.sleep(500);
+  const second = index();
+  const secondAt = Date.now();
+  const closed = (e: LogEvent[]) => e.slice(from + second).some((x) => x.event === "hibernated");
+  if (d.os === "win32" && d.pressSummonShortcut) {
+    // Windows: the real shortcut, as the user presses it again — a forwarded `--toggle` comes
+    // from a second process, and the window has lost the keyboard to it by then (CI saw `Focus`).
+    // A synthetic key now and then never arrives (Deferred follow-ups): once more if nothing came.
+    d.pressSummonShortcut();
+    if (!(await app.waitFor("fullscreen summon: the second press (the shortcut) closed the window", closed, 6_000))) {
+      if (!app.events().slice(from + second).some((x) => x.event === "window-front" || x.event === "closing")) {
+        d.pressSummonShortcut();
+      }
+      await app.waitFor("fullscreen summon: the second press closed the window", closed, 10_000);
+    }
+  } else {
+    await app.forward(["--toggle"]);
+    await app.waitFor("fullscreen summon: the second press closed the window", closed, 10_000);
+  }
+  await d.sleep(1000);
+  return { entered, events: app.events().slice(from), first, second, firstAt, secondAt, pings: d.pings(`${FS_PING}-fullscreen`) };
 }
 
 /** Runs the fullscreen launch, and with `siteModes` the second one. */
@@ -269,14 +344,16 @@ export async function fullscreenRun(d: FsDriver, siteModes: boolean): Promise<Fs
   for (const size of FS_SIZES) {
     await atSize(d, app, size);
   }
+  const summon = await summonRun(d, app);
   await app.quit();
+  const main = app.events();
   if (!siteModes) {
-    return { main: app.events() };
+    return summon ? { main, summon } : { main };
   }
   const site = await launchWithPage(d, "fullscreen-site", { siteModes: SITE_MODES });
   await atSize(d, site, SITE_SIZE);
   await site.quit();
-  return { main: app.events(), site: site.events() };
+  return summon ? { main, site: site.events(), summon } : { main, site: site.events() };
 }
 
 /**
@@ -297,23 +374,6 @@ export function layoutDuringWebKitFullscreen(events: LogEvent[]): LogEvent[] {
 /** WebKit's fullscreen states in the order the log saw them (macOS). */
 export function webkitStates(events: LogEvent[]): string[] {
   return events.filter((e) => e.event === "wk-fullscreen").map((e) => e.detail);
-}
-
-/**
- * macOS (LJ19.4-fix4): the main run's `--show <url>` comes while WebKit shows the smoke page in
- * element fullscreen. The summon must bring the app forward without ordering the window (it logs
- * `summon-fullscreen`): ordered front, the window joins WebKit's full-screen Space, the navigation
- * closes that Space with it inside, and the Dock may then refuse every app's full screen for
- * minutes — the fullscreen launches a few minutes later fail with it. Only when the page was in
- * WebKit's fullscreen (`wk-fullscreen in`: the click reached it).
- */
-export function summonDuringFullscreenFailures(main: LogEvent[], os: string): string[] {
-  if (os !== "darwin" || !main.some((e) => e.event === "wk-fullscreen" && e.detail === "in")) {
-    return [];
-  }
-  return main.some((e) => e.event === "summon-fullscreen")
-    ? []
-    : ["fullscreen: the summon during the page's WebKit fullscreen ordered the window front (no summon-fullscreen line)"];
 }
 
 /**
@@ -387,6 +447,7 @@ export function fullscreenSummary(run: FsRunEvents, os: string, fullscreenOff = 
     webkit: webkitStates(run.main),
     windowEvents: run.main.filter((e) => e.event === "wk-window").map((e) => e.detail),
     siteModes: run.site ? { reports: fsReports(run.site), webkit: webkitStates(run.site) } : null,
+    summon: fsSummonSummary(run.summon, os),
     rules: fullscreenFailures(run, os, fullscreenOff),
   };
 }

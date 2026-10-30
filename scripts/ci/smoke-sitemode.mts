@@ -196,6 +196,8 @@ export interface SiteApp extends FsApp {
   pid(): number;
   /** The launch's settings.json, now. */
   settings(): string | undefined;
+  /** The launch's data folder (a relaunch on it: smoke-tray.mts). */
+  dir?(): string;
 }
 
 export interface SiteDriver {

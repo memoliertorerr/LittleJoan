@@ -205,7 +205,9 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   to 300 %, shows the level in the toolbar for a moment ("Zoom 110 %"), holds while you browse in
   the window, and is back at 100 % the next time you summon Little Joan.
 
-- **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. On
+- **Fullscreen video:** a video's fullscreen button fills the screen; Esc brings it back. The
+  shortcut brings it back too, still playing, and opens the command bar (press it again to close
+  Little Joan). On
   Linux, video needs the GStreamer plugins (`gstreamer1.0-plugins-good`, `-plugins-bad`,
   `gstreamer1.0-libav` on Debian/Ubuntu); the `.deb` installs them.
   **On Ubuntu 22.04's WebKitGTK 2.50 a video can't go fullscreen; Little Joan turns fullscreen
@@ -244,7 +246,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   registered, or on a Linux Wayland session without the portal (above) — so Little Joan is never
   out of reach.
 - **Quit:** tray menu → **Quit Little Joan**, the command bar's **Quit Little Joan** (type
-  "quit"), `little-joan --quit`, or Cmd+Q on macOS while it's in front.
+  "quit"), **Settings → General → Quit** (unsaved changes in Settings are dropped), `little-joan
+  --quit`, or Cmd+Q on macOS while it's in front.
 
 ## Translate
 

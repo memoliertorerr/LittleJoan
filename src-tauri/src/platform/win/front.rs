@@ -38,3 +38,13 @@ pub fn front<R: Runtime>(window: &Window<R>) -> Option<Front> {
         })
     }
 }
+
+/// Whether the window is the foreground window — it has the keyboard, wherever in it (the toggle's
+/// "focused"; LJ19.5). tao's `is_focused` follows the top-level window's own `WM_SETFOCUS` /
+/// `WM_KILLFOCUS`, so it says false once a webview's child window took the keyboard (the command
+/// bar's field after a summon). `None` when the window has no handle any more.
+pub fn foreground<R: Runtime>(window: &Window<R>) -> Option<bool> {
+    let hwnd = window.hwnd().ok()?;
+    // SAFETY: GetForegroundWindow reads which window is in front; valid on any thread.
+    Some(unsafe { GetForegroundWindow() } == hwnd)
+}

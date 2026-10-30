@@ -22,6 +22,7 @@ use crate::summon_timing::{self, Kind, Request, Source};
 use crate::toggle::{self, Action, Command, WindowState};
 use crate::tray;
 
+mod fullscreen;
 mod rest;
 mod window;
 
@@ -89,8 +90,15 @@ fn run<R: Runtime>(app: &AppHandle<R>, command: Command, request: Option<Request
             measure(Kind::Cold, url.is_some());
             rest::create(app, url)
         }
-        Action::Focus => focus(app),
-        Action::FocusAndNavigate(url) => focus(app).and_then(|()| bar::navigate(app, url)),
+        Action::Focus => focus(app).map(drop),
+        // The shortcut while the page is full screen (LJ19.5): out of the fullscreen, then the
+        // command bar with the keyboard in its field.
+        Action::LeaveFullscreen => focus(app).map(|front| {
+            if front {
+                bar::focus_bar(app);
+            }
+        }),
+        Action::FocusAndNavigate(url) => focus(app).and_then(|_| bar::navigate(app, url)),
         Action::CreateExtension(id) => {
             measure(Kind::Cold, false);
             extension_window(app, &id, |app| rest::create(app, None))
@@ -104,7 +112,7 @@ fn run<R: Runtime>(app: &AppHandle<R>, command: Command, request: Option<Request
             measure(Kind::Ready, false);
             extension_window(app, &id, |app| rest::summon(app, None))
         }
-        Action::FocusAndExtension(id) => focus(app).and_then(|()| open_extension(app, &id)),
+        Action::FocusAndExtension(id) => focus(app).and_then(|_| open_extension(app, &id)),
         Action::Close => rest::close(app),
         Action::Prewarm => rest::prewarm(app),
         Action::Release(why) => {
@@ -213,32 +221,58 @@ fn window_state<R: Runtime>(app: &AppHandle<R>) -> WindowState {
         Some(_) if rest::at_rest() => WindowState::Ready {
             usable: rest::bar_usable(),
         },
-        Some(window) => WindowState::Open {
-            focused: window.is_focused().unwrap_or(false),
-        },
+        Some(window) => {
+            let state = WindowState::Open {
+                focused: platform::has_keyboard(&window),
+                page_fullscreen: bar::element_fullscreen() || bar::page_in_webkit_fullscreen(app),
+            };
+            // CI: what the toggle saw (and tao's own focus, which differs on Windows: LJ19.5).
+            if smoke::enabled()
+                && let WindowState::Open {
+                    focused,
+                    page_fullscreen,
+                } = state
+            {
+                smoke::log(
+                    "window-state",
+                    &format!(
+                        "open focused={focused} page-fullscreen={page_fullscreen} tao-focused={}",
+                        window.is_focused().unwrap_or(false)
+                    ),
+                );
+            }
+            state
+        }
     }
 }
 
-fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    if let Some(window) = app.get_window(LABEL) {
-        // macOS: WebKit shows the page in element fullscreen, on screen in its own window and Space.
-        // The app comes to the front instead of this window, which, ordered front, would join that
-        // Space (LJ19.2's collection behaviour) — and when the Space closed with it inside (a
-        // summon with a URL leaves the fullscreen at once), the Dock could refuse every app's full
-        // screen for minutes (LJ19.4-fix4). A navigation that follows ends the fullscreen; WebKit
-        // then puts the page back in this window and makes it key.
-        if bar::page_in_webkit_fullscreen(app) {
-            platform::activate_app(&window);
-            smoke::log("summon-fullscreen", "activated");
-            platform::report_front(&window);
-            return Ok(());
-        }
-        window.unminimize()?;
-        window.show()?;
-        platform::bring_to_front(&window)?;
+/// Brings the open window to the front with the keyboard; returns whether it came with the page
+/// out of any fullscreen (false: there is no window, or the page didn't leave its fullscreen in
+/// time — then nothing may take the keyboard from it). A page in element fullscreen leaves
+/// it first (LJ19.5, joan/fullscreen.rs) — on macOS nothing is ordered until WebKit has put the
+/// page back in this window and the Space with it is on screen again: ordered front during
+/// WebKit's fullscreen, the window would join WebKit's full-screen Space (LJ19.2's collection
+/// behaviour), and that Space closing with it inside can make the Dock refuse every app's full
+/// screen for minutes (LJ19.4-fix4, the Landmine). If the page never leaves, macOS only brings the
+/// app to the front (the full-screen page with the keyboard), as LJ19.4-fix4 did.
+fn focus<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<bool> {
+    let Some(window) = app.get_window(LABEL) else {
+        return Ok(false);
+    };
+    let left = fullscreen::leave(app, &window);
+    if left == (fullscreen::Leave::GaveUp { webkit: true }) {
+        platform::activate_app(&window);
+        smoke::log("summon-fullscreen", "activated");
         platform::report_front(&window);
+        return Ok(false);
     }
-    Ok(())
+    // (Windows and Linux: a page that kept its fullscreen keeps it in this window, which comes to
+    // the front.)
+    window.unminimize()?;
+    window.show()?;
+    platform::bring_to_front(&window)?;
+    platform::report_front(&window);
+    Ok(left == fullscreen::Leave::Done)
 }
 
 /// `--size`: the open window becomes width × height logical pixels (within the allowed range).

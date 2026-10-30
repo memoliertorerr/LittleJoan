@@ -34,6 +34,7 @@ fn main() {
             "site_mode_info",
             "set_site_mode",
             "quit_app",
+            "quit_from_settings",
             "quick_state",
             "quick_command",
             "keymap_info",

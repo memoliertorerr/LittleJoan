@@ -15,7 +15,6 @@ import {
   readyIndex,
   reportAfter,
   route,
-  summonDuringFullscreenFailures,
   webkitStates,
 } from "./smoke-fullscreen.mts";
 
@@ -221,22 +220,5 @@ describe("fullscreenFailures", () => {
       "fs/element-720.png",
       "fs/desktop-site-390.png",
     ]);
-  });
-});
-
-describe("summonDuringFullscreenFailures", () => {
-  const during = (summon: boolean) =>
-    parseLog(
-      ["1 wk-fullscreen entering", "2 wk-fullscreen in", ...(summon ? ["3 summon-fullscreen activated"] : []), "4 wk-fullscreen exiting", "5 wk-fullscreen not"].join("\n") + "\n",
-    );
-  it("pass on macOS when the summon during WebKit's fullscreen activated the app", () => {
-    expect(summonDuringFullscreenFailures(during(true), "darwin")).toEqual([]);
-  });
-  it("fail on macOS when that summon ordered the window front", () => {
-    expect(summonDuringFullscreenFailures(during(false), "darwin")).toHaveLength(1);
-  });
-  it("ask nothing when the page never was in WebKit's fullscreen, or off macOS", () => {
-    expect(summonDuringFullscreenFailures(parseLog("1 wk-fullscreen not\n"), "darwin")).toEqual([]);
-    expect(summonDuringFullscreenFailures(during(false), "win32")).toEqual([]);
   });
 });

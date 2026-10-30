@@ -103,7 +103,8 @@ import {
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
-import { fullscreenFailures, fullscreenRun, fullscreenSummary, summonDuringFullscreenFailures, type FsDriver } from "./smoke-fullscreen.mts";
+import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } from "./smoke-fullscreen.mts";
+import { fsSummonFailures, summonDuringFullscreenFailures } from "./smoke-fullscreen-summon.mts";
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
@@ -111,7 +112,7 @@ import { findApp, listProcs } from "./smoke-linux.mts";
 import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
 import { summonTimings, timingFailures, timingRun, timingSummary, timingTable, type TimingDriver } from "./smoke-timing.mts";
-import { spacesFailures, spacesRun, spacesSummary } from "./smoke-spaces.mts";
+import { repeatLaunch, repeatSummary, spacesFailures, spacesRepeat, spacesRun, spacesSummary, type SpacesDriver, type SpacesRun } from "./smoke-spaces.mts";
 import { restFailures, restRun, restSummary, restTable, type EngineProc, type RestRun } from "./smoke-rest.mts";
 import { ZOOMED, zoomFailures, zoomReset, zoomSummary, zoomedViewport } from "./smoke-zoom.mts";
 import {
@@ -1581,15 +1582,17 @@ for (const run of THEME_RUNS) {
  * `name` names the data folder and the log (`smoke-<name>.log`); `extra` adds to the app's
  * environment (the tray run's Wayland session).
  */
-function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra: Record<string, string> = {}): Promise<SiteApp> {
+function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra: Record<string, string> = {}, dir?: string): Promise<SiteApp> {
   const logFile = join(out, `smoke-${name}.log`);
   rmSync(logFile, { force: true });
-  const runDir = dataDir(name, true, settings);
+  // A relaunch (`dir`) keeps the data folder and its settings as they are.
+  const runDir = dir ?? dataDir(name, true, settings);
   const runEnv = { ...env, ...extra, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
   const runChild = launch(runEnv);
   return Promise.resolve({
     pid: () => appPid(runChild),
     settings: () => readIfThere(join(runDir, "settings.json")),
+    dir: () => runDir,
     forward: (args) => forward(args, runEnv),
     events: () => events(logFile),
     waitFor: (what, test, timeoutMs) => waitFor(what, test, timeoutMs, logFile),
@@ -1610,6 +1613,9 @@ const fullscreenDriver: FsDriver = {
   screenshot,
   sleep: (ms) => sleep(ms).then(() => undefined),
   fullscreenOff,
+  typeText,
+  pings: (id) => pingLog.filter((p) => p.id === id).map((p) => p.t),
+  pressSummonShortcut: () => pressSummonShortcut(),
 };
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
@@ -1692,6 +1698,8 @@ const trayDriver: TrayDriver = {
   typeText,
   pressKeys,
   exited,
+  pageUrl: smokePageUrl,
+  relaunch: (previous, name) => fullscreenLaunch(name, {}, {}, previous.dir?.()),
 };
 const trayCheck = await trayRun(trayDriver);
 console.log(`tray: ${JSON.stringify(traySummary(trayCheck, os))}`);
@@ -1799,7 +1807,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
 }
 // The over-full-screen run (LJ19.2, smoke-spaces.mts): its own launch, summoned over another app's
 // full-screen window.
-const spacesCheck = await spacesRun({
+const spacesDriver: SpacesDriver = {
   os,
   out,
   launch: fullscreenLaunch,
@@ -1809,8 +1817,25 @@ const spacesCheck = await spacesRun({
   typeText,
   pressSummonShortcut,
   run,
-});
+};
+const spacesCheck = await spacesRun(spacesDriver);
 console.log(`spaces: ${JSON.stringify(spacesSummary(spacesCheck, os))}`);
+// CI experiments (LJ19.6): LJ_SPACES_REPEAT=<n> in extra_env runs that launch n times in all.
+const spacesRepeats: { name: string; run: SpacesRun }[] = [{ name: "spaces", run: spacesCheck }];
+for (let index = 2; index <= spacesRepeat(extraEnv.LJ_SPACES_REPEAT); index += 1) {
+  const launch = repeatLaunch(index);
+  const repeated = await spacesRun(spacesDriver, launch);
+  spacesRepeats.push({ name: launch.name, run: repeated });
+  console.log(`${launch.name}: ${JSON.stringify(spacesFailures(repeated, os))}`);
+}
+const spacesRepeated = repeatSummary(spacesRepeats, os);
+if (spacesRepeats.length > 1) {
+  const line = `over-fullscreen launches: ${spacesRepeated.failed} of ${spacesRepeated.launches} failed (${os})`;
+  console.log(line);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${line}\n`);
+  }
+}
 // The rest runs (LJ19.4, smoke-rest.mts): one launch per "After closing" mode.
 const restRuns: RestRun[] = [];
 for (const mode of ["ready", "hibernate", "ready15"] as const) {
@@ -1964,6 +1989,8 @@ const summary = {
   mainRunTimings: summonTimings(log),
   // LJ19.2: summoned over another app's full-screen window.
   spacesRun: spacesSummary(spacesCheck, os),
+  // LJ19.6's experiments: the same launch repeated (LJ_SPACES_REPEAT; one launch by default).
+  spacesRepeat: spacesRepeated,
   // LJ19.4: what stays at rest per "After closing" mode.
   restRuns: restRuns.map(restSummary),
   downloads: downloadSummary(downloadCheck),
@@ -2016,6 +2043,7 @@ const failures = evaluate(
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(fullscreenFailures(fullscreenCheck, os, fullscreenOff))
   .concat(summonDuringFullscreenFailures(log, os))
+  .concat(fsSummonFailures(fullscreenCheck.summon, os))
   .concat(fullscreenOffFailures(fullscreenOff, { main: log, fullscreen: fullscreenCheck }))
   .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(siteModeFailures(siteModeCheck, os))
@@ -2026,6 +2054,7 @@ const failures = evaluate(
   .concat(trayFailures(trayCheck, os))
   .concat(timingFailures(timingCheck, os))
   .concat(spacesFailures(spacesCheck, os))
+  .concat(spacesRepeats.slice(1).flatMap(({ name, run: repeated }) => spacesFailures(repeated, os).map((rule) => `${name}: ${rule}`)))
   .concat(restRuns.flatMap((restCheck) => restFailures(restCheck, os)))
   .concat(downloadFailures(downloadCheck, os))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
@@ -2043,6 +2072,7 @@ if (failures.length > 0) {
     "downloads",
     "tray",
     "tray-settings",
+    "tray-settings-after",
     "tray-wayland",
     "timing-ready",
     "timing",

@@ -32,7 +32,7 @@ use crate::translate::LANGUAGES;
 use crate::welcome;
 use keys::PortalShortcut;
 
-/// The app itself from the command bar (LJ41): `quit_app`.
+/// The app itself: the command bar's Quit (LJ41) `quit_app`, Settings' (LJ19.7) `quit_from_settings`.
 pub mod app;
 /// The toolbar's "Show in folder" for a download (LJ15): `reveal_download`.
 pub mod downloads;
@@ -252,6 +252,7 @@ pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
         )
     });
     smoke::log("settings-loaded", "");
+    settings_window::smoke_click_quit(&app);
     SettingsView {
         settings,
         start_at_login: autostart::is_enabled(&app),

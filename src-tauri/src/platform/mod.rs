@@ -13,6 +13,10 @@ mod portal;
 #[cfg(windows)]
 mod win;
 
+/// A summon leaving the page's element fullscreen (LJ19.5).
+mod leave;
+pub use leave::{close_media_presentations, fullscreen_now, has_keyboard, webkit_fullscreen_exit};
+
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::thread::ThreadId;
