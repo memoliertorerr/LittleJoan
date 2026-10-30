@@ -6,6 +6,15 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-10-30
+
+Little Joan opens instantly, and its shortcut works while a video is full screen. It includes
+everything in the pre-release below, 0.2.1-beta.1 — it stays ready after you close it (your choice
+in Settings → General → After closing), the page is built after the command bar, no flash of the
+default theme, and it opens over full-screen apps on the Space you are on — plus what is listed
+here: the shortcut during a page's full screen, Quit in Settings, and the beta's over-fullscreen
+issue fixed.
+
 ### Added
 - **Quit Little Joan from Settings.** Settings → General now ends with a **Quit** button, the same
   quit as the tray's and the command bar's. Changes in Settings you haven't saved are dropped, as
@@ -26,6 +35,31 @@ All notable changes to Little Joan are recorded here. The format follows
 - **On Windows, pressing the shortcut while Little Joan is in front closes it every time.** In
   testing (after a video's full screen, with the keyboard in the command bar) it sometimes only
   brought the window forward.
+
+### Known issues
+- **Stay ready keeps some memory while Little Joan is closed** — in CI about 30 MB more than
+  Hibernate on macOS, 110 MB on Windows, 200 MB on Linux. Choose **Hibernate** under Settings →
+  General → After closing to keep nothing.
+- **The builds aren't code-signed yet** (signing comes in a later release). The macOS DMG is
+  ad-hoc signed and not notarized, so macOS blocks its first launch (the README's Install section
+  has the one-time step); the Windows installer isn't signed, so SmartScreen warns about an unknown
+  publisher (More info → Run anyway).
+- **Videos can't go fullscreen with a WebKitGTK older than 2.52** (Ubuntu 22.04's `.deb`, x86_64
+  and ARM64): Little Joan turns fullscreen off there rather than crash. Ubuntu 24.04 and the
+  AppImage keep fullscreen video.
+- **Desktop site changes nothing on sites that send every device the same page.**
+- **macOS shows a file it can display — a PDF, an image — in the page instead of saving it,**
+  unless the link is marked as a download.
+- **Linux under Wayland without the GlobalShortcuts portal** (GNOME 46 on Ubuntu 24.04) can't hear
+  the shortcut: bind `little-joan --toggle` in your desktop's keyboard settings.
+- **Windows:** a sign-in kept "until you close the browser" with a cookie for a whole domain may
+  ask again on a subdomain after the window was closed.
+- **"Copy as Markdown link" shows twice when you type "copy".**
+- **A double click on the toolbar always zooms the window,** whatever macOS's title-bar setting.
+- **Windows: a fast drag can show a white strip for a frame at the edge of a dark page.**
+- **After an extension opens a page in the window**, the toolbar's Back may do nothing.
+- **History can list a page twice** after a link on it was refused or turned into a download.
+- **The AppImage's start-at-login entry breaks if the AppImage's path has a space in it.**
 
 ## [0.2.1-beta.1] — 2026-10-29
 
@@ -455,7 +489,8 @@ global shortcut calls it.
   a Gatekeeper or SmartScreen warning.
 - Linux global shortcuts work on X11 only; on Wayland, bind `little-joan --toggle` instead.
 
-[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.1-beta.1...HEAD
+[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.1
 [0.2.1-beta.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.1-beta.1
 [0.2.0]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0
 [0.2.0-beta.3]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0-beta.3

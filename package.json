@@ -1,7 +1,7 @@
 {
   "name": "little-joan",
   "private": true,
-  "version": "0.2.1-beta.1",
+  "version": "0.2.1",
   "description": "A tiny pop-up browser that hibernates until a global shortcut calls it.",
   "license": "MIT",
   "author": "Mehmet Ali Ertorer",
