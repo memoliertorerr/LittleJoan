@@ -563,7 +563,10 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
   (a close hid it).
 - **The prewarm** (`prewarm_after_launch`, Stay ready only): `PREWARM_AFTER` (3 s) after setup,
   after the tray and the shortcut, `Command::Prewarm` builds the hidden window and the bar — no
-  page, no history, nothing shown, nothing focused, the bar's memory target low (Windows). Never
+  page, no history, nothing shown, nothing focused, the bar's memory target low (Windows). On
+  macOS the window gets its collection behaviour as it is built (LJ19.6; every window does, cold
+  ones again before the show) and no `orderOut` (it was never shown): until its first summon
+  WindowServer hears of it exactly as of a window built at its summon. Never
   on the first run's welcome (that window stays ready when it closes) nor while quitting; a
   summon that came first makes it do nothing. Switching "After closing" to a ready mode prewarms
   at once; switching to Hibernate destroys a resting window at once (`after_close_changed`).
@@ -575,8 +578,9 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
   `released bar-gone`), never a blank window. A bar on screen is reloaded instead.
 - **Where the window shows up (LJ19.2): where the user is, in front with the keyboard — over
   another app's full-screen window too — and never always-on-top.** Like Little Arc: it opens
-  where you are and goes behind other windows once you click them. **macOS:** before the window
-  (and Settings) is first shown, `platform/mac/spaces.rs` gives its NSWindow the collection
+  where you are and goes behind other windows once you click them. **macOS:** as the page window
+  is built (LJ19.6: the ready window seconds or hours before its first summon) and again before
+  every show (and Settings before it is first shown), `platform/mac/spaces.rs` gives its NSWindow the collection
   behaviour `spaces::summoned` — `MoveToActiveSpace` (made active, it comes to the Space on
   screen instead of taking the user to its own; not `CanJoinAllSpaces`, which would put the open
   window on every desktop and full-screen Space at once) and `FullScreenAuxiliary` (it may show on
@@ -1516,9 +1520,10 @@ the windows get those collection-behaviour bits instead, for CI experiments only
 [app=<pid|own>] [stack=<module:symbol < …>]` (macOS: AppKit's window did become / resign key, will /
 did enter / exit full screen, the app did become / resign active or hide, NSWorkspace's active
 Space did change and app did activate — a window's state with it, the key, exit and resign ones
-with the call stack that posted them; LJ19.4-fix4), `wk-context <page-adding|page-added|shown>
-<window's state>` (macOS: the page window just before and after the page's webview is added, and
-once a summon's show and raise ran on the main thread; LJ19.4-fix4), and next to the logs
+with the call stack that posted them; LJ19.4-fix4), `wk-context <page-adding|page-added|before-show|shown>
+<window's state>` (macOS: the page window just before and after the page's webview is added, just
+before a summon orders it — `space=` then says whether ordering it puts it on the Space on screen,
+LJ19.6 —, and once a summon's show and raise ran on the main thread; LJ19.4-fix4), and next to the logs
 `unified.log` (macOS: the unified log of the whole smoke run — the Dock and Stage Manager without
 their per-frame chatter, WebKit's Fullscreen category, AppKit's full-screen lines) and, with
 `LJ_DOCK_PROBE=1` in a run's `extra_env` (CI experiments only), `dock-probe.jsonl` (before each
@@ -1882,7 +1887,12 @@ and pushes to `main`:
   default behaviour, with Little Joan's, and with Little Joan's + canJoinAllApplications, ordered
   front over the full-screen window. Screenshots `over-fullscreen.png`,
   `over-fullscreen-shortcut.png`, `over-fullscreen-settings.png` (log `smoke-spaces.log`, the
-  helper's `fs-helper.jsonl`; `summary.json`'s `spacesRun`). Then the **rest runs**
+  helper's `fs-helper.jsonl`; `summary.json`'s `spacesRun`). For CI experiments (LJ19.6),
+  `LJ_SPACES_REPEAT=<n>` in a dispatched run's `extra_env` runs that launch n times in all, each
+  with a fresh full-screen helper and a fresh Little Joan launch (`smoke-spaces-<i>.log`, no probes
+  or screenshots after the first), with every launch's rules (`summary.json`'s `spacesRepeat`, a line
+  `over-fullscreen launches: <failed> of <n> failed` in the job summary); one launch by default.
+  Then the **rest runs**
   (`smoke-rest.mts`, LJ19.4), one launch per "After closing" mode. Each summons the smoke page's
   `?ping=<id>` (a ping to the smoke server every 250 ms while it runs), closes it, and requires no
   ping later than 2 s after the app's `closing` line and none of the web processes that came with
