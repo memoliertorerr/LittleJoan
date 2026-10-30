@@ -273,6 +273,12 @@ their word; then **Liquid Glass on macOS 26+ only** (LJ19.9: Off / Clear / Tinte
 theme); then v0.3 from phase 21; a **Mac App Store build after round 4** (LJ60). **Execution order
 from here: 19.5 → 19.6 → 19.7 (phase 12, `lj/p12-v021-fixes`) → 58 (once the secrets exist) → 19.8
 (checkpoint) → 19.9 (checkpoint) → 21 → 22 → 23 → 24 → 25 (LJ56) → 26 → 59 → 60.**
+**Phase 12 (2026-10-30)** is PR #37 on `lj/p12-v021-fixes`, merged by the agent once every job is
+green (the standing exception): the shortcut during a page's full screen leaves it and opens the
+command bar on every OS (and on Windows a press closes a window that is in front), the ready
+window no longer lands on the desktop Space over another app's full screen (2 of 100 repeated
+launches before, 0 of 150 after), and Settings → General has Quit Little Joan. Next: LJ58 once the
+owner's Apple secrets exist, then LJ19.8 (the v0.2.1 release, a checkpoint).
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -4373,14 +4379,24 @@ shortcut → the video back in the window, still playing, the command bar open; 
 - **CI round 2** (PR run 41051831701, `fix2`'s head): everything green but Windows, which failed the
   same rule with the real shortcut too (`window-front … focused=true` after the press, no
   `closing`): the window *was* in front with the keyboard in the command bar's field (the letter
-  had reached it), but the toggle's "focused" is tao's `is_focused`, which on Windows follows the
-  top-level window's own `WM_SETFOCUS` / `WM_KILLFOCUS` — and turns false as soon as a webview's
-  child window takes the keyboard (`bar::focus_bar` hands it to the bar's WebView2). So the press
-  only focused. **`lj-step-19.5-fix3`:** the toggle asks `platform::has_keyboard` — on Windows
-  whether the window is the foreground window (`GetForegroundWindow`, what the over-fullscreen
-  check's `focused=` has read since LJ19.2), elsewhere tao's `is_focused` as before (macOS's key
-  window, GTK's toplevel focus: both passed); the smoke log's `window-state open focused=
-  page-fullscreen= tao-focused=` records both for every request on an open window.
+  had reached it), but the toggle's "focused" is tao's `is_focused` — on Windows the top-level
+  window's own activation and `WM_SETFOCUS` / `WM_KILLFOCUS`, which a webview's child window taking
+  the keyboard can turn off — and it said no, so the press only focused. The three after-fix
+  repeat runs below, on `fix2`'s installers, failed the same way: 5 of 5 Windows runs. **`lj-step-19.5-fix3`:**
+  the toggle asks `platform::has_keyboard` — on Windows whether the window is the foreground window
+  (`GetForegroundWindow`, what the over-fullscreen check's `focused=` has read since LJ19.2),
+  elsewhere tao's `is_focused` as before (macOS's key window, GTK's toplevel focus: both passed);
+  the smoke log's `window-state open focused= page-fullscreen= tao-focused=` records both for
+  every request on an open window.
+- **CI round 3** (PR run 41055710136, `fix3`'s head): **all 18 jobs green**. Windows' second press
+  closed (`closing ready` 1 s after it); its `window-state` line said `focused=true` and
+  `tao-focused=true` — so this run doesn't show tao's flag off: why it was off in the five runs
+  before isn't in the logs (each had the letter typed into the field just before, as here). Two
+  more smoke runs on the same installers (41059842982, 41059853884), all 9 smoke jobs green in
+  both: there Windows' second press found `focused=true tao-focused=false` — the window in front
+  with the keyboard, tao saying otherwise — and closed, as the old decision would not have. So tao's
+  flag was off in 7 of 8 Windows runs at that moment, and the foreground check closes in all three
+  runs that have it.
 - **CI:** the fullscreen run ends its first launch with the summon during a fullscreen
   (`smoke-fullscreen.mts` `summonRun`, rules in `smoke-fullscreen-summon.mts`): the page pings
   (`?fs=both&ping=fs-fullscreen`; smoke.html now pings alongside `?fs=both`), "Element fullscreen"
@@ -4443,6 +4459,14 @@ Deferred follow-up struck through.
   summon. A smoke-only `wk-context before-show … space=` line (AppKit's `isOnActiveSpace`, which
   for a window off screen says whether ordering it puts it on the Space on screen) records what
   AppKit expects just before each order.
+- **Proven:** three dispatched runs on the fix's installers (PR run 41051831701, `0b955bf` +
+  `lj-step-19.5-fix2`; `LJ_SPACES_REPEAT=50` each), runs 41053002550, 41053011704, 41053020777:
+  **macOS 0 of 150 launches failed** (before: 2 of 100) — at the before rate of about 1 in 50,
+  150 clean launches would come by chance about 5 % of the time, so about 95 % confidence the rate
+  fell; Windows 0 of 150, Linux 0 of 50 on every job of every run. The PR runs' own over-fullscreen
+  launch passed on every job since. The three runs' only failure was Windows' second press of the
+  fullscreen summon (the installers had `lj-step-19.5-fix2`, not `fix3`).
+- `LJ_SPACES_REPEAT` stays for later experiments (off by default; architecture.md, CI).
 
 ### LJ19.7 — "Quit Little Joan" in Settings · standard · auto
 
@@ -9376,7 +9400,7 @@ smoke run; nothing changed in the direct-download build.
   before LJ19.4-fix4, 40942144444 after it), green on the others. One of the page's WebKit helpers
   outlived the close in those runs. Not looked into: check `helpers-after-hibernate.txt` for which
   one, and whether it went later than the sample.
-- **macOS: a Stay-ready summon over another app's full screen can switch to the desktop** (LJ19.2's
+- ~~**macOS: a Stay-ready summon over another app's full screen can switch to the desktop**~~ (LJ19.2's
   over-fullscreen rule, "the full-screen app's Space was left"): twice on 2026-10-29 in about 35
   macOS smoke runs — 40931257236 (during LJ19.4-fix4's diagnostics) and the release PR's
   40959308249 —, never in LJ19.2's own runs. Both times both summons of the main window (`--show`,
@@ -9391,6 +9415,8 @@ smoke run; nothing changed in the direct-download build.
   gets `MoveToActiveSpace|FullScreenAuxiliary` at its first summon (a cold window gets it right
   after it is built) — set it when the window is built, then run the macOS smoke many times (it is
   about 1 in 20). Listed as a Known issue of 0.2.1-beta.1. → *LJ19.6 (the owner, 2026-10-30).*
+  *Done in LJ19.6: reproduced 2 times in 100 launches on `main`'s installers, none in 150 with the
+  window's behaviour set as it is built (and no `orderOut` at the prewarm) — the step's notes.*
 - **The AppImage's own memory at rest is about twice the `.deb`'s** (surfaced by LJ13's CI): 45.6 MB
   private dirty at start against 19.5 MB, on the same runner and run — the bundled libraries'
   relocated pages are the app's own instead of shared with the system's copies; after a page both

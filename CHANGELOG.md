@@ -19,6 +19,13 @@ All notable changes to Little Joan are recorded here. The format follows
   full screen and the command bar never came; on Windows and Linux the shortcut closed the window
   (and the video with it). An address opened that way (`--show <url>`) also leaves full screen
   first, then loads.
+- **On a Mac, summoning Little Joan over another app's full screen no longer switches to the
+  desktop now and then** (0.2.1-beta.1's known issue, about 1 in 50 of CI's runs): the window that
+  stays ready is now prepared for the Space you are on from the moment it is built. None in 150
+  runs since.
+- **On Windows, pressing the shortcut while Little Joan is in front closes it every time.** In
+  testing (after a video's full screen, with the keyboard in the command bar) it sometimes only
+  brought the window forward.
 
 ## [0.2.1-beta.1] — 2026-10-29
 
