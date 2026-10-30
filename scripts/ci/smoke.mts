@@ -103,7 +103,7 @@ import {
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
 import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
-import { fullscreenFailures, fullscreenRun, fullscreenSummary, summonDuringFullscreenFailures, type FsDriver } from "./smoke-fullscreen.mts";
+import { fsSummonFailures, fullscreenFailures, fullscreenRun, fullscreenSummary, summonDuringFullscreenFailures, type FsDriver } from "./smoke-fullscreen.mts";
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
 import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
@@ -1610,6 +1610,8 @@ const fullscreenDriver: FsDriver = {
   screenshot,
   sleep: (ms) => sleep(ms).then(() => undefined),
   fullscreenOff,
+  typeText,
+  pings: (id) => pingLog.filter((p) => p.id === id).map((p) => p.t),
 };
 mkdirSync(join(out, "fs"), { recursive: true });
 // With the second launch, whose siteModes put the smoke page's host on the desktop agent.
@@ -2016,6 +2018,7 @@ const failures = evaluate(
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(fullscreenFailures(fullscreenCheck, os, fullscreenOff))
   .concat(summonDuringFullscreenFailures(log, os))
+  .concat(fsSummonFailures(fullscreenCheck.summon, os))
   .concat(fullscreenOffFailures(fullscreenOff, { main: log, fullscreen: fullscreenCheck }))
   .concat(resizeFailures(RESIZE_STEPS, resizeCheck.results))
   .concat(siteModeFailures(siteModeCheck, os))

@@ -216,15 +216,19 @@
       // ?ext=race&base=<origin>: iframes and window.open at the panel while the app opens it.
       const race = raceRequest(location.search);
       // ?ping=<id>: a ping to the smoke server every 250 ms while the page runs (LJ19.4: after a
-      // close they must stop — nothing of the page survives it).
+      // close they must stop — nothing of the page survives it). With ?fs=both too (LJ19.5) the
+      // fullscreen run's page pings as well, without the ping title (a summon during its
+      // fullscreen must leave the page running).
       const ping = pingRequest(location.search);
       if (ping) {
-        show(`LJ-PING ${ping.id}`);
         let sent = 0;
         setInterval(() => {
           sent += 1;
           fetch(pingUrl(ping.id, sent), { cache: "no-store" }).catch(() => undefined);
         }, PING_EVERY_MS);
+      }
+      if (ping && !fsRequest(location.search)) {
+        show(`LJ-PING ${ping.id}`);
       } else if (fsRequest(location.search)) {
         runFullscreen();
       } else if (probe) {
