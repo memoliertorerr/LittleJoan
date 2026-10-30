@@ -1582,15 +1582,17 @@ for (const run of THEME_RUNS) {
  * `name` names the data folder and the log (`smoke-<name>.log`); `extra` adds to the app's
  * environment (the tray run's Wayland session).
  */
-function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra: Record<string, string> = {}): Promise<SiteApp> {
+function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra: Record<string, string> = {}, dir?: string): Promise<SiteApp> {
   const logFile = join(out, `smoke-${name}.log`);
   rmSync(logFile, { force: true });
-  const runDir = dataDir(name, true, settings);
+  // A relaunch (`dir`) keeps the data folder and its settings as they are.
+  const runDir = dir ?? dataDir(name, true, settings);
   const runEnv = { ...env, ...extra, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
   const runChild = launch(runEnv);
   return Promise.resolve({
     pid: () => appPid(runChild),
     settings: () => readIfThere(join(runDir, "settings.json")),
+    dir: () => runDir,
     forward: (args) => forward(args, runEnv),
     events: () => events(logFile),
     waitFor: (what, test, timeoutMs) => waitFor(what, test, timeoutMs, logFile),
@@ -1695,6 +1697,8 @@ const trayDriver: TrayDriver = {
   typeText,
   pressKeys,
   exited,
+  pageUrl: smokePageUrl,
+  relaunch: (previous, name) => fullscreenLaunch(name, {}, {}, previous.dir?.()),
 };
 const trayCheck = await trayRun(trayDriver);
 console.log(`tray: ${JSON.stringify(traySummary(trayCheck, os))}`);
@@ -2067,6 +2071,7 @@ if (failures.length > 0) {
     "downloads",
     "tray",
     "tray-settings",
+    "tray-settings-after",
     "tray-wayland",
     "timing-ready",
     "timing",

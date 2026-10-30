@@ -264,6 +264,32 @@ fn only_the_bar_may_quit() {
 }
 
 #[test]
+fn only_settings_may_quit_from_settings() {
+    // Settings → General's "Quit Little Joan" (LJ19.7): the settings window only — never the bar
+    // (it has quit_app, which Settings doesn't), never the page.
+    let mut granted_to = Vec::new();
+    for (place, capability) in all_capabilities() {
+        if !permissions(&capability).contains(&"allow-quit-from-settings") {
+            continue;
+        }
+        let id = capability.get("identifier").and_then(Value::as_str);
+        let settings_only = id == Some("settings")
+            && scopes(&capability, "windows") == [settings_window::LABEL]
+            && scopes(&capability, "webviews").is_empty();
+        assert!(
+            settings_only,
+            "{place}: only the settings window's capability may quit from Settings"
+        );
+        assert!(
+            !permissions(&capability).contains(&"allow-quit-app"),
+            "{place}: Settings quits through its own command, not the bar's"
+        );
+        granted_to.extend(id.map(str::to_owned));
+    }
+    assert_eq!(granted_to, ["settings"]);
+}
+
+#[test]
 fn only_the_bar_may_run_quick_commands() {
     // The command bar's quick commands (LJ42): the trusted bar only — never the page, never
     // Settings (which has its own Save).

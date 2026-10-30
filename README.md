@@ -246,7 +246,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   registered, or on a Linux Wayland session without the portal (above) — so Little Joan is never
   out of reach.
 - **Quit:** tray menu → **Quit Little Joan**, the command bar's **Quit Little Joan** (type
-  "quit"), `little-joan --quit`, or Cmd+Q on macOS while it's in front.
+  "quit"), **Settings → General → Quit** (unsaved changes in Settings are dropped), `little-joan
+  --quit`, or Cmd+Q on macOS while it's in front.
 
 ## Translate
 

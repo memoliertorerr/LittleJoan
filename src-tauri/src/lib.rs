@@ -102,6 +102,7 @@ pub fn run() {
             commands::site::site_mode_info,
             commands::site::set_site_mode,
             commands::app::quit_app,
+            commands::app::quit_from_settings,
             commands::downloads::reveal_download,
             commands::quick::quick_state,
             commands::quick::quick_command,

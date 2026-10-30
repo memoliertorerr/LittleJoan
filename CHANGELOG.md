@@ -6,6 +6,11 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Quit Little Joan from Settings.** Settings → General now ends with a **Quit** button, the same
+  quit as the tray's and the command bar's. Changes in Settings you haven't saved are dropped, as
+  with Cancel; the note under the button says so.
+
 ### Fixed
 - **The shortcut works while a video is full screen.** Pressing it — or `--show`, or the tray's
   Open — while a page in Little Joan shows a video (or anything else) full screen now brings the

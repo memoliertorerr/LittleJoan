@@ -182,6 +182,8 @@ ui/settings/reserved-shortcuts.ts  the OSes' own shortcuts and the editing keys 
 ui/settings/sites-logic.ts         General's "Phone or desktop per site": the user's entries and
                                    the built-in ones, Remove / Reset, the draft (pure, unit-tested)
 ui/settings/sites.ts               that list in the General tab; DOM glue only
+ui/settings/quit.ts                General's "Quit Little Joan" (LJ19.7): the button calls
+                                   quit_from_settings once (unit-tested with a fake button)
 docs/extensions.md                 the extension authors' guide (experimental)
 docs/trademark-check.md            where to check that the name is free before a wider launch or a
                                    store listing (a note for the owner, not legal advice)
@@ -204,7 +206,8 @@ src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_
                                    report_timing; drag the window
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, clear history, preview a theme, list / reload
-                                   extensions, show their folder, close
+                                   extensions, show their folder, read the keys, quit
+                                   (quit_from_settings, LJ19.7), close
 src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
@@ -298,7 +301,8 @@ src-tauri/src/phone/agent.rs       Windows' phone agent with client hints: CDP
                                    check (pure, tested; built on Windows and in tests)
 src-tauri/src/commands/site.rs     the bar: site_mode_info, set_site_mode; the built-in sites for
                                    Settings
-src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan")
+src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Little Joan");
+                                   Settings: quit_from_settings (General's, LJ19.7)
 src-tauri/src/commands/timing.rs   the bar: report_timing (its start's marks; smoke tests only,
                                    LJ19.1)
 src-tauri/src/commands/downloads.rs  the bar: reveal_download (the toolbar's "Show in folder")
@@ -459,8 +463,8 @@ scripts/ci/smoke-quick.mts         CI: the quick-commands run ("mobile", "dark",
 scripts/ci/smoke-keymap.mts        CI: the keymap run (History on Ctrl/Cmd+Shift+K: the new key,
                                    the old one, macOS's menu) and its rules; unit-tested
 scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a second launch, Quit
-                                   from the command bar, a Wayland session) and its rules;
-                                   unit-tested
+                                   from the command bar, Settings' Quit and a relaunch, a Wayland
+                                   session) and its rules; unit-tested
 scripts/ci/smoke-downloads.mts     CI: the downloads run (two attachments, one refused while a
                                    panel shows, the window closed during a slow one) and its rules;
                                    unit-tested
@@ -695,7 +699,7 @@ permission, and capabilities grant them per webview label or window:
 | Capability | Scope | Grants |
 |---|---|---|
 | `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `allow-keymap-info` (the bar and Settings only, a test says), `allow-reveal-download` (the toolbar's "Show in folder"; only the bar, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
-| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `allow-keymap-info`, `core:window:allow-close` |
+| `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `allow-keymap-info`, `allow-quit-from-settings` (General's Quit Little Joan; only Settings, a test says), `core:window:allow-close` |
 | — | `joan-page`, window `joan`, remote URLs | nothing |
 
 Capabilities are local unless they list `remote` URLs, and none does. No `core:default`
@@ -733,6 +737,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `keymap_info()` | Settings' Keyboard tab (LJ44); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut, shortcutProblem, portalShortcut, systemShortcuts }` — `portalShortcut` `{ trigger }` while the XDG GlobalShortcuts portal holds the summon shortcut (LJ17), else `null` — — the last macOS's own shortcuts as read from its preferences (`[{ id, enabled, accelerator }]`, empty elsewhere; smoke log `system-shortcuts <n> keys=<k>`) — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
 | `reveal_download()` | the toolbar's **Show in folder**, after a download was saved (LJ15) | shows the last file saved in this window in the file manager, selected (`tauri_plugin_opener::reveal_item_in_dir`) — which file is Rust's, never the bar's; an error when there is none |
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
+| `quit_from_settings()` | Settings → General's **Quit Little Joan** (LJ19.7) | the same `joan::quit`; logs `settings-quit`, then `quit`. A command of its own so the settings window gets no bar command: `capability_tests.rs` allows it to the settings window's capability only (never the bar's, which keeps `quit_app`, never the page). What Settings hasn't saved goes with its window, as with Cancel |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) and its **Settings** row (tab `general`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
 `get_settings` also reports `startAtLogin` (`null` when the entry can't be read).
@@ -853,7 +858,7 @@ all fields, whichever tab they are on):
 
 | Tab | Holds |
 |---|---|
-| General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, **After closing** (LJ19.4, `afterClose`: **Stay ready** / **Stay ready for 15 minutes** / **Hibernate**, with a note under the list saying what the chosen one does — "Opens instantly; holds about N MB more memory while closed than Hibernate" with this OS's figure from `READY_MEMORY_MB` (CI's own-memory numbers: macOS 30, Windows 110, Linux 200), "… then hibernates", "Uses the least memory while closed; opens a little slower" — and that closing always ends the page; drawn as text; it takes effect on Save, at once — `after_close_changed`), search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login |
+| General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, **After closing** (LJ19.4, `afterClose`: **Stay ready** / **Stay ready for 15 minutes** / **Hibernate**, with a note under the list saying what the chosen one does — "Opens instantly; holds about N MB more memory while closed than Hibernate" with this OS's figure from `READY_MEMORY_MB` (CI's own-memory numbers: macOS 30, Windows 110, Linux 200), "… then hibernates", "Uses the least memory while closed; opens a little slower" — and that closing always ends the page; drawn as text; it takes effect on Save, at once — `after_close_changed`), search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login, and last **Quit Little Joan** (LJ19.7: a Quit button, `quit_from_settings`; the note under it says that changes not saved are dropped, as with Cancel — the window goes with the app; `ui/settings/quit.ts`, tested) |
 | Keyboard | **Summon Little Joan** — the global shortcut's recorder (moved here from General; it pauses the shortcut while it listens, as before), Reset when it isn't the default; on a Linux Wayland session without the portal a note to bind `little-joan --toggle` instead; while the portal holds the shortcut (LJ17) the desktop's key as text instead of the recorder (no Reset, no problems: the desktop's key is never judged, so it can't block Save, and Reset all leaves the preferred trigger alone), with "Change it in your desktop's keyboard settings." — and General's line shows that key with the same note instead of **Change…** — then **Little Joan's keys**: every keymap action (`keymap_info`) with its key as a recorder button (the next key with a modifier, or an F-key; a letter is the one the key types in the user's layout; Esc cancels, Backspace means no key), **No key**, **Reset** when it isn't the default, its problems under it; **Reset all** at the bottom (every key and the summon shortcut). Problems (`keyboard-logic.ts`, the keymap's own rules): errors block Save and say why — "⌘L is already Open Location", "That's the shortcut that summons Little Joan", "Plain keys type text — add ⌘ or ⌃", "On macOS a key needs ⌘ or ⌃", the editing keys ("⌘C is used for editing in pages") —; warnings don't — the OSes' reserved shortcuts ("macOS uses ⌘Space for Spotlight", `reserved-shortcuts.ts`, curated from the OSes' documentation; `Super+*` on Windows and Linux), "Ctrl+Alt is AltGr on many keyboards". **On macOS the user's own changes refine the curated table** (decided by a CI runner's export, LJ44): Rust reads the `com.apple.symbolichotkeys` domain (NSUserDefaults, read-only; `system_shortcuts.rs`), which lists only entries that were written — an entry switched off (or moved to another key) drops that curated warning (curated macOS entries carry their domain id: Spotlight 64, input sources 60 / 61, screenshots 28 / 30 / 184, …), and an entry that is on with a key warns there (under the curated name when its id is known, else "one of its keyboard shortcuts"); entries without a key say nothing, so the curated defaults stay. A saved summon shortcut that isn't one shows as written and is an error until it is recorded again or Reset. On Windows a note says WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these. The summon recorder gets the same rules (one of Little Joan's keys → error, a reserved one → warning). When the saved shortcut couldn't be registered at launch (`shortcut::settle` keeps `AppState::shortcut_problem`: what was wanted, what is active instead, `taken` or `invalid`; `get_settings` and `keymap_info` report it), Keyboard and General say so: "⌘⇧K couldn't be registered: another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little Joan has no shortcut now."); a Save whose shortcut registers clears it. Save sends `keys` only when they were edited |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
 | Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
@@ -1829,8 +1834,14 @@ and pushes to `main`:
   `tray-visible false` after `shortcut-registered` (and never `true`); a second launch without
   flags must log `window-created`; typing `quit` in its command bar, ↓ ↓ Enter (the search row,
   then "Quit Little Joan"; `command-quit.png`) must log `quit` and the process must end by itself
-  (Windows, Linux; best effort on macOS); a relaunch opens Settings → General with the switch off
-  (`settings-general-tray.png`); and on Linux a launch with `XDG_SESSION_TYPE=wayland` in its
+  (Windows, Linux; best effort on macOS); a relaunch sets a login on the smoke page
+  (`?persist=set`) and opens Settings → General with the switch off (`settings-general-tray.png`),
+  and 4 s after Settings loaded its **Quit Little Joan** button is clicked (LJ19.7; a smoke-only
+  click, `LITTLEJOAN_SMOKE_SETTINGS_QUIT=1` — CI has no driver for Settings' controls — through the
+  page's own handler: `settings-quit-click`): the app must log `settings-quit` and `quit` and end by
+  itself within 15 s, and a relaunch on the same data folder (`smoke-tray-settings-after.log`) must
+  be a later launch whose page still has the login (persistent cookie and localStorage, no session
+  cookie; every OS); and on Linux a launch with `XDG_SESSION_TYPE=wayland` in its
   environment (still Xvfb's X11 underneath, but a Wayland session to Little Joan, where the X11
   shortcut can't fire) must log `tray-visible true` despite the setting (logs `smoke-tray.log`,
   `smoke-tray-settings.log`, `smoke-tray-wayland.log`; `summary.json`'s `trayRun`). Then the

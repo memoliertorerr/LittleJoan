@@ -1,5 +1,6 @@
 // The settings window: tabs in a sidebar (General, Keyboard, Appearance, Extensions, Privacy,
-// About), lists and switches, and Save / Cancel for every tab. The Keyboard tab
+// About), lists and switches, and Save / Cancel for every tab; General ends with "Quit Little
+// Joan" (settings/quit.ts). The Keyboard tab
 // (settings/keyboard.ts) records the summon shortcut and every Little Joan key. All validation happens
 // in Rust; this page shows what it says. Rust picks the first tab (window.__littleJoanSettingsTab,
 // set before this script runs) and switches an open window with window.littleJoanSettings.showTab.
@@ -14,6 +15,7 @@ import { keyboardTab, type KeymapInfo } from "./settings/keyboard.ts";
 import { appearance } from "./settings/appearance.ts";
 import { extensionsTab } from "./settings/extensions.ts";
 import { sitesList } from "./settings/sites.ts";
+import { quitButton } from "./settings/quit.ts";
 import { builtInsFrom, siteModesFrom } from "./settings/sites-logic.ts";
 import { sameTheme } from "./settings/appearance-logic.ts";
 import { BUILT_INS } from "./answers/index.ts";
@@ -282,6 +284,14 @@ cancel.addEventListener("click", () => {
   keyboard.stopRecording();
   void getCurrentWindow().close();
 });
+
+// General's "Quit Little Joan" (LJ19.7): unsaved changes go with the window, as with Cancel.
+quitButton(
+  element<HTMLButtonElement>("#quit"),
+  (command) => invoke(command),
+  () => keyboard.stopRecording(),
+  showError,
+);
 
 window.littleJoanSettings = {
   showTab(name: string) {

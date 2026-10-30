@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "settings",
-  "description": "The settings window: read and save settings, pause the shortcut while recording, add or remove the login entry, clear history (the Privacy tab), preview a theme in the page window while it is edited (the Appearance tab), list the extensions, read them again and show their folder (the Extensions tab), read Little Joan's keys (the Keyboard tab), close itself.",
+  "description": "The settings window: read and save settings, pause the shortcut while recording, add or remove the login entry, clear history (the Privacy tab), preview a theme in the page window while it is edited (the Appearance tab), list the extensions, read them again and show their folder (the Extensions tab), read Little Joan's keys (the Keyboard tab), close itself, quit Little Joan (the General tab's Quit Little Joan; the bar has its own command for the command bar's Quit).",
   "windows": ["settings"],
   "permissions": [
     "allow-get-settings",
@@ -14,6 +14,7 @@
     "allow-reload-extensions",
     "allow-open-extensions-folder",
     "allow-keymap-info",
+    "allow-quit-from-settings",
     "core:window:allow-close"
   ]
 }

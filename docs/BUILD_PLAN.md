@@ -99,7 +99,7 @@
 | LJ19.4 | *(added mid-plan 2026-10-29)* Summon speed: "After closing" — Stay ready (the owner's default: the hidden window and the trusted bar stay, the page never), for 15 minutes, or Hibernate; the page webview built after the bar; a prewarm after launch; no theme flash; measured per OS and mode (cold vs ready, memory at rest, typed keys, "nothing of the page survives") | strong | auto | ✅ done (CI numbers: see notes; fix4: a summon during the page's macOS fullscreen broke the Dock — see notes) |
 | LJ19.5 | *(v0.2.1; owner, 2026-10-30)* The shortcut while a page is full screen: the page leaves full screen (its video keeps playing in the window), then the command bar opens, ready to type — every OS; never ordering the window into WebKit's full-screen Space | strong | auto | ✅ done (CI: see notes) |
 | LJ19.6 | *(v0.2.1; owner, 2026-10-30)* The ready window over another app's full screen: find why it sometimes lands on the desktop Space (about 1 in 20 macOS runs), fix it, prove it with a repeated over-fullscreen launch | strong | auto | ⬜ todo |
-| LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ⬜ todo |
+| LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ✅ done (CI: see notes) |
 | LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | ⬜ todo |
 | LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
@@ -4393,6 +4393,31 @@ Deferred follow-up struck through.
 tray-settings run (or the Settings run) clicks it, or invokes the command the way the smoke drives
 Settings, and the app exits by itself within LJ20's quit limits, its data saved (the persist check).
 **Commit:** `lj-step-19.7: Quit Little Joan in Settings → General`
+
+**Implementation notes (2026-10-30):**
+
+- **The button:** the last row of Settings → General, "Quit Little Joan" with a **Quit** button, and
+  under it "Little Joan stops until you open it again. Changes here that you haven't saved are
+  dropped, as with Cancel." (`ui/settings.html`). `ui/settings/quit.ts` wires it: a click stops a
+  key recording, disables the button and calls `quit_from_settings`; a failed call enables it
+  again and shows the reason (vitest with a fake button; a markup test that it is the General tab's
+  last control, its note under it).
+- **The command:** `commands::app::quit_from_settings` — the same `joan::quit` as the tray's, the
+  command bar's and `--quit` (history saved, on macOS the window closed first) — logs
+  `settings-quit`. A new command rather than `quit_app`, so Settings gets nothing of the bar's:
+  `capabilities/settings.json` grants `allow-quit-from-settings`, and `capability_tests.rs`'s
+  `only_settings_may_quit_from_settings` requires exactly the settings window's capability to grant
+  it (no webview scope, no `allow-quit-app` there); `only_the_bar_may_quit` still keeps `quit_app`
+  the bar's alone. The page webview has no capability, as before.
+- **CI:** the tray run's Settings launch now sets a login on the smoke page first, opens Settings →
+  General (the screenshot as before), and 4 s later its Quit button is clicked through the page's
+  own handler — a smoke-only knob, `LITTLEJOAN_SMOKE_SETTINGS_QUIT=1` (ignored without the smoke
+  log), since CI has no driver for Settings' controls and the button sits below the fold —; the app
+  must log `settings-quit-click`, `settings-quit` and `quit`, end by itself within 15 s (LJ20's quit
+  limit), and a relaunch on the same data folder be a later launch whose page still has the login
+  (p=1 s=0 l=1) — `smoke-tray.mts` `settingsQuitFailures`, every OS.
+- **What CI can't show:** a real click on the button and the window's look with it (the screenshot
+  shows the tab's top); the owner's check in LJ19.8's checklist.
 
 ### LJ19.8 — Release v0.2.1 · standard · checkpoint
 
