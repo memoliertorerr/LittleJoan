@@ -38,7 +38,7 @@ body:
     attributes:
       label: Little Joan version
       description: Settings → About shows it.
-      placeholder: "e.g. 0.2.0"
+      placeholder: "e.g. 0.2.1"
     validations:
       required: true
   - type: dropdown

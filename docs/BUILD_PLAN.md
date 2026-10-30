@@ -100,7 +100,7 @@
 | LJ19.5 | *(v0.2.1; owner, 2026-10-30)* The shortcut while a page is full screen: the page leaves full screen (its video keeps playing in the window), then the command bar opens, ready to type — every OS; never ordering the window into WebKit's full-screen Space | strong | auto | ✅ done (CI: see notes) |
 | LJ19.6 | *(v0.2.1; owner, 2026-10-30)* The ready window over another app's full screen: find why it sometimes lands on the desktop Space (about 1 in 20 macOS runs), fix it, prove it with a repeated over-fullscreen launch | strong | auto | ✅ done (CI: see notes) |
 | LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ✅ done (CI: see notes) |
-| LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | ⬜ todo |
+| LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | 🔄 the release PR `lj/release-0.2.1` — the owner said to release it unsigned now (2026-10-30: "i will sign later"); the tag and release v0.2.1 (`--latest`) come from its merge commit; the owner's checklist after |
 | LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ⬜ todo |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
@@ -140,7 +140,7 @@
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ⬜ todo |
 | LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ⬜ todo |
-| LJ58 | *(moved into v0.2.1 by the owner, 2026-10-30; was round 4)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step; the owner has the Developer account since 2026-10-30) | strong | auto | ⬜ todo — needs the owner's Apple secrets |
+| LJ58 | *(moved into v0.2.1 by the owner, 2026-10-30; was round 4)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step; the owner has the Developer account since 2026-10-30) | strong | auto | ⬜ todo — needs the owner's Apple secrets; v0.2.1 went out unsigned on the owner's word (2026-10-30), so signing lands in a later release |
 | LJ59 | *(round 4, after v0.3; owner, 2026-10-29)* Auto-update: tauri-plugin-updater, signed update manifests published with the GitHub releases | strong | review | ⬜ todo — needs the owner's updater signing key as a GitHub secret |
 | LJ60 | *(after round 4; owner, 2026-10-30)* A Mac App Store build: the App Sandbox and its entitlements, login through SMAppService, single-instance inside the container, no updater, Apple Distribution signing; App Review's questions answered before submitting | strong | review | ⬜ todo — needs the owner's App Store certificates, profile and app record |
 
@@ -277,8 +277,12 @@ from here: 19.5 → 19.6 → 19.7 (phase 12, `lj/p12-v021-fixes`) → 58 (once t
 green (the standing exception): the shortcut during a page's full screen leaves it and opens the
 command bar on every OS (and on Windows a press closes a window that is in front), the ready
 window no longer lands on the desktop Space over another app's full screen (2 of 100 repeated
-launches before, 0 of 150 after), and Settings → General has Quit Little Joan. Next: LJ58 once the
-owner's Apple secrets exist, then LJ19.8 (the v0.2.1 release, a checkpoint).
+launches before, 0 of 150 after), and Settings → General has Quit Little Joan. It merged as
+9960c8f (main's CI 41066867436 green, 18 jobs). The Apple secrets weren't there yet, and the owner
+chose to **release v0.2.1 unsigned now and sign later** (2026-10-30): LJ19.8 is the release PR
+`lj/release-0.2.1`, released from its merge commit on their word; LJ58 runs whenever the secrets
+exist and goes out in a later release. **Execution order from here: 19.8 → 19.9 (checkpoint) → 21
+→ 22 → 23 → 24 → 25 (LJ56) → 26 → 59 → 60, with 58 as soon as the owner's secrets exist.**
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -4517,6 +4521,10 @@ Settings, and the app exits by itself within LJ20's quit limits, its data saved 
 > 0.2.1-beta.1's entries and phase 12's), README, the owner's checklist (LJ19.5's and LJ19.7's
 > checks, the beta's items they hadn't tried). The PR may be merged once green; **the tag and the
 > release wait for the owner's word**, then `--latest`.
+> **2026-10-30:** the secrets weren't there after phase 12, and the owner said to release it
+> unsigned now ("i will sign later") — their word for the merge, the tag and the release. Their
+> checklist (YouTube full screen with the shortcut, `--show` and the tray's Open; a real click on
+> Settings' Quit; a few summons over another app's full screen) is theirs after the release.
 
 ### LJ19.9 — Liquid Glass on macOS 26+ · strong · checkpoint
 
