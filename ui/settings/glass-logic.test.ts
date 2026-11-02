@@ -33,19 +33,17 @@ describe("Liquid Glass in Settings (LJ19.9)", () => {
   });
 
   it("says in one short line what each choice does, or why the solid theme shows", () => {
-    expect(glassNote("off", MAC26)).toBe("Glass for the toolbar and the command bar, tinted by your theme.");
-    expect(glassNote("clear", MAC26)).toBe("More transparent. Tinted by your theme; no grain on glass.");
-    expect(glassNote("tinted", MAC26)).toBe("More opaque, with more contrast. Tinted by your theme.");
+    expect(glassNote("off", MAC26)).toBe("A glass toolbar and command bar, tinted by your theme.");
+    expect(glassNote("clear", MAC26)).toBe("More transparent. Tinted by your theme; no grain.");
+    expect(glassNote("tinted", MAC26)).toBe("More opaque, more contrast. Tinted by your theme.");
     for (const choice of ["off", "clear", "tinted"] as const) {
-      expect(glassNote(choice, { available: true, blockedBy: "reduceTransparency" })).toBe(
-        "Reduce Transparency is on in Accessibility settings, so the theme shows solid.",
-      );
-      expect(glassNote(choice, { available: true, blockedBy: "increaseContrast" })).toMatch(/^Increase Contrast is on/);
+      expect(glassNote(choice, { available: true, blockedBy: "reduceTransparency" })).toBe("Reduce Transparency is on, so the theme shows solid.");
+      expect(glassNote(choice, { available: true, blockedBy: "increaseContrast" })).toBe("Increase Contrast is on, so the theme shows solid.");
     }
-    // One line in the Appearance tab (about 70 characters at 12 px).
+    // One line in the Appearance tab (CI's macOS 26 screenshot: about 56 characters at 12 px).
     for (const choice of ["off", "clear", "tinted"] as const) {
       for (const blockedBy of [null, "reduceTransparency", "increaseContrast"] as const) {
-        expect(glassNote(choice, { available: true, blockedBy }).length).toBeLessThanOrEqual(80);
+        expect(glassNote(choice, { available: true, blockedBy }).length).toBeLessThanOrEqual(56);
       }
     }
   });

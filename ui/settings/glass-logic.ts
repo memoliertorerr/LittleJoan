@@ -41,8 +41,8 @@ export function glassSupportFrom(value: unknown): GlassSupport {
 }
 
 const BLOCKED: Record<NonNullable<GlassSupport["blockedBy"]>, string> = {
-  reduceTransparency: "Reduce Transparency is on in Accessibility settings, so the theme shows solid.",
-  increaseContrast: "Increase Contrast is on in Accessibility settings, so the theme shows solid.",
+  reduceTransparency: "Reduce Transparency is on, so the theme shows solid.",
+  increaseContrast: "Increase Contrast is on, so the theme shows solid.",
 };
 
 /**
@@ -54,8 +54,8 @@ export function glassNote(choice: GlassSetting, support: GlassSupport): string {
     return BLOCKED[support.blockedBy];
   }
   return choice === "clear"
-    ? "More transparent. Tinted by your theme; no grain on glass."
+    ? "More transparent. Tinted by your theme; no grain."
     : choice === "tinted"
-      ? "More opaque, with more contrast. Tinted by your theme."
-      : "Glass for the toolbar and the command bar, tinted by your theme.";
+      ? "More opaque, more contrast. Tinted by your theme."
+      : "A glass toolbar and command bar, tinted by your theme.";
 }

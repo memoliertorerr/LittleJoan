@@ -101,7 +101,7 @@
 | LJ19.6 | *(v0.2.1; owner, 2026-10-30)* The ready window over another app's full screen: find why it sometimes lands on the desktop Space (about 1 in 20 macOS runs), fix it, prove it with a repeated over-fullscreen launch | strong | auto | ✅ done (CI: see notes) |
 | LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ✅ done (CI: see notes) |
 | LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | ✅ done — v0.2.1 released 2026-10-30 17:54 UTC as Latest, **unsigned on the owner's word** ("Release unsigned now" / "i will sign later"): release PR #38 (head a33f85f, run 41091192039 green) merged as f2f440a; main's run 41095737643 green (18 jobs); tag v0.2.1 on f2f440a; 7 assets; a re-downloaded DMG matched SHA256SUMS; the owner's checklist is theirs |
-| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | 🔄 phase 14, `lj/p14-liquid-glass` (2026-11-02) |
+| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ✅ done (CI: see notes; PR #39) — the owner's check on macOS 26.2 next |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -4671,7 +4671,37 @@ the summon's speed with glass on, Reduce Transparency switching it to solid.
   nothing; macOS 26+: the glass runs over a striped backdrop window (Clear / light, Tinted / dark,
   the Tinted one switching Reduce Transparency and Increase Contrast), and `smoke-timing.mts`'s
   `ready-glass` / `hibernate-glass` runs against the runs without (warm medians within 1.5× + 150 /
-  750 ms). Results: below, after the PR's runs.
+  750 ms).
+- **CI (PR #39):** run 41484579569 (head ac17c9e) — 17 of 18 green; `smoke (macos)` failed every
+  glass rule because **the runner has Reduce Transparency on** (`glass-support … reduce=true`):
+  Little Joan rightly showed the solid theme, and only the stand-in's switches showed glass (the
+  native side was right: `glass-view regular back=true fills=true corner=16 tint=0.65 dark=true
+  opaque=false window-alpha=0.00`, `bar-surface tinted html=rgba(0, 0, 0, 0) body=rgba(0, 0, 0, 0)
+  image=none`). → `lj-step-19.9-fix`: every glass launch starts with the stand-in saying `none`, the
+  harness switches the runner's own setting off around the glass runs and the glass timing runs
+  (`defaults write com.apple.universalaccess reduceTransparency -bool false`, put back after — the
+  launches then logged `glass-system reduce=false`: the system took it), the glass timing runs must
+  really show glass, and the accessibility refresh runs off the main thread (Tauri's getters run
+  inline there). A Landmine records the runner. Run 41490550522 (head 3e0c2ed, with fix2 below):
+  **all 18 jobs green**. What it showed: Clear and Tinted views as wanted (`clear … tint=0.25
+  dark=false`, `regular … tint=0.65 dark=true`, at the back, filling the window, the window clear and
+  non-opaque), the bar drawing nothing under itself, the switches `off → tinted → off → tinted` with
+  `glass-view none opaque=true window-alpha=1.00` for the solid theme; the screenshots over the
+  striped backdrop show **real Liquid Glass**: Clear blurs the stripes through the whole command bar
+  and the toolbar, Tinted is dark glass with the stripes faint, and the stand-in's Reduce
+  Transparency gives the solid theme — so the window must be non-opaque, as researched. The corners
+  (radius 16) meet the window's, no rim (zoomed, run 41484579569).
+- **Summon timing (macOS, warm medians to the command bar's rows):** run 41490550522 — Stay ready
+  150 ms without glass, 112 ms with Clear (first 129 / 143 ms); Hibernate 2,641 ms without, 1,901 ms
+  with (first 3,197 / 2,069 ms). Run 41484579569 (glass not showing there, so a noise check): ready 47
+  / 57 ms, hibernate 1,386 / 1,319 ms. Glass is no slower; the differences are CI's noise (LJ19.1's
+  Landmine). Glass is built with the window, so a summon from ready does nothing more.
+- **Off unchanged:** the main run's screenshots against main's run 41095737643 differ only in the
+  menu bar's clock and icons, the Dock's date and the smoke page's letter tile (its hue follows the
+  smoke server's port); Settings → Appearance differs by the new row (CI's Mac is macOS 26) — which,
+  with its two-line note, made the tab scroll: `lj-step-19.9-fix2` (one-line notes) and
+  `lj-step-19.9-fix3` (shorter notes, and with the row shown the tab's other gaps close a little,
+  through `:has()`). Windows and Linux: `glass-support available=false os=-`, nothing else.
 - Disk: 19 GB free before; `.cache/target` 1.4 GB.
 
 ---
@@ -9640,6 +9670,19 @@ smoke run; nothing changed in the direct-download build.
   topmost, so on Windows a topmost full-screen window (some video players, exclusive-full-screen
   games) and on Linux a window manager's full-screen layer for a still-focused window keep it
   behind. Making Little Joan topmost while summoned would need a rule for when to drop it again.
+- **The page under a glass toolbar, Safari-style** (surfaced by LJ19.9): today the toolbar's glass
+  shows what is behind the window (the page sits below the 40 px strip). macOS 26's public
+  `WKWebView.obscuredContentInsets` would let the page run under the toolbar, its layout viewport
+  shrunk by 40 px, so the glass refracts the page as Safari's does — a layout change on macOS only
+  (the page's bounds, phone mode's viewport math, the fullscreen guard). The owner's call, after
+  seeing LJ19.9.
+- **Clear's legibility over a loud background** (surfaced by LJ19.9's CI screenshots over the striped
+  backdrop): Clear is very see-through (tint alpha 0.25, by design: macOS's Clear), so the command
+  bar's text competes with a busy wallpaper. `CLEAR_TINT` / `TINTED_TINT` (settings/glass.rs) and
+  the card's `GLASS_CARD_ALPHA` (ui/lib/theme.ts) are the knobs, if the owner wants it denser.
+- **The glass's corner radius is a constant** (LJ19.9): 16 pt matched CI's macOS 26 window corners
+  (no un-blurred rim in the zoomed screenshots); macOS 26 has no public API for a window's radius, so
+  a future macOS changing it would need the constant changed.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
