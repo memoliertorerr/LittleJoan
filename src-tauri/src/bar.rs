@@ -30,7 +30,7 @@ mod view;
 mod watch;
 mod zoom;
 
-pub use background::{forget_painted, painted, window_background};
+pub use background::{base_background, forget_painted, painted, window_background};
 pub use boot::{BAR_READY, Ready, early_theme, mark_ready, set_theme, theme_script};
 pub use page::{ensure_page, page_summon};
 pub use view::{
@@ -93,9 +93,10 @@ pub fn add_bar<R: Runtime>(
     // The bar's script hasn't run yet in this window (panels opened now wait for it: boot.rs).
     BAR_READY.reset();
     // The theme it paints first: the preview while Settings edits one, else the saved one (what
-    // start_info hands out too).
-    let theme = crate::state::with(window.app_handle(), |s| s.shown_theme());
-    boot::set_early_theme(theme.clone());
+    // start_info hands out too), with the Liquid Glass it shows (LJ19.9; Off but on macOS 26+).
+    let look = crate::glass::bar_theme(window.app_handle());
+    let (base, dark) = background::base_background(window, &look.theme);
+    boot::set_early_theme(look.clone());
     *LAST_SHOWN.lock().unwrap_or_else(PoisonError::into_inner) = None;
     // No status yet, and every summon starts at 100 % (LJ16).
     status::forget();
@@ -111,9 +112,9 @@ pub fn add_bar<R: Runtime>(
     let mut bar = WebviewBuilder::new(BAR, WebviewUrl::App("bar.html".into()))
         // Its theme before its first paint (the bar only: the page webview never gets a script),
         // and that theme's background under it (LJ39, LJ19.4: computed from the theme until the
-        // bar painted one; the page keeps the engine's white).
-        .initialization_script(theme_script(&theme))
-        .background_color(background::bar_background(window, &theme))
+        // bar painted one; the page keeps the engine's white) — clear over glass (LJ19.9).
+        .initialization_script(theme_script(&look))
+        .background_color(crate::glass::background(base, look.glass))
         // The bar is ours and never leaves the app's origin (about:blank only to unload it when
         // the window is destroyed on macOS, see joan::release_window).
         .on_navigation(|url| navigation::is_allowed_bar_navigation(url, &keys::app_origin()))
@@ -139,6 +140,8 @@ pub fn add_bar<R: Runtime>(
         LogicalSize::new(bar_rect.width, bar_rect.height),
     )?;
     platform::install_bar(&bar);
+    // With Liquid Glass, the glass behind the bar before the window shows (macOS 26+).
+    crate::glass::new_window(&bar, look.glass, base, dark);
     platform::set_overlay(&bar, None, true);
     Ok(())
 }
@@ -339,9 +342,9 @@ pub fn rest<R: Runtime>(app: &AppHandle<R>) {
 
 /// A summon from ready (LJ19.4): the bar starts over for it — the command bar's first rows, the
 /// theme if it changed meanwhile, its field focused — and in smoke tests reports this summon's
-/// timing (`timing`). The theme is a checked one (hex colors, a mode name, two numbers), so its
-/// JSON is a safe script literal.
-pub fn summoned<R: Runtime>(app: &AppHandle<R>, theme: &crate::settings::Theme, timing: bool) {
+/// timing (`timing`). The theme is a checked one (hex colors, a mode name, two numbers, a glass
+/// name), so its JSON is a safe script literal.
+pub fn summoned<R: Runtime>(app: &AppHandle<R>, theme: &crate::glass::BarTheme, timing: bool) {
     let Some(bar) = app.get_webview(BAR) else {
         return;
     };

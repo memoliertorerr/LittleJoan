@@ -6,6 +6,16 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Liquid Glass on macOS 26 Tahoe and later.** Settings → Appearance → **Liquid Glass**: Off (the
+  default), **Clear** (more transparent) or **Tinted** (more opaque, with more contrast) — the same
+  choices as macOS 26.1's own setting. The toolbar and the command bar become glass, tinted by your
+  theme's color; pages stay as they are, and the grain doesn't show on glass. It is there from the
+  first frame of a summon (no flash of the solid theme) and costs no time when Little Joan opens.
+  With Reduce Transparency or Increase Contrast on (System Settings → Accessibility → Display),
+  Little Joan shows the solid theme, and switches as soon as you change them. The option appears
+  only on macOS 26 and later; nothing changes on older Macs, Windows or Linux.
+
 ## [0.2.1] — 2026-10-30
 
 Little Joan opens instantly, and its shortcut works while a video is full screen. It includes

@@ -290,6 +290,31 @@ fn only_settings_may_quit_from_settings() {
 }
 
 #[test]
+fn only_settings_may_switch_liquid_glass() {
+    // Liquid Glass (LJ19.9) changes only through Settings — Save (`save_settings`) and the
+    // Appearance tab's preview (`preview_theme`) — never the bar, never the page: no quick command
+    // or bar command carries it, and the page webview has no capability at all.
+    for wanted in ["allow-save-settings", "allow-preview-theme"] {
+        let mut granted_to = Vec::new();
+        for (place, capability) in all_capabilities() {
+            if !permissions(&capability).contains(&wanted) {
+                continue;
+            }
+            let id = capability.get("identifier").and_then(Value::as_str);
+            let settings_only = id == Some("settings")
+                && scopes(&capability, "windows") == [settings_window::LABEL]
+                && scopes(&capability, "webviews").is_empty();
+            assert!(
+                settings_only,
+                "{place}: only the settings window's capability may grant {wanted}"
+            );
+            granted_to.extend(id.map(str::to_owned));
+        }
+        assert_eq!(granted_to, ["settings"], "{wanted}");
+    }
+}
+
+#[test]
 fn only_the_bar_may_run_quick_commands() {
     // The command bar's quick commands (LJ42): the trusted bar only — never the page, never
     // Settings (which has its own Save).

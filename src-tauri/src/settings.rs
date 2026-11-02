@@ -17,12 +17,14 @@ use crate::translate::is_valid_lang;
 
 pub mod after_close;
 pub mod change;
+pub mod glass;
 pub mod keys;
 pub mod site_modes;
 pub mod theme;
 
 pub use after_close::AfterClose;
 pub use change::{Change, apply_change};
+pub use glass::Glass;
 pub use site_modes::SiteMode;
 pub use theme::{Theme, ThemeMode};
 
@@ -71,6 +73,9 @@ pub struct Settings {
     /// What stays at rest after the window closes (LJ19.4, settings/after_close.rs): the hidden
     /// window and the bar (`ready`, the default), the same for 15 minutes (`ready15`), or nothing.
     pub after_close: AfterClose,
+    /// Liquid Glass for the toolbar and the command bar (LJ19.9, settings/glass.rs): `off` (the
+    /// default), `clear` or `tinted`; shown only on macOS 26 and later.
+    pub glass: Glass,
 }
 
 impl Default for Settings {
@@ -91,6 +96,7 @@ impl Default for Settings {
             show_tray_icon: true,
             keys: BTreeMap::new(),
             after_close: AfterClose::default(),
+            glass: Glass::default(),
         }
     }
 }
@@ -170,6 +176,7 @@ pub fn parse(json: &str) -> Settings {
         show_tray_icon,
         keys: keys::parse(map.get("keys")),
         after_close: after_close::parse(map.get("afterClose")),
+        glass: glass::parse(map.get("glass")),
     }
 }
 
@@ -291,6 +298,7 @@ mod tests {
                 grain: 0.4,
             },
             after_close: AfterClose::Ready15,
+            glass: Glass::Tinted,
             ..Settings::default()
         };
         save(&dir, &settings).expect("save");
@@ -299,6 +307,7 @@ mod tests {
         let json = fs::read_to_string(dir.join(SETTINGS_FILE)).expect("written");
         assert!(json.contains("\"searchEngine\": \"brave\""), "{json}");
         assert!(json.contains("\"afterClose\": \"ready15\""), "{json}");
+        assert!(json.contains("\"glass\": \"tinted\""), "{json}");
         fs::remove_dir_all(&dir).expect("cleanup");
     }
 
@@ -435,6 +444,19 @@ mod tests {
         assert_eq!(parse(r#"{"afterClose": 3}"#).after_close, AfterClose::Ready);
         let json = serde_json::to_string(&Settings::default()).expect("json");
         assert!(json.contains(r#""afterClose":"ready""#), "{json}");
+    }
+
+    #[test]
+    fn liquid_glass_is_off_unless_set() {
+        assert_eq!(Settings::default().glass, Glass::Off);
+        assert_eq!(parse("{}").glass, Glass::Off, "settings from before LJ19.9");
+        let s = parse(r#"{"glass": "clear", "showTrayIcon": false}"#);
+        assert_eq!(s.glass, Glass::Clear);
+        assert!(!s.show_tray_icon);
+        assert_eq!(parse(r#"{"glass": "frosted"}"#).glass, Glass::Off);
+        assert_eq!(parse(r#"{"glass": true}"#).glass, Glass::Off);
+        let json = serde_json::to_string(&Settings::default()).expect("json");
+        assert!(json.contains(r#""glass":"off""#), "{json}");
     }
 
     #[test]

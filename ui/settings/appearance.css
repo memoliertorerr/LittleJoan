@@ -262,6 +262,25 @@
   color: var(--lj-fg);
 }
 
+.glass-setting {
+  margin-top: 14px;
+}
+
+.glass-setting[hidden] {
+  display: none;
+}
+
+.glass-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.tab-panel .glass-head h2.appearance-label {
+  margin: 0;
+}
+
 .slider input {
   flex: 1;
   min-width: 0;

@@ -4,13 +4,16 @@
 // it loads (start_info, src-tauri/src/commands.rs) — the mode and a count, never the colors —, and
 // before that `theme-early <mode> colors=<n>` when it painted its initialization script's theme
 // before its first frame (LJ38). A summon from the ready window (LJ19.4) hands the bar its theme
-// again: `theme-summon <mode> colors=<n>`.
+// again: `theme-summon <mode> colors=<n>`. With Liquid Glass (LJ19.9, macOS 26+) each of these ends
+// in ` glass=<clear|tinted>` (smoke-glass.mts's runs; never in these, which are Off).
 import type { LogEvent } from "./smoke-log.mts";
 import { sawSettings, sawSmokeTopSite } from "./smoke-command.mts";
 
 export interface ThemeEvent {
   mode: string;
   colors: number;
+  /** The Liquid Glass the bar was handed, if any (LJ19.9). */
+  glass?: string;
 }
 
 /** Reads a `theme` event's detail; anything else is undefined. */
@@ -29,8 +32,11 @@ export function parseEarlyTheme(event: LogEvent): ThemeEvent | undefined {
 }
 
 function themeDetail(detail: string): ThemeEvent | undefined {
-  const match = /^(system|light|dark) colors=(\d+)$/.exec(detail);
-  return match?.[1] && match[2] ? { mode: match[1], colors: Number(match[2]) } : undefined;
+  const match = /^(system|light|dark) colors=(\d+)(?: glass=(clear|tinted))?$/.exec(detail);
+  if (!match?.[1] || !match[2]) {
+    return undefined;
+  }
+  return { mode: match[1], colors: Number(match[2]), ...(match[3] ? { glass: match[3] } : {}) };
 }
 
 /** A theme as settings.json holds it (fields left out take the default). */

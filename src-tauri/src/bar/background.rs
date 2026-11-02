@@ -12,6 +12,9 @@
 //! over the webview's color on every engine (WebView2's `DefaultBackgroundColor`, WebKitGTK's
 //! background color, WKWebView's `drawsBackground` turned off), so a dark color there would make
 //! such pages — plain text, many simple sites — dark on dark.
+//!
+//! With Liquid Glass (LJ19.9, macOS 26+) the bar's and the window's backgrounds are clear (the same
+//! colour at alpha 0), so the glass behind shows; the colour then tints the glass (glass.rs).
 
 use std::collections::BTreeMap;
 
@@ -20,7 +23,8 @@ use tauri::{AppHandle, Manager, Runtime, Window};
 
 use super::BAR;
 use crate::extensions::theme::Tokens;
-use crate::settings::{Theme, ThemeMode};
+use crate::glass;
+use crate::settings::{Glass, Theme, ThemeMode};
 use crate::smoke;
 use crate::state;
 
@@ -78,10 +82,6 @@ pub fn background_tokens(tokens: &Tokens) -> Tokens {
     }
 }
 
-fn color([r, g, b]: [u8; 3]) -> Color {
-    Color(r, g, b, 255)
-}
-
 /// What the bar's webview and the window show under the bar before it paints `theme`: the last
 /// painted `--lj-bg-0` when it fits the scheme, else `theme`'s own (theme_color.rs).
 pub fn first_background(painted: Option<&Tokens>, theme: &Theme, dark: bool) -> [u8; 3] {
@@ -92,25 +92,24 @@ pub fn first_background(painted: Option<&Tokens>, theme: &Theme, dark: bool) -> 
     crate::theme_color::base_background(theme, dark)
 }
 
-/// The background a new window's bar is built with, for `theme` (the theme it paints first).
-pub fn bar_background<R: Runtime>(window: &Window<R>, theme: &Theme) -> Color {
-    window_background(window, theme)
-}
-
-/// The window's own background before its bar paints `theme` (LJ19.4): the same colour.
-pub fn window_background<R: Runtime>(window: &Window<R>, theme: &Theme) -> Color {
+/// The colour under a new window's bar before it paints `theme` — the last painted `--lj-bg-0` in
+/// this scheme, else the theme's own (`first_background`) — and whether that scheme is dark.
+pub fn base_background<R: Runtime>(window: &Window<R>, theme: &Theme) -> ([u8; 3], bool) {
     let system_dark = matches!(window.theme(), Ok(tauri::Theme::Dark));
     let painted = state::with(window.app_handle(), |s| s.painted_background.clone());
-    color(first_background(
-        painted.as_ref(),
-        theme,
-        shows_dark(theme.mode, system_dark),
-    ))
+    let dark = shows_dark(theme.mode, system_dark);
+    (first_background(painted.as_ref(), theme, dark), dark)
+}
+
+/// The window's own background before its bar paints `theme` (LJ19.4): the same colour (clear over
+/// `glass`).
+pub fn window_background<R: Runtime>(window: &Window<R>, theme: &Theme, glass: Glass) -> Color {
+    glass::background(base_background(window, theme).0, glass)
 }
 
 /// The bar painted a theme (`set_theme_tokens`): its background becomes that theme's — kept for
-/// the next window, and set on the open bar at once when it changed. Smoke log: `bar-background
-/// <light|dark>`.
+/// the next window, and set on the open bar at once when it changed (clear over glass, whose tint
+/// follows it). Smoke log: `bar-background <light|dark>`.
 pub fn painted<R: Runtime>(app: &AppHandle<R>, tokens: &Tokens) {
     let kept = background_tokens(tokens);
     let changed = state::with(app, |s| {
@@ -122,10 +121,13 @@ pub fn painted<R: Runtime>(app: &AppHandle<R>, tokens: &Tokens) {
         return;
     }
     if let Some(bar) = app.get_webview(BAR) {
-        let rgb = background_for(Some(&kept), kept.scheme == "dark");
-        if let Err(err) = bar.set_background_color(Some(color(rgb))) {
+        let dark = kept.scheme == "dark";
+        let rgb = background_for(Some(&kept), dark);
+        let shown = glass::shown(app);
+        if let Err(err) = bar.set_background_color(Some(glass::background(rgb, shown))) {
             eprintln!("little-joan: could not set the bar's background: {err}");
         }
+        glass::painted(&bar, shown, rgb, dark);
     }
     smoke::log("bar-background", &kept.scheme);
 }

@@ -92,8 +92,8 @@ pub(super) fn summon<R: Runtime>(app: &AppHandle<R>, url: Option<Url>) -> tauri:
     if let Some(bar) = bar::bar(app) {
         platform::bar_at_rest(&bar, false);
     }
-    let theme = state::with(app, |s| s.shown_theme());
-    smoke::log("theme-summon", &crate::commands::theme_summary(&theme));
+    let theme = crate::glass::bar_theme(app);
+    smoke::log("theme-summon", &theme.summary());
     bar::summoned(app, &theme, smoke::enabled());
     platform::take_focus_back(app);
     let (width, height) = size_of(app);
@@ -167,8 +167,9 @@ fn build<R: Runtime>(app: &AppHandle<R>, history: bool) -> tauri::Result<Window<
     // it had AppKit's default.
     platform::join_active_space(&window);
     // The theme's own colour under everything before the bar paints (LJ19.4: no flash of the
-    // default theme, or of white, while the window opens).
-    let _ = window.set_background_color(Some(bar::window_background(&window, &theme)));
+    // default theme, or of white, while the window opens) — clear over Liquid Glass (LJ19.9).
+    let glass = crate::glass::shown(app);
+    let _ = window.set_background_color(Some(bar::window_background(&window, &theme, glass)));
     AT_REST.store(false, Ordering::SeqCst);
     BAR_GONE.store(false, Ordering::SeqCst);
     REST.fetch_add(1, Ordering::SeqCst);

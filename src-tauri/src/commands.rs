@@ -13,13 +13,14 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::autostart;
 use crate::bar;
 use crate::extensions::{self, list::ExtensionsView, session};
+use crate::glass::{self, BarTheme};
 use crate::history::{ClearRange, Listed, VisitKind};
 use crate::history_store;
 use crate::input::{self, SearchEngine};
 use crate::joan;
 use crate::keys::PageAction;
 use crate::page_actions;
-use crate::settings::{self, Change, Settings, Theme};
+use crate::settings::{self, Change, Glass, Settings, Theme};
 use crate::settings_live;
 use crate::settings_window::{self, SettingsTab};
 use crate::shortcut::{self, PluginRegistrar};
@@ -124,8 +125,9 @@ pub struct StartInfo {
     /// The XDG GlobalShortcuts portal holds the shortcut (LJ17): `{ trigger }`, the desktop's own
     /// words for the key (`null` while it gave none). `shortcut` is then `null`.
     portal_shortcut: Option<PortalShortcut>,
-    /// The theme, which the bar applies as it loads (ui/lib/theme.ts makes the colors).
-    theme: Theme,
+    /// The theme, which the bar applies as it loads (ui/lib/theme.ts makes the colors), with the
+    /// Liquid Glass it shows (LJ19.9; left out for Off).
+    theme: BarTheme,
     /// Smoke tests only: the bar reports its part of the summon's timing (`report_timing`,
     /// LJ19.1). Never in normal use.
     timing: bool,
@@ -135,21 +137,21 @@ pub struct StartInfo {
 /// launch the facts it shows.
 #[tauri::command]
 pub fn start_info<R: Runtime>(app: AppHandle<R>) -> StartInfo {
-    let (shortcut, first_run, theme, portal) = state::with(&app, |s| {
+    let (shortcut, first_run, portal) = state::with(&app, |s| {
         (
             s.active_shortcut.clone(),
             std::mem::take(&mut s.first_run),
-            s.shown_theme(),
             s.portal.clone(),
         )
     });
+    let theme = glass::bar_theme(&app);
     if first_run {
         smoke::log("welcome", "");
     }
     // The bar's first call: its script runs, so a panel waiting to open may (bar/boot.rs).
     bar::mark_ready();
     summon_timing::mark(Mark::BarReady);
-    smoke::log("theme", &theme_summary(&theme));
+    smoke::log("theme", &theme.summary());
     // The bar's script is running now: make sure it knows its view (bar::tell_state).
     bar::tell_state(&app);
     StartInfo {
@@ -223,6 +225,9 @@ pub struct SettingsView {
     /// A Linux Wayland session whose portal didn't take the shortcut, where the X11 shortcut
     /// can't fire (Keyboard explains --toggle).
     wayland_no_shortcut: bool,
+    /// Liquid Glass (LJ19.9): whether this system has it (Appearance shows the setting only then)
+    /// and what keeps it from showing now.
+    glass_support: glass::SettingsSupport,
 }
 
 /// Where the web engine keeps cookies and site data (docs/architecture.md, "Where data lives"):
@@ -273,6 +278,7 @@ pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
         built_in_site_modes: site::built_in_sites(),
         shortcut_problem,
         wayland_no_shortcut: shortcut::backend_now(&app).toggle_hint(),
+        glass_support: glass::SettingsSupport::now(),
     }
 }
 
@@ -313,6 +319,10 @@ pub struct SettingsInput {
     /// the saved one stays.
     #[serde(default)]
     after_close: Option<String>,
+    /// Settings → Appearance's Liquid Glass (LJ19.9): `off`, `clear` or `tinted`. Left out, the
+    /// saved one stays.
+    #[serde(default)]
+    glass: Option<String>,
 }
 
 /// Validates and applies new settings: every part is checked first (settings::apply_change), the
@@ -340,6 +350,7 @@ pub async fn save_settings<R: Runtime>(
         show_tray_icon: settings.show_tray_icon,
         keys: settings.keys,
         after_close: settings.after_close,
+        glass: settings.glass,
     };
     // A refused part changes nothing — not even the shortcut.
     let current = state::with(&app, |s| s.settings.clone());
@@ -375,25 +386,43 @@ fn swap_shortcut<R: Runtime>(app: &AppHandle<R>, wanted: String) -> Result<(), S
     Ok(())
 }
 
-/// Settings' Appearance tab previews `theme` in the open page window while it is edited (not
-/// saved; checked like a saved one). `null` puts the saved theme back.
+/// Settings' Appearance tab previews `theme` — and its Liquid Glass setting `glass` (LJ19.9) — in
+/// the open page window while they are edited (not saved; checked like saved ones). `null` puts the
+/// saved one back.
 #[tauri::command]
-pub async fn preview_theme<R: Runtime>(app: AppHandle<R>, theme: Option<Value>) {
-    let shown = state::with(&app, |s| {
+pub async fn preview_theme<R: Runtime>(
+    app: AppHandle<R>,
+    theme: Option<Value>,
+    glass: Option<String>,
+) {
+    state::with(&app, |s| {
         s.theme_preview = theme.as_ref().map(|v| settings::theme::parse(Some(v)));
-        s.shown_theme()
+        s.glass_preview = glass.as_deref().and_then(Glass::from_name);
     });
     bar::forget_painted(&app);
-    smoke::log("theme-preview", &theme_summary(&shown));
-    bar::set_theme(&app, &shown);
+    smoke::log("theme-preview", &glass::bar_theme(&app).summary());
+    glass::refresh(&app);
 }
 
 /// The bar applied a theme: `{ scheme, vars }`, the `--lj-*` variables it computed
 /// (ui/lib/theme.ts). Kept in memory for extension panels (littleJoan.theme); a report that
 /// fails the checks is dropped (extensions/theme.rs). `early`: the bar painted the theme of its
-/// initialization script, before start_info (LJ38) — the smoke log gets `theme-early`.
+/// initialization script, before start_info (LJ38) — the smoke log gets `theme-early`. `surface`:
+/// with Liquid Glass, what the bar's page draws under it (`html=<css colour> body=<…> image=<none|
+/// set>`), for the smoke log's `bar-surface` (LJ19.9) — never used otherwise.
 #[tauri::command]
-pub async fn set_theme_tokens<R: Runtime>(app: AppHandle<R>, tokens: Value, early: Option<bool>) {
+pub async fn set_theme_tokens<R: Runtime>(
+    app: AppHandle<R>,
+    tokens: Value,
+    early: Option<bool>,
+    surface: Option<String>,
+) {
+    if let Some(surface) = surface.filter(|_| smoke::enabled()) {
+        smoke::log(
+            "bar-surface",
+            &surface.chars().take(200).collect::<String>(),
+        );
+    }
     match crate::extensions::theme::parse(&tokens) {
         Some(tokens) => {
             // The bar webview's own background follows (bar/background.rs, LJ39).
@@ -402,7 +431,7 @@ pub async fn set_theme_tokens<R: Runtime>(app: AppHandle<R>, tokens: Value, earl
             if early == Some(true)
                 && let Some(theme) = bar::early_theme()
             {
-                smoke::log("theme-early", &theme_summary(&theme));
+                smoke::log("theme-early", &theme.summary());
                 // The bar's script runs: its first report (LJ19.1).
                 summon_timing::mark(Mark::BarScript);
             }

@@ -90,6 +90,17 @@ import {
   TYPED,
 } from "./smoke-command.mts";
 import { THEME_RUNS, parseTheme, themeFailures, type ThemeRun } from "./smoke-theme.mts";
+import {
+  GLASS_RUNS,
+  MAC_BACKDROP,
+  glassOffFailures,
+  glassRun,
+  glassRunFailures,
+  glassTimingFailures,
+  parseGlassSupport,
+  type GlassDriver,
+  type GlassRun,
+} from "./smoke-glass.mts";
 import { macKeyToken } from "./smoke-keys.mts";
 import {
   BROKEN_EXTENSION,
@@ -1577,6 +1588,53 @@ for (const run of THEME_RUNS) {
   themeRuns.push({ run, events: await themeRun(run) });
 }
 
+// The Liquid Glass runs (LJ19.9, smoke-glass.mts): macOS 26+ only (what the main run's launch
+// said), each its own launch over a striped backdrop window, so the screenshots show the glass.
+const glassSupport = parseGlassSupport(events());
+const glassAvailable = os === "darwin" && glassSupport?.available === true;
+const glassRuns: { run: GlassRun; events: LogEvent[] }[] = [];
+const backdropStatus = join(out, "glass-backdrop.txt");
+/** macOS: the backdrop helper (MAC_BACKDROP) on screen (it goes on without it if it doesn't show). */
+async function startBackdrop(): Promise<ChildProcess> {
+  const script = join(out, "glass-backdrop.swift");
+  const status = backdropStatus;
+  writeFileSync(script, MAC_BACKDROP);
+  rmSync(status, { force: true });
+  rmSync(`${status}.stop`, { force: true });
+  const child = spawn("swift", [script, status, "900"], { stdio: ["ignore", "ignore", "pipe"] });
+  child.stderr?.on("data", (chunk: Buffer) => process.stdout.write(`[glass-backdrop] ${chunk.toString()}`));
+  child.on("error", (err) => console.log(`(glass-backdrop: ${err.message})`));
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline && !existsSync(status)) {
+    await sleep(500);
+  }
+  console.log(existsSync(status) ? "glass: the backdrop is on screen" : "glass: the backdrop never showed (the runs go on without it)");
+  await sleep(500);
+  return child;
+}
+if (glassAvailable) {
+  mkdirSync(join(out, "glass"), { recursive: true });
+  const backdrop = await startBackdrop();
+  const glassDriver: GlassDriver = {
+    out,
+    pageUrl: smokePageUrl,
+    launch: (name, settings, extra) => fullscreenLaunch(name, settings, extra),
+    screenshot,
+    sleep: (ms) => sleep(ms).then(() => undefined),
+    write: (path, text) => writeFileSync(path, text),
+  };
+  for (const run of GLASS_RUNS) {
+    glassRuns.push({ run, events: await glassRun(glassDriver, run) });
+  }
+  // It quits by itself on the stop file (`swift` may run it in a child the kill wouldn't reach).
+  writeFileSync(`${backdropStatus}.stop`, "stop\n");
+  const stopped = new Promise((done) => backdrop.once("exit", done));
+  await Promise.race([stopped, sleep(10_000)]);
+  backdrop.kill();
+} else {
+  console.log(`glass: no Liquid Glass here (${glassSupport ? `available=false os=${glassSupport.os ?? "-"}` : "no glass-support line"}): the glass runs are skipped`);
+}
+
 /**
  * The fullscreen run (LJ36, smoke-fullscreen.mts): its own launches, driven through clicks only.
  * `name` names the data folder and the log (`smoke-<name>.log`); `extra` adds to the app's
@@ -1797,6 +1855,8 @@ const timingDriver: TimingDriver = {
     return "none";
   },
   pressSummonShortcut,
+  // LJ19.9: and with Liquid Glass, where it shows.
+  glass: glassAvailable,
 };
 const timingCheck = await timingRun(timingDriver);
 const timingMd = timingTable(timingCheck, os);
@@ -1995,6 +2055,19 @@ const summary = {
   restRuns: restRuns.map(restSummary),
   downloads: downloadSummary(downloadCheck),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
+  // LJ19.9: Liquid Glass — what the main run's launch said, and the glass runs (macOS 26+).
+  glass: {
+    support: glassSupport ?? null,
+    runs: glassRuns.map(({ run, events: runEvents }) => ({
+      name: run.name,
+      glass: run.glass,
+      views: runEvents.filter((e) => e.event === "glass-view").map((e) => e.detail),
+      surfaces: runEvents.filter((e) => e.event === "bar-surface").map((e) => e.detail),
+      shown: runEvents.filter((e) => e.event === "glass").map((e) => e.detail),
+      rules: glassRunFailures(run, runEvents),
+    })),
+    timingRules: glassTimingFailures(timingCheck),
+  },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
     theme: run.theme,
@@ -2041,6 +2114,9 @@ const failures = evaluate(
   .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
+  .concat(glassOffFailures(log, os))
+  .concat(glassRuns.flatMap(({ run, events: runEvents }) => glassRunFailures(run, runEvents)))
+  .concat(glassTimingFailures(timingCheck))
   .concat(fullscreenFailures(fullscreenCheck, os, fullscreenOff))
   .concat(summonDuringFullscreenFailures(log, os))
   .concat(fsSummonFailures(fullscreenCheck.summon, os))
@@ -2076,6 +2152,9 @@ if (failures.length > 0) {
     "tray-wayland",
     "timing-ready",
     "timing",
+    "timing-ready-glass",
+    "timing-glass",
+    ...GLASS_RUNS.map((run) => run.name),
     "spaces",
     "rest-ready",
     "rest-hibernate",

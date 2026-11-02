@@ -151,7 +151,9 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   to three colors turned into a soft, muted gradient with a little grain, in light, dark, or
   following your system. Whatever colors you pick, Little Joan keeps them pale in light mode and
   deep in dark mode, and picks the text color so it stays readable. The default is a quiet
-  blue-grey; make your own in **Settings → Appearance** (below).
+  blue-grey; make your own in **Settings → Appearance** (below). **On macOS 26 Tahoe and later**
+  the toolbar and the command bar can be **Liquid Glass** instead, Clear or Tinted, tinted by your
+  theme (Settings → Appearance → Liquid Glass).
 - **Extensions** (experimental) open as a panel in the window: type a name or what it does in the
   command bar ("snake", "notes", "json", "clock"…) or run `little-joan --extension <id>`.
   Twelve come with Little Joan — games, Notes, a focus timer, a world clock, tools for JSON, text
@@ -299,7 +301,11 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
   for bigger steps); **+** adds a color, × on the selected pad removes it —; and **Intensity** and
   **Grain**. Settings and the open Little Joan window change as you edit; **Save** keeps the
   theme, **Cancel** (or closing Settings) puts the saved one back. It's stored in `settings.json`
-  as `"theme": { "mode", "colors", "intensity", "grain" }`.
+  as `"theme": { "mode", "colors", "intensity", "grain" }`. **Liquid Glass** (macOS 26 and later
+  only; the option isn't shown on older Macs, Windows or Linux): **Off**, **Clear** (more
+  transparent) or **Tinted** (more opaque, more contrast), like macOS's own setting — the toolbar
+  and the command bar in glass tinted by the theme's color; pages stay as they are. With Reduce
+  Transparency or Increase Contrast on, the solid theme shows. Stored as `"glass"`.
 
   <p>
     <img src="docs/images/appearance.png" width="420" alt="Settings, Appearance: System, Light and Dark, a live preview, presets, a color pad, Intensity and Grain">

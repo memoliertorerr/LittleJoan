@@ -143,9 +143,9 @@ pub fn app_state<R: Runtime>(window: &Window<R>) -> Option<String> {
 /// A screen point (CGPoint, which NSPoint is on 64-bit macOS).
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Point {
-    x: f64,
-    y: f64,
+pub(super) struct Point {
+    pub(super) x: f64,
+    pub(super) y: f64,
 }
 
 // SAFETY: laid out as CGPoint (two CGFloats, f64 on 64-bit macOS), with its encoding.
@@ -161,9 +161,9 @@ unsafe impl RefEncode for Point {
 /// A size (CGSize).
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Size {
-    width: f64,
-    height: f64,
+pub(super) struct Size {
+    pub(super) width: f64,
+    pub(super) height: f64,
 }
 
 // SAFETY: laid out as CGSize, with its encoding.
@@ -179,9 +179,9 @@ unsafe impl RefEncode for Size {
 /// A rectangle (CGRect, which NSRect is on 64-bit macOS).
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Rect {
-    origin: Point,
-    size: Size,
+pub(super) struct Rect {
+    pub(super) origin: Point,
+    pub(super) size: Size,
 }
 
 // SAFETY: laid out as CGRect, with its encoding.

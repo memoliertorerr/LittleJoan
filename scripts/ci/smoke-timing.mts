@@ -24,6 +24,9 @@
 //   cold-url        the same, with `--show <url>` (the bar's frame and the page's start)
 //   cold-shortcut   evicted, IDLE_MS of quiet, then the global shortcut (best effort)
 //   url             a warm `--show <url>`
+// With Liquid Glass (LJ19.9, macOS 26+ only: the driver's `glass`), the same with glass Clear —
+// `ready-glass` (first, warm ×3, url) and `hibernate-glass` (first, warm ×3) —, which
+// smoke-glass.mts's glassTimingFailures compares with the runs without.
 // Each CLI summon (forwarded `--show`) must log a complete line with every mark of its kind; the
 // shortcut ones count only when the key arrived. The ceilings (CEILINGS, per OS and kind, from
 // LJ19.1's and LJ19.4's numbers) are loose on purpose — CI runners vary a lot —: they catch a summon
@@ -124,8 +127,8 @@ export function focusedMs(t: SummonTiming): number | undefined {
 
 export type Kind = "first" | "warm" | "shortcut" | "idle" | "cold" | "cold-url" | "cold-shortcut" | "url";
 
-/** Which run a summon was measured in: Stay ready's or Hibernate's. */
-export type RunMode = "ready" | "hibernate";
+/** Which run a summon was measured in: Stay ready's or Hibernate's, without or with Liquid Glass. */
+export type RunMode = "ready" | "hibernate" | "ready-glass" | "hibernate-glass";
 
 /** One measured summon. */
 export interface Measured {
@@ -195,7 +198,7 @@ export function timingFailures(run: Measured[], os: string, ceilings: Ceilings =
     }
   }
   for (const m of run) {
-    const name = `summon timing (${m.run === "ready" ? "ready " : ""}${m.kind})`;
+    const name = `summon timing (${m.run === "hibernate" ? "" : `${m.run} `}${m.kind})`;
     const t = m.timing;
     if (!t) {
       if (m.trigger === "cli") {
@@ -207,7 +210,7 @@ export function timingFailures(run: Measured[], os: string, ceilings: Ceilings =
       failures.push(`${name}: the line is partial (marks: ${Object.keys(t.marks).join(", ")})`);
       continue;
     }
-    const expectedKind = m.run === "ready" ? "ready" : "cold";
+    const expectedKind = m.run.startsWith("ready") ? "ready" : "cold";
     if (t.kind !== expectedKind) {
       failures.push(`${name}: a ${t.kind} summon, not ${expectedKind}`);
     }
@@ -351,16 +354,32 @@ export interface TimingDriver {
   evict(): string;
   /** Presses the global shortcut; the unix ms just before the key went out, or null. */
   pressSummonShortcut(): number | null;
+  /** This system shows Liquid Glass (macOS 26+): the glass runs too (LJ19.9). */
+  glass?: boolean;
 }
 
-/** Runs the timing launches: Stay ready's, then Hibernate's (LJ19.1's). */
+/** Runs the timing launches: Stay ready's, then Hibernate's (LJ19.1's), then with glass where it shows. */
 export async function timingRun(d: TimingDriver): Promise<Measured[]> {
-  return [...(await modeRun(d, "ready")), ...(await modeRun(d, "hibernate"))];
+  const run = [...(await modeRun(d, "ready")), ...(await modeRun(d, "hibernate"))];
+  if (d.glass) {
+    run.push(...(await modeRun(d, "ready-glass")), ...(await modeRun(d, "hibernate-glass")));
+  }
+  return run;
 }
+
+/** Each run's launch: its log's name and its settings. */
+const LAUNCHES: Record<RunMode, { name: string; settings: Record<string, unknown> }> = {
+  ready: { name: "timing-ready", settings: {} },
+  hibernate: { name: "timing", settings: { afterClose: "hibernate" } },
+  "ready-glass": { name: "timing-ready-glass", settings: { glass: "clear" } },
+  "hibernate-glass": { name: "timing-glass", settings: { afterClose: "hibernate", glass: "clear" } },
+};
 
 async function modeRun(d: TimingDriver, mode: RunMode): Promise<Measured[]> {
-  const ready = mode === "ready";
-  const app = await d.launch(ready ? "timing-ready" : "timing", ready ? {} : { afterClose: "hibernate" }, { "history.json": seedHistory(Date.now()) });
+  const ready = mode.startsWith("ready");
+  const glass = mode.endsWith("glass");
+  const launch = LAUNCHES[mode];
+  const app = await d.launch(launch.name, launch.settings, { "history.json": seedHistory(Date.now()) });
   await app.waitFor(`timing ${mode}: started, shortcut`, (e) => e.some((x) => x.event === "started") && e.some((x) => x.event.startsWith("shortcut-")), 30_000);
   if (ready) {
     await app.waitFor("timing ready: prewarmed", (e) => e.some((x) => x.event === "prewarmed"), 20_000);
@@ -396,6 +415,15 @@ async function modeRun(d: TimingDriver, mode: RunMode): Promise<Measured[]> {
   for (let i = 0; i < 3; i += 1) {
     await d.sleep(WARM_GAP_MS);
     await summon("warm", "cli", "none");
+  }
+  if (glass) {
+    // With glass only what a comparison needs (the shortcut and the idle summon are glass's too).
+    if (ready) {
+      await d.sleep(WARM_GAP_MS);
+      await summon("url", "cli", "none", `${d.pageUrl}?fits=1`);
+    }
+    await app.quit();
+    return run;
   }
   await d.sleep(WARM_GAP_MS);
   await summon("shortcut", "shortcut", "none");
@@ -443,6 +471,9 @@ export function timingSummary(run: Measured[], os: string) {
   return {
     ready: modeSummary("ready"),
     hibernate: modeSummary("hibernate"),
+    // LJ19.9 (macOS 26+ only; nulls elsewhere): the same with Liquid Glass Clear.
+    readyGlass: modeSummary("ready-glass"),
+    hibernateGlass: modeSummary("hibernate-glass"),
     rows: run.map(summaryRow),
     rules: timingFailures(run, os),
   };

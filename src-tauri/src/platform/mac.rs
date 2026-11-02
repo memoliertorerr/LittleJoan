@@ -3,7 +3,8 @@
 //! (extensions' clipboard.writeText); the page's downloads are followed to cancel them when the
 //! window closes (mac/downloads.rs, LJ15); App Nap stays off while a summon builds the window
 //! (mac/activity.rs, LJ19.1); the windows join the active Space and may show over another app's
-//! full-screen window (mac/spaces.rs, LJ19.2).
+//! full-screen window (mac/spaces.rs, LJ19.2); Liquid Glass behind the bar on macOS 26+
+//! (mac/glass.rs, LJ19.9).
 
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
 use std::sync::{Mutex, PoisonError, mpsc};
@@ -31,8 +32,11 @@ pub use activity::{SummonActivity, nap_state};
 /// Spaces and other apps' full-screen windows (LJ19.2).
 mod spaces;
 pub use spaces::{activate_app, front, join_active_space};
+/// Liquid Glass behind the bar on macOS 26+ (LJ19.9).
+mod glass;
 /// Smoke mode: AppKit's window and app notifications, for WebKit's fullscreen (LJ19.4-fix4).
 mod notes;
+pub use glass::{os_major, set as set_glass, support as glass_support, watch_accessibility};
 pub use notes::{context as smoke_context, install as install_notes};
 
 pub fn set_mobile<R: Runtime>(page: &Webview<R>, mobile: bool) {

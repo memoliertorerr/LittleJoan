@@ -2,7 +2,8 @@
 //! that holds the summon shortcut in a Wayland session (portal.rs, LJ17), where a summoned
 //! window shows up — the current Space, in front, over another app's full-screen window (LJ19.2,
 //! spaces.rs) —, and the ready window at rest (LJ19.4): the bar's engine process ending, Windows'
-//! memory target while hidden, macOS giving the keyboard back when the window hides.
+//! memory target while hidden, macOS giving the keyboard back when the window hides — and Liquid
+//! Glass behind the bar on macOS 26+ (glass.rs, LJ19.9).
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -13,8 +14,11 @@ mod portal;
 #[cfg(windows)]
 mod win;
 
+/// Liquid Glass behind the bar, macOS 26+ only (LJ19.9).
+mod glass;
 /// A summon leaving the page's element fullscreen (LJ19.5).
 mod leave;
+pub use glass::{glass_os, glass_support, set_glass, watch_accessibility};
 pub use leave::{close_media_presentations, fullscreen_now, has_keyboard, webkit_fullscreen_exit};
 
 use std::path::PathBuf;

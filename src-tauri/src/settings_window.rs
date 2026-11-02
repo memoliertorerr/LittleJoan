@@ -7,7 +7,6 @@
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 
-use crate::bar;
 use crate::keys;
 use crate::navigation;
 use crate::platform;
@@ -200,18 +199,20 @@ pub fn smoke_click_quit<R: Runtime>(app: &AppHandle<R>) {
 const SMOKE_QUIT_AFTER: std::time::Duration = std::time::Duration::from_secs(4);
 
 /// When the window closes: the shortcut it may have paused while recording comes back, and a
-/// theme it was previewing without saving (Cancel, or the close button) gives way to the saved
-/// one in the page window.
+/// theme (or Liquid Glass setting) it was previewing without saving (Cancel, or the close button)
+/// gives way to the saved one in the page window.
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if window.label() == LABEL && matches!(event, WindowEvent::Destroyed) {
         let app = window.app_handle().clone();
         tauri::async_runtime::spawn(async move {
             shortcut::set_suspended(&app, false);
             let previewed = state::with(&app, |s| {
-                s.theme_preview.take().map(|_| s.settings.theme.clone())
+                let theme = s.theme_preview.take().is_some();
+                let glass = s.glass_preview.take().is_some();
+                theme || glass
             });
-            if let Some(saved) = previewed {
-                bar::set_theme(&app, &saved);
+            if previewed {
+                crate::glass::refresh(&app);
                 smoke::log("theme-preview", "ended");
             }
             // The Extensions tab read the registry; with no page window, nothing stays at rest.

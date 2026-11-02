@@ -165,6 +165,11 @@ ui/settings/appearance-logic.ts    the Appearance tab: color pads (hue × chroma
 ui/settings/appearance.ts          the Appearance tab's controls and live preview; every edit
                                    re-themes the window and goes to preview_theme; DOM glue only
 ui/settings/appearance.css         the Appearance tab's styles (linked by settings.html)
+ui/settings/glass-logic.ts         Appearance's Liquid Glass (LJ19.9): Off / Clear / Tinted, shown
+                                   only where Rust says this Mac has glass, its note (Reduce
+                                   Transparency / Increase Contrast) (pure, unit-tested)
+ui/settings/glass.ts               its three buttons and note; a choice is a draft, previewed with
+                                   the theme; DOM glue (tested with stand-ins)
 ui/settings/extensions-logic.ts    the Extensions tab: groups (Built-in, Bundled, Developer),
                                    permissions in plain words, the switches' draft (pure,
                                    unit-tested)
@@ -255,7 +260,11 @@ src-tauri/src/bar/boot.rs          the bar's first paint: its theme script (chec
                                    theme pushed to it, whether its script runs yet (`Ready`)
 src-tauri/src/bar/background.rs    the bar webview's and the window's own background: the theme's
                                    `--lj-bg-0` it painted last, else the theme's own (theme_color.rs;
-                                   pure part tested)
+                                   pure part tested); clear over Liquid Glass, whose tint follows it
+src-tauri/src/glass.rs             Liquid Glass at run time (LJ19.9): `BarTheme` (the theme the bar
+                                   is handed, with the glass it shows — left out for Off), the open
+                                   window following the setting, its preview, the painted theme and
+                                   the accessibility settings; Settings' `glassSupport` (tested)
 src-tauri/src/theme_color.rs       a theme's `--lj-bg-0` computed as ui/lib/theme.ts does (OKLCH,
                                    pure, tested against the TS values; LJ19.4's theme flash)
 src-tauri/src/bar/download.rs      downloads at run time: on_download (WebView2, WKWebView), the
@@ -367,6 +376,8 @@ src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView
                                    their keys from the keymap (set again when the keys change);
                                    Cmd+Q goes through joan::quit
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
+src-tauri/src/platform/glass.rs    Liquid Glass's native side per OS: macOS 26+ only; elsewhere no
+                                   support and nothing done (LJ19.9)
 src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → keys.rs;
                                    ContainsFullScreenElementChanged → window fullscreen; phone
                                    mode's agent through the DevTools protocol (SetUserAgent as the
@@ -395,6 +406,13 @@ src-tauri/src/platform/mac/downloads.rs    macOS: the page's WKDownloads noted (
 src-tauri/src/platform/mac/spaces.rs       macOS: a window's collection behaviour set before it is
                                    first shown (the active Space, over full-screen apps; LJ19.2),
                                    and the smoke log's key / on-top / on-the-active-Space check
+src-tauri/src/platform/mac/glass.rs        macOS 26+ (LJ19.9): NSGlassEffectView looked up at run time
+                                   (NSProcessInfo's version too), one glass view at the back of the
+                                   window's content view under both webviews, the window non-opaque
+                                   and clear meanwhile; Reduce Transparency / Increase Contrast read
+                                   and followed (an NSObject observer of NSWorkspace's notification;
+                                   smoke: a stand-in file); `glass-view` read back (tested: AppKit's
+                                   constant names, the version check on this Mac)
 src-tauri/src/platform/mac/notes.rs        macOS, smoke log only: AppKit's key-window, native
                                    full-screen and activation notifications with the stacks that
                                    posted them and each window's state, NSWorkspace's Space and
@@ -425,6 +443,10 @@ src-tauri/src/settings/site_modes.rs  the `siteModes` field: host → auto | pho
                                    the lookup that walks a name up to its last two labels (tested)
 src-tauri/src/settings/after_close.rs  the `afterClose` field (LJ19.4): ready | ready15 | hibernate,
                                    tolerant parse (default ready), what each keeps (tested)
+src-tauri/src/settings/glass.rs    the `glass` field (LJ19.9): off | clear | tinted, tolerant parse
+                                   (default off), the native style and tint per choice, what shows
+                                   (`effective`: macOS 26+ and neither Reduce Transparency nor
+                                   Increase Contrast), the version check (tested)
 src-tauri/src/toggle.rs            the toggle table: (window state — hibernating, ready, open, the
                                    page in fullscreen —, command) → action (pure, tested)
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
@@ -438,6 +460,10 @@ scripts/ci/smoke-command.mts       CI: the command bar's and history view's smok
                                    unit-tested
 scripts/ci/smoke-theme.mts         CI: the theme runs (themes, screenshots) and their rules,
                                    unit-tested
+scripts/ci/smoke-glass.mts         CI: Liquid Glass (LJ19.9) — Off changes nothing (every OS), the
+                                   glass runs over a striped backdrop window (macOS 26+: the glass
+                                   view, the clear bar, Reduce Transparency / Increase Contrast),
+                                   glass timing no worse; unit-tested
 scripts/ci/smoke-keys.mts          CI: typing on macOS runners — characters as real key codes (US
                                    layout), a Unicode string only for the rest (unit-tested)
 scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which panels open, and when a
@@ -470,7 +496,8 @@ scripts/ci/smoke-downloads.mts     CI: the downloads run (two attachments, one r
                                    unit-tested
 scripts/ci/smoke-timing.mts        CI: the summon-timing runs — Stay ready's (from the ready window)
                                    and Hibernate's (first, warm, idle, cold after the file cache was
-                                   emptied, the real shortcut; timing.md) —, their rules and
+                                   emptied, the real shortcut; timing.md), and on macOS 26+ both
+                                   again with Liquid Glass Clear (LJ19.9) —, their rules and
                                    ceilings; unit-tested (LJ19.1, LJ19.4)
 scripts/ci/smoke-rest.mts          CI: the rest runs, one per "After closing" mode (LJ19.4): what
                                    stays at rest, a pinging page stopping at the close, memory at
@@ -719,17 +746,17 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `go_back()` | the toolbar's back button | the page action Back (`history.back()` in the page, as Alt+Left / Cmd+[) |
 | `open_in_browser()` | the toolbar's "open in default browser" | the page action OpenInBrowser: the page goes to the default browser, the window hibernates |
 | `hibernate()` | the bar, Esc with no page | close the window (same path as `--hide`) |
-| `start_info()` | the bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut, portalShortcut, theme }`: the theme the bar applies, and the welcome's facts; `firstRun` is true once; `waylandNoShortcut` is a Wayland session whose portal doesn't hold the shortcut, `portalShortcut` `{ trigger }` while it does (LJ17; `shortcut` is then `null`); logs `theme <mode> colors=<n>` |
-| `get_settings()` | settings window, on load | settings + engine and language lists + platform + `shortcutProblem` (the saved shortcut failed at launch, LJ44) + `waylandNoShortcut` + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version` + `builtInSiteModes` (`[{ host, mode }]`: YouTube on desktop on macOS and Linux, none on Windows); logs `settings-loaded` |
-| `save_settings(settings)` | settings window, Save | check every part first (`settings::apply_change`: a bad engine id, language, theme mode or color refuses the whole Save, nothing changed); swap the shortcut live (old one restored if the new one is taken) — not while the portal holds or is asked for it (LJ17): the desktop owns that key; then `settings_live::apply` — the path the quick commands take too — and save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` and optionally `theme` (valid as it stands — `parse_strict`; left out, the saved one stays), `showTrayIcon` and `siteModes` (General's list, only when it was edited — so a pill click while Settings is open isn't undone). A new theme goes at once to the open window's bar (`window.littleJoan.setTheme`) and to the settings window (`window.littleJoanSettings.setTheme`), both by `eval` |
+| `start_info()` | the bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut, portalShortcut, theme }`: the theme the bar applies (with `glass: clear \| tinted` while Liquid Glass shows, LJ19.9 — left out for Off), and the welcome's facts; `firstRun` is true once; `waylandNoShortcut` is a Wayland session whose portal doesn't hold the shortcut, `portalShortcut` `{ trigger }` while it does (LJ17; `shortcut` is then `null`); logs `theme <mode> colors=<n>` |
+| `get_settings()` | settings window, on load | settings + engine and language lists + platform + `shortcutProblem` (the saved shortcut failed at launch, LJ44) + `waylandNoShortcut` + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version` + `builtInSiteModes` (`[{ host, mode }]`: YouTube on desktop on macOS and Linux, none on Windows) + `glassSupport` (`{ available, blockedBy }`: Liquid Glass on this system — macOS 26+ — and `reduceTransparency` / `increaseContrast` / `null`, LJ19.9); logs `settings-loaded` |
+| `save_settings(settings)` | settings window, Save | check every part first (`settings::apply_change`: a bad engine id, language, theme mode or color, or Liquid Glass name, refuses the whole Save, nothing changed); swap the shortcut live (old one restored if the new one is taken) — not while the portal holds or is asked for it (LJ17): the desktop owns that key; then `settings_live::apply` — the path the quick commands take too — and save. Sends `shortcut`, `searchEngine`, `translateTo`, `mobileSites`, `rememberHistory` and optionally `theme` (valid as it stands — `parse_strict`; left out, the saved one stays), `glass` (`off` / `clear` / `tinted`, only where the setting shows; LJ19.9), `showTrayIcon` and `siteModes` (General's list, only when it was edited — so a pill click while Settings is open isn't undone). A new theme goes at once to the open window's bar (`window.littleJoan.setTheme`) and to the settings window (`window.littleJoanSettings.setTheme`), both by `eval` |
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 | `history_list()` | the history view, when it opens and after a change | every record, latest visit first: `[{ url, title, host, lastVisit, visitCount }]` (empty with no window); the view searches, groups and draws them; logs `history-list <n>` |
 | `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → up to 8 top sites, leaving out the open page's site, or the 4 starters when there are none; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) |
 | `history_remove(url)` | the command bar (Shift+Delete on a history row), the history view (× or Shift+Delete) | forget that record and rewrite `history.json` at once; returns whether there was one |
 | `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
-| `preview_theme(theme?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` (checked like a saved one, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
-| `set_theme_tokens(tokens)` | the bar, each time it paints a theme (`apply-theme.ts`'s `onPaint`) | keep `{ scheme, vars }` — the `--lj-*` variables it computed — in memory for extension panels (`littleJoan.theme`); checked first (names `--lj-*`, short CSS values without `;{}<>\`), a bad report is dropped; forgotten when the window closes |
+| `preview_theme(theme?, glass?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` — and the Liquid Glass choice `glass` (LJ19.9) — (checked like saved ones, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
+| `set_theme_tokens(tokens, early?, surface?)` | the bar, each time it paints a theme (`apply-theme.ts`'s `onPaint`) | keep `{ scheme, vars }` — the `--lj-*` variables it computed — in memory for extension panels (`littleJoan.theme`); checked first (names `--lj-*`, short CSS values without `;{}<>\`), a bad report is dropped; forgotten when the window closes. The bar's own background follows (bar/background.rs), and with Liquid Glass the glass's tint; `surface` (only with glass): what the bar draws under itself, for the smoke log's `bar-surface` only |
 | `extensions_list()` | the command bar, each time it opens; Settings → Extensions | `{ developerMode, folder, extensions: [{ id, name, version, description, author, kind: bundled \| developer, enabled, icon (data: URI), permissions, commands, pageActions }], skipped: [{ name, reason }], disabledBuiltIns }` (`extensions/list.rs`; the last: the quick answers switched off); logs `extensions-list <n> skipped=<m>` |
 | `open_extension(id, command, pageAction)` | the command bar, an extension's row | opens that command's panel — or, for a page action, its panel for the open web page (refused without one), handing it the page's address and title only when its manifest asks for `pageInfo`; never a switched-off extension (`session::open`) |
 | `reload_extensions()` | Settings → Extensions → Reload extensions | read the registry again; returns the new list |
@@ -864,7 +891,7 @@ all fields, whichever tab they are on):
 |---|---|
 | General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, **After closing** (LJ19.4, `afterClose`: **Stay ready** / **Stay ready for 15 minutes** / **Hibernate**, with a note under the list saying what the chosen one does — "Opens instantly; holds about N MB more memory while closed than Hibernate" with this OS's figure from `READY_MEMORY_MB` (CI's own-memory numbers: macOS 30, Windows 110, Linux 200), "… then hibernates", "Uses the least memory while closed; opens a little slower" — and that closing always ends the page; drawn as text; it takes effect on Save, at once — `after_close_changed`), search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login, and last **Quit Little Joan** (LJ19.7: a Quit button, `quit_from_settings`; the note under it says that changes not saved are dropped, as with Cancel — the window goes with the app; `ui/settings/quit.ts`, tested) |
 | Keyboard | **Summon Little Joan** — the global shortcut's recorder (moved here from General; it pauses the shortcut while it listens, as before), Reset when it isn't the default; on a Linux Wayland session without the portal a note to bind `little-joan --toggle` instead; while the portal holds the shortcut (LJ17) the desktop's key as text instead of the recorder (no Reset, no problems: the desktop's key is never judged, so it can't block Save, and Reset all leaves the preferred trigger alone), with "Change it in your desktop's keyboard settings." — and General's line shows that key with the same note instead of **Change…** — then **Little Joan's keys**: every keymap action (`keymap_info`) with its key as a recorder button (the next key with a modifier, or an F-key; a letter is the one the key types in the user's layout; Esc cancels, Backspace means no key), **No key**, **Reset** when it isn't the default, its problems under it; **Reset all** at the bottom (every key and the summon shortcut). Problems (`keyboard-logic.ts`, the keymap's own rules): errors block Save and say why — "⌘L is already Open Location", "That's the shortcut that summons Little Joan", "Plain keys type text — add ⌘ or ⌃", "On macOS a key needs ⌘ or ⌃", the editing keys ("⌘C is used for editing in pages") —; warnings don't — the OSes' reserved shortcuts ("macOS uses ⌘Space for Spotlight", `reserved-shortcuts.ts`, curated from the OSes' documentation; `Super+*` on Windows and Linux), "Ctrl+Alt is AltGr on many keyboards". **On macOS the user's own changes refine the curated table** (decided by a CI runner's export, LJ44): Rust reads the `com.apple.symbolichotkeys` domain (NSUserDefaults, read-only; `system_shortcuts.rs`), which lists only entries that were written — an entry switched off (or moved to another key) drops that curated warning (curated macOS entries carry their domain id: Spotlight 64, input sources 60 / 61, screenshots 28 / 30 / 184, …), and an entry that is on with a key warns there (under the curated name when its id is known, else "one of its keyboard shortcuts"); entries without a key say nothing, so the curated defaults stay. A saved summon shortcut that isn't one shows as written and is an error until it is recorded again or Reset. On Windows a note says WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these. The summon recorder gets the same rules (one of Little Joan's keys → error, a reserved one → warning). When the saved shortcut couldn't be registered at launch (`shortcut::settle` keeps `AppState::shortcut_problem`: what was wanted, what is active instead, `taken` or `invalid`; `get_settings` and `keymap_info` report it), Keyboard and General say so: "⌘⇧K couldn't be registered: another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little Joan has no shortcut now."); a Save whose shortcut registers clears it. Save sends `keys` only when they were edited |
-| Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders. Every edit re-themes this window and calls `preview_theme`; Save sends the theme with the rest |
+| Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders; then **Liquid Glass — Off / Clear / Tinted** (LJ19.9, `glass`), only where `get_settings`'s `glassSupport` says this Mac has it (macOS 26+; never on Windows, Linux or older Macs), with a note under it: what the choice does ("More transparent…" / "More opaque, with more contrast…", the grain not showing on glass) and, while Reduce Transparency or Increase Contrast is on, that Little Joan shows the solid theme. Every edit re-themes this window and calls `preview_theme` (the glass choice with it: previewed in the open page window); Save sends the theme and the glass with the rest |
 | Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
 | Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
 | About | version, license, the repository link, "Inspired by Little Arc…" as plain text |
@@ -1210,6 +1237,53 @@ WebKitGTK differ in CSS color-4 support, so no stylesheet uses `oklch()` or `col
   Sand, Sage, Lagoon, Dusk, Ember, Orchid, Glacier, Meadow, Berry, Graphite); a preset sets the
   colors, intensity and grain, never the mode.
 
+## Liquid Glass (macOS 26+)
+
+Settings → Appearance's **Liquid Glass — Off / Clear / Tinted** (LJ19.9, the owner's request: macOS
+26.1's own setting, on top of the theme) is settings.json's `glass` (`settings/glass.rs`: tolerant,
+default `off`). It shows only on **macOS 26 and later** — AppKit's `NSGlassEffectView` looked up at
+run time with the system's version (`platform/mac/glass.rs`), so one build serves macOS 12.3 → 26 —
+and is hidden on older Macs, Windows and Linux, where nothing changes.
+
+- **What shows** (`glass::shown`): the setting (or the Appearance tab's preview of it) where the
+  system has glass and neither **Reduce Transparency** nor **Increase Contrast** is on
+  (`NSWorkspace`'s display options, read at launch and followed through
+  `NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification`: the open window switches to the
+  solid theme and back while Little Joan runs). Otherwise Off.
+- **The bar is told before it paints:** the theme it is handed — the initialization script's
+  `window.__littleJoanTheme`, `start_info`'s, a summon's, `setTheme`'s — is `glass::BarTheme`, the
+  theme plus `glass: clear | tinted` (left out for Off, so an Off bar gets exactly what it got
+  before). `apply-theme.ts` sets `<html data-glass>` and `--lj-glass-card` before the first frame
+  (LJ38's path), so a summon never flashes the solid theme first.
+- **The native glass** (`platform/mac/glass.rs`): one `NSGlassEffectView` in the window's content
+  view at the back (`addSubview:positioned:NSWindowBelow relativeTo:nil`), the content view's size
+  (width + height autoresizing), under both webviews — so live resize, Retina and the bar's modes
+  need nothing more: in the command bar the bar covers the window and the glass shows all around
+  and through its card; in the toolbar view the opaque page covers it below the 40 px strip; during
+  element fullscreen WebKit has the page in its own window. Style: Clear → the clear style with a
+  light tint (alpha 0.25), Tinted → the regular style with a stronger one (0.65); the tint colour is
+  the theme's `--lj-bg-0` (its first colour, muted at its intensity), updated whenever the bar
+  paints another theme (bar/background.rs), and the glass view's `appearance` is Aqua or Dark Aqua
+  for the scheme the bar painted; corners 16 pt (a title-bar-only window's on macOS 26; no public
+  API says it). It is built with the window (prewarm or cold summon), before the window shows, so a
+  summon from ready does nothing more.
+- **Transparency, public API only:** meanwhile the window is non-opaque with a clear background
+  (`-[NSWindow setOpaque:NO]`, `setBackgroundColor:` clear, `invalidateShadow`), so the glass shows
+  what is behind the window rather than its own colour; the bar's webview background is the theme's
+  colour at alpha 0, and its CSS draws nothing under the toolbar and around the card (style.css's
+  `html[data-glass]` rules: no gradient, no grain). Without glass the window is opaque again with the
+  theme's colour. The bar's webview depends, as since LJ39, on wry turning WKWebView's undocumented
+  `drawsBackground` key off (it does so for any webview built with a background colour) — glass adds
+  no other private key, and `macOSPrivateApi` stays off (the plan's LJ60 notes it for App Review).
+- **Who can switch it:** only Settings — Save and `preview_theme` (`capability_tests.rs`'s
+  `only_settings_may_switch_liquid_glass`); no quick command or bar command carries it, and the page
+  webview has no capability at all.
+- Smoke log: `glass-support available= os= reduce= contrast=` at launch (every OS), `glass-view
+  <clear|regular|none> back= fills= corner= tint= dark= opaque= window-alpha= views=` (what AppKit
+  reports after each change), the bar's `bar-surface <glass> html= body= image=`, a theme line's
+  ` glass=<style>`, `glass-accessibility reduce= contrast=` and `glass <off|clear|tinted>` after a
+  switch; in CI `LITTLEJOAN_SMOKE_A11Y=<file>` stands in for System Settings (smoke mode only).
+
 ## Extensions (experimental)
 
 Extensions are small web apps — an `extension.json` and plain HTML, CSS and JavaScript — that
@@ -1453,7 +1527,10 @@ past 3 s), `page-unload timeout` (macOS: its `about:blank` didn't load within 40
 `bar-gone <why>` (the bar's web process ended; `… reload` on screen), `bar-process-failed kind=<n>
 (restarts)` (Windows: a GPU or utility process WebView2 restarts), `bar-rest <low | normal |
 plain>` (Windows: the bar's controller at rest), `theme-summon <mode> colors=<n>` (a summon from
-ready handed the bar its theme), `after-close <mode>` (the setting changed), `window-created
+ready handed the bar its theme; every theme line ends in ` glass=<clear|tinted>` while Liquid Glass
+shows, LJ19.9), `glass-support …`, `glass-view …`, `bar-surface …`, `glass-accessibility …` and
+`glass <off|clear|tinted>` (Liquid Glass, LJ19.9: "Liquid Glass (macOS 26+)" above),
+`after-close <mode>` (the setting changed), `window-created
 <cold | ready>` (a summon brought the window up), 
 `start-at-login <true|false>` (the login entry read back after a change),
 `start-at-login-failed <reason>`, `settings-window <tab | focus>` (Settings opened on a tab, or
@@ -1756,7 +1833,19 @@ and pushes to `main`:
   and the
   default theme in dark (`theme/command-bar-default-dark.png`); every `theme` event must name the
   run's mode and number of colors, and come after a `theme-early` of the same theme (the bar
-  painted it before its first frame, LJ38). Then the **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
+  painted it before its first frame, LJ38). Then **Liquid Glass** (`smoke-glass.mts`, LJ19.9): on
+  every OS the main launch's `glass-support` must say what the system has (macOS 26+ only — CI's
+  `macos-latest` is the macos-26 image) and glass Off must change nothing (no `glass-view`, no
+  `bar-surface`, no theme line with glass); on macOS 26+ the **glass runs**, each its own launch over
+  a striped backdrop window (a Swift helper, `MAC_BACKDROP`): Clear on a light two-colour theme and
+  Tinted on a dark one, the smoke page under the toolbar and the command bar
+  (`glass/glass-clear-light-page.png`, `…-command-bar.png`, the same for `glass-tinted-dark`) — every
+  theme line with the run's glass, the glass view at the back of the window, filling it, in the
+  run's style, tint and scheme, the window non-opaque and clear, the bar drawing nothing under
+  itself —; the Tinted run then switches Reduce Transparency and Increase Contrast on and off through
+  the stand-in file (`…-reduce-transparency.png`, `…-restored.png`): the solid theme each time, the
+  glass gone and the window opaque, then the glass back (logs `smoke-glass-*.log`). Then the
+  **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
   its own launch: the smoke page in `?fs=both` mode at 390×600 (phone agent) and 720×600 (desktop
   agent); at each size the page's "Element fullscreen" (`requestFullscreen` on a container, as
   desktop YouTube) and "Phone player" (m.youtube.com's way under an iPhone agent:
@@ -1866,7 +1955,10 @@ and pushes to `main`:
   three warm ones 3 s apart, one through the real global shortcut (xdotool's XTEST, SendKeys, a
   CGEvent; best effort), one after 60 s of quiet, one after the OS's file cache was emptied (macOS
   `sudo -n purge`, Linux `drop_caches`; Windows has no such command, so a 180 s gap), the same with
-  `--show <url>`, the shortcut again after an eviction and 60 s, and a warm `--show <url>`. Every
+  `--show <url>`, the shortcut again after an eviction and 60 s, and a warm `--show <url>`. On macOS
+  26+ both again with Liquid Glass Clear (`timing-ready-glass`: first, three warm, a URL;
+  `timing-glass`: first, three warm), whose warm medians may be at most 1.5× + 150 ms (ready) /
+  + 750 ms (hibernate) of the runs without (LJ19.9: glass must not make a summon slower). Every
   forwarded summon must log a complete `summon-timing` line with every mark, the native marks in
   order, ready (the command bar's rows; with a URL the later of the bar's frame and the page's
   start) under its ceiling — per OS, several times what LJ19.1 measured (Linux 2 / 3 / 5 s for

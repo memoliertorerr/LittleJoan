@@ -4632,6 +4632,48 @@ the summon's speed with glass on, Reduce Transparency switching it to solid.
   macOS runs in CI any more — the "hidden" case is Windows' and Linux's there, and a unit test for
   older Macs.
 
+**Implementation notes (2026-11-02):**
+
+- **The setting:** `glass` in settings.json (`settings/glass.rs`: `off` | `clear` | `tinted`, tolerant,
+  default Off), checked by `apply_change` like `afterClose` ("Pick Off, Clear or Tinted.");
+  Settings' Save sends it only where it shows. `glass::shown` = the setting (or its preview) where
+  `platform::glass_support()` says the system has glass and neither Reduce Transparency nor
+  Increase Contrast is on, else Off. Rust's `Theme` is unchanged: glass sits beside it, as the
+  owner put it, "on top of themes" (presets and quick commands never touch it).
+- **The bar before it paints:** what the bar is handed is `glass::BarTheme` — the theme plus
+  `glass` (serialized only when it shows, so an Off bar's script and payloads are byte for byte
+  what they were: `bar/boot.rs`'s test) — in the initialization script, `start_info`, a summon's
+  `summoned` and `setTheme`. `ui/lib/theme.ts` keeps `glass` in `themeFrom` (Settings' themes never
+  have it), `apply-theme.ts` sets `<html data-glass>` and `--lj-glass-card` (not a token: extension
+  panels and the reports are unchanged), `style.css`'s `html[data-glass]` rules draw no background
+  (no gradient, no grain) and the card as a light pane (the panel's tint at 0.2 / 0.3).
+- **The native glass:** `platform/mac/glass.rs` (+ `platform/glass.rs`'s per-OS wrappers; nothing
+  on Windows and Linux) as researched: one NSGlassEffectView at the back of the content view,
+  autoresizing; style, tint (`--lj-bg-0` at 0.25 / 0.65), corner radius 16, appearance per scheme;
+  the window non-opaque with a clear background; all of it built with the window (`bar::add_bar`,
+  before the window shows), the tint following each painted theme (`bar/background.rs`), and taken
+  out again — the window opaque with the theme's colour — when glass goes off. A window that never
+  had glass is never touched.
+- **Accessibility:** read at launch on macOS 26+ and followed through NSWorkspace's notification (an
+  NSObject subclass from objc2's ClassBuilder, as `mac/notes.rs`); a change re-applies the glass to
+  the open or resting window and hands the bar its theme again (`glass::refresh`). Smoke mode only:
+  `LITTLEJOAN_SMOKE_A11Y=<file>` (polled every 250 ms) stands in for System Settings — a runner's
+  own Reduce Transparency can't be switched from a script.
+- **Who can switch it:** Save and the Appearance tab's preview (`preview_theme` gained an optional
+  `glass`), both Settings-only; `capability_tests.rs`'s `only_settings_may_switch_liquid_glass`. No
+  new command; the bar's `set_theme_tokens` gained an optional `surface` that is only logged in
+  smoke mode.
+- **Settings → Appearance:** "Liquid Glass" with Off / Clear / Tinted after the sliders
+  (`ui/settings/glass-logic.ts`, `glass.ts`), hidden unless `get_settings`' `glassSupport.available`;
+  the note says what the choice does, and under Reduce Transparency / Increase Contrast that the
+  solid theme shows. A choice previews in the open page window like a theme edit.
+- **CI:** `smoke-glass.mts` — every OS: `glass-support` says what the system has and Off changes
+  nothing; macOS 26+: the glass runs over a striped backdrop window (Clear / light, Tinted / dark,
+  the Tinted one switching Reduce Transparency and Increase Contrast), and `smoke-timing.mts`'s
+  `ready-glass` / `hibernate-glass` runs against the runs without (warm medians within 1.5× + 150 /
+  750 ms). Results: below, after the PR's runs.
+- Disk: 19 GB free before; `.cache/target` 1.4 GB.
+
 ---
 
 ## v0.2 round 2 steps — the Little Arc feel

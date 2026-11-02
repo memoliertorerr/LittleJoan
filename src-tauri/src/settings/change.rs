@@ -6,7 +6,7 @@
 
 use serde_json::Value;
 
-use super::{AfterClose, Settings, ThemeMode, disabled_extensions, keys, site_modes, theme};
+use super::{AfterClose, Glass, Settings, ThemeMode, disabled_extensions, keys, site_modes, theme};
 use crate::input::SearchEngine;
 use crate::keymap;
 use crate::keys::Platform;
@@ -37,6 +37,8 @@ pub struct Change {
     pub keys: Option<Value>,
     /// What stays at rest after a close (LJ19.4): `ready`, `ready15` or `hibernate`.
     pub after_close: Option<String>,
+    /// Liquid Glass (LJ19.9): `off`, `clear` or `tinted`.
+    pub glass: Option<String>,
 }
 
 impl Change {
@@ -106,6 +108,10 @@ pub fn apply_change(current: &Settings, change: &Change) -> Result<Settings, Str
         next.after_close = AfterClose::from_name(mode)
             .ok_or_else(|| "Pick what happens after closing from the list.".to_owned())?;
     }
+    if let Some(glass) = &change.glass {
+        next.glass =
+            Glass::from_name(glass).ok_or_else(|| "Pick Off, Clear or Tinted.".to_owned())?;
+    }
     if let Some(value) = &change.keys {
         next.keys = keys::from_input(value)
             .ok_or_else(|| "The keys must be a list of actions and keys.".to_owned())?;
@@ -155,7 +161,26 @@ mod tests {
             current,
             "nothing else moved"
         );
-        assert_eq!(apply_change(&current, &Change::default()), Ok(current));
+        assert_eq!(
+            apply_change(&current, &Change::default()),
+            Ok(current.clone())
+        );
+        let glass = apply_change(
+            &current,
+            &Change {
+                glass: Some("tinted".into()),
+                ..Change::default()
+            },
+        )
+        .expect("valid");
+        assert_eq!(glass.glass, Glass::Tinted);
+        assert_eq!(
+            Settings {
+                glass: current.glass,
+                ..glass
+            },
+            current
+        );
     }
 
     #[test]
@@ -192,6 +217,11 @@ mod tests {
             },
             Change {
                 after_close: Some("ready30".into()),
+                mobile_sites: Some(false),
+                ..Change::default()
+            },
+            Change {
+                glass: Some("frosted".into()),
                 mobile_sites: Some(false),
                 ..Change::default()
             },

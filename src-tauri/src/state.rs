@@ -11,7 +11,7 @@ use crate::extensions::theme::Tokens;
 use crate::history_store::OpenHistory;
 use crate::keymap::Keymap;
 use crate::keys::Platform;
-use crate::settings::{self, SETTINGS_FILE, Settings, Theme};
+use crate::settings::{self, Glass, SETTINGS_FILE, Settings, Theme};
 use crate::shortcut::backend::PortalState;
 
 /// Development builds point this at `.cache/dev-data` (see scripts/env.sh). Shipped builds never
@@ -52,6 +52,8 @@ pub struct AppState {
     /// The theme Settings' Appearance tab is previewing (not saved), while that window is open:
     /// a page window summoned meanwhile shows it too. `None` = the saved theme.
     pub theme_preview: Option<Theme>,
+    /// The Liquid Glass setting the Appearance tab is previewing (LJ19.9), like `theme_preview`.
+    pub glass_preview: Option<Glass>,
     /// The scheme and `--lj-bg-0` the bar painted last, kept across windows for the next bar's
     /// webview background (bar/background.rs); `None` until a bar painted, or after the theme
     /// changed.
@@ -78,6 +80,7 @@ impl AppState {
             session_cookies: SessionCookies::default(),
             history: None,
             theme_preview: None,
+            glass_preview: None,
             painted_background: None,
             keymap: Keymap::new(Platform::current(), &std::collections::BTreeMap::new()),
         }
@@ -88,6 +91,12 @@ impl AppState {
         self.theme_preview
             .clone()
             .unwrap_or_else(|| self.settings.theme.clone())
+    }
+
+    /// The Liquid Glass setting the bar shows, if this Mac can (glass.rs decides): the preview while
+    /// Settings edits it, else the saved one.
+    pub fn shown_glass(&self) -> Glass {
+        self.glass_preview.unwrap_or(self.settings.glass)
     }
 }
 
@@ -120,6 +129,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         session_cookies: SessionCookies::default(),
         history: None,
         theme_preview: None,
+        glass_preview: None,
         painted_background: None,
         keymap,
     }));
@@ -180,6 +190,10 @@ mod tests {
             Theme::default(),
             "a preview is never saved"
         );
+        assert_eq!(state.shown_glass(), Glass::Off);
+        state.glass_preview = Some(Glass::Clear);
+        assert_eq!(state.shown_glass(), Glass::Clear);
+        assert_eq!(state.settings.glass, Glass::Off, "nor is the glass preview");
     }
 
     #[test]

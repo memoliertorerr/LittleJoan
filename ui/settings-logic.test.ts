@@ -37,6 +37,7 @@ const saved: Settings = {
   showTrayIcon: true,
   keys: {},
   afterClose: "ready",
+  glass: "off",
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -232,6 +233,40 @@ describe("after closing (LJ19.4)", () => {
     const next = { ...saved, afterClose: "hibernate" as const };
     expect(rebase(saved, saved, next).afterClose).toBe("hibernate");
     expect(rebase({ ...saved, afterClose: "ready15" }, saved, next).afterClose).toBe("ready15");
+  });
+});
+
+describe("Liquid Glass (LJ19.9)", () => {
+  const withGlass = (glass?: "off" | "clear" | "tinted") =>
+    toInput(
+      saved.shortcut,
+      saved.searchEngine,
+      saved.translateTo,
+      saved.mobileSites,
+      saved.rememberHistory,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      glass,
+    );
+
+  it("counts a new choice as a change, the saved one as none, and leaves it out where it doesn't show", () => {
+    expect(isChanged(saved, withGlass("off"))).toBe(false);
+    expect(isChanged(saved, withGlass("clear"))).toBe(true);
+    expect(isChanged({ ...saved, glass: "tinted" }, withGlass("tinted"))).toBe(false);
+    // Windows, Linux, older Macs: the control gives no draft, so Save never sends it.
+    expect("glass" in withGlass(undefined)).toBe(false);
+    expect(isChanged({ ...saved, glass: "clear" }, withGlass(undefined))).toBe(false);
+    expect(withGlass("tinted").glass).toBe("tinted");
+  });
+
+  it("follows a change made elsewhere unless the window edited it", () => {
+    const next = { ...saved, glass: "clear" as const };
+    expect(rebase(saved, saved, next).glass).toBe("clear");
+    expect(rebase({ ...saved, glass: "tinted" }, saved, next).glass).toBe("tinted");
   });
 });
 

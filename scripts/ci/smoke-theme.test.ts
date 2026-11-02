@@ -24,7 +24,10 @@ describe("theme events", () => {
   it("parse the mode and the number of colors", () => {
     const [event] = parseLog("1 theme dark colors=3\n");
     expect(event && parseTheme(event)).toEqual({ mode: "dark", colors: 3 });
-    for (const bad of ["1 theme sepia colors=1", "1 theme dark", "1 welcome"]) {
+    // With Liquid Glass (LJ19.9) the line ends in its style.
+    const [glass] = parseLog("1 theme light colors=2 glass=tinted\n");
+    expect(glass && parseTheme(glass)).toEqual({ mode: "light", colors: 2, glass: "tinted" });
+    for (const bad of ["1 theme sepia colors=1", "1 theme dark", "1 welcome", "1 theme dark colors=1 glass=off", "1 theme dark colors=1 glass="]) {
       const [e] = parseLog(`${bad}\n`);
       expect(e && parseTheme(e)).toBeUndefined();
     }

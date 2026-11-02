@@ -29,10 +29,11 @@ export function earlyTheme(value: unknown): Theme | null {
   return themeFrom(value);
 }
 
-/** Whether two themes look the same. */
+/** Whether two themes look the same (their Liquid Glass too, LJ19.9). */
 export function sameTheme(a: Theme, b: Theme): boolean {
   return (
     a.mode === b.mode &&
+    a.glass === b.glass &&
     a.intensity === b.intensity &&
     a.grain === b.grain &&
     a.colors.length === b.colors.length &&
