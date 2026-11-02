@@ -100,8 +100,8 @@
 | LJ19.5 | *(v0.2.1; owner, 2026-10-30)* The shortcut while a page is full screen: the page leaves full screen (its video keeps playing in the window), then the command bar opens, ready to type — every OS; never ordering the window into WebKit's full-screen Space | strong | auto | ✅ done (CI: see notes) |
 | LJ19.6 | *(v0.2.1; owner, 2026-10-30)* The ready window over another app's full screen: find why it sometimes lands on the desktop Space (about 1 in 20 macOS runs), fix it, prove it with a repeated over-fullscreen launch | strong | auto | ✅ done (CI: see notes) |
 | LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ✅ done (CI: see notes) |
-| LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | 🔄 the release PR `lj/release-0.2.1` — the owner said to release it unsigned now (2026-10-30: "i will sign later"); the tag and release v0.2.1 (`--latest`) come from its merge commit; the owner's checklist after |
-| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ⬜ todo |
+| LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | ✅ done — v0.2.1 released 2026-10-30 17:54 UTC as Latest, **unsigned on the owner's word** ("Release unsigned now" / "i will sign later"): release PR #38 (head a33f85f, run 41091192039 green) merged as f2f440a; main's run 41095737643 green (18 jobs); tag v0.2.1 on f2f440a; 7 assets; a re-downloaded DMG matched SHA256SUMS; the owner's checklist is theirs |
+| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | 🔄 phase 14, `lj/p14-liquid-glass` (2026-11-02) |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -279,10 +279,15 @@ command bar on every OS (and on Windows a press closes a window that is in front
 window no longer lands on the desktop Space over another app's full screen (2 of 100 repeated
 launches before, 0 of 150 after), and Settings → General has Quit Little Joan. It merged as
 9960c8f (main's CI 41066867436 green, 18 jobs). The Apple secrets weren't there yet, and the owner
-chose to **release v0.2.1 unsigned now and sign later** (2026-10-30): LJ19.8 is the release PR
-`lj/release-0.2.1`, released from its merge commit on their word; LJ58 runs whenever the secrets
-exist and goes out in a later release. **Execution order from here: 19.8 → 19.9 (checkpoint) → 21
+chose to **release v0.2.1 unsigned now and sign later** (2026-10-30): LJ19.8 was the release PR
+`lj/release-0.2.1` (#38, merged as f2f440a), and v0.2.1 was released from that merge commit on their word
+(2026-10-30 17:54 UTC, Latest, unsigned; main's run 41095737643 green, 18 jobs; 7 assets, the DMG's
+checksum verified); LJ58 runs whenever the secrets exist and goes out in a later release. **Execution order from here: 19.8 → 19.9 (checkpoint) → 21
 → 22 → 23 → 24 → 25 (LJ56) → 26 → 59 → 60, with 58 as soon as the owner's secrets exist.**
+**Phase 14 (LJ19.9, 2026-11-02)** is on `lj/p14-liquid-glass`: Liquid Glass on macOS 26+ (Settings →
+Appearance → Off / Clear / Tinted, the toolbar and the command bar in glass tinted by the theme), a
+checkpoint — merged by the agent once every job is green, then the owner looks at it on their Mac;
+phase 21 starts on their go.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -4525,6 +4530,10 @@ Settings, and the app exits by itself within LJ20's quit limits, its data saved 
 > unsigned now ("i will sign later") — their word for the merge, the tag and the release. Their
 > checklist (YouTube full screen with the shortcut, `--show` and the tray's Open; a real click on
 > Settings' Quit; a few summons over another app's full screen) is theirs after the release.
+> **Done (2026-10-30):** v0.2.1 was released at 17:54 UTC as the Latest release, unsigned: the
+> release PR #38 (head a33f85f, its run 41091192039 green) merged as f2f440a; main's run
+> 41095737643 green (18 jobs); the tag v0.2.1 on f2f440a; 7 assets; a re-downloaded DMG matched
+> SHA256SUMS.txt. v0.2.1-beta.1 stays a pre-release.
 
 ### LJ19.9 — Liquid Glass on macOS 26+ · strong · checkpoint
 
