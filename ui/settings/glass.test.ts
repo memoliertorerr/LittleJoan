@@ -66,7 +66,7 @@ describe("Settings → Appearance's Liquid Glass control (LJ19.9)", () => {
     const control = glassControl(fake.element, () => undefined);
     control.load("clear", { available: true, blockedBy: "reduceTransparency" });
     expect(fake.root.hidden).toBe(false);
-    expect(fake.note.textContent).toContain("Reduce Transparency is on");
+    expect(fake.note.textContent).toMatch(/^Reduce Transparency is on/);
     expect(control.draft()).toBe("clear");
   });
 });

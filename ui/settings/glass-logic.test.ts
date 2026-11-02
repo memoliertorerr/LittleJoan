@@ -32,17 +32,22 @@ describe("Liquid Glass in Settings (LJ19.9)", () => {
     expect(glassSupportFrom({ available: true, blockedBy: "darkMode" })).toEqual(MAC26);
   });
 
-  it("says what each choice does, and why the solid theme shows when the system asks for it", () => {
-    expect(glassNote("off", MAC26)).toBe("Glass for the toolbar and the command bar, tinted by the theme's color. Pages stay as they are.");
-    expect(glassNote("clear", MAC26)).toMatch(/^More transparent: what is behind the window shows through\./);
-    expect(glassNote("tinted", MAC26)).toMatch(/^More opaque, with more contrast\./);
-    for (const choice of ["clear", "tinted"] as const) {
-      expect(glassNote(choice, MAC26)).toContain("the grain doesn't show on glass");
+  it("says in one short line what each choice does, or why the solid theme shows", () => {
+    expect(glassNote("off", MAC26)).toBe("Glass for the toolbar and the command bar, tinted by your theme.");
+    expect(glassNote("clear", MAC26)).toBe("More transparent. Tinted by your theme; no grain on glass.");
+    expect(glassNote("tinted", MAC26)).toBe("More opaque, with more contrast. Tinted by your theme.");
+    for (const choice of ["off", "clear", "tinted"] as const) {
+      expect(glassNote(choice, { available: true, blockedBy: "reduceTransparency" })).toBe(
+        "Reduce Transparency is on in Accessibility settings, so the theme shows solid.",
+      );
+      expect(glassNote(choice, { available: true, blockedBy: "increaseContrast" })).toMatch(/^Increase Contrast is on/);
     }
-    expect(glassNote("clear", { available: true, blockedBy: "reduceTransparency" })).toMatch(
-      /Reduce Transparency is on \(System Settings → Accessibility → Display\), so Little Joan shows the solid theme\.$/,
-    );
-    expect(glassNote("tinted", { available: true, blockedBy: "increaseContrast" })).toMatch(/Increase Contrast is on .* solid theme\.$/);
+    // One line in the Appearance tab (about 70 characters at 12 px).
+    for (const choice of ["off", "clear", "tinted"] as const) {
+      for (const blockedBy of [null, "reduceTransparency", "increaseContrast"] as const) {
+        expect(glassNote(choice, { available: true, blockedBy }).length).toBeLessThanOrEqual(80);
+      }
+    }
   });
 
   it("is hidden in the markup until Rust says otherwise, its buttons named by data-glass-choice", () => {

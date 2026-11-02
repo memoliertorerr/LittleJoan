@@ -41,17 +41,21 @@ export function glassSupportFrom(value: unknown): GlassSupport {
 }
 
 const BLOCKED: Record<NonNullable<GlassSupport["blockedBy"]>, string> = {
-  reduceTransparency: "Reduce Transparency is on (System Settings → Accessibility → Display), so Little Joan shows the solid theme.",
-  increaseContrast: "Increase Contrast is on (System Settings → Accessibility → Display), so Little Joan shows the solid theme.",
+  reduceTransparency: "Reduce Transparency is on in Accessibility settings, so the theme shows solid.",
+  increaseContrast: "Increase Contrast is on in Accessibility settings, so the theme shows solid.",
 };
 
-/** The note under the choices: what `choice` does, then what keeps glass from showing now, if anything. */
+/**
+ * The note under the choices, one short line (the tab fits its window without scrolling): what
+ * `choice` does — or, while the system asks for it, why the solid theme shows instead.
+ */
 export function glassNote(choice: GlassSetting, support: GlassSupport): string {
-  const what =
-    choice === "clear"
-      ? "More transparent: what is behind the window shows through. Tinted by the theme's color; the grain doesn't show on glass."
-      : choice === "tinted"
-        ? "More opaque, with more contrast. Tinted by the theme's color; the grain doesn't show on glass."
-        : "Glass for the toolbar and the command bar, tinted by the theme's color. Pages stay as they are.";
-  return support.blockedBy ? `${what} ${BLOCKED[support.blockedBy]}` : what;
+  if (support.blockedBy) {
+    return BLOCKED[support.blockedBy];
+  }
+  return choice === "clear"
+    ? "More transparent. Tinted by your theme; no grain on glass."
+    : choice === "tinted"
+      ? "More opaque, with more contrast. Tinted by your theme."
+      : "Glass for the toolbar and the command bar, tinted by your theme.";
 }
