@@ -100,11 +100,31 @@ let reportEarly = false;
 /** That report, which start_info waits for, so the log keeps the order it happened in. */
 let earlyReported: Promise<unknown> = Promise.resolve();
 
+/**
+ * With Liquid Glass (LJ19.9): what the bar draws under itself — nothing, so the glass shows — for
+ * the smoke log's `bar-surface`; undefined without glass (the report is then as before).
+ */
+function glassSurface(): string | undefined {
+  const glass = document.documentElement.dataset.glass;
+  if (!glass || !document.body) {
+    return undefined;
+  }
+  const html = getComputedStyle(document.documentElement);
+  const body = getComputedStyle(document.body);
+  const image = body.backgroundImage === "none" ? "none" : "set";
+  return `${glass} html=${html.backgroundColor} body=${body.backgroundColor} image=${image}`;
+}
+
 /** Extension panels match the bar: Rust keeps the variables it painted (littleJoan.theme). */
 const reportTheme = (tokens: ThemeTokens): void => {
   const early = reportEarly;
   reportEarly = false;
-  const sent = invoke("set_theme_tokens", early ? { tokens, early: true } : { tokens }).catch(() => {
+  const surface = glassSurface();
+  const sent = invoke("set_theme_tokens", {
+    tokens,
+    ...(early ? { early: true } : {}),
+    ...(surface === undefined ? {} : { surface }),
+  }).catch(() => {
     // Panels then wait for the next report; the bar itself is unaffected.
   });
   if (early) {

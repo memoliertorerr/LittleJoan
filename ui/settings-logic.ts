@@ -5,6 +5,7 @@ import type { Theme } from "./lib/theme.ts";
 import { sameTheme } from "./settings/appearance-logic.ts";
 import { sameSites, type BuiltInSite, type SiteMode } from "./settings/sites-logic.ts";
 import { sameOverrides, type ShortcutProblem } from "./settings/keyboard-logic.ts";
+import { glassSettingFrom, type GlassSetting } from "./settings/glass-logic.ts";
 
 export interface Choice {
   id: string;
@@ -34,6 +35,8 @@ export interface Settings {
   keys: Record<string, string>;
   /** What stays at rest after a close (General, LJ19.4; settings/after_close.rs). */
   afterClose: AfterClose;
+  /** Liquid Glass for the toolbar and the command bar (Appearance, LJ19.9; settings/glass.rs). */
+  glass: GlassSetting;
 }
 
 /** "After closing" (LJ19.4, the owner's decision): the hidden window and the bar stay, for 15 minutes, or nothing. */
@@ -98,6 +101,8 @@ export interface SettingsView {
   shortcutProblem: ShortcutProblem | null;
   /** A Linux Wayland session: the global shortcut can't fire. */
   waylandNoShortcut: boolean;
+  /** Liquid Glass on this system (LJ19.9): read with glass-logic.ts's glassSupportFrom. */
+  glassSupport?: unknown;
 }
 
 export interface SettingsInput {
@@ -119,6 +124,8 @@ export interface SettingsInput {
   keys?: Record<string, string>;
   /** General's "After closing"; left out, Rust keeps the saved one. */
   afterClose?: AfterClose;
+  /** Appearance's Liquid Glass; left out (it doesn't show here), Rust keeps the saved one. */
+  glass?: GlassSetting;
 }
 
 /** The Extensions tab's part of Save (settings/extensions-logic.ts's draft). */
@@ -186,6 +193,7 @@ export function toInput(
   showTrayIcon?: boolean,
   keys?: Record<string, string>,
   afterClose?: AfterClose,
+  glass?: GlassSetting,
 ): SettingsInput {
   return {
     shortcut,
@@ -199,6 +207,7 @@ export function toInput(
     ...(showTrayIcon === undefined ? {} : { showTrayIcon }),
     ...(keys ? { keys } : {}),
     ...(afterClose === undefined ? {} : { afterClose }),
+    ...(glass === undefined ? {} : { glass }),
   };
 }
 
@@ -222,7 +231,8 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     (input.siteModes !== undefined && !sameSites(saved.siteModes, input.siteModes)) ||
     (input.showTrayIcon !== undefined && input.showTrayIcon !== saved.showTrayIcon) ||
     (input.keys !== undefined && !sameOverrides(saved.keys, input.keys)) ||
-    (input.afterClose !== undefined && input.afterClose !== afterCloseFrom(saved.afterClose))
+    (input.afterClose !== undefined && input.afterClose !== afterCloseFrom(saved.afterClose)) ||
+    (input.glass !== undefined && input.glass !== glassSettingFrom(saved.glass))
   );
 }
 
@@ -243,6 +253,7 @@ export function rebase(draft: Settings, oldSaved: Settings, newSaved: Settings):
     rememberHistory: follow("rememberHistory"),
     showTrayIcon: follow("showTrayIcon"),
     afterClose: follow("afterClose"),
+    glass: follow("glass"),
     developerMode: follow("developerMode"),
     theme: follow("theme", sameTheme),
     disabledExtensions: follow("disabledExtensions", sameIds),

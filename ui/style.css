@@ -368,6 +368,21 @@ body {
     0 10px 30px var(--lj-shadow);
 }
 
+/* Liquid Glass (LJ19.9, macOS 26+: <html data-glass="clear|tinted">, set by apply-theme.ts from the
+   theme Rust hands the bar): the bar draws no background — no gradient, no grain — so the native
+   glass Rust puts behind its webview shows: all around the command bar, whose card is a lighter
+   pane on it, and under the toolbar. Without glass none of this applies. */
+html[data-glass],
+html[data-glass] body,
+html[data-glass] .themed {
+  background: transparent;
+}
+
+html[data-glass] .bar-body.overlay .command {
+  background: var(--lj-glass-card);
+  box-shadow: 0 0 0 1px var(--lj-hairline);
+}
+
 .bar-body.overlay .bar-top {
   height: 52px;
   padding: 0 10px 0 16px;

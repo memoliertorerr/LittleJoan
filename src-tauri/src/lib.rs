@@ -13,6 +13,7 @@ pub mod cookies;
 pub mod downloads;
 pub mod extensions;
 pub mod fullscreen;
+pub mod glass;
 pub mod history;
 pub mod history_store;
 pub mod input;
@@ -133,6 +134,8 @@ pub fn run() {
 
             let handle = app.handle();
             state::init(handle)?;
+            // Liquid Glass (LJ19.9, macOS 26+): Reduce Transparency / Increase Contrast followed.
+            glass::start(handle);
             #[cfg(target_os = "macos")]
             {
                 // The page items' keys come from the keymap (state::init built it).

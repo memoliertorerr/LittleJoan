@@ -27,6 +27,8 @@ export interface Appearance {
   draft(): Theme;
   /** The saved theme arrived (on load, after a save): editing starts again from it. */
   load(theme: Theme): void;
+  /** Shows the draft — and the Liquid Glass choice — in the open page window (not saved). */
+  preview(): void;
 }
 
 function find<T extends HTMLElement>(root: ParentNode, selector: string): T {
@@ -39,7 +41,11 @@ function find<T extends HTMLElement>(root: ParentNode, selector: string): T {
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
-export function appearance(root: HTMLElement, onChange: () => void): Appearance {
+/**
+ * `glass`: the Liquid Glass choice to preview with the theme (LJ19.9; `undefined` where it doesn't
+ * show, so the saved one stays).
+ */
+export function appearance(root: HTMLElement, onChange: () => void, glass: () => string | undefined = () => undefined): Appearance {
   let editor = startEditing(DEFAULT_THEME);
   const modes = [...root.querySelectorAll<HTMLButtonElement>("[data-mode]")];
   const presetRow = find<HTMLElement>(root, "#presets");
@@ -74,7 +80,8 @@ export function appearance(root: HTMLElement, onChange: () => void): Appearance 
     previewQueued = true;
     requestAnimationFrame(() => {
       previewQueued = false;
-      invoke("preview_theme", { theme: editor.draft }).catch(() => {
+      const choice = glass();
+      invoke("preview_theme", { theme: editor.draft, ...(choice === undefined ? {} : { glass: choice }) }).catch(() => {
         // No page window open: nothing to preview there.
       });
     });
@@ -176,6 +183,7 @@ export function appearance(root: HTMLElement, onChange: () => void): Appearance 
 
   draw();
   return {
+    preview,
     draft: () => editor.draft,
     load(theme: Theme) {
       editor = startEditing(theme);

@@ -26,6 +26,11 @@ import { DEFAULT_PRESET } from "./presets.ts";
 export type ThemeMode = "system" | "light" | "dark";
 /** What a theme resolves to on screen. */
 export type Scheme = "light" | "dark";
+/**
+ * Liquid Glass (LJ19.9, macOS 26+): the bar's surfaces stay clear over the native glass Rust puts
+ * behind them — Clear (more transparent) or Tinted (more opaque, more contrast).
+ */
+export type Glass = "clear" | "tinted";
 
 export interface Theme {
   mode: ThemeMode;
@@ -35,6 +40,12 @@ export interface Theme {
   intensity: number;
   /** 0–1: how strong the grain is. */
   grain: number;
+  /**
+   * The Liquid Glass the bar shows: only in the theme Rust hands the bar, and only while this Mac
+   * shows glass (never in Settings, which keeps its own `glass` setting beside the theme).
+   * Left out: none — the theme's gradient and grain, as always.
+   */
+  glass?: Glass;
 }
 
 export const MAX_COLORS = 3;
@@ -69,11 +80,13 @@ export function themeFrom(value: unknown): Theme {
     .map(normalizeHex)
     .filter((hex): hex is string => hex !== null)
     .slice(0, MAX_COLORS);
+  const glass = raw.glass === "clear" || raw.glass === "tinted" ? raw.glass : undefined;
   return {
     mode: mode === "light" || mode === "dark" || mode === "system" ? mode : DEFAULT_THEME.mode,
     colors: colors.length > 0 ? colors : [...DEFAULT_THEME.colors],
     intensity: unit(raw.intensity, DEFAULT_THEME.intensity),
     grain: unit(raw.grain, DEFAULT_THEME.grain),
+    ...(glass ? { glass } : {}),
   };
 }
 
@@ -341,4 +354,18 @@ export function tokens(theme: Theme, systemDark: boolean): ThemeTokens {
       "--lj-grain": grain ? `url("${grain}")` : "none",
     },
   };
+}
+
+/** The command bar's card over glass: the panel's tint, light enough to let the glass through. */
+export const GLASS_CARD_ALPHA: Record<Glass, number> = { clear: 0.2, tinted: 0.3 };
+
+/**
+ * The card's colour over Liquid Glass (`--lj-glass-card`): the frosted panel's tint (near-white in
+ * light, deep in dark) at GLASS_CARD_ALPHA — a lighter (or deeper) pane on the glass, not a solid
+ * card hiding it.
+ */
+export function glassCard(theme: Theme, systemDark: boolean, glass: Glass): string {
+  const scheme = schemeFor(theme.mode, systemDark);
+  const [base] = backgrounds(theme, scheme);
+  return rgba(panelFor(base, scheme).rgb, GLASS_CARD_ALPHA[glass]);
 }

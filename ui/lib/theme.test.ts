@@ -6,12 +6,14 @@ import { DEFAULT_PRESET, PRESETS } from "./presets.ts";
 import { defaultsCss } from "./theme-css.ts";
 import {
   DEFAULT_THEME,
+  GLASS_CARD_ALPHA,
   GRAIN_OPACITY,
   LIGHTNESS,
   MAX_CHROMA,
   backgrounds,
   gradientCss,
   gradientStops,
+  glassCard,
   grainOpacity,
   grainUri,
   mute,
@@ -266,6 +268,43 @@ describe("reading a theme", () => {
       grain: 0,
     });
     expect(themeFrom({ mode: "sepia", colors: [], intensity: "x", grain: Number.NaN })).toEqual(DEFAULT_THEME);
+  });
+
+  it("keeps Liquid Glass only as Rust names it, and has none otherwise (LJ19.9)", () => {
+    const dusk = { mode: "dark", colors: ["#9d8fd0"], intensity: 0.6, grain: 0.4 };
+    expect(themeFrom({ ...dusk, glass: "clear" }).glass).toBe("clear");
+    expect(themeFrom({ ...dusk, glass: "tinted" }).glass).toBe("tinted");
+    for (const none of [undefined, "off", "Clear", "frosted", 1, true, null]) {
+      const theme = themeFrom({ ...dusk, glass: none });
+      expect(theme.glass).toBeUndefined();
+      expect("glass" in theme).toBe(false);
+    }
+    // Settings' themes never carry it: the setting lives beside the theme.
+    expect("glass" in themeFrom(DEFAULT_THEME)).toBe(false);
+  });
+});
+
+describe("the card over Liquid Glass", () => {
+  it("is the panel's tint at a low alpha, lighter for Clear than for Tinted", () => {
+    expect(GLASS_CARD_ALPHA.clear).toBeLessThan(GLASS_CARD_ALPHA.tinted);
+    for (const scheme of SCHEMES) {
+      const theme: Theme = { ...DEFAULT_THEME, mode: scheme };
+      const panel = tokens(theme, false).vars["--lj-panel"] ?? "";
+      const rgb = /^rgba\((\d+), (\d+), (\d+), [\d.]+\)$/.exec(panel)?.slice(1, 4).join(", ");
+      for (const glass of ["clear", "tinted"] as const) {
+        const card = glassCard(theme, false, glass);
+        expect(card).toBe(`rgba(${rgb}, ${GLASS_CARD_ALPHA[glass]})`);
+      }
+    }
+    // System mode follows the system's scheme.
+    const system: Theme = { ...DEFAULT_THEME, mode: "system" };
+    expect(glassCard(system, true, "clear")).toBe(glassCard({ ...system, mode: "dark" }, false, "clear"));
+  });
+
+  it("isn't a token: extension panels and the reports stay as they were", () => {
+    const vars = tokens({ ...DEFAULT_THEME, glass: "tinted" }, false).vars;
+    expect(Object.keys(vars).some((name) => name.includes("glass"))).toBe(false);
+    expect(vars).toEqual(tokens(DEFAULT_THEME, false).vars);
   });
 });
 

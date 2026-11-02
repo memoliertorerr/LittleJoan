@@ -3,9 +3,9 @@
 //!   Rules 10 and 18) — gets an initialization script, `window.__littleJoanTheme = <theme>;`
 //!   (`theme_script`), which the engine runs at document start, before the page's own scripts (so
 //!   the bar's CSP doesn't apply to it); ui/bar-boot.ts applies it before anything awaits. The
-//!   theme is a checked one — `#rrggbb` colors, a mode name and two numbers — so its JSON is a
-//!   safe script literal. The bar's first theme report then says `early` (commands.rs logs
-//!   `theme-early`);
+//!   theme is a checked one — `#rrggbb` colors, a mode name, two numbers and, with Liquid Glass
+//!   (LJ19.9), a glass name — so its JSON is a safe script literal. The bar's first theme report
+//!   then says `early` (commands.rs logs `theme-early`);
 //! - **whether the bar's script runs yet** (`start_info`, its first call, logs `bar-ready`): a panel
 //!   opened from hibernation waits for it (extensions/session.rs), so the toolbar is there to name
 //!   it (on macOS a panel committed before the bar's script ran left the toolbar unpainted).
@@ -18,25 +18,31 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::BAR;
-use crate::settings::{self, Theme};
+use crate::glass::BarTheme;
+use crate::settings;
 use crate::smoke;
 
 /// The initialization script that hands the bar `theme` before its first paint. The theme is
-/// checked again here, so whatever reaches it, the script is one assignment of plain JSON.
-pub fn theme_script(theme: &Theme) -> String {
-    let checked = serde_json::to_value(theme)
-        .map(|value| settings::theme::parse(Some(&value)))
-        .unwrap_or_default();
+/// checked again here (the glass is one of three names), so whatever reaches it, the script is one
+/// assignment of plain JSON.
+pub fn theme_script(theme: &BarTheme) -> String {
+    let checked = BarTheme {
+        theme: serde_json::to_value(&theme.theme)
+            .map(|value| settings::theme::parse(Some(&value)))
+            .unwrap_or_default(),
+        glass: theme.glass,
+    };
     let json = serde_json::to_string(&checked).unwrap_or_else(|_| "null".to_owned());
     format!("window.__littleJoanTheme = {json};")
 }
 
-/// Shows `theme` in the open window's bar at once (after Settings saves one, or previews one).
-pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &Theme) {
+/// Shows `theme` in the open window's bar at once (after Settings saves one, or previews one, or
+/// the glass it shows changed).
+pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &BarTheme) {
     let Some(bar) = app.get_webview(BAR) else {
         return;
     };
-    // Checked hex colors, a mode name and two numbers: the JSON is a safe script literal.
+    // Checked hex colors, a mode name, two numbers and a glass name: a safe script literal.
     match serde_json::to_string(theme) {
         Ok(json) => {
             let _ = bar.eval(format!(
@@ -48,15 +54,15 @@ pub fn set_theme<R: Runtime>(app: &AppHandle<R>, theme: &Theme) {
 }
 
 /// The theme this window's bar got in its initialization script (for `theme-early`).
-static EARLY: Mutex<Option<Theme>> = Mutex::new(None);
+static EARLY: Mutex<Option<BarTheme>> = Mutex::new(None);
 
 /// A new window's bar is built with `theme` in its initialization script.
-pub fn set_early_theme(theme: Theme) {
+pub fn set_early_theme(theme: BarTheme) {
     *EARLY.lock().unwrap_or_else(PoisonError::into_inner) = Some(theme);
 }
 
 /// The theme of this window's initialization script.
-pub fn early_theme() -> Option<Theme> {
+pub fn early_theme() -> Option<BarTheme> {
     EARLY.lock().unwrap_or_else(PoisonError::into_inner).clone()
 }
 
@@ -125,7 +131,14 @@ pub fn mark_ready() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::ThemeMode;
+    use crate::settings::{Glass, Theme, ThemeMode};
+
+    fn bar_theme(theme: Theme) -> BarTheme {
+        BarTheme {
+            theme,
+            glass: Glass::Off,
+        }
+    }
 
     #[test]
     fn the_theme_script_is_one_assignment_of_a_checked_theme() {
@@ -135,10 +148,23 @@ mod tests {
             intensity: 0.6,
             grain: 0.4,
         };
+        // Off: exactly the script of before LJ19.9.
         assert_eq!(
-            theme_script(&theme),
+            theme_script(&bar_theme(theme.clone())),
             r##"window.__littleJoanTheme = {"mode":"dark","colors":["#9d8fd0","#e0a2a0"],"intensity":0.6,"grain":0.4};"##
         );
+        // With Liquid Glass the bar knows before its first paint (no flash of the solid theme).
+        for (glass, name) in [(Glass::Clear, "clear"), (Glass::Tinted, "tinted")] {
+            assert_eq!(
+                theme_script(&BarTheme {
+                    theme: theme.clone(),
+                    glass
+                }),
+                format!(
+                    r##"window.__littleJoanTheme = {{"mode":"dark","colors":["#9d8fd0","#e0a2a0"],"intensity":0.6,"grain":0.4,"glass":"{name}"}};"##
+                )
+            );
+        }
     }
 
     #[test]
@@ -163,17 +189,17 @@ mod tests {
                 ..Theme::default()
             },
         ] {
-            let script = theme_script(&theme);
+            let script = theme_script(&bar_theme(theme));
             assert!(!script.contains('<'), "{script}");
             assert!(!script.contains('\n') && !script.contains('\r'), "{script}");
             assert_eq!(script.matches(';').count(), 1, "one statement: {script}");
             assert!(script.starts_with("window.__littleJoanTheme = {") && script.ends_with("};"));
         }
-        let checked = theme_script(&Theme {
+        let checked = theme_script(&bar_theme(Theme {
             colors: vec!["</script>".into(), "#ABC".into()],
             intensity: 7.0,
             ..Theme::default()
-        });
+        }));
         assert!(checked.contains(r##""colors":["#aabbcc"]"##), "{checked}");
         assert!(checked.contains(r#""intensity":1.0"#), "{checked}");
     }

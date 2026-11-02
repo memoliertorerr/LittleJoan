@@ -18,6 +18,12 @@ describe("the early theme", () => {
     expect(theme).toEqual({ mode: "light", colors: ["#aabbcc"], intensity: 1, grain: 0 });
   });
 
+  it("carries its Liquid Glass to the first paint (LJ19.9: no flash of the solid theme)", () => {
+    const applied: unknown[] = [];
+    bootTheme({ ...DUSK, glass: "tinted" }, (t) => applied.push(t));
+    expect(applied).toEqual([{ ...themeFrom(DUSK), glass: "tinted" }]);
+  });
+
   it("falls back to start_info's path when missing or malformed", () => {
     for (const bad of [undefined, null, "dark", 3, [], { colors: ["#ffffff"] }, { mode: "dark" }, { mode: 1, colors: [] }]) {
       const applied: unknown[] = [];
@@ -43,6 +49,11 @@ describe("start_info's theme", () => {
   it("compares every part of a theme", () => {
     const a = themeFrom(DUSK);
     expect(sameTheme(a, themeFrom({ ...DUSK }))).toBe(true);
+    // Liquid Glass too (LJ19.9): a summon after it changed applies the theme again.
+    expect(sameTheme(a, themeFrom({ ...DUSK, glass: "clear" }))).toBe(false);
+    expect(sameTheme(themeFrom({ ...DUSK, glass: "clear" }), themeFrom({ ...DUSK, glass: "tinted" }))).toBe(false);
+    expect(sameTheme(themeFrom({ ...DUSK, glass: "tinted" }), themeFrom({ ...DUSK, glass: "tinted" }))).toBe(true);
+    expect(needsTheme(a, { ...DUSK, glass: "clear" })).toBe(true);
     expect(sameTheme(a, themeFrom({ ...DUSK, colors: ["#e0a2a0", "#9d8fd0"] }))).toBe(false);
     expect(sameTheme(a, themeFrom({ ...DUSK, intensity: 0.61 }))).toBe(false);
   });

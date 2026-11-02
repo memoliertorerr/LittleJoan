@@ -1,13 +1,14 @@
 //! Settings changes at runtime (LJ42): the one path Settings' Save and the command bar's quick
 //! commands share. `settings::apply_change` decides what the settings become (pure, tested); this
-//! puts the result to work — AppState, a new theme in the bar, the tray icon's rule (LJ41), phone
-//! mode, the extensions' registry, what stays at rest after a close (LJ19.4) — and saves
-//! settings.json (atomically).
+//! puts the result to work — AppState, a new theme in the bar, Liquid Glass on the window (LJ19.9),
+//! the tray icon's rule (LJ41), phone mode, the extensions' registry, what stays at rest after a
+//! close (LJ19.4) — and saves settings.json (atomically).
 
 use tauri::{AppHandle, Runtime};
 
 use crate::bar;
 use crate::extensions;
+use crate::glass;
 use crate::keymap::Keymap;
 use crate::phone_mode;
 use crate::settings::{self, Change, Settings};
@@ -15,16 +16,20 @@ use crate::smoke;
 use crate::state;
 
 /// Applies `change` (checked again against the settings of this moment, under the state lock) and
-/// saves it. Refused: nothing changed, and the message says why. A theme change ends a preview
-/// Settings may be showing; the open window's bar gets the new theme (smoke log `theme <mode>
-/// colors=<n>`). Callers tell the settings window themselves (Save closes it; a quick command
-/// rebases its draft, settings_window::saved_changed).
+/// saves it. Refused: nothing changed, and the message says why. A theme or glass change ends a
+/// preview Settings may be showing; the open window's bar gets the new theme, and the window its
+/// glass (smoke log `theme <mode> colors=<n>[ glass=<style>]`). Callers tell the settings window
+/// themselves (Save closes it; a quick command rebases its draft, settings_window::saved_changed).
 pub fn apply<R: Runtime>(app: &AppHandle<R>, change: &Change) -> Result<Settings, String> {
-    let (dir, before, updated, theme_changed) = state::with(app, |s| {
+    let (dir, before, updated, theme_changed, glass_changed) = state::with(app, |s| {
         let next = settings::apply_change(&s.settings, change)?;
         let shown = s.shown_theme();
+        let shown_glass = s.shown_glass();
         if change.touches_theme() {
             s.theme_preview = None;
+        }
+        if change.glass.is_some() {
+            s.glass_preview = None;
         }
         let before = std::mem::replace(&mut s.settings, next);
         // The keys follow the settings (LJ43): the native hooks read this keymap.
@@ -34,12 +39,16 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, change: &Change) -> Result<Settings
             before,
             s.settings.clone(),
             s.shown_theme() != shown,
+            s.shown_glass() != shown_glass,
         ))
     })?;
     if theme_changed {
         bar::forget_painted(app);
-        bar::set_theme(app, &updated.theme);
-        smoke::log("theme", &crate::commands::theme_summary(&updated.theme));
+    }
+    if theme_changed || glass_changed {
+        // The bar's theme, and the window's glass with it (glass.rs leaves an Off window alone).
+        glass::refresh(app);
+        smoke::log("theme", &glass::bar_theme(app).summary());
     }
     // The icon shown or hidden by the switch and whether the shortcut works (LJ41).
     crate::tray::apply_visibility(app);

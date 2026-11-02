@@ -1,8 +1,11 @@
 // Puts a theme on the page (DOM glue): theme.ts's variables go on <html> as inline custom
 // properties — CSSOM, which the CSP's `style-src 'self'` allows — and `color-scheme` follows, so
 // form controls match. A "system" theme follows the system's light / dark as it changes. The bar
-// passes `onPaint`, which hears every set of variables it puts on (for extension panels).
-import { themeFrom, tokens, type Theme, type ThemeTokens } from "./theme.ts";
+// passes `onPaint`, which hears every set of variables it puts on (for extension panels). With
+// Liquid Glass (LJ19.9: a theme Rust hands the bar on macOS 26+) <html> gets `data-glass` and the
+// card's colour over the glass (`--lj-glass-card`, never reported); style.css then draws no
+// background under the bar, so the native glass behind it shows.
+import { glassCard, themeFrom, tokens, type Theme, type ThemeTokens } from "./theme.ts";
 
 let current: Theme | null = null;
 let media: MediaQueryList | null = null;
@@ -17,11 +20,19 @@ function paint(): void {
     return;
   }
   const shown = tokens(current, systemDark());
-  const style = document.documentElement.style;
+  const root = document.documentElement;
+  const style = root.style;
   for (const [name, value] of Object.entries(shown.vars)) {
     style.setProperty(name, value);
   }
   style.setProperty("color-scheme", shown.scheme);
+  if (current.glass) {
+    root.dataset.glass = current.glass;
+    style.setProperty("--lj-glass-card", glassCard(current, systemDark(), current.glass));
+  } else if (root.dataset.glass !== undefined) {
+    delete root.dataset.glass;
+    style.removeProperty("--lj-glass-card");
+  }
   painted?.(shown);
 }
 

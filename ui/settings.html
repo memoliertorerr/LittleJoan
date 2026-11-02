@@ -190,6 +190,18 @@
               <input id="grain" type="range" min="0" max="100" step="1" />
             </label>
           </div>
+          <!-- Liquid Glass (LJ19.9): only where Rust says this Mac has it (macOS 26+). -->
+          <div id="glass-setting" class="glass-setting" hidden>
+            <div class="glass-head">
+              <h2 class="appearance-label" id="glass-label">Liquid Glass</h2>
+              <div class="modes" role="group" aria-labelledby="glass-label">
+                <button class="mode" type="button" data-glass-choice="off" aria-pressed="true">Off</button>
+                <button class="mode" type="button" data-glass-choice="clear" aria-pressed="false">Clear</button>
+                <button class="mode" type="button" data-glass-choice="tinted" aria-pressed="false">Tinted</button>
+              </div>
+            </div>
+            <p class="setting-note" id="glass-note"></p>
+          </div>
         </section>
 
         <section id="panel-extensions" class="tab-panel" role="tabpanel" aria-labelledby="tab-extensions" hidden>

@@ -13,6 +13,8 @@ import { themeFrom } from "./lib/theme.ts";
 import { displayShortcut } from "./lib/shortcut.ts";
 import { keyboardTab, type KeymapInfo } from "./settings/keyboard.ts";
 import { appearance } from "./settings/appearance.ts";
+import { glassControl } from "./settings/glass.ts";
+import { glassSettingFrom, glassSupportFrom } from "./settings/glass-logic.ts";
 import { extensionsTab } from "./settings/extensions.ts";
 import { sitesList } from "./settings/sites.ts";
 import { quitButton } from "./settings/quit.ts";
@@ -96,12 +98,19 @@ const error = element<HTMLElement>("#error");
 const save = element<HTMLButtonElement>("#save");
 const cancel = element<HTMLButtonElement>("#cancel");
 
-const look = appearance(element<HTMLElement>("#panel-appearance"), refresh);
+// Liquid Glass (LJ19.9): previewed with the theme, saved with the rest.
+const glass = glassControl(element<HTMLElement>("#glass-setting"), () => {
+  look.preview();
+  refresh();
+});
+const look = appearance(element<HTMLElement>("#panel-appearance"), refresh, () => glass.draft());
 const extensionsPanel = extensionsTab(element<HTMLElement>("#panel-extensions"), refresh, BUILT_INS);
 const sites = sitesList(element<HTMLElement>("#site-modes"), element<HTMLElement>("#site-modes-empty"), refresh);
 const keyboard = keyboardTab(refresh, () => showTab("keyboard", true));
 
 let saved: Settings | null = null;
+/** What get_settings said of Liquid Glass here (no glass until it answered). */
+let glassSupport = glassSupportFrom(null);
 let savedLogin: boolean | null = null;
 let builtInSites: ReturnType<typeof builtInsFrom> = [];
 let isMac = false;
@@ -165,6 +174,7 @@ function input(): SettingsInput {
     tray.checked,
     keyboard.keys(),
     afterCloseFrom(afterClose.value),
+    glass.draft(),
   );
 }
 
@@ -181,6 +191,7 @@ function shownSettings(from: Settings): Settings {
     rememberHistory: remember.checked,
     showTrayIcon: tray.checked,
     afterClose: afterCloseFrom(afterClose.value),
+    glass: glass.draft() ?? from.glass,
     theme: look.draft(),
     disabledExtensions: extensions.disabledExtensions,
     developerMode: extensions.developerMode,
@@ -321,6 +332,9 @@ window.littleJoanSettings = {
     if (!sameTheme(draft.theme, shown.theme)) {
       look.load(themeFrom(draft.theme));
     }
+    if (draft.glass !== shown.glass) {
+      glass.load(glassSettingFrom(draft.glass), glassSupport);
+    }
     if (draft.developerMode !== shown.developerMode || draft.disabledExtensions !== shown.disabledExtensions) {
       extensionsPanel.load({ disabledExtensions: draft.disabledExtensions, developerMode: draft.developerMode });
     }
@@ -344,6 +358,8 @@ invoke<SettingsView>("get_settings")
   .then((view) => {
     saved = view.settings;
     look.load(themeFrom(view.settings.theme));
+    glassSupport = glassSupportFrom(view.glassSupport);
+    glass.load(glassSettingFrom(view.settings.glass), glassSupport);
     isMac = view.platform === "macos";
     fill(engine, view.engines, view.settings.searchEngine);
     fill(language, view.languages, view.settings.translateTo);

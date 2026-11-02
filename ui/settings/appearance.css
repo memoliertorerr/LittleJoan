@@ -262,6 +262,39 @@
   color: var(--lj-fg);
 }
 
+.glass-setting {
+  margin-top: 8px;
+}
+
+/* With Liquid Glass shown (macOS 26+ only) the tab's other gaps close a little, so it still fits its
+   window without scrolling; elsewhere the row is hidden and nothing moves. */
+#panel-appearance:has(.glass-setting:not([hidden])) > h2.appearance-label {
+  margin-top: 8px;
+}
+
+#panel-appearance:has(.glass-setting:not([hidden])) .sliders {
+  margin-top: 8px;
+}
+
+.glass-setting[hidden] {
+  display: none;
+}
+
+.glass-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.tab-panel .glass-setting .setting-note {
+  margin: 0;
+}
+
+.tab-panel .glass-head h2.appearance-label {
+  margin: 0;
+}
+
 .slider input {
   flex: 1;
   min-width: 0;
