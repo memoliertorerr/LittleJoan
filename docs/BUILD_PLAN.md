@@ -4570,6 +4570,68 @@ every earlier rule green; summon timing not worse with glass on.
 the summon's speed with glass on, Reduce Transparency switching it to solid.
 **Commit:** `lj-step-19.9: Liquid Glass on macOS 26+ — Off / Clear / Tinted, tinted by the theme`
 
+**Research notes (2026-11-02, before code; disk 19 GB free, `.cache/target` 1.4 GB):**
+
+- **The API** (the macOS 26.4 SDK's `AppKit/NSGlassEffectView.h`, read on this Mac; Apple's page adds
+  nothing beyond one-line abstracts): `NSGlassEffectView : NSView`, `API_AVAILABLE(macos(26.0))` —
+  `contentView` (strong, nullable: "only guarantees the `contentView` will be placed inside the glass
+  effect"), `cornerRadius` (CGFloat, all corners), `tintColor` (nullable NSColor, "the color the glass
+  effect view uses to tint the background and glass effect toward"), `style`
+  (`NSGlassEffectViewStyleRegular` = 0, `NSGlassEffectViewStyleClear` = 1). Also
+  `NSGlassEffectContainerView` (merges nearby glass views; not needed for one surface).
+- **From Rust:** objc2-app-kit 0.3.2 (already in Cargo.lock through tao/wry) has generated bindings
+  behind its `NSGlassEffectView` feature, but Little Joan's macOS code uses only `objc2` and
+  `objc2-foundation` (`NSString`) with run-time class lookups. Glass does the same —
+  `AnyClass::get(c"NSGlassEffectView")` and `msg_send!` — so no dependency or feature changes, and one
+  build serves macOS 12.3 → 26: before 26 the lookup finds nothing. The support check is that plus
+  `NSProcessInfo.operatingSystemVersion.majorVersion` ≥ 26 (16 counts too: what Tahoe reports to an
+  app linked against an older SDK), read once.
+- **Where the glass goes:** the bar (`joan-bar`) is a child WKWebView of tao's content view (wry's
+  `ns_view.addSubview`), and the page (`joan-page`) a sibling added after it (LJ19.4). One
+  NSGlassEffectView goes into that content view **at the back** (`addSubview:positioned:NSWindowBelow
+  relativeTo:nil`), the content view's size with width + height autoresizing — so live resize,
+  Retina (AppKit points) and the bar's overlay modes need nothing more: in the command bar (Overlay)
+  the bar covers the window and the glass shows through all of it, its card a frosted panel on it; in
+  Toolbar mode the page — opaque, the site's own — covers it below the 40 px strip, so it shows only
+  behind the toolbar; in element fullscreen WebKit has the page in its own window. No geometry from
+  the bar's script (no new IPC), no layout change, nothing for the page.
+- **A transparent bar:** AppKit's WKWebView has no public way to stop drawing its white background;
+  wry turns the **undocumented KVC key `drawsBackground`** off — on the WKWebViewConfiguration when a
+  webview is built with a background colour, and on the WKWebView in `set_background_color`
+  (wry 0.57 `wkwebview/mod.rs` 371–375, 988–994, where wry itself calls it "Private API"). The bar has
+  had that since LJ39 (its theme colour under its page). Glass adds no new key: the bar's background
+  colour gets alpha 0 (wry then also sets the public `underPageBackgroundColor`, macOS 12+) and its CSS
+  draws nothing under the toolbar and around the card. **For LJ60 (App Review):** `drawsBackground`
+  is the one undocumented key the bar depends on (before and after glass); the page webview never
+  gets it.
+- **The window:** the glass shows what is under it. Behind it is the window's own background
+  (NSThemeFrame's `backgroundColor`, the theme's colour since LJ19.4), so in an opaque window the
+  glass would only blur a flat colour. With glass on, the window is made **non-opaque with a clear
+  background** — `-[NSWindow setOpaque:NO]`, `setBackgroundColor:` `NSColor.clearColor`,
+  `invalidateShadow`, all public — and goes back to opaque with the theme's colour when glass goes
+  off. Prior art: Rio terminal's macOS 26 "macos-glass-regular / -clear" window blur
+  (rio-window's `glass.rs`) puts an NSGlassEffectView behind its non-opaque content the same way.
+  **`macOSPrivateApi` stays off** — nothing here needs it (and Tauri 2.12.1+ documents the flag as a
+  no-op: `tauri/src/lib.rs`); Tauri's `transparent(true)` isn't used either: glass switches at run
+  time, so the public NSWindow calls are made directly.
+- **Corners:** macOS 26 has no public API for a window's corner radius (it changes with toolbars and
+  sidebars); the glass gets a constant for a title-bar-only window, checked against the CI
+  screenshots.
+- **The tint:** `tintColor` is the theme's `--lj-bg-0` (its first colour, muted at the theme's
+  intensity — what the bar's own background has been since LJ39), at a low alpha for Clear (with the
+  clear style) and a higher one for Tinted (the regular style), and the glass view's `appearance`
+  (`NSAppearanceNameAqua` / `…DarkAqua`) follows the scheme the bar painted, so a dark theme on a
+  light system gets dark glass.
+- **Accessibility:** `NSWorkspace.sharedWorkspace` `accessibilityDisplayShouldReduceTransparency` /
+  `accessibilityDisplayShouldIncreaseContrast` (public, 10.10+), and
+  `NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification` on NSWorkspace's notification center —
+  observed with a small NSObject subclass (objc2's ClassBuilder, as `mac/notes.rs` does; no `block2`).
+- **CI:** GitHub's `macos-26` image is GA since 2026-02-26, and **`macos-latest` is it now**: main's
+  run 41095737643's `smoke (macos)` ran on "Image: macos-26-arm64, Version 20261026.0455.2". So the
+  existing macOS smoke job runs macOS 26: the glass runs go into it (still 18 jobs), and no older
+  macOS runs in CI any more — the "hidden" case is Windows' and Linux's there, and a unit test for
+  older Macs.
+
 ---
 
 ## v0.2 round 2 steps — the Little Arc feel
