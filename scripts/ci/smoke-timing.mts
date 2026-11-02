@@ -347,8 +347,8 @@ const WARM_GAP_MS = 3000;
 export interface TimingDriver {
   os: string;
   pageUrl: string;
-  /** Launches the app (no gdb) on a fresh data folder with these settings and files. */
-  launch(name: string, settings: Record<string, unknown>, files: Record<string, string>): Promise<SiteApp>;
+  /** Launches the app (no gdb) on a fresh data folder with these settings and files (and env). */
+  launch(name: string, settings: Record<string, unknown>, files: Record<string, string>, extra?: Record<string, string>): Promise<SiteApp>;
   sleep(ms: number): Promise<void>;
   /** Empties the OS's file cache where a command can (sudo on CI runners): what it did. */
   evict(): string;
@@ -356,13 +356,18 @@ export interface TimingDriver {
   pressSummonShortcut(): number | null;
   /** This system shows Liquid Glass (macOS 26+): the glass runs too (LJ19.9). */
   glass?: boolean;
+  /** Around the glass runs: the environment they launch with (smoke-glass.mts's stand-in), and after them. */
+  beforeGlass?(): Record<string, string>;
+  afterGlass?(): void;
 }
 
 /** Runs the timing launches: Stay ready's, then Hibernate's (LJ19.1's), then with glass where it shows. */
 export async function timingRun(d: TimingDriver): Promise<Measured[]> {
   const run = [...(await modeRun(d, "ready")), ...(await modeRun(d, "hibernate"))];
   if (d.glass) {
-    run.push(...(await modeRun(d, "ready-glass")), ...(await modeRun(d, "hibernate-glass")));
+    const extra = d.beforeGlass?.() ?? {};
+    run.push(...(await modeRun(d, "ready-glass", extra)), ...(await modeRun(d, "hibernate-glass", extra)));
+    d.afterGlass?.();
   }
   return run;
 }
@@ -375,11 +380,11 @@ const LAUNCHES: Record<RunMode, { name: string; settings: Record<string, unknown
   "hibernate-glass": { name: "timing-glass", settings: { afterClose: "hibernate", glass: "clear" } },
 };
 
-async function modeRun(d: TimingDriver, mode: RunMode): Promise<Measured[]> {
+async function modeRun(d: TimingDriver, mode: RunMode, extra: Record<string, string> = {}): Promise<Measured[]> {
   const ready = mode.startsWith("ready");
   const glass = mode.endsWith("glass");
   const launch = LAUNCHES[mode];
-  const app = await d.launch(launch.name, launch.settings, { "history.json": seedHistory(Date.now()) });
+  const app = await d.launch(launch.name, launch.settings, { "history.json": seedHistory(Date.now()) }, extra);
   await app.waitFor(`timing ${mode}: started, shortcut`, (e) => e.some((x) => x.event === "started") && e.some((x) => x.event.startsWith("shortcut-")), 30_000);
   if (ready) {
     await app.waitFor("timing ready: prewarmed", (e) => e.some((x) => x.event === "prewarmed"), 20_000);

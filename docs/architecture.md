@@ -1278,11 +1278,15 @@ and is hidden on older Macs, Windows and Linux, where nothing changes.
 - **Who can switch it:** only Settings — Save and `preview_theme` (`capability_tests.rs`'s
   `only_settings_may_switch_liquid_glass`); no quick command or bar command carries it, and the page
   webview has no capability at all.
-- Smoke log: `glass-support available= os= reduce= contrast=` at launch (every OS), `glass-view
+- Smoke log: `glass-support available= os= reduce= contrast=` at launch (every OS; on macOS 26+ also
+  `glass-system reduce= contrast=`, what the system itself said — the stand-in file wins), `glass-view
   <clear|regular|none> back= fills= corner= tint= dark= opaque= window-alpha= views=` (what AppKit
   reports after each change), the bar's `bar-surface <glass> html= body= image=`, a theme line's
   ` glass=<style>`, `glass-accessibility reduce= contrast=` and `glass <off|clear|tinted>` after a
-  switch; in CI `LITTLEJOAN_SMOKE_A11Y=<file>` stands in for System Settings (smoke mode only).
+  switch; in CI `LITTLEJOAN_SMOKE_A11Y=<file>` stands in for System Settings (smoke mode only):
+  GitHub's macOS 26 image has Reduce Transparency on, so every glass launch starts with it saying
+  `none`, and the harness switches the runner's own setting off around the glass runs (`defaults`,
+  put back after).
 
 ## Extensions (experimental)
 
@@ -1844,7 +1848,11 @@ and pushes to `main`:
   run's style, tint and scheme, the window non-opaque and clear, the bar drawing nothing under
   itself —; the Tinted run then switches Reduce Transparency and Increase Contrast on and off through
   the stand-in file (`…-reduce-transparency.png`, `…-restored.png`): the solid theme each time, the
-  glass gone and the window opaque, then the glass back (logs `smoke-glass-*.log`). Then the
+  glass gone and the window opaque, then the glass back (logs `smoke-glass-*.log`). The runner has
+  Reduce Transparency on: every glass launch starts with the stand-in file saying `none`, and the
+  runner's own setting is switched off around the glass runs and the glass timing runs (`defaults
+  write com.apple.universalaccess reduceTransparency`, put back after; `summary.json`'s
+  `glass.systemSaid` says what the system reported). Then the
   **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
   its own launch: the smoke page in `?fs=both` mode at 390×600 (phone agent) and 720×600 (desktop
   agent); at each size the page's "Element fullscreen" (`requestFullscreen` on a container, as
@@ -1958,7 +1966,8 @@ and pushes to `main`:
   `--show <url>`, the shortcut again after an eviction and 60 s, and a warm `--show <url>`. On macOS
   26+ both again with Liquid Glass Clear (`timing-ready-glass`: first, three warm, a URL;
   `timing-glass`: first, three warm), whose warm medians may be at most 1.5× + 150 ms (ready) /
-  + 750 ms (hibernate) of the runs without (LJ19.9: glass must not make a summon slower). Every
+  + 750 ms (hibernate) of the runs without (LJ19.9: glass must not make a summon slower), and must
+  really have shown glass (a clear glass view, the bar handed it). Every
   forwarded summon must log a complete `summon-timing` line with every mark, the native marks in
   order, ready (the command bar's rows; with a URL the later of the bar's frame and the page's
   start) under its ceiling — per OS, several times what LJ19.1 measured (Linux 2 / 3 / 5 s for

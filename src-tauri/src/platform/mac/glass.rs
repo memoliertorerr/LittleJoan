@@ -138,6 +138,15 @@ pub fn watch_accessibility(on_change: Box<dyn Fn() + Send + Sync>) {
         return;
     }
     let _ = ON_CHANGE.set(on_change);
+    if smoke::enabled()
+        && let Some((reduce, contrast)) = display_options()
+    {
+        // What the system itself says (the stand-in file, if any, wins below).
+        smoke::log(
+            "glass-system",
+            &format!("reduce={reduce} contrast={contrast}"),
+        );
+    }
     if let Some((reduce, contrast)) = smoke_options().or_else(display_options) {
         REDUCE.store(reduce, Ordering::SeqCst);
         CONTRAST.store(contrast, Ordering::SeqCst);

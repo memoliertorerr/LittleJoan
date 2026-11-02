@@ -6,7 +6,11 @@
 // `bar-surface <glass> html=<css> body=<css> image=<none|set>` (what it draws under itself), and a
 // theme line's ` glass=<clear|tinted>`; `glass-accessibility reduce= contrast=` and `glass
 // <off|clear|tinted>` when Reduce Transparency / Increase Contrast change — in CI through the smoke
-// stand-in file (LITTLEJOAN_SMOKE_A11Y): a runner's own settings can't be switched.
+// stand-in file (LITTLEJOAN_SMOKE_A11Y), which wins over the system's own (`glass-system reduce=
+// contrast=`): GitHub's macOS 26 image has Reduce Transparency ON (seen in run 41484579569), so
+// every glass launch starts with the file saying `none`, and the harness also tries to switch the
+// runner's own setting off around the glass runs (defaults; informational — `glass-system` says
+// whether the system took it).
 //
 // - The main run (every OS, glass Off — the default): the support line says what the OS has (macOS
 //   26+ only), and Off changes nothing: no glass-view, no bar-surface, no theme line with glass.
@@ -272,9 +276,31 @@ export interface GlassDriver {
   write(path: string, text: string): void;
 }
 
+/** The stand-in file's word for "neither Reduce Transparency nor Increase Contrast". */
+export const A11Y_NONE = "none";
+
+/**
+ * A launch that should have shown glass did: a `glass-view <style>` with the window clear, and the
+ * bar handed the glass (the glass timing runs, which have no other rule of their own).
+ */
+export function glassShowedFailures(name: string, glass: GlassName, events: LogEvent[]): string[] {
+  const style = glass === "clear" ? "clear" : "regular";
+  const views = events.filter((e) => e.event === "glass-view").map((e) => parseGlassView(e.detail));
+  const failures: string[] = [];
+  if (!views.some((view) => view?.style === style && view.fields.opaque === "false")) {
+    failures.push(`${name}: no ${style} glass view in a clear window`);
+  }
+  if (!events.some((e) => /^theme(-summon)?$/.test(e.event) && e.detail.endsWith(` glass=${glass}`))) {
+    failures.push(`${name}: the bar was never handed glass=${glass}`);
+  }
+  return failures;
+}
+
 /** One glass run (macOS 26+): the page, the command bar, then its accessibility switches. */
 export async function glassRun(d: GlassDriver, run: GlassRun): Promise<LogEvent[]> {
   const a11y = `${d.out}/a11y-${run.name}.txt`;
+  // The runner's own Reduce Transparency is on: the stand-in says neither from the start.
+  d.write(a11y, A11Y_NONE);
   const app = await d.launch(run.name, { theme: run.theme, glass: run.glass }, { LITTLEJOAN_SMOKE_A11Y: a11y });
   const shot = (what: string) => d.screenshot(`glass/${run.name}-${what}.png`);
   await app.waitFor(`${run.name}: started`, (e) => count(e, "started") > 0, 30_000);

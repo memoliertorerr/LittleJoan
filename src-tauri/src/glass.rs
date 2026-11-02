@@ -166,10 +166,14 @@ pub fn start<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Reduce Transparency or Increase Contrast changed: the window shows the solid theme, or its glass
-/// again (smoke log `glass <off|clear|tinted>`, what it shows now).
+/// again (smoke log `glass <off|clear|tinted>`, what it shows now). Off the main thread (the
+/// notification comes on it): the window's getters and setters are queued from there, as everywhere.
 fn accessibility_changed<R: Runtime>(app: &AppHandle<R>) {
-    smoke::log("glass", shown(app).name());
-    refresh(app);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        smoke::log("glass", shown(&app).name());
+        refresh(&app);
+    });
 }
 
 #[cfg(test)]

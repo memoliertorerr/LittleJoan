@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
 import {
+  A11Y_NONE,
   GLASS_RUNS,
   MAC_BACKDROP,
   glassOffFailures,
   glassRunFailures,
+  glassShowedFailures,
   glassTimingFailures,
   parseGlassSupport,
   parseGlassView,
@@ -185,5 +187,21 @@ describe("the backdrop", () => {
     expect(MAC_BACKDROP).toContain('"shown\\n"');
     expect(MAC_BACKDROP).toContain('statusPath + ".stop"');
     expect(MAC_BACKDROP).not.toContain("activate(");
+  });
+});
+
+describe("a launch that should have shown glass (the glass timing runs)", () => {
+  it("did: a glass view of its style in a clear window, and the bar handed the glass", () => {
+    const shown = log(["theme light colors=1 glass=clear", "glass-view clear back=true fills=true opaque=false window-alpha=0.00"]);
+    expect(glassShowedFailures("timing-ready-glass", "clear", shown)).toEqual([]);
+    const solid = log(["glass-system reduce=true contrast=false", "theme light colors=1"]);
+    expect(glassShowedFailures("timing-glass", "clear", solid)).toEqual([
+      "timing-glass: no clear glass view in a clear window",
+      "timing-glass: the bar was never handed glass=clear",
+    ]);
+  });
+
+  it("starts every glass launch saying neither Reduce Transparency nor Increase Contrast", () => {
+    expect(A11Y_NONE).toBe("none");
   });
 });

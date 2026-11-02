@@ -91,11 +91,13 @@ import {
 } from "./smoke-command.mts";
 import { THEME_RUNS, parseTheme, themeFailures, type ThemeRun } from "./smoke-theme.mts";
 import {
+  A11Y_NONE,
   GLASS_RUNS,
   MAC_BACKDROP,
   glassOffFailures,
   glassRun,
   glassRunFailures,
+  glassShowedFailures,
   glassTimingFailures,
   parseGlassSupport,
   type GlassDriver,
@@ -1612,8 +1614,33 @@ async function startBackdrop(): Promise<ChildProcess> {
   await sleep(500);
   return child;
 }
+/**
+ * The runner's own Reduce Transparency (GitHub's macOS 26 image has it on, so AppKit draws glass
+ * opaque): read, or written to `value` for the glass runs and put back after (best effort; each
+ * glass launch's `glass-system` line says what the system reported to it).
+ */
+function runnerReduceTransparency(value?: string): string {
+  if (value !== undefined) {
+    run("defaults", ["write", "com.apple.universalaccess", "reduceTransparency", "-bool", value]);
+  }
+  const now = run("defaults", ["read", "com.apple.universalaccess", "reduceTransparency"]).trim() || "unset";
+  console.log(`glass: the runner's reduceTransparency is ${now}${value === undefined ? "" : ` (asked for ${value})`}`);
+  return now;
+}
+let runnerReduce = "unset";
+/** Puts the runner's own setting back as the glass runs found it. */
+function restoreRunnerReduce(): void {
+  if (runnerReduce === "unset") {
+    run("defaults", ["delete", "com.apple.universalaccess", "reduceTransparency"]);
+    runnerReduceTransparency();
+  } else {
+    runnerReduceTransparency(runnerReduce === "1" ? "true" : "false");
+  }
+}
 if (glassAvailable) {
   mkdirSync(join(out, "glass"), { recursive: true });
+  runnerReduce = runnerReduceTransparency();
+  runnerReduceTransparency("false");
   const backdrop = await startBackdrop();
   const glassDriver: GlassDriver = {
     out,
@@ -1631,6 +1658,7 @@ if (glassAvailable) {
   const stopped = new Promise((done) => backdrop.once("exit", done));
   await Promise.race([stopped, sleep(10_000)]);
   backdrop.kill();
+  restoreRunnerReduce();
 } else {
   console.log(`glass: no Liquid Glass here (${glassSupport ? `available=false os=${glassSupport.os ?? "-"}` : "no glass-support line"}): the glass runs are skipped`);
 }
@@ -1820,14 +1848,14 @@ release?.post(tap: .cghidEventTap)
 const timingDriver: TimingDriver = {
   os,
   pageUrl: smokePageUrl,
-  launch: (name, settings, files) => {
+  launch: (name, settings, files, extra = {}) => {
     const logFile = join(out, `smoke-${name}.log`);
     rmSync(logFile, { force: true });
     const runDir = dataDir(name, true, settings);
     for (const [file, text] of Object.entries(files)) {
       writeFileSync(join(runDir, file), text);
     }
-    const runEnv = { ...env, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
+    const runEnv = { ...env, ...extra, LITTLEJOAN_DATA_DIR: runDir, LITTLEJOAN_SMOKE_LOG: logFile };
     const runChild = launch(runEnv, false);
     return Promise.resolve({
       pid: () => appPid(runChild),
@@ -1855,8 +1883,17 @@ const timingDriver: TimingDriver = {
     return "none";
   },
   pressSummonShortcut,
-  // LJ19.9: and with Liquid Glass, where it shows.
+  // LJ19.9: and with Liquid Glass, where it shows — the stand-in file saying neither Reduce
+  // Transparency nor Increase Contrast, and the runner's own setting off meanwhile, as for the glass
+  // runs.
   glass: glassAvailable,
+  beforeGlass: () => {
+    const file = join(out, "a11y-timing.txt");
+    writeFileSync(file, A11Y_NONE);
+    runnerReduceTransparency("false");
+    return { LITTLEJOAN_SMOKE_A11Y: file };
+  },
+  afterGlass: restoreRunnerReduce,
 };
 const timingCheck = await timingRun(timingDriver);
 const timingMd = timingTable(timingCheck, os);
@@ -2067,6 +2104,8 @@ const summary = {
       rules: glassRunFailures(run, runEvents),
     })),
     timingRules: glassTimingFailures(timingCheck),
+    runnerReduceTransparency: runnerReduce,
+    systemSaid: glassRuns.map(({ run, events: runEvents }) => `${run.name}: ${runEvents.find((e) => e.event === "glass-system")?.detail ?? "–"}`),
   },
   themes: themeRuns.map(({ run, events: runEvents }) => ({
     name: run.name,
@@ -2117,6 +2156,7 @@ const failures = evaluate(
   .concat(glassOffFailures(log, os))
   .concat(glassRuns.flatMap(({ run, events: runEvents }) => glassRunFailures(run, runEvents)))
   .concat(glassTimingFailures(timingCheck))
+  .concat(glassAvailable ? ["timing-ready-glass", "timing-glass"].flatMap((name) => glassShowedFailures(name, "clear", events(join(out, `smoke-${name}.log`)))) : [])
   .concat(fullscreenFailures(fullscreenCheck, os, fullscreenOff))
   .concat(summonDuringFullscreenFailures(log, os))
   .concat(fsSummonFailures(fullscreenCheck.summon, os))

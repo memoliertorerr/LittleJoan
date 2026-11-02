@@ -10027,6 +10027,13 @@ Populated from real friction, not speculation:
   screen; if that never comes, it only activates the app, as LJ19.4-fix4 did). To see the Dock's state,
   dispatch a smoke run with `LJ_DOCK_PROBE=1` in `extra_env` and read `dock-probe.jsonl` and
   `unified.log`.
+- *(LJ19.9, run 41484579569)* **GitHub's macOS 26 runner image has Reduce Transparency ON**
+  (`glass-support … reduce=true` at every launch). AppKit then draws Liquid Glass opaque, and Little
+  Joan rightly shows the solid theme — so a glass run that trusts the runner's settings shows no
+  glass at all. The smoke's glass launches start with the stand-in file (`LITTLEJOAN_SMOKE_A11Y`)
+  saying `none`, and the harness switches the runner's own setting off around them (`defaults write
+  com.apple.universalaccess reduceTransparency -bool false`, put back after); `glass-system` says
+  what the system reported. Judge translucency on a real Mac with the setting off.
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the
