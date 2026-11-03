@@ -464,6 +464,9 @@ scripts/ci/smoke-glass.mts         CI: Liquid Glass (LJ19.9) — Off changes not
                                    glass runs over a striped backdrop window (macOS 26+: the glass
                                    view, the clear bar, Reduce Transparency / Increase Contrast),
                                    glass timing no worse; unit-tested
+scripts/ci/smoke-runner.mts        CI: what the harness may change on its machine — only a GitHub
+                                   Actions runner (GITHUB_ACTIONS=true), never a developer's own
+                                   settings; unit-tested
 scripts/ci/smoke-keys.mts          CI: typing on macOS runners — characters as real key codes (US
                                    layout), a Unicode string only for the rest (unit-tested)
 scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which panels open, and when a
@@ -1852,7 +1855,9 @@ and pushes to `main`:
   Reduce Transparency on: every glass launch starts with the stand-in file saying `none`, and the
   runner's own setting is switched off around the glass runs and the glass timing runs (`defaults
   write com.apple.universalaccess reduceTransparency`, put back after; `summary.json`'s
-  `glass.systemSaid` says what the system reported). Then the
+  `glass.systemSaid` says what the system reported) — only on a GitHub Actions runner
+  (`smoke-runner.mts`): run anywhere else, the harness logs that it skipped the write and never
+  touches the machine's own accessibility setting. Then the
   **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
   its own launch: the smoke page in `?fs=both` mode at 390×600 (phone agent) and 720×600 (desktop
   agent); at each size the page's "Element fullscreen" (`requestFullscreen` on a container, as

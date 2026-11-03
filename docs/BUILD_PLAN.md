@@ -10086,7 +10086,10 @@ Populated from real friction, not speculation:
   glass at all. The smoke's glass launches start with the stand-in file (`LITTLEJOAN_SMOKE_A11Y`)
   saying `none`, and the harness switches the runner's own setting off around them (`defaults write
   com.apple.universalaccess reduceTransparency -bool false`, put back after); `glass-system` says
-  what the system reported. Judge translucency on a real Mac with the setting off.
+  what the system reported. Judge translucency on a real Mac with the setting off. *(Phase 21's
+  `ci:` commit)* That write happens only on a GitHub Actions runner (`GITHUB_ACTIONS=true`,
+  `scripts/ci/smoke-runner.mts`): run anywhere else, the smoke logs that it skipped it — the
+  harness must never change a developer's own accessibility setting.
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the

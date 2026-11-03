@@ -104,6 +104,7 @@ import {
   type GlassRun,
 } from "./smoke-glass.mts";
 import { macKeyToken } from "./smoke-keys.mts";
+import { mayChangeThisMachine, skippedChange } from "./smoke-runner.mts";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
@@ -1617,11 +1618,16 @@ async function startBackdrop(): Promise<ChildProcess> {
 /**
  * The runner's own Reduce Transparency (GitHub's macOS 26 image has it on, so AppKit draws glass
  * opaque): read, or written to `value` for the glass runs and put back after (best effort; each
- * glass launch's `glass-system` line says what the system reported to it).
+ * glass launch's `glass-system` line says what the system reported to it). Written only on a
+ * GitHub Actions runner (smoke-runner.mts): never a developer's own accessibility setting.
  */
 function runnerReduceTransparency(value?: string): string {
   if (value !== undefined) {
-    run("defaults", ["write", "com.apple.universalaccess", "reduceTransparency", "-bool", value]);
+    if (mayChangeThisMachine(process.env)) {
+      run("defaults", ["write", "com.apple.universalaccess", "reduceTransparency", "-bool", value]);
+    } else {
+      console.log(`glass: ${skippedChange(`writing reduceTransparency = ${value}`)}`);
+    }
   }
   const now = run("defaults", ["read", "com.apple.universalaccess", "reduceTransparency"]).trim() || "unset";
   console.log(`glass: the runner's reduceTransparency is ${now}${value === undefined ? "" : ` (asked for ${value})`}`);
@@ -1630,6 +1636,10 @@ function runnerReduceTransparency(value?: string): string {
 let runnerReduce = "unset";
 /** Puts the runner's own setting back as the glass runs found it. */
 function restoreRunnerReduce(): void {
+  if (!mayChangeThisMachine(process.env)) {
+    console.log(`glass: ${skippedChange("putting reduceTransparency back")}`);
+    return;
+  }
   if (runnerReduce === "unset") {
     run("defaults", ["delete", "com.apple.universalaccess", "reduceTransparency"]);
     runnerReduceTransparency();
