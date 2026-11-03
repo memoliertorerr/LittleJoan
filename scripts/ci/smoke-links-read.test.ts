@@ -100,7 +100,8 @@ describe("the Windows registration", () => {
 });
 
 describe("desktop entries", () => {
-  const template = readFileSync(join(root, "src-tauri", "linux", "little-joan.desktop.hbs"), "utf8");
+  // Windows' checkout may turn the file's line ends into CRLF.
+  const template = readFileSync(join(root, "src-tauri", "linux", "little-joan.desktop.hbs"), "utf8").replace(/\r\n/g, "\n");
   // As Tauri renders the template (name, exec, icon, comment).
   const rendered = template
     .replace("{{name}}", "Little Joan")
