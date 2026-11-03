@@ -293,7 +293,9 @@ any findings come later as fixes. **Phase 21 (LJ45 → LJ46, 2026-11-03)** is on
 Joan as the system's browser for links (registered as a candidate per OS, links received as
 untrusted data) and the main browser for handing pages on without loops, with the default-apps
 button — security-sensitive (`review`): the PR ends ready and green, NOT merged, for an independent
-review and the owner's decision.
+review and the owner's decision. **2026-11-03: LJ45 and LJ46 are done — PR #40 is ready and green
+(run 41730050366, 18 jobs), NOT merged:** the independent security review comes next, then the
+owner decides. Phase 22 waits for the merge (it changes the same new-window code).
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -8744,7 +8746,11 @@ STOP. Never merge it: an independent security review comes next, and the owner d
   showed the Browser section as designed — except that the AppImage's told its user to choose
   Little Joan in the desktop's settings, which it can't be (fix2 above) → `lj-step-46-fix2`:
   `browsers_info` says `candidate: false` under an AppImage (`$APPIMAGE`), and Settings then says the
-  AppImage can't be the system's browser (the `.deb` can) and hides the button.
+  AppImage can't be the system's browser (the `.deb` can) and hides the button. Run 41730050366
+  (head 98307ce): **all 18 jobs green on the first try** — the arm64 jobs now read the default from
+  mimeapps.list (`default=self` with the smoke's write, the click to the fake with
+  `handoff-self-refused`, no `link-opened`); the AppImage's Settings says it can't be the system's
+  browser. Screenshots looked at on every OS (`settings-general-browser.png`), then deleted.
 
 ### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
 
