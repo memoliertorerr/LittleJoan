@@ -101,7 +101,7 @@
 | LJ19.6 | *(v0.2.1; owner, 2026-10-30)* The ready window over another app's full screen: find why it sometimes lands on the desktop Space (about 1 in 20 macOS runs), fix it, prove it with a repeated over-fullscreen launch | strong | auto | ✅ done (CI: see notes) |
 | LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ✅ done (CI: see notes) |
 | LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | ✅ done — v0.2.1 released 2026-10-30 17:54 UTC as Latest, **unsigned on the owner's word** ("Release unsigned now" / "i will sign later"): release PR #38 (head a33f85f, run 41091192039 green) merged as f2f440a; main's run 41095737643 green (18 jobs); tag v0.2.1 on f2f440a; 7 assets; a re-downloaded DMG matched SHA256SUMS; the owner's checklist is theirs |
-| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ✅ done (CI: see notes; PR #39) — the owner's check on macOS 26.2 next |
+| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ✅ done (CI: see notes; PR #39, merged as 8409ab1) — the owner's check passed 2026-11-03 ("okay i tested, i will report later if i find a bug"): no bugs reported so far; any findings come later as fixes |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -127,7 +127,7 @@
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ✅ done |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ✅ done |
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
-| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ⬜ todo |
+| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | 🔄 in progress (phase 21, `lj/p21-links`) |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ⬜ todo |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ⬜ todo |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ⬜ todo |
@@ -287,7 +287,13 @@ checksum verified); LJ58 runs whenever the secrets exist and goes out in a later
 **Phase 14 (LJ19.9, 2026-11-02)** is on `lj/p14-liquid-glass`: Liquid Glass on macOS 26+ (Settings →
 Appearance → Off / Clear / Tinted, the toolbar and the command bar in glass tinted by the theme), a
 checkpoint — merged by the agent once every job is green, then the owner looks at it on their Mac;
-phase 21 starts on their go.
+phase 21 starts on their go. It merged as 8409ab1 (PR #39). **The owner's check (2026-11-03):** "okay
+i tested, i will report later if i find a bug" — the checkpoint passed with no bugs reported so far;
+any findings come later as fixes. **Phase 21 (LJ45 → LJ46, 2026-11-03)** is on `lj/p21-links`: Little
+Joan as the system's browser for links (registered as a candidate per OS, links received as
+untrusted data) and the main browser for handing pages on without loops, with the default-apps
+button — security-sensitive (`review`): the PR ends ready and green, NOT merged, for an independent
+review and the owner's decision.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -4703,6 +4709,10 @@ the summon's speed with glass on, Reduce Transparency switching it to solid.
   `lj-step-19.9-fix3` (shorter notes, and with the row shown the tab's other gaps close a little,
   through `:has()`). Windows and Linux: `glass-support available=false os=-`, nothing else.
 - Disk: 19 GB free before; `.cache/target` 1.4 GB.
+
+**The owner's check (2026-11-03):** "okay i tested, i will report later if i find a bug" — LJ19.9's
+checkpoint passed with no bugs reported so far; any findings come later as fixes (`lj-step-19.9-fix…`
+in a later branch).
 
 ---
 
