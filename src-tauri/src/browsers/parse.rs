@@ -309,3 +309,27 @@ pub fn xdg_answer(stdout: &str) -> Option<String> {
     let line = stdout.lines().map(str::trim).find(|l| !l.is_empty())?;
     (line.ends_with(".desktop") && !line.contains('/')).then(|| line.to_owned())
 }
+
+/// Linux, without `xdg-mime` (some systems lack xdg-utils; CI's ubuntu-22.04-arm runner did): the
+/// default for https from mimeapps.list files, as the XDG MIME Applications spec orders them (the
+/// caller passes their texts in that order). The first file whose `[Default Applications]` names a
+/// desktop file for x-scheme-handler/https wins, with its first entry.
+pub fn mimeapps_default<'a>(lists: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    lists.into_iter().find_map(|text| {
+        let mut in_group = false;
+        text.lines().find_map(|raw| {
+            let line = raw.trim();
+            if line.starts_with('[') {
+                in_group = line == "[Default Applications]";
+                return None;
+            }
+            let value = line
+                .strip_prefix("x-scheme-handler/https")?
+                .trim_start()
+                .strip_prefix('=')?;
+            let first = value.split(';').map(str::trim).find(|id| !id.is_empty())?;
+            (in_group && first.ends_with(".desktop") && !first.contains('/'))
+                .then(|| first.to_owned())
+        })
+    })
+}

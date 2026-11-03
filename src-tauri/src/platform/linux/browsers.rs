@@ -11,7 +11,8 @@ use std::time::{Duration, Instant};
 use url::Url;
 
 use crate::browsers::parse::{
-    DESKTOP_IDS, DesktopFile, desktop_browser, exec_args, is_own_desktop, xdg_answer,
+    DESKTOP_IDS, DesktopFile, desktop_browser, exec_args, is_own_desktop, mimeapps_default,
+    xdg_answer,
 };
 use crate::browsers::{Browser, Browsers, Launch};
 use crate::platform::browsers::spawn_detached;
@@ -79,8 +80,46 @@ pub fn read() -> Browsers {
         .args(["query", "default", "x-scheme-handler/https"])
         .output()
         .ok()
-        .and_then(|out| xdg_answer(&String::from_utf8_lossy(&out.stdout)));
+        .and_then(|out| xdg_answer(&String::from_utf8_lossy(&out.stdout)))
+        .or_else(default_from_mimeapps);
     browsers
+}
+
+/// Without xdg-mime (or no answer from it): the mimeapps.list files themselves, in the spec's
+/// order — `$XDG_CONFIG_HOME`, then `$XDG_CONFIG_DIRS` (each `<desktop>-mimeapps.list` before
+/// `mimeapps.list`), then the data directories' `applications/mimeapps.list` and the older
+/// `defaults.list`.
+fn default_from_mimeapps() -> Option<String> {
+    let set = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
+    let config_home = set("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| set("HOME").map(|home| PathBuf::from(home).join(".config")));
+    let config_dirs = set("XDG_CONFIG_DIRS").unwrap_or_else(|| "/etc/xdg".to_owned());
+    let desktops: Vec<String> = set("XDG_CURRENT_DESKTOP")
+        .unwrap_or_default()
+        .split(':')
+        .filter(|d| !d.is_empty())
+        .map(|d| format!("{}-mimeapps.list", d.to_ascii_lowercase()))
+        .collect();
+    let mut files: Vec<PathBuf> = Vec::new();
+    for dir in config_home.into_iter().chain(
+        config_dirs
+            .split(':')
+            .filter(|d| !d.is_empty())
+            .map(PathBuf::from),
+    ) {
+        files.extend(desktops.iter().map(|name| dir.join(name)));
+        files.push(dir.join("mimeapps.list"));
+    }
+    for dir in data_dirs() {
+        files.push(dir.join("applications").join("mimeapps.list"));
+        files.push(dir.join("applications").join("defaults.list"));
+    }
+    let texts: Vec<String> = files
+        .iter()
+        .filter_map(|file| std::fs::read_to_string(file).ok())
+        .collect();
+    mimeapps_default(texts.iter().map(String::as_str))
 }
 
 /// How long gio may take to say it launched the browser before it is left to it.

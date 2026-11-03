@@ -8724,6 +8724,23 @@ STOP. Never merge it: an independent security review comes next, and the owner d
   to the Browser section by a smoke-only hook (`LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`, like
   LJ19.7's quit click) for `settings-general-browser.png`, and Linux's loop check (`xdg-mime default`
   run by the smoke — or the mimeapps.list written by it when xdg-mime refuses — put back after).
+- **CI (PR #40):** run 41724602261 (head 67658c7) — verify and package green on all three. Smoke
+  green on macOS (the links run as before; `browsers-listed 5 default=other`: Safari, Firefox, Edge,
+  Chrome for Testing, Chrome — Little Joan left out; the Browser section's screenshot), Windows (the
+  fake `LJFakeBrowser` as main browser got exactly `…/smoke.html?from=blank` after the
+  `target=_blank` click: `handoff browser=LJFakeBrowser`; the uninstaller removed the app and all
+  three registration keys), linux-22.04, linux-scale-2 and **linux-appimage** (fix2 works: every flag
+  reached the AppImage again; its link as `<image> --link <url>`): on Linux the fake got the page as
+  main browser, and with Little Joan made the runner's default the click went to the fake with
+  `handoff-self-refused`, no `link-opened`. **The three arm64 jobs failed the loop check:** GitHub's
+  arm64 images have no xdg-utils (`no xdg-mime`), so the app read the default as unknown
+  (`default=none`) and handed the page to the opener — which (GIO reads mimeapps.list) sent it to
+  Little Joan — where **the loop guard refused it** (`link-refused http loop`): no loop, but the page
+  went nowhere. → `lj-step-46-fix`: without an answer from `xdg-mime`, Linux reads the default from
+  the mimeapps.list files itself, in the XDG MIME Applications spec's order
+  (`$XDG_CONFIG_HOME` / `$XDG_CONFIG_DIRS`, each `<desktop>-mimeapps.list` first, then the data
+  directories' `applications/mimeapps.list` and `defaults.list`; `browsers::parse::mimeapps_default`,
+  tested).
 
 ### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
 
@@ -10220,6 +10237,9 @@ Populated from real friction, not speculation:
   became `--link --show` — a refused link — and both AppImage smoke jobs ran into their 75-minute
   limit. The AppImage keeps a plain `Exec=little-joan` (`bundle.linux.appimage.files` overrides the
   deb's generated entry); any argument added to the deb's Exec must stay out of the AppImage's.
+- *(LJ46, run 41724602261)* **GitHub's arm64 Ubuntu images have no xdg-utils.** No `xdg-mime`,
+  no `xdg-open`: Little Joan then reads the default for https from the mimeapps.list files itself
+  (the XDG MIME Applications spec's order), and the opener still works through GIO.
 - *(LJ45, run 41649304377)* **`xdg-mime query default` answers from mimeinfo.cache when no default
   is written.** In xdg-utils' generic mode (no desktop session, as on CI) it greps mimeinfo.cache
   after mimeapps.list / defaults.list, so on a runner where nothing set a default it may name any

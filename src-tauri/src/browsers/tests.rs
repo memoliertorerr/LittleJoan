@@ -330,6 +330,34 @@ fn linux_xdg_mime_answers() {
     assert_eq!(xdg_answer("/usr/share/applications/x.desktop"), None);
 }
 
+#[test]
+fn linux_mimeapps_without_xdg_mime() {
+    let user = "[Added Associations]\nx-scheme-handler/https=chrome.desktop;\n[Default Applications]\ntext/html=x.desktop\nx-scheme-handler/https = Little Joan.desktop;firefox.desktop\n";
+    let system = "[Default Applications]\nx-scheme-handler/https=firefox.desktop\n";
+    assert_eq!(
+        mimeapps_default([user, system]),
+        Some("Little Joan.desktop".into())
+    );
+    // A file that sets no https default doesn't count; the next one does.
+    assert_eq!(
+        mimeapps_default(["[Default Applications]\ntext/html=x.desktop\n", system]),
+        Some("firefox.desktop".into())
+    );
+    assert_eq!(
+        mimeapps_default(["[Added Associations]\nx-scheme-handler/https=chrome.desktop\n"]),
+        None
+    );
+    assert_eq!(
+        mimeapps_default(["[Default Applications]\nx-scheme-handler/https=/x/y.desktop\n"]),
+        None
+    );
+    assert_eq!(
+        mimeapps_default(["[Default Applications]\nx-scheme-handler/http=a.desktop\n"]),
+        None
+    );
+    assert_eq!(mimeapps_default(Vec::<&str>::new()), None);
+}
+
 /// Every Rust file under `dir`.
 fn rust_files(dir: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();

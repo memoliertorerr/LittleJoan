@@ -1600,7 +1600,8 @@ the one place that calls the opener (`browsers/tests.rs` checks the sources).
   https ProgId of its Capabilities) and `UserChoice`'s ProgId, mapped to the entry that claims it;
   Linux the desktop files of the XDG data directories whose MimeType has
   `x-scheme-handler/https` (shown ones; the first file of an id masks later ones) and `xdg-mime
-  query default x-scheme-handler/https`. Little Joan's own ids are known per OS (its bundle id; its
+  query default x-scheme-handler/https` — without xdg-utils (GitHub's arm64 images), the
+  mimeapps.list files themselves, in the XDG MIME Applications spec's order. Little Joan's own ids are known per OS (its bundle id; its
   key and ProgId, or a command running this executable; its desktop files, or an Exec running
   `little-joan`, this executable or `$APPIMAGE`).
 - **Where a page goes** (`browsers::handoff_target`, pure): the main browser (`settings.mainBrowser`)
