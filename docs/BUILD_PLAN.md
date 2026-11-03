@@ -8553,6 +8553,34 @@ then stop).
 - **Windows' "as Explorer would":** the ProgId's command with `%1` replaced is handed to
   CreateProcess as it is (node's `windowsVerbatimArguments`, the quoted program as `argv0`), so the
   smoke runs exactly the registered command line.
+- **CI (PR #40):** run 41648711085 (head e843750) — verify (windows-latest) red: the desktop
+  template's test rendered the file with Windows' CRLF line ends → `lj-step-45-fix` (the test reads
+  either). Run 41649304377 (head 1330cbe): verify and package green on all three (the NSIS hooks
+  compile, the template and Info.plist are bundled); **smoke (macos) green** — Launch Services listed
+  Little Joan for http and https without `lsregister` (NSWorkspace: Safari, Little Joan, Firefox,
+  Edge, Chrome for Testing, Chrome), the defaults stayed Safari, `open -a <app> <url>` → `link-opened`
+  and the smoke page, the three refusals, and `open -a` with a file URL → `link-refused file`, two
+  links at once → two `link-opened` (AppKit sent two events). Windows and the five deb jobs: the
+  registration read back right (UserChoice stayed MSEdgeHTM; `desktop-file-validate` ok, after
+  installing desktop-file-utils on the runner; `xdg-mime query default` answered `Little Joan.desktop`
+  from mimeinfo.cache with no default written anywhere — as predicted above), the OS-style launch
+  opened the page and the refusals were right — but every job failed the rule "a refused link caused
+  window-front": `window-front` is the summon's own report about a second after it brought the window
+  up, and it landed after the refusals began. Windows also failed the main run's zoom-reset check
+  once (Ctrl+0 synthetic keys: CI's known flake, before the links run). **Both AppImage jobs were
+  cancelled at 75 minutes: every forwarded flag became a refused link.** The AppImage's AppRun
+  (AppImageKit's, `AppRun.wrapped` behind the GTK / GStreamer hooks) starts the binary with the
+  root desktop entry's `Exec` arguments **in front of** the launch's own — `--link %u` minus the
+  field code made `--show` the link. → `lj-step-45-fix2`: the AppImage gets its pre-LJ45 desktop
+  entry back (`bundle.linux.appimage.files` puts `linux/little-joan-appimage.desktop` over Tauri's
+  generated one: `Exec=little-joan`, `Utility`, no web MIME types — tauri-bundler copies those files
+  after generating the deb's data), so **the AppImage is not a browser candidate**: it installs
+  nothing for the OS anyway, and a desktop-integration tool's `Exec=<image> %u` would hand a bare
+  URL that Little Joan doesn't read as a link. The links run checks that the AppImage's entry stays
+  plain and sends its link as `<image> --link <url>`; the refusal rule no longer counts
+  `window-front`, and waits 2.5 s after the link's page before the refusals. *(The owner's call,
+  later: accepting a lone bare http(s) argument as a link would let AppImage integrations work —
+  a design change, so not made here; Deferred follow-ups.)*
 
 ### LJ46 — The main browser: handing pages on without loops; the default-apps button · strong · review
 
@@ -9335,6 +9363,12 @@ smoke run; nothing changed in the direct-download build.
 > Things a step noticed but were out of its own scope. Kept here so they don't get buried in
 > per-step notes. Strike through when genuinely handled; don't silently delete lines.
 
+- **Links from other apps for the AppImage** (LJ45, the owner's call): the AppImage isn't a browser
+  candidate (its AppRun prepends the desktop entry's Exec arguments to every launch — Landmines), so
+  a desktop-integration tool (AppImageLauncher, Gear Lever) that writes `Exec=<image> %u` hands a
+  bare URL, which Little Joan ignores. Accepting a lone bare http(s) argument (nothing else on the
+  command line, not starting with `-`) as a link would make that work; it widens what a command line
+  may do, so it waits for the owner.
 - ~~**First-run discoverability**~~ (surfaced by LJ3). Hibernating from the very first launch
   means a new user sees only a tray icon — and on GNOME without the AppIndicator extension,
   nothing at all. Option: when no `settings.json` exists yet, show the window once with the
@@ -10127,6 +10161,18 @@ Populated from real friction, not speculation:
   screen; if that never comes, it only activates the app, as LJ19.4-fix4 did). To see the Dock's state,
   dispatch a smoke run with `LJ_DOCK_PROBE=1` in `extra_env` and read `dock-probe.jsonl` and
   `unified.log`.
+- *(LJ45, run 41649304377)* **An AppImage's AppRun puts the desktop entry's Exec arguments in
+  front of every launch's own.** Tauri's AppImage runs AppImageKit's AppRun (`AppRun.wrapped`, behind
+  the GTK and GStreamer hooks), which reads the root `.desktop`'s `Exec`, drops the field codes and
+  appends the command line: with `Exec=little-joan --link %u` every `--show`, `--hide` or `--quit`
+  became `--link --show` — a refused link — and both AppImage smoke jobs ran into their 75-minute
+  limit. The AppImage keeps a plain `Exec=little-joan` (`bundle.linux.appimage.files` overrides the
+  deb's generated entry); any argument added to the deb's Exec must stay out of the AppImage's.
+- *(LJ45, run 41649304377)* **`xdg-mime query default` answers from mimeinfo.cache when no default
+  is written.** In xdg-utils' generic mode (no desktop session, as on CI) it greps mimeinfo.cache
+  after mimeapps.list / defaults.list, so on a runner where nothing set a default it may name any
+  handler — Little Joan, once installed. That is no default anyone wrote: the smoke's "defaults
+  untouched" rule reads the mimeapps.list / defaults.list files themselves.
 - *(LJ19.9, run 41484579569)* **GitHub's macOS 26 runner image has Reduce Transparency ON**
   (`glass-support … reduce=true` at every launch). AppKit then draws Liquid Glass opaque, and Little
   Joan rightly shows the solid theme — so a glass run that trusts the runner's settings shows no

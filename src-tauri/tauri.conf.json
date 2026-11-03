@@ -58,7 +58,10 @@
         "desktopTemplate": "linux/little-joan.desktop.hbs"
       },
       "appimage": {
-        "bundleMediaFramework": true
+        "bundleMediaFramework": true,
+        "files": {
+          "/usr/share/applications/Little Joan.desktop": "linux/little-joan-appimage.desktop"
+        }
       }
     }
   }

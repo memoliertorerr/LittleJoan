@@ -183,6 +183,23 @@ export function desktopEntryFailures(entry: Record<string, string>, where: strin
 }
 
 /**
+ * What the AppImage's own desktop entry must stay (src-tauri/linux/little-joan-appimage.desktop):
+ * a plain `Exec=little-joan` and no web MIME types. Its AppRun puts the entry's Exec arguments in
+ * front of every launch's own, so `--link %u` there would turn `--show` into a refused link.
+ */
+export function appImageEntryFailures(entry: Record<string, string>, where: string): string[] {
+  const failures: string[] = [];
+  const exec = expandExec(entry.Exec ?? "", "URL");
+  if (!exec || exec.length !== 1 || !/(^|\/)little-joan$/.test(exec[0] ?? "")) {
+    failures.push(`links: ${where} Exec is ${JSON.stringify(entry.Exec ?? "")}, not a plain "little-joan" (the AppImage's AppRun prepends it to every launch)`);
+  }
+  if (listOf(entry.MimeType).some((type) => type.startsWith("x-scheme-handler/http"))) {
+    failures.push(`links: ${where} claims web links, but an AppImage installs nothing to receive them`);
+  }
+  return failures;
+}
+
+/**
  * The defaults a mimeapps.list (or defaults.list) sets for web links: its `[Default Applications]`
  * entries for x-scheme-handler/http and /https.
  */

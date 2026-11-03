@@ -6,6 +6,7 @@ import {
   DESKTOP_ID,
   PROGID_KEY,
   REGISTERED_KEY,
+  appImageEntryFailures,
   defaultsNamingUs,
   desktopEntryFailures,
   expandExec,
@@ -128,6 +129,15 @@ describe("desktop entries", () => {
     expect(text).toContain("x-scheme-handler/https");
     expect(text).toContain("Categories");
     expect(desktopEntryFailures({ ...parseDesktopEntry(rendered), NoDisplay: "true" }, "x").join("\n")).toContain("hidden");
+  });
+
+  it("keeps the AppImage's own entry plain (its AppRun prepends Exec's arguments to every launch)", () => {
+    const appImage = parseDesktopEntry(readFileSync(join(root, "src-tauri", "linux", "little-joan-appimage.desktop"), "utf8").replace(/\r\n/g, "\n"));
+    expect(appImage.Exec).toBe("little-joan");
+    expect(appImageEntryFailures(appImage, "x")).toEqual([]);
+    const both = appImageEntryFailures(parseDesktopEntry(rendered), "x").join("\n");
+    expect(both).toContain("plain");
+    expect(both).toContain("claims web links");
   });
 
   it("expands Exec as the spec says", () => {

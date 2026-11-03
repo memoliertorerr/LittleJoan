@@ -5,16 +5,18 @@
 //   command is `"<app>" --link "%1"`); macOS: the app's Info.plist (http and https as a Viewer, no
 //   document types) and Launch Services' handlers for https naming io.github.memoliertorerr.littlejoan
 //   (if a fresh runner hasn't indexed the copied app yet, `lsregister -f` registers it as Finder does
-//   on install — never a default); Linux: the installed desktop entry (the AppImage's own, extracted)
-//   with `Exec=little-joan --link %u`, the web MIME types and Categories, accepted by
-//   desktop-file-validate, and LJ17's portal entry still hidden;
+//   on install — never a default); Linux: the installed desktop entry with `Exec=little-joan --link
+//   %u`, the web MIME types and Categories, accepted by desktop-file-validate, and LJ17's portal
+//   entry still hidden — the AppImage's own entry (extracted) must stay plain instead: its AppRun
+//   prepends the entry's Exec arguments to every launch, and an AppImage installs nothing anyway;
 // - the OS's default untouched — no UserChoice names LittleJoanURL; Launch Services' default for
 //   http / https isn't ours; no mimeapps.list / defaults.list names our desktop file (`xdg-mime query
 //   default` is recorded too: with no default anywhere it falls back to mimeinfo.cache, which is no
 //   default written);
 // - a link launched the way the OS would — the ProgId's command line with %1 (Windows, verbatim, as
 //   Explorer passes it to CreateProcess), `open -a <app> <url>` (macOS), the desktop entry's Exec
-//   with %u (Linux) — must log `link-opened` and load the smoke page (`LJ-SMOKE ready`);
+//   with %u (Linux; the AppImage as `<image> --link <url>`) — must log `link-opened` and load the
+//   smoke page (`LJ-SMOKE ready`);
 // - `--link --quit`, `--link file:///etc/passwd` and `--link javascript:alert(1)` must each log
 //   `link-refused` (invalid, file, javascript) and nothing else: no quit, no page, no window change,
 //   the app still running. macOS also gets a file URL and a batch of two links through `open -a`
@@ -25,6 +27,7 @@ import { count, lastTitle, type LogEvent } from "./smoke-log.mts";
 import type { SiteApp } from "./smoke-sitemode.mts";
 import {
   CLIENT_KEY,
+  appImageEntryFailures,
   DESKTOP_ID,
   MAC_HANDLERS,
   PORTAL_DESKTOP_ID,
@@ -209,7 +212,7 @@ function readLinux(d: LinksDriver): Registration {
   if (!found) {
     failures.push(`links: no desktop entry for Little Joan (${d.appImage ? "in the AppImage" : `/usr/share/applications/${DESKTOP_ID}`})`);
   } else {
-    failures.push(...desktopEntryFailures(entry, found.path));
+    failures.push(...(d.appImage ? appImageEntryFailures(entry, found.path) : desktopEntryFailures(entry, found.path)));
     let valid = d.exec("desktop-file-validate", [found.path]);
     if (valid.code === null && d.mayChange) {
       d.exec("bash", [`${d.root}/scripts/ci/apt-install.sh`, "desktop-file-utils"]);
@@ -251,12 +254,12 @@ function readLinux(d: LinksDriver): Registration {
     defaults,
     facts,
     launch: (url) => {
-      const args = expandExec(entry.Exec ?? "", url);
-      if (!args?.[0]) {
-        return undefined;
+      // An AppImage installs nothing for the OS to start: a link reaches it as `<image> --link <url>`.
+      if (d.appImage) {
+        return { command: d.app, args: ["--link", url] };
       }
-      // An AppImage's entry names its inner binary: the image itself is what runs it.
-      return { command: d.appImage ? d.app : args[0], args: args.slice(1) };
+      const args = expandExec(entry.Exec ?? "", url);
+      return args?.[0] ? { command: args[0], args: args.slice(1) } : undefined;
     },
   };
 }
@@ -280,6 +283,8 @@ export async function linksRun(d: LinksDriver): Promise<LinksRun> {
     launched = `${launch.options?.verbatim?.argv0 ?? launch.command} ${launch.args.join(" ")} → code ${result.code}`;
     console.log(`links: launched as the OS would: ${launched}`);
     await app.waitFor("links: the link opened", (e) => linkLoaded(since(e, beforeLaunch)), 45_000);
+    // The summon's own late lines (`window-front` about a second after it) come before the refusals.
+    await d.sleep(2500);
   }
   const afterLaunch = since(app.events(), beforeLaunch);
   const beforeRefusals = app.events().length;
@@ -315,7 +320,7 @@ export function linkLoaded(events: LogEvent[]): boolean {
 }
 
 /** Events a refused link must never cause. */
-const NEVER_AFTER_REFUSAL = ["link-opened", "quit", "page-started", "window-created", "window-front", "closing", "hibernated", "settings-window", "extension-opened"];
+const NEVER_AFTER_REFUSAL = ["link-opened", "quit", "page-started", "window-created", "closing", "hibernated", "settings-window", "extension-opened"];
 
 export function linksFailures(run: LinksRun): string[] {
   const failures = [...run.registration.failures, ...run.registration.defaults];
