@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  BLANK_READY_TITLE,
+  BLANK_TARGET,
+  blankRequest,
   CODECS,
   codecSupport,
   fullscreenTitle,
@@ -169,5 +172,20 @@ describe("the ping page (LJ19.4)", () => {
 
   it("pings its own origin", () => {
     expect(pingUrl("ready-1", 7)).toBe("/ping?id=ready-1&n=7");
+  });
+});
+
+describe("the new-window page (LJ46)", () => {
+  it("is asked for with ?blank=1 only", () => {
+    expect(blankRequest("?blank=1")).toBe(true);
+    for (const other of ["", "?blank=0", "?blank=", "?from=blank", "?blank=yes"]) {
+      expect(blankRequest(other), other).toBe(false);
+    }
+  });
+
+  it("opens the smoke page again in a new window, marked", () => {
+    expect(BLANK_TARGET).toBe("smoke.html?from=blank");
+    expect(blankRequest(`?${BLANK_TARGET.split("?")[1] ?? ""}`)).toBe(false);
+    expect(BLANK_READY_TITLE).toMatch(/^LJ-BLANK /);
   });
 });

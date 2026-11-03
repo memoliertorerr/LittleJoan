@@ -203,8 +203,12 @@ export const MAX_STATUS_NAME = 40;
 
 export type DownloadState = "downloading" | "saved" | "failed" | "blocked";
 
-/** What Rust says happened (checked by `statusMessage`). */
-export type StatusMessage = { kind: "download"; state: DownloadState; name: string } | { kind: "zoom"; percent: number };
+/** What Rust says happened (checked by `statusMessage`). `handoff`: a page couldn't be handed to
+ * another browser — Little Joan is the default and there is no other (LJ46). */
+export type StatusMessage =
+  | { kind: "download"; state: DownloadState; name: string }
+  | { kind: "zoom"; percent: number }
+  | { kind: "handoff"; state: "none" };
 
 /** What a status action asks Rust for: the only one is "Show in folder". */
 export interface StatusAction {
@@ -239,6 +243,9 @@ export function statusMessage(value: unknown): StatusMessage | null {
     const percent = raw.percent;
     return typeof percent === "number" && Number.isInteger(percent) && percent >= 1 && percent <= 1_000 ? { kind: "zoom", percent } : null;
   }
+  if (raw.kind === "handoff") {
+    return raw.state === "none" ? { kind: "handoff", state: "none" } : null;
+  }
   return null;
 }
 
@@ -246,6 +253,13 @@ export function statusMessage(value: unknown): StatusMessage | null {
 export function statusView(message: StatusMessage): StatusView {
   if (message.kind === "zoom") {
     return { text: `Zoom ${message.percent} %`, title: `The page at ${message.percent} %`, action: null };
+  }
+  if (message.kind === "handoff") {
+    return {
+      text: "No other browser to open this in",
+      title: "Little Joan is your default browser and no other is installed, so the page stays here",
+      action: null,
+    };
   }
   const name = middleEllipsis(message.name, MAX_STATUS_NAME);
   switch (message.state) {
@@ -268,6 +282,9 @@ export function statusView(message: StatusMessage): StatusView {
 export function lingerFor(message: StatusMessage): number | null {
   if (message.kind === "zoom") {
     return ZOOM_LINGER_MS;
+  }
+  if (message.kind === "handoff") {
+    return STATUS_LINGER_MS;
   }
   return message.state === "downloading" ? null : STATUS_LINGER_MS;
 }

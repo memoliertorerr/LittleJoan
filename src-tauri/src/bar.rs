@@ -40,6 +40,11 @@ pub use view::{
 pub use watch::watch_url;
 pub use zoom::zoom_page;
 
+/// The toolbar's status: no other browser to hand the page to (LJ46, browsers.rs).
+pub fn tell_handoff_nowhere<R: Runtime>(app: &AppHandle<R>) {
+    status::tell(app, &status::Status::Handoff { state: "none" });
+}
+
 use crate::back_stack::BackStack;
 use crate::extensions;
 use crate::keys;

@@ -162,7 +162,7 @@ fn add<R: Runtime>(
     _rect: Rect,
 ) -> tauri::Result<Webview<R>> {
     let page = window.add_child(
-        page_builder(data_dir),
+        page_builder(window.app_handle().clone(), data_dir),
         LogicalPosition::new(0.0, 0.0),
         LogicalSize::new(0.0, 0.0),
     )?;
@@ -183,7 +183,7 @@ fn add<R: Runtime>(
     window.run_on_main_thread(move || {
         platform::smoke_context(&target, "page-adding");
         let added = target.add_child(
-            page_builder(data_dir),
+            page_builder(target.app_handle().clone(), data_dir),
             LogicalPosition::new(rect.x, rect.y),
             LogicalSize::new(rect.width, rect.height),
         );
@@ -200,9 +200,9 @@ fn add<R: Runtime>(
         .map_err(|_| tauri::Error::FailedToReceiveMessage)?
 }
 
-/// The page's builder: web pages only, its title and load events, new windows to the default
+/// The page's builder: web pages only, its title and load events, new windows to the main
 /// browser, downloads to the Downloads folder.
-fn page_builder<R: Runtime>(data_dir: Option<PathBuf>) -> WebviewBuilder<R> {
+fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> WebviewBuilder<R> {
     let mut page = WebviewBuilder::new(PAGE, WebviewUrl::App("index.html".into()))
         // Never the keyboard: the bar's field has it (keys typed right after a summon land there).
         .focused(false)
@@ -264,12 +264,12 @@ fn page_builder<R: Runtime>(data_dir: Option<PathBuf>) -> WebviewBuilder<R> {
                 history_store::page_loaded(app, url);
             }
         })
-        // target=_blank and window.open go to the default browser (web URLs only).
-        .on_new_window(|url, _features| {
-            if !navigation::is_external_openable(&url) {
+        // target=_blank and window.open go to the main browser (web URLs only; browsers.rs).
+        .on_new_window(move |url, _features| {
+            if navigation::is_external_openable(&url) {
+                crate::browsers::hand_off(&app, url, |_, _| {});
+            } else {
                 smoke::log("new-window-refused", url.as_str());
-            } else if let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>) {
-                eprintln!("little-joan: could not open the link in the default browser: {err}");
             }
             NewWindowResponse::Deny
         });

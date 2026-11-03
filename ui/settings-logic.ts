@@ -37,6 +37,8 @@ export interface Settings {
   afterClose: AfterClose;
   /** Liquid Glass for the toolbar and the command bar (Appearance, LJ19.9; settings/glass.rs). */
   glass: GlassSetting;
+  /** Where pages are handed on (General's Browser, LJ46): a browser's id, or null for the system default. */
+  mainBrowser: string | null;
 }
 
 /** "After closing" (LJ19.4, the owner's decision): the hidden window and the bar stay, for 15 minutes, or nothing. */
@@ -126,6 +128,8 @@ export interface SettingsInput {
   afterClose?: AfterClose;
   /** Appearance's Liquid Glass; left out (it doesn't show here), Rust keeps the saved one. */
   glass?: GlassSetting;
+  /** General's main browser ("" = System default); left out (not read yet), Rust keeps the saved one. */
+  mainBrowser?: string;
 }
 
 /** The Extensions tab's part of Save (settings/extensions-logic.ts's draft). */
@@ -194,6 +198,7 @@ export function toInput(
   keys?: Record<string, string>,
   afterClose?: AfterClose,
   glass?: GlassSetting,
+  mainBrowser?: string,
 ): SettingsInput {
   return {
     shortcut,
@@ -208,6 +213,7 @@ export function toInput(
     ...(keys ? { keys } : {}),
     ...(afterClose === undefined ? {} : { afterClose }),
     ...(glass === undefined ? {} : { glass }),
+    ...(mainBrowser === undefined ? {} : { mainBrowser }),
   };
 }
 
@@ -232,7 +238,8 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     (input.showTrayIcon !== undefined && input.showTrayIcon !== saved.showTrayIcon) ||
     (input.keys !== undefined && !sameOverrides(saved.keys, input.keys)) ||
     (input.afterClose !== undefined && input.afterClose !== afterCloseFrom(saved.afterClose)) ||
-    (input.glass !== undefined && input.glass !== glassSettingFrom(saved.glass))
+    (input.glass !== undefined && input.glass !== glassSettingFrom(saved.glass)) ||
+    (input.mainBrowser !== undefined && input.mainBrowser !== (saved.mainBrowser ?? ""))
   );
 }
 
@@ -254,6 +261,7 @@ export function rebase(draft: Settings, oldSaved: Settings, newSaved: Settings):
     showTrayIcon: follow("showTrayIcon"),
     afterClose: follow("afterClose"),
     glass: follow("glass"),
+    mainBrowser: follow("mainBrowser"),
     developerMode: follow("developerMode"),
     theme: follow("theme", sameTheme),
     disabledExtensions: follow("disabledExtensions", sameIds),

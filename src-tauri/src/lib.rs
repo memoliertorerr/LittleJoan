@@ -7,6 +7,7 @@
 pub mod autostart;
 pub mod back_stack;
 pub mod bar;
+pub mod browsers;
 pub mod cli;
 pub mod commands;
 pub mod cookies;
@@ -110,6 +111,8 @@ pub fn run() {
             commands::site::set_site_mode,
             commands::app::quit_app,
             commands::app::quit_from_settings,
+            commands::browsers::browsers_info,
+            commands::browsers::open_default_apps_settings,
             commands::downloads::reveal_download,
             commands::quick::quick_state,
             commands::quick::quick_command,

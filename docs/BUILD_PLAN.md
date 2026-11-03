@@ -128,7 +128,7 @@
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ✅ done |
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`) |
-| LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ⬜ todo |
+| LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done (CI: see notes; PR #40 ready, NOT merged — the independent security review, then the owner) |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ⬜ todo |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ⬜ todo |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ⬜ todo |
@@ -8672,6 +8672,58 @@ On Windows (if you have one): Little Joan appears in Settings → Default apps, 
 On Linux: GNOME Settings → Default Apps lists it. Mark the PR ready once every job is green and
 STOP. Never merge it: an independent security review comes next, and the owner decides.
 ```
+
+**Implementation notes (2026-11-03; disk 12 GB free, `.cache/target` 1.4 GB):**
+
+- **browsers.rs** is the glue and the one caller of the opener (`browsers/tests.rs`'s source test
+  counts `tauri_plugin_opener::open_url`, `OpenerExt` and `.opener()` in every file: two in
+  browsers.rs — the OS default and the default-apps settings URI —, none elsewhere). `hand_off`
+  runs on a blocking thread (the callers are engine callbacks on the main thread) and reports an
+  `Outcome`; `hand_off_now` is for extensions' request handler, already on one. Callers:
+  page_actions' Open in browser (closes the window only when the page went somewhere), the page's
+  `on_new_window`, Settings' `on_new_window`, extensions' `openUrl(where: "browser")` (409
+  `no-browser` "No other browser to open this in." when there is none). Nowhere → the toolbar's
+  status (`Status::Handoff { state: "none" }`, ui/toolbar/logic.ts: "No other browser to open this
+  in", 8 s like a finished download) and nothing opens.
+- **Pure parts:** `browsers/target.rs` — `handoff_target(main, &Browsers)` as the plan's Verify
+  (an unknown default counts as "not Little Joan": the opener, as before; a main browser that is
+  Little Joan — settings.json could say so — is passed over too) and `Recent`, the loop guard's
+  memory; `browsers/parse.rs` — StartMenuInternet entries (the key's default name, else a
+  non-indirect ApplicationName), UserChoice's ProgId → the entry whose Capabilities claim it
+  (`LittleJoanURL` → Little Joan), MSVC command-line splitting and `%1`, desktop files (shown
+  applications whose MimeType has https; a hidden one masks its id), Exec per the Desktop Entry
+  spec, Little Joan's own ids (an Exec running `little-joan`, this executable or `$APPIMAGE` too),
+  `xdg-mime`'s answer. All tested on every OS.
+- **The loop guard, beyond the plan's rule:** besides `handoff_target` never choosing Little Joan,
+  every page handed on is remembered for 10 s and a link from another app that is exactly that page
+  is refused once (`link-refused http loop`, links.rs). It covers a default that couldn't be read
+  (the opener then goes to the OS default, which might be Little Joan after all) — without it a
+  page whose script calls `window.open` on load could ping-pong.
+- **Readers** (`platform/browsers.rs` → `mac/`, `win/`, `linux/browsers.rs`, read-only): macOS
+  NSWorkspace through objc2's run-time messaging (no new dependency or feature, in an autorelease
+  pool; NSWorkspace may be used off the main thread), names from NSFileManager's
+  `displayNameAtPath:`; Windows `winreg` (already a dependency); Linux the XDG data directories and
+  `xdg-mime`. Starting one: `/usr/bin/open -b`, the program with its arguments (a thread reaps it),
+  `gio launch` (5 s for it to say it launched; a failure → the file's own Exec).
+- **Settings:** `mainBrowser` (`settings/main_browser.rs`: 1–255 characters, no control characters,
+  `/` or `\`, not starting with `-`; anything else is the system default) — an id only selects from
+  the OS's list, it is never run. `Change.main_browser` (`""` = system default; "Pick a browser from
+  the list." otherwise). General's **Browser** section (`ui/settings/browser-logic.ts`, tested;
+  `browser.ts`): the default line, **Open default apps settings** (hidden where the OS has none to
+  open; the note then names `xdg-settings set default-web-browser "Little Joan.desktop"` for the user
+  to run), **Main browser** with System default first and a saved browser that is gone kept as "(not
+  installed)", the note saying where pages go with the choice shown; `browsers_info` again when the
+  window comes back to the front. Commands `browsers_info`, `open_default_apps_settings` (child
+  module `commands/browsers.rs`), granted to the settings window only
+  (`only_settings_may_read_browsers_and_open_default_apps`; the glass test now shares its
+  `only_settings_grants` helper, keeping capability_tests.rs at ~400 lines).
+- **The smoke** (`scripts/ci/smoke-handoff.mts` + test, its own launches after the links run): the
+  plan's fake browsers (a node script writing its arguments to a file, as a HKCU StartMenuInternet
+  entry or a desktop file in ~/.local/share/applications; only on a GitHub runner), the
+  `?blank=1` page (tests/smoke: one big `target=_blank` link, `LJ-BLANK ready`), Settings scrolled
+  to the Browser section by a smoke-only hook (`LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`, like
+  LJ19.7's quit click) for `settings-general-browser.png`, and Linux's loop check (`xdg-mime default`
+  run by the smoke — or the mimeapps.list written by it when xdg-mime refuses — put back after).
 
 ### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
 

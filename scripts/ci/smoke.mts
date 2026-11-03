@@ -106,6 +106,7 @@ import {
 import { macKeyToken } from "./smoke-keys.mts";
 import { mayChangeThisMachine, skippedChange } from "./smoke-runner.mts";
 import { linksFailures, linksRun, linksSummary, type ExecOptions, type ExecResult, type LinksApp, type LinksDriver } from "./smoke-links.mts";
+import { handoffFailures, handoffRun, handoffSummary } from "./smoke-handoff.mts";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
@@ -2026,6 +2027,25 @@ const linksDriver: LinksDriver = {
 };
 const linksCheck = await linksRun(linksDriver);
 console.log(`links: ${JSON.stringify(linksSummary(linksCheck))}`);
+// The handoff run (LJ46, smoke-handoff.mts): pages go to the main browser, never back to Little Joan.
+const handoffCheck = await handoffRun({
+  os,
+  out,
+  home: homedir(),
+  pageUrl: smokePageUrl,
+  mayChange: mayChangeThisMachine(process.env),
+  nodePath: process.execPath,
+  launch: (name, settings, extra = {}) => fullscreenLaunch(name, settings, extra),
+  exec: execResult,
+  readFile: readIfThere,
+  writeFile: (path, text) => writeFileSync(path, text),
+  removeFile: (path) => rmSync(path, { force: true }),
+  mkdirs: (path) => mkdirSync(path, { recursive: true }),
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  screenshot,
+  clickCentre,
+});
+console.log(`handoff: ${JSON.stringify(handoffSummary(handoffCheck, os))}`);
 const restMd = restTable(restRuns, os);
 writeFileSync(join(out, "rest.md"), restMd);
 console.log(restMd);
@@ -2142,6 +2162,8 @@ const summary = {
   downloads: downloadSummary(downloadCheck),
   // LJ45: Little Joan as a browser for links from other apps.
   linksRun: linksSummary(linksCheck),
+  // LJ46: pages handed on to the main browser.
+  handoffRun: handoffSummary(handoffCheck, os),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   // LJ19.9: Liquid Glass — what the main run's launch said, and the glass runs (macOS 26+).
   glass: {
@@ -2225,6 +2247,7 @@ const failures = evaluate(
   .concat(restRuns.flatMap((restCheck) => restFailures(restCheck, os)))
   .concat(downloadFailures(downloadCheck, os))
   .concat(linksFailures(linksCheck))
+  .concat(handoffFailures(handoffCheck, os))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
@@ -2252,6 +2275,8 @@ if (failures.length > 0) {
     "rest-hibernate",
     "rest-ready15",
     "links",
+    "handoff",
+    "handoff-default",
   ].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);

@@ -98,7 +98,7 @@ web page is open, marked "for this page".
 | `storage` | use `littleJoan.storage` (1 MB) |
 | `clipboard` | use `littleJoan.clipboard.writeText` |
 | `pageInfo` | read the address and title of the page a page action was opened on (`littleJoan.pageInfo()`) |
-| `openBrowser` | hand a web address to the default browser (`littleJoan.openUrl(url, { where: "browser" })`), at most one every 2 seconds |
+| `openBrowser` | hand a web address to the user's main browser (`littleJoan.openUrl(url, { where: "browser" })` — Settings → General → Browser; never Little Joan itself, and a 409 `no-browser` when there is no other), at most one every 2 seconds |
 | `network:<host>` | fetch from `https://<host>` — e.g. `network:api.example.com`, or `network:*.example.com` for its subdomains. Lower-case DNS names only, with at least two labels after `*.` (no `*.com`), no IP addresses, ports, paths or schemes; https only |
 
 Settings → Extensions shows them in plain words. `theme`, `openUrl` into the window and `close`
@@ -132,7 +132,7 @@ const { scheme, vars } = await littleJoan.theme.get();
 const page = await littleJoan.pageInfo(); // { url, title }
 
 // Open a public web address in the window (the panel goes away), or — permission "openBrowser",
-// one every 2 s — in the default browser. Never this computer or the local network (localhost,
+// one every 2 s — in the user's main browser. Never this computer or the local network (localhost,
 // *.local, 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, ::1, fc00::/7, fe80::/10).
 await littleJoan.openUrl("https://example.com/", { where: "browser" });
 
@@ -177,7 +177,7 @@ extension only once that panel has actually loaded. A panel is one page: links t
 same extension don't open (build your UI in the page; that includes `#anchor` links and
 `location.reload()` — scroll with `scrollIntoView()`, re-render instead of reloading), and a panel
 can't become a `blob:` or `data:` document. Following a link to the web leaves the panel, like `openUrl`. Popups
-(`target=_blank`, `window.open`) open web addresses in the default browser.
+(`target=_blank`, `window.open`) open web addresses in the user's main browser.
 
 **Files** are served by plain paths only: names of letters, digits, `.`, `_` and `-` (no spaces,
 no names starting with `.`), at most 8 folders deep; `__lj/` is Little Joan's. Served types:

@@ -100,6 +100,19 @@
           <h2 id="site-modes-label">Phone or desktop per site</h2>
           <ul id="site-modes" class="site-modes" aria-labelledby="site-modes-label" hidden></ul>
           <p id="site-modes-empty" class="setting-note"></p>
+          <h2 id="browser-label">Browser</h2>
+          <div id="browser-section" class="browser-section" aria-labelledby="browser-label">
+            <div class="setting">
+              <span class="setting-label" id="browser-default">…</span>
+              <button id="browser-open-settings" type="button" aria-describedby="browser-settings-note">Open default apps settings</button>
+            </div>
+            <p class="setting-note" id="browser-settings-note"></p>
+            <label class="setting" for="main-browser">
+              <span class="setting-label">Main browser</span>
+              <select id="main-browser"></select>
+            </label>
+            <p class="setting-note" id="main-browser-note"></p>
+          </div>
           <label class="setting" for="login">
             <span class="setting-label">Start Little Joan at login</span>
             <input id="login" type="checkbox" />

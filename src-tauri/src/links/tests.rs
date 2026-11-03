@@ -110,6 +110,7 @@ fn the_log_never_holds_the_link() {
         Refusal::App,
         Refusal::Extension,
         Refusal::NotWeb,
+        Refusal::Loop,
     ] {
         let detail = why.detail();
         assert!(!detail.contains("SECRET") && !detail.contains("secretscheme"));

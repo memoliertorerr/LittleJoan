@@ -39,6 +39,8 @@ pub struct Change {
     pub after_close: Option<String>,
     /// Liquid Glass (LJ19.9): `off`, `clear` or `tinted`.
     pub glass: Option<String>,
+    /// The main browser (LJ46): a browser's id, or `""` for the system default.
+    pub main_browser: Option<String>,
 }
 
 impl Change {
@@ -112,6 +114,9 @@ pub fn apply_change(current: &Settings, change: &Change) -> Result<Settings, Str
         next.glass =
             Glass::from_name(glass).ok_or_else(|| "Pick Off, Clear or Tinted.".to_owned())?;
     }
+    if let Some(id) = &change.main_browser {
+        next.main_browser = super::main_browser::from_input(id).map_err(str::to_owned)?;
+    }
     if let Some(value) = &change.keys {
         next.keys = keys::from_input(value)
             .ok_or_else(|| "The keys must be a list of actions and keys.".to_owned())?;
@@ -174,6 +179,25 @@ mod tests {
         )
         .expect("valid");
         assert_eq!(glass.glass, Glass::Tinted);
+        // The main browser (LJ46): an id, then "" back to the system default.
+        let chosen = apply_change(
+            &current,
+            &Change {
+                main_browser: Some("Google Chrome".into()),
+                ..Change::default()
+            },
+        )
+        .expect("valid");
+        assert_eq!(chosen.main_browser.as_deref(), Some("Google Chrome"));
+        let back = apply_change(
+            &chosen,
+            &Change {
+                main_browser: Some(String::new()),
+                ..Change::default()
+            },
+        )
+        .expect("valid");
+        assert_eq!(back.main_browser, None);
         assert_eq!(
             Settings {
                 glass: current.glass,
@@ -222,6 +246,11 @@ mod tests {
             },
             Change {
                 glass: Some("frosted".into()),
+                mobile_sites: Some(false),
+                ..Change::default()
+            },
+            Change {
+                main_browser: Some("--quit".into()),
                 mobile_sites: Some(false),
                 ..Change::default()
             },

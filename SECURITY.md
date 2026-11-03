@@ -30,7 +30,10 @@ the same rules as typed addresses: never `file:`, `javascript:`, `data:`, `about
 or the app's own pages. Little Joan registers itself only as a candidate and never changes the
 system's default browser. Report anything that lets a link do more than open one web page — run
 a flag or command, change a setting, open a file or a non-web URL — or that changes a system
-default.
+default. Pages Little Joan hands on ("Open in browser", new-window links, extensions' `openUrl`
+to the browser) go to the user's main browser through one place, never to Little Joan itself —
+report anything that makes a page loop back, or that starts a browser through a shell or with
+arguments a page chose.
 
 Extensions (experimental) have their own model — one origin each, a strict Content-Security-Policy,
 no IPC, and a small API that checks every request (see `docs/architecture.md`, "Extensions"). Also

@@ -375,9 +375,13 @@ fn call<R: Runtime>(
                         if !limits::browser_open(id) {
                             return Err(error(429, "busy", "One address every 2 seconds at most."));
                         }
-                        match tauri_plugin_opener::open_url(url.as_str(), None::<&str>) {
-                            Ok(()) => ok(None),
-                            Err(err) => error(500, "failed", err.to_string()),
+                        // The main browser, never Little Joan itself (browsers.rs, LJ46).
+                        match crate::browsers::hand_off_now(app, &url) {
+                            crate::browsers::Outcome::Opened => ok(None),
+                            crate::browsers::Outcome::Nowhere => {
+                                error(409, "no-browser", "No other browser to open this in.")
+                            }
+                            crate::browsers::Outcome::Failed(err) => error(500, "failed", err),
                         }
                     }
                     _ => error(400, "bad-request", "`where` is \"page\" or \"browser\"."),

@@ -53,6 +53,9 @@ pub enum Refusal {
     Extension,
     /// Anything else the typed-address rules refuse (navigation.rs).
     NotWeb,
+    /// A page Little Joan just handed to a browser, sent straight back (LJ46's loop guard: the
+    /// default it went to was Little Joan after all).
+    Loop,
 }
 
 impl Refusal {
@@ -66,6 +69,7 @@ impl Refusal {
             Refusal::App => "http app",
             Refusal::Extension => "http extension",
             Refusal::NotWeb => "http not-web",
+            Refusal::Loop => "http loop",
         }
     }
 }
@@ -209,6 +213,11 @@ fn open_batch<R: Runtime>(app: &AppHandle<R>, urls: &[Url]) {
 }
 
 fn open<R: Runtime>(app: &AppHandle<R>, url: Url) {
+    // The loop guard (LJ46): a page handed on a moment ago that comes back doesn't open again.
+    if crate::browsers::bounced(&url) {
+        refused(Refusal::Loop);
+        return;
+    }
     smoke::log("link-opened", "");
     // Create, Summon or FocusAndNavigate (toggle.rs): the window comes to the front — it was asked
     // for — and the command bar closes for the page; the page before stays in the back trail.

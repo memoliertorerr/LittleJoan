@@ -141,7 +141,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   everything. Esc returns to the command bar.
 - **The toolbar** stays at the top of the window while a page is open: a back button (once
   there is somewhere to go back to), the site's icon and domain in the middle, and **open in
-  your default browser** on the right (the page moves there and Little Joan goes back to sleep).
+  your main browser** on the right (the page moves there and Little Joan goes back to sleep; see
+  "Little Joan as your browser for links" below for which browser that is).
   Click the domain (or press Ctrl/Cmd+L) to go somewhere else: the command bar opens with the
   full address selected; Esc returns to the page. On macOS the window's traffic lights sit in
   the toolbar, and you can drag the window by its empty parts; double-click them to zoom the
@@ -217,7 +218,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   whenever a page goes fullscreen — reproduced in testing without Little Joan, and even when an app
   declines the page's request — so on it a video's fullscreen button does nothing. Ubuntu 24.04's
   (2.52) works, and the AppImage brings its own 2.52 (it needs Ubuntu 24.04 or newer, though).
-- **Links that open a new window** (`target=_blank`) open in your default browser.
+- **Links that open a new window** (`target=_blank`) open in your main browser.
 - **Downloads** go to your Downloads folder, under the name the site gives the file — tidied into a
   safe file name, and never overwriting one: a second `report.pdf` becomes `report (1).pdf`. The
   toolbar says "Downloading report.pdf…", then "report.pdf saved" with **Show in folder** (or
@@ -253,6 +254,35 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
 - **Quit:** tray menu → **Quit Little Joan**, the command bar's **Quit Little Joan** (type
   "quit"), **Settings → General → Quit** (unsaved changes in Settings are dropped), `little-joan
   --quit`, or Cmd+Q on macOS while it's in front.
+
+## Little Joan as your browser for links
+
+Little Joan can be the browser your system opens links with — a link you click in Mail, Notes, a
+chat app or a document then opens in the Little Joan window, which comes to the front (the page
+you had stays in its back history). Installing it only adds Little Joan to the system's list of
+browsers; **it never makes itself the default**. You choose it yourself:
+
+- **macOS:** System Settings → **Desktop & Dock** → **Default web browser** (on macOS 12: General).
+- **Windows:** Settings → Apps → **Default apps** → Little Joan → set it for HTTP and HTTPS
+  (Windows 11 offers "Set default"). Uninstalling removes Little Joan from the list.
+- **Linux (the `.deb`):** your desktop's default applications — GNOME Settings → **Default Apps**
+  (Apps → Default Apps on newer GNOME), KDE System Settings → Default Applications — or run
+  `xdg-settings set default-web-browser "Little Joan.desktop"` yourself. The AppImage installs
+  nothing, so it can't be chosen as the system's browser (everything else works the same).
+
+Settings → General → **Browser** says whether Little Joan is your default and has **Open default
+apps settings**, which opens those settings (that is all it does). Only http and https links open
+from other apps — never files, scripts or other kinds of address.
+
+**The main browser.** "Open in browser", links that open a new window and extensions that open a
+page in the browser hand the page on to your **main browser** (Settings → General → Browser →
+Main browser): **System default**, or one of the browsers your system lists. Little Joan never
+hands a page to itself: when Little Joan is your default browser and the main browser is "System
+default", pages go to the first other browser your system lists — Settings names it ("Opening
+pages in Safari, because Little Joan is your default browser") — and if there is none, the page
+stays where it is and the toolbar says "No other browser to open this in". A page Little Joan
+has just handed on that comes straight back isn't opened again, so nothing can go round in a
+loop.
 
 ## Translate
 
