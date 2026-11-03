@@ -127,7 +127,7 @@
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ✅ done |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ✅ done |
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
-| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | 🔄 in progress (phase 21, `lj/p21-links`) |
+| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`) |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ⬜ todo |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ⬜ todo |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ⬜ todo |
@@ -8506,6 +8506,53 @@ Little Joan registers as a browser candidate and opens links". Push, open the ph
 main as a draft, and watch CI until every job is green (Ground Rule 3; two honest fix attempts,
 then stop).
 ```
+
+**Implementation notes (2026-11-03; disk 13–14 GB free, `.cache/target` 1.4 GB):**
+
+- **Phase 21's first commits:** `lj-plan` (the owner's LJ19.9 check, 2026-11-03: "okay i tested, i
+  will report later if i find a bug" — passed, no bugs reported so far) and the coordinator's `ci:`
+  commit: the smoke writes the machine's own Reduce Transparency only on a GitHub Actions runner
+  (`scripts/ci/smoke-runner.mts`, tested), so it can never change a developer's setting. The links
+  run's machine changes (`lsregister`, installing desktop-file-utils; LJ46's fake browsers) ask the
+  same check.
+- **cli.rs:** its tests moved to `cli/tests.rs` (the file was at 392 lines; the move is part of this
+  commit, not a separate one). `--link` is handled before every other flag: the **first** `--link`
+  takes the next argument, whatever it is (`Link::Given`), or nothing (`Link::Empty`: a plain
+  launch, as the desktop file's `%u` from the app menu); a command line with `--link` sets nothing
+  else — no command, Settings, start at login or quit, before or after it — so a link whose quotes
+  or spaces split it into more arguments only adds ignored ones. `forwarded_command` is `None` for a
+  given link (links.rs decides); `state::finish_first_run` shows no welcome for one.
+- **links.rs** (pure parts tested in `links/tests.rs`): `refusal(&Url)` / `accept(&Url)` /
+  `parse(&str)` — only http(s) with a host, ≤ 4,096 bytes (the text before parsing, and the URL as
+  it would load), never an extension URL (`is_ext_like`), the app's origin, `tauri.localhost` or
+  `ipc.localhost` (Tauri's hosts on Windows, refused on every OS), and the typed-address rules last
+  (navigation.rs); `Url::parse` straight, never `input::normalize`. `pick` for a batch (the first
+  acceptable opens, `link-ignored <n>` counts the acceptable ones after it). The log names only the
+  scheme (a fixed list, anything else `other`) and why: never the link. A link opens through
+  `joan::dispatch(Show(Some(url)), Source::Link)` — the toggle table's `show` test already covers
+  Create / Summon / Rebuild / FocusAndNavigate for a URL, so toggle.rs is unchanged; summon_timing
+  gained the `link` source.
+- **macOS's event can come before setup:** tao delivers `application:openURLs:` as soon as its
+  callback is set, and AppKit sends a launch's open-URL event between "will" and "did finish
+  launching" — before Tauri's `Ready`, which runs setup. So `links::opened` keeps the URLs (at most
+  64) until `links::ready` at setup's end. tao drops URLs it can't parse itself; Handoff's web
+  activities come through the same event, and the same checks.
+- **Packaging:** the AppImage has no `desktopTemplate` of its own in tauri-utils 2.10.2 (only deb
+  and rpm do): tauri-bundler's AppImage copies the deb's `usr/` tree (linuxdeploy.rs's
+  `debian::generate_data`), so `bundle.linux.deb.desktopTemplate` serves both. The template is
+  Tauri's own default (bundler `linux/freedesktop/main.desktop`) with the Exec, MimeType and
+  Categories the plan names (`Categories=Network;WebBrowser;`, so no longer `Utility;`). NSIS:
+  Tauri's installer.nsi includes the hooks file before its defines, and expands the macros in its
+  Install / Uninstall sections, where `MAINBINARYNAME`, `PRODUCTNAME` and `$UpdateMode` exist; the
+  removal follows Tauri's own pattern (not while updating: the new installer writes the keys
+  again, and a `UserChoice` the user made keeps pointing at the same ProgId).
+- **The smoke's Linux "default untouched" check** reads the mimeapps.list / defaults.list files
+  instead of trusting `xdg-mime query default` alone: with no default written anywhere, xdg-utils'
+  generic mode greps mimeinfo.cache too and may answer the first handler it finds there — possibly
+  Little Joan — which is no default anyone wrote. The answer is recorded in `summary.json`.
+- **Windows' "as Explorer would":** the ProgId's command with `%1` replaced is handed to
+  CreateProcess as it is (node's `windowsVerbatimArguments`, the quoted program as `argv0`), so the
+  smoke runs exactly the registered command line.
 
 ### LJ46 — The main browser: handing pages on without loops; the default-apps button · strong · review
 

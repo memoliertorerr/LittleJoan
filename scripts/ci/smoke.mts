@@ -51,7 +51,7 @@
 // data folder (the window opens once with the welcome), --hide, quit, relaunch on the same
 // folder (it must hibernate). Screenshots and a summary land in <out>. Linux runs inside
 // xvfb-run + dbus-run-session with a window manager.
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, execFileSync, type ChildProcess } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -105,6 +105,7 @@ import {
 } from "./smoke-glass.mts";
 import { macKeyToken } from "./smoke-keys.mts";
 import { mayChangeThisMachine, skippedChange } from "./smoke-runner.mts";
+import { linksFailures, linksRun, linksSummary, type ExecOptions, type ExecResult, type LinksApp, type LinksDriver } from "./smoke-links.mts";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
@@ -120,7 +121,7 @@ import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionF
 import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } from "./smoke-fullscreen.mts";
 import { fsSummonFailures, summonDuringFullscreenFailures } from "./smoke-fullscreen-summon.mts";
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
-import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteApp, type SiteDriver } from "./smoke-sitemode.mts";
+import { parseAgentLog, siteModeFailures, siteModeRun, siteModeSummary, type SiteDriver } from "./smoke-sitemode.mts";
 import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tray.mts";
 import { findApp, listProcs } from "./smoke-linux.mts";
 import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
@@ -1678,7 +1679,7 @@ if (glassAvailable) {
  * `name` names the data folder and the log (`smoke-<name>.log`); `extra` adds to the app's
  * environment (the tray run's Wayland session).
  */
-function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra: Record<string, string> = {}, dir?: string): Promise<SiteApp> {
+function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra: Record<string, string> = {}, dir?: string): Promise<LinksApp> {
   const logFile = join(out, `smoke-${name}.log`);
   rmSync(logFile, { force: true });
   // A relaunch (`dir`) keeps the data folder and its settings as they are.
@@ -1689,6 +1690,7 @@ function fullscreenLaunch(name: string, settings: Record<string, unknown>, extra
     pid: () => appPid(runChild),
     settings: () => readIfThere(join(runDir, "settings.json")),
     dir: () => runDir,
+    env: () => runEnv,
     forward: (args) => forward(args, runEnv),
     events: () => events(logFile),
     waitFor: (what, test, timeoutMs) => waitFor(what, test, timeoutMs, logFile),
@@ -1987,6 +1989,43 @@ for (const mode of ["ready", "hibernate", "ready15"] as const) {
     ),
   );
 }
+// The links run (LJ45, smoke-links.mts): Little Joan as a browser for links from other apps — the
+// registration read back, the defaults untouched, a link launched as the OS would, refusals.
+/** Runs a command to its end (the links run's tools), never through a shell. */
+function execResult(command: string, args: string[], options: ExecOptions = {}): ExecResult {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd,
+    env: options.env ?? process.env,
+    encoding: "utf8",
+    timeout: 120_000,
+    stdio: ["ignore", "pipe", "pipe"],
+    ...(options.verbatim ? { windowsVerbatimArguments: true, argv0: options.verbatim.argv0 } : {}),
+  });
+  if (result.error) {
+    console.log(`(${command}: ${result.error.message})`);
+  }
+  return { code: result.error ? null : result.status, out: result.stdout ?? "", err: result.stderr ?? "" };
+}
+const linksDriver: LinksDriver = {
+  os,
+  app,
+  appImage,
+  root,
+  out,
+  home: homedir(),
+  pageUrl: smokePageUrl,
+  mayChange: mayChangeThisMachine(process.env),
+  launch: (name, settings) => fullscreenLaunch(name, settings),
+  exec: execResult,
+  readFile: readIfThere,
+  writeFile: (path, text) => writeFileSync(path, text),
+  listDir: (path) => (existsSync(path) ? readdirSync(path) : []),
+  tempDir: (name) => mkdtempSync(join(dataRoot, `lj-${name}-`)),
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  alive,
+};
+const linksCheck = await linksRun(linksDriver);
+console.log(`links: ${JSON.stringify(linksSummary(linksCheck))}`);
 const restMd = restTable(restRuns, os);
 writeFileSync(join(out, "rest.md"), restMd);
 console.log(restMd);
@@ -2101,6 +2140,8 @@ const summary = {
   // LJ19.4: what stays at rest per "After closing" mode.
   restRuns: restRuns.map(restSummary),
   downloads: downloadSummary(downloadCheck),
+  // LJ45: Little Joan as a browser for links from other apps.
+  linksRun: linksSummary(linksCheck),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   // LJ19.9: Liquid Glass — what the main run's launch said, and the glass runs (macOS 26+).
   glass: {
@@ -2183,6 +2224,7 @@ const failures = evaluate(
   .concat(spacesRepeats.slice(1).flatMap(({ name, run: repeated }) => spacesFailures(repeated, os).map((rule) => `${name}: ${rule}`)))
   .concat(restRuns.flatMap((restCheck) => restFailures(restCheck, os)))
   .concat(downloadFailures(downloadCheck, os))
+  .concat(linksFailures(linksCheck))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {
@@ -2209,6 +2251,7 @@ if (failures.length > 0) {
     "rest-ready",
     "rest-hibernate",
     "rest-ready15",
+    "links",
   ].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);

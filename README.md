@@ -230,6 +230,9 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   `little-joan --start-at-login on|off`, `little-joan --settings [general|keyboard|appearance|extensions|privacy|about]`
   (open Settings on a tab), `little-joan --extension <id>` (open an extension's first command,
   e.g. `snake` — page actions open from the command bar, on a page; experimental), and `little-joan --quit` talk to the running app.
+  `little-joan --link <https://…>` is how your system hands Little Joan a link once you choose it
+  as your browser: only http and https addresses open, and nothing else on that command line
+  counts — `--link` takes exactly the next argument as the link, even one that looks like a flag.
 - **Linux on Wayland:** Little Joan asks the desktop for its shortcut through the XDG
   GlobalShortcuts portal — KDE Plasma has it, and GNOME from 48 (Ubuntu 25.04 and later). The
   desktop owns the key: the first time it may ask you to allow the shortcut (and may pick another

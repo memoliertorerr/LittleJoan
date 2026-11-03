@@ -15,6 +15,14 @@ All notable changes to Little Joan are recorded here. The format follows
   With Reduce Transparency or Increase Contrast on (System Settings → Accessibility → Display),
   Little Joan shows the solid theme, and switches as soon as you change them. The option appears
   only on macOS 26 and later; nothing changes on older Macs, Windows or Linux.
+- **Little Joan can be your browser for links.** Installing it now lists it among your system's
+  web browsers — Windows' Default apps, macOS's Default web browser (System Settings → Desktop &
+  Dock), the desktop's default applications on Linux — without ever making itself the default:
+  that choice is yours, in your system's settings. Once chosen, a link you click in another app
+  opens in the Little Joan window (it comes to the front, and the page you had stays in its back
+  history). Only http and https links open — never files, scripts or other schemes — and a link
+  can't do anything but open a page. Uninstalling on Windows removes the registration; on Linux it
+  goes with the package; on macOS with the app.
 
 ## [0.2.1] — 2026-10-30
 

@@ -213,7 +213,16 @@ src-tauri/capabilities/settings.json  settings window: get/save settings, suspen
                                    start at login, clear history, preview a theme, list / reload
                                    extensions, show their folder, read the keys, quit
                                    (quit_from_settings, LJ19.7), close
-src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
+src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons, the
+                                   NSIS hooks and the deb's desktop template (LJ45)
+src-tauri/Info.plist               macOS: merged into the app's Info.plist — http and https as URL
+                                   types (role Viewer), no document types (LJ45)
+src-tauri/windows/hooks.nsh        Windows: NSIS hooks — the per-user browser registration
+                                   (StartMenuInternet\LittleJoan, RegisteredApplications, the
+                                   LittleJoanURL ProgId running `--link "%1"`) and its removal (LJ45)
+src-tauri/linux/little-joan.desktop.hbs  Linux: the desktop file template (the deb's, which the
+                                   AppImage reuses): `Exec=little-joan --link %u`, the web MIME types,
+                                   Categories=Network;WebBrowser; (LJ45)
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
 src-tauri/src/lib.rs               builder: plugins, commands, setup, run loop
@@ -451,7 +460,11 @@ src-tauri/src/toggle.rs            the toggle table: (window state — hibernati
                                    page in fullscreen —, command) → action (pure, tested)
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
                                    --start-at-login on|off / --settings [tab] / --extension <id> /
-                                   --quit parsing
+                                   --quit / --link <url> parsing (tests in cli/tests.rs)
+src-tauri/src/links.rs             links from other apps (LJ45): `accept` (only absolute http(s), no
+                                   app or extension URL, ≤ 4,096 bytes), a batch's first acceptable
+                                   link, macOS's events waiting for setup; then `Show(url)` (pure
+                                   parts tested in links/tests.rs)
 scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide, start at
                                    login on/off, cookies and storage across close and quit),
                                    reads the OS login entry, screenshots
@@ -467,6 +480,9 @@ scripts/ci/smoke-glass.mts         CI: Liquid Glass (LJ19.9) — Off changes not
 scripts/ci/smoke-runner.mts        CI: what the harness may change on its machine — only a GitHub
                                    Actions runner (GITHUB_ACTIONS=true), never a developer's own
                                    settings; unit-tested
+scripts/ci/smoke-links.mts         CI: the links run (LJ45) — the registration read back, the OS's
+                                   defaults untouched, a link launched as the OS would, refusals;
+                                   smoke-links-read.mts parses each OS's tools (both unit-tested)
 scripts/ci/smoke-keys.mts          CI: typing on macOS runners — characters as real key codes (US
                                    layout), a Unicode string only for the rest (unit-tested)
 scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which panels open, and when a
@@ -540,7 +556,7 @@ tests/smoke/ext-probe.mjs          the smoke page's ?ext=probe: a web page tryin
 ```
 launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewarm: the hidden window
            and the bar, no page ──► ready          (Hibernate: nothing ──► hibernating)
-              │  shortcut / --toggle / --show [url] / second launch
+              │  shortcut / --toggle / --show [url] / second launch / a link from another app
               ▼
            ready: the window shown (cold: built first), the command bar open over it, its field
            focused; then the page webview, built after the bar (at once for a URL)
@@ -1498,6 +1514,50 @@ Safari's (H.264, HEVC, VP9 on recent macOS); WebKitGTK uses GStreamer, so Linux 
 depends on them; the AppImage bundles them). `tests/smoke/smoke.html` reports what each engine
 supports (`LJ-SMOKE ready h264=… vp9=… av1=…` in the title).
 
+## Links from other apps
+
+Since LJ45 Little Joan can be the system's browser for http and https links. Installing it makes it
+a **candidate** only; choosing it is the user's, in the OS's own settings — Little Joan never writes
+a default (Ground Rule 21: no Windows `UserChoice`, no `LSSetDefaultHandlerForURLScheme`, no
+`xdg-settings set` / `xdg-mime default`, from the app, an installer or a package script).
+
+- **Registration** (per user, like the install): macOS `src-tauri/Info.plist` (merged by Tauri's
+  bundler) declares `CFBundleURLTypes` for `http` and `https`, role Viewer, and no document types —
+  Little Joan never opens files; Launch Services indexes it when the app is installed. Windows
+  `src-tauri/windows/hooks.nsh` (`bundle.windows.nsis.installerHooks`) writes, under HKCU,
+  `Software\Clients\StartMenuInternet\LittleJoan` (name, Capabilities with `URLAssociations`
+  http / https → `LittleJoanURL`, icon, `shell\open\command`), `Software\RegisteredApplications`
+  `Little Joan` → its Capabilities, and the ProgId `Software\Classes\LittleJoanURL` whose command is
+  `"<exe>" --link "%1"`, then tells the shell (`SHChangeNotify`); the uninstaller deletes exactly
+  those (not during an update, when the new installer writes them again) — never
+  `Software\Classes\http(s)` themselves. Linux: Tauri's `Little Joan.desktop` comes from
+  `src-tauri/linux/little-joan.desktop.hbs` (`bundle.linux.deb.desktopTemplate`; the AppImage
+  reuses the deb's data, tauri-utils 2.10 has no AppImage template of its own) with
+  `Exec=little-joan --link %u`, `MimeType=x-scheme-handler/http;x-scheme-handler/https;` and
+  `Categories=Network;WebBrowser;` (GNOME's Default Apps lists browsers by them); from the app menu
+  `%u` is nothing, and `--link` alone is a plain launch. LJ17's
+  `io.github.memoliertorerr.littlejoan.desktop` stays hidden and no browser.
+- **Receiving:** Windows and Linux start `little-joan --link <url>`; single-instance forwards it to
+  the running app (lib.rs). `cli.rs` takes **exactly the argument after the first `--link`** as
+  data — even `--quit` — and a command line with `--link` sets nothing else, so quotes or spaces
+  in a crafted link can only add arguments that are ignored. macOS sends an open-URL Apple event:
+  tao's `application:openURLs:` → `RunEvent::Opened { urls }` in lib.rs's run loop; one can come
+  before setup is done (between AppKit's "will" and "did finish launching"), so links.rs keeps such
+  links (at most 64) until setup's end (`links::ready`).
+- **What opens** (`links::accept`, pure): an absolute `http` / `https` URL with a host, at most
+  4,096 bytes, that the typed-address rules allow (navigation.rs) — never `file:`, `javascript:`,
+  `data:`, `about:`, `ljext:` or WebView2's `http://ljext.<id>.localhost`, the app's origin or
+  Tauri's `tauri.localhost` / `ipc.localhost`. `input::normalize` isn't used: a link is never a
+  search. From a batch (macOS) only the first acceptable link opens. It goes through the toggle
+  table as `Show(Some(url))` (source `link`): `Create(url)` while hibernating, `Summon(url)` from
+  ready, `FocusAndNavigate(url)` with the window open — it comes to the front (it was asked for;
+  `--show <url>` could already do that), the command bar closes, the page before stays in the
+  back trail; the visit records as a link. A flood of links is one navigation of the one window
+  each, as `--show` is. No command and no capability was added for any of this.
+- **Smoke log:** `link-opened`, `link-refused <scheme>[ <why>]` (`invalid`, `too-long`, `file`,
+  `javascript` …, `http app`, `http extension`; unknown schemes as `other`), `link-ignored <n>` —
+  never the URL.
+
 ## Translate and open in browser
 
 - **Translate Page** navigates the page window to Google Translate's proxy for the current
@@ -1583,7 +1643,9 @@ follows=<bool>` (macOS: a webview's autoresizing mask was set), `bar-background 
 when the window closed) / `download-deciders-removed <n>` (Linux: wry's handlers taken off a
 download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't the page's) /
 `download-noted` / `download-cancelled <n>` (macOS: a WKDownload noted; cancelled on close),
-`zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
+`zoom <percent>` (a zoom key set the page's level, LJ16), `link-opened` / `link-refused
+<scheme>[ <why>]` / `link-ignored <n>` (a link from another app opened, was refused, or came after
+the first in a batch; never the URL — LJ45), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
 `window-spaces <label> behavior=<names> was=<names> level=<n>` (macOS: a window's collection
 behaviour was set before it was first shown, and what it had before; LJ19.2), `summon-fullscreen
@@ -1718,9 +1780,9 @@ Installers are built in CI only (`package` job), never on a developer machine:
 
 | OS | Runner | Command | Artifact |
 |---|---|---|---|
-| Windows | windows-latest | `tauri build --bundles nsis` | `Little Joan_<v>_x64-setup.exe` — per-user install (no admin), downloads the WebView2 runtime if missing |
-| macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+ |
-| Linux (`linux`) | ubuntu-22.04 | `tauri build --bundles deb` | `.deb` — depends on the system's WebKitGTK and the GStreamer plugins for video; built on 22.04, its binary needs glibc 2.34, so it installs on Ubuntu 22.04+ and Debian 12+. Two desktop files: Tauri's `Little Joan.desktop` (named after the product, for the app list) and, from `bundle.linux.deb.files`, `io.github.memoliertorerr.littlejoan.desktop` (`NoDisplay=true`), which the XDG portals' host registry needs to accept the app id (LJ17) |
+| Windows | windows-latest | `tauri build --bundles nsis` | `Little Joan_<v>_x64-setup.exe` — per-user install (no admin), downloads the WebView2 runtime if missing; its hooks (`windows/hooks.nsh`) register Little Joan as a browser candidate under HKCU and the uninstaller removes it (LJ45) |
+| macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+; `Info.plist` merged in: http / https URL types (LJ45) |
+| Linux (`linux`) | ubuntu-22.04 | `tauri build --bundles deb` | `.deb` — depends on the system's WebKitGTK and the GStreamer plugins for video; built on 22.04, its binary needs glibc 2.34, so it installs on Ubuntu 22.04+ and Debian 12+. Two desktop files: Tauri's `Little Joan.desktop` (named after the product, for the app list; from `linux/little-joan.desktop.hbs` since LJ45: a web browser, `Exec=little-joan --link %u`) and, from `bundle.linux.deb.files`, `io.github.memoliertorerr.littlejoan.desktop` (`NoDisplay=true`), which the XDG portals' host registry needs to accept the app id (LJ17) |
 | Linux (`linux-appimage`) | ubuntu-24.04 | `tauri build --bundles appimage` | `.AppImage` — bundles the WebKitGTK of the machine that built it (24.04's 2.52: 22.04's 2.50 aborts on element fullscreen) and the media framework; glibc floor 2.39 (Ubuntu 24.04+, Debian 13, Fedora 40+) |
 | Linux ARM64 (`linux-arm64`) | ubuntu-22.04-arm | `tauri build --bundles deb` | `arm64` `.deb` (`Little Joan_<v>_arm64.deb`, ~3 MB) — the `linux` package built natively on GitHub's arm64 runner: the system's WebKitGTK, glibc floor 2.34 (Ubuntu 22.04+, Debian 12+), both desktop files (LJ18.1) |
 | Linux ARM64 (`linux-appimage-arm64`) | ubuntu-24.04-arm | `tauri build --bundles appimage` | `aarch64` `.AppImage` (`Little Joan_<v>_aarch64.AppImage`, ~149 MB) — the `linux-appimage` package built natively on arm64 (Tauri doesn't cross-build AppImages): bundles 24.04's arm64 WebKitGTK 2.52 and media framework; glibc floor 2.39 (LJ18.1) |
@@ -2024,7 +2086,28 @@ and pushes to `main`:
   `LITTLEJOAN_SMOKE_READY_MS=6000` (read only with the smoke log) the ready window must go by
   itself twice (`released timer`: after the launch's prewarm and after the close), the summon
   between them cold. Logs `smoke-rest-<mode>.log`; the table goes into `rest.md` and the job's
-  summary, `summary.json`'s `restRuns`. Last comes the
+  summary, `summary.json`'s `restRuns`. Then the **links run** (`smoke-links.mts`, LJ45), its own
+  launch: the registration read back as installed — Windows `reg query` of the keys hooks.nsh
+  writes (the ProgId's command must be `"<app>" --link "%1"`), macOS the installed app's Info.plist
+  (`plutil`: http and https as a Viewer, no document types) and Launch Services' handlers for http
+  and https naming `io.github.memoliertorerr.littlejoan` (a Swift snippet, read-only; if a fresh
+  runner hasn't indexed the copied app, `lsregister -f` registers it as Finder does on install —
+  only on a GitHub runner), Linux the installed desktop entry (the AppImage's own, extracted) with
+  `Exec=little-joan --link %u`, the web MIME types and categories, accepted by
+  `desktop-file-validate` (installed on the runner if missing), and LJ17's entry still hidden; the
+  OS's default untouched (no `UserChoice` names `LittleJoanURL` and no `HKCU\Software\Classes\http(s)`
+  names the app; Launch Services' defaults aren't ours; no mimeapps.list / defaults.list names our
+  desktop file — `xdg-mime query default` is recorded, and when nothing is written anywhere it falls
+  back to mimeinfo.cache, which is no default); a link launched the way the OS would (the ProgId's
+  command line with `%1`, handed to CreateProcess verbatim as Explorer does; `open -a <app> <url>`;
+  the desktop entry's `Exec` with `%u`) must log `link-opened` and load the smoke page
+  (`?link=os`, `LJ-SMOKE ready`); `--link --quit`, `--link file:///etc/passwd` and `--link
+  javascript:alert(1)` must log `link-refused invalid`, `file`, `javascript` and nothing else (no
+  quit, page, window or Settings; the app still running); macOS also gets a file URL and two links
+  at once through `open -a` (informational; nothing may open from the file). Log `smoke-links.log`,
+  `summary.json`'s `linksRun`. After the smoke, the Windows job **uninstalls** (`uninstall.exe /S`):
+  the StartMenuInternet entry, the RegisteredApplications value and the ProgId must be gone with
+  the app. Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (the prewarm,
