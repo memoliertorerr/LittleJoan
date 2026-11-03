@@ -32,6 +32,9 @@ pub struct BrowsersInfo {
     first_other: Option<String>,
     /// Whether the button can open the OS's settings here (Linux: GNOME's or KDE's).
     can_open_settings: bool,
+    /// Whether this install can be chosen as the system's browser at all: not the AppImage, which
+    /// installs nothing for the OS and keeps a plain desktop entry (LJ45-fix2).
+    candidate: bool,
 }
 
 /// What Settings shows about browsers, read from the OS now (read-only).
@@ -57,6 +60,7 @@ pub async fn browsers_info<R: Runtime>(app: AppHandle<R>) -> BrowsersInfo {
         browsers: choices,
         main_browser,
         can_open_settings,
+        candidate: !(cfg!(target_os = "linux") && std::env::var_os("APPIMAGE").is_some()),
     }
 }
 

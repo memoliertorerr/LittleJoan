@@ -19,6 +19,8 @@ export interface BrowsersInfo {
   firstOther: string | null;
   /** Whether the button can open the system's settings here. */
   canOpenSettings: boolean;
+  /** Whether this install can be the system's browser at all (not the AppImage, which installs nothing). */
+  candidate: boolean;
 }
 
 /** "System default" in the list. */
@@ -46,6 +48,7 @@ export function browsersInfoFrom(value: unknown): BrowsersInfo {
     mainBrowser: text(raw.mainBrowser),
     firstOther: text(raw.firstOther),
     canOpenSettings: raw.canOpenSettings === true,
+    candidate: raw.candidate !== false,
   };
 }
 
@@ -74,10 +77,18 @@ export function settingsPlace(platform: string): string {
 
 /** The note under the button: where to choose Little Joan, or (no settings to open) how. */
 export function settingsNote(info: BrowsersInfo): string {
+  if (!info.candidate) {
+    return "The AppImage can't be your system's browser: it installs nothing for your desktop to find (the .deb can). Pages you hand on still go to your main browser.";
+  }
   if (info.canOpenSettings) {
     return `To use Little Joan for links from other apps, choose it in ${settingsPlace(info.platform)}. Little Joan never changes it by itself.`;
   }
   return 'Choose Little Joan in your desktop\'s settings, or run xdg-settings set default-web-browser "Little Joan.desktop" yourself. Little Joan never changes it by itself.';
+}
+
+/** Whether "Open default apps settings" shows: there is something to open, and a reason to. */
+export function showsSettingsButton(info: BrowsersInfo): boolean {
+  return info.candidate && info.canOpenSettings;
 }
 
 /** The main browser's list: System default, then the system's browsers; the saved one is kept selected. */

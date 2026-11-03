@@ -4,7 +4,7 @@
 // names come from the system and are drawn as text. The main browser is a draft like the rest of
 // General: Save keeps it, Cancel drops it. Coming back to the window (from the system's settings,
 // say) reads the system again.
-import { SYSTEM_DEFAULT, browserChoices, browsersInfoFrom, defaultText, goesToNote, settingsNote, type BrowsersInfo } from "./browser-logic.ts";
+import { SYSTEM_DEFAULT, browserChoices, browsersInfoFrom, defaultText, goesToNote, settingsNote, showsSettingsButton, type BrowsersInfo } from "./browser-logic.ts";
 
 export interface BrowserSection {
   /** The list's choice ("" = System default); `undefined` until the system answered (Save leaves it). */
@@ -34,7 +34,7 @@ export function browserSection(
       defaultLine.textContent = defaultText(info);
     }
     if (openButton) {
-      openButton.hidden = !info.canOpenSettings;
+      openButton.hidden = !showsSettingsButton(info);
     }
     if (settingsLine) {
       settingsLine.textContent = settingsNote(info);

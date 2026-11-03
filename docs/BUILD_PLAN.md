@@ -8740,7 +8740,11 @@ STOP. Never merge it: an independent security review comes next, and the owner d
   the mimeapps.list files itself, in the XDG MIME Applications spec's order
   (`$XDG_CONFIG_HOME` / `$XDG_CONFIG_DIRS`, each `<desktop>-mimeapps.list` first, then the data
   directories' `applications/mimeapps.list` and `defaults.list`; `browsers::parse::mimeapps_default`,
-  tested).
+  tested). The run's screenshots (`settings-general-browser.png`, macOS / Windows / Linux / AppImage)
+  showed the Browser section as designed — except that the AppImage's told its user to choose
+  Little Joan in the desktop's settings, which it can't be (fix2 above) → `lj-step-46-fix2`:
+  `browsers_info` says `candidate: false` under an AppImage (`$APPIMAGE`), and Settings then says the
+  AppImage can't be the system's browser (the `.deb` can) and hides the button.
 
 ### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
 

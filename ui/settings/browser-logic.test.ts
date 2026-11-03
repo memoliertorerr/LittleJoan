@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SYSTEM_DEFAULT, browserChoices, browsersInfoFrom, defaultText, goesToNote, settingsNote, settingsPlace, type BrowsersInfo } from "./browser-logic.ts";
+import { SYSTEM_DEFAULT, browserChoices, browsersInfoFrom, defaultText, goesToNote, settingsNote, settingsPlace, showsSettingsButton, type BrowsersInfo } from "./browser-logic.ts";
 
 const info = (over: Partial<BrowsersInfo> = {}): BrowsersInfo => ({
   platform: "macos",
@@ -12,14 +12,16 @@ const info = (over: Partial<BrowsersInfo> = {}): BrowsersInfo => ({
   mainBrowser: null,
   firstOther: "Safari",
   canOpenSettings: true,
+  candidate: true,
   ...over,
 });
 
 describe("Settings' Browser section", () => {
   it("reads Rust's answer, field by field", () => {
     const raw = { platform: "macos", defaultKind: "self", defaultName: null, browsers: [{ id: "a", name: "A" }, { id: 3 }, "x"], mainBrowser: "a", firstOther: "A", canOpenSettings: true };
-    expect(browsersInfoFrom(raw)).toEqual({ platform: "macos", defaultKind: "self", defaultName: null, browsers: [{ id: "a", name: "A" }], mainBrowser: "a", firstOther: "A", canOpenSettings: true });
-    expect(browsersInfoFrom(null)).toEqual({ platform: "", defaultKind: "none", defaultName: null, browsers: [], mainBrowser: null, firstOther: null, canOpenSettings: false });
+    expect(browsersInfoFrom(raw)).toEqual({ platform: "macos", defaultKind: "self", defaultName: null, browsers: [{ id: "a", name: "A" }], mainBrowser: "a", firstOther: "A", canOpenSettings: true, candidate: true });
+    expect(browsersInfoFrom(null)).toEqual({ platform: "", defaultKind: "none", defaultName: null, browsers: [], mainBrowser: null, firstOther: null, canOpenSettings: false, candidate: true });
+    expect(browsersInfoFrom({ candidate: false }).candidate).toBe(false);
     expect(browsersInfoFrom({ defaultKind: "maybe" }).defaultKind).toBe("none");
   });
 
@@ -37,6 +39,14 @@ describe("Settings' Browser section", () => {
     const noSettings = settingsNote(info({ platform: "linux", canOpenSettings: false }));
     expect(noSettings).toContain('xdg-settings set default-web-browser "Little Joan.desktop"');
     expect(noSettings).toContain("yourself");
+    expect(showsSettingsButton(info())).toBe(true);
+    expect(showsSettingsButton(info({ canOpenSettings: false }))).toBe(false);
+  });
+
+  it("tells an AppImage user it can't be the system's browser, without the button", () => {
+    const appImage = info({ platform: "linux", candidate: false });
+    expect(settingsNote(appImage)).toContain("The AppImage can't be your system's browser");
+    expect(showsSettingsButton(appImage)).toBe(false);
   });
 
   it("lists System default first, and keeps a saved browser that is gone", () => {
