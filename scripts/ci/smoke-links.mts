@@ -35,6 +35,7 @@ import {
   PROGID_KEY,
   REGISTERED_KEY,
   USER_CHOICE,
+  USER_CHOICE_LATEST,
   defaultsNamingUs,
   desktopEntryFailures,
   expandExec,
@@ -131,9 +132,13 @@ function readWindows(d: LinksDriver): Registration {
   const facts: string[] = [];
   for (const scheme of ["http", "https"]) {
     const choice = query(USER_CHOICE(scheme), "/v", "ProgId")[USER_CHOICE(scheme)]?.ProgId ?? null;
-    facts.push(`UserChoice ${scheme} = ${choice ?? "none"}`);
-    if (choice === PROGID) {
-      defaults.push(`links: Windows' UserChoice for ${scheme} names ${PROGID}`);
+    const latestTree = query(USER_CHOICE_LATEST(scheme), "/s");
+    const latest = Object.values(latestTree).map((values) => values.ProgId).find((p) => p !== undefined) ?? null;
+    facts.push(`UserChoice ${scheme} = ${choice ?? "none"}; UserChoiceLatest = ${latest ?? (Object.keys(latestTree).length > 0 ? "(no ProgId)" : "none")}`);
+    for (const [name, value] of [["UserChoice", choice], ["UserChoiceLatest", latest]] as const) {
+      if (value === PROGID) {
+        defaults.push(`links: Windows' ${name} for ${scheme} names ${PROGID}`);
+      }
     }
     const own = d.exec("reg", ["query", `HKEY_CURRENT_USER\\Software\\Classes\\${scheme}`, "/s"]).out;
     if (/little-joan/i.test(own)) {

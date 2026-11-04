@@ -162,7 +162,7 @@ pub fn run() {
             // A first launch with flags (e.g. `--show <url>`, `--start-at-login on`, `--settings`) acts on
             // them; without flags Little Joan starts hibernating — except on the very first run
             // (no settings.json yet), which opens the window once with the welcome.
-            let args = cli::parse_args(&std::env::args().collect::<Vec<_>>());
+            let args = cli::parse_args(&cli::lossy_args(std::env::args_os()));
             let first_run = state::with(handle, |s| {
                 s.first_run
                     .then(|| (s.data_dir.clone(), s.settings.clone()))

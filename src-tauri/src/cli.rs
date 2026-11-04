@@ -68,6 +68,15 @@ impl Args {
     }
 }
 
+/// The process's arguments as text: anything that isn't Unicode is replaced (U+FFFD), never a
+/// panic (`std::env::args` panics on it) — such an argument then matches no flag, and as a link
+/// it is refused.
+pub fn lossy_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> Vec<String> {
+    args.into_iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect()
+}
+
 /// Parses `args` (including argv[0]).
 pub fn parse_args(args: &[String]) -> Args {
     // A link from another app (LJ45): the first `--link` takes the next argument, and nothing else

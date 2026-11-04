@@ -11,7 +11,7 @@
 //! Both go through `accept`: an absolute http(s) URL with a host, at most 4,096 bytes, that the
 //! page may load as a typed address may (navigation.rs) — never `file:`, `javascript:`, `data:`,
 //! `about:`, an extension (`ljext:`, WebView2's `http://ljext.<id>.localhost`), the app's own
-//! origin or Tauri's other hosts. A link is never a search (input.rs isn't used). What opens goes
+//! origin or anything WebView2 hands to the app's protocols (`http://tauri.*`, `http://ipc.*`). A link is never a search (input.rs isn't used). What opens goes
 //! through the toggle table as `Show(Some(url))` — Create, Summon or FocusAndNavigate — so a link
 //! is one navigation of the one window, as `--show <url>` already is, and its visit records as a
 //! link. The smoke log says `link-opened`, `link-refused <scheme>[ <why>]` or `link-ignored <n>`:
@@ -31,8 +31,6 @@ use crate::toggle::Command;
 
 /// The longest link that opens (history.rs records nothing longer either).
 pub const MAX_LINK_BYTES: usize = 4096;
-/// Tauri's own hosts on Windows (`http://<scheme>.localhost`): the app's pages and its IPC.
-const TAURI_HOSTS: [&str; 2] = ["tauri.localhost", "ipc.localhost"];
 /// Links that wait for setup (macOS), at most.
 const MAX_WAITING: usize = 64;
 
@@ -103,14 +101,16 @@ pub fn refusal(url: &Url) -> Option<Refusal> {
     if !matches!(url.scheme(), "http" | "https") {
         return Some(Refusal::Scheme(scheme_name(url.scheme())));
     }
-    let Some(host) = url.host_str().map(str::to_ascii_lowercase) else {
+    if !url.has_host() {
         return Some(Refusal::NoHost);
-    };
+    }
     if url.as_str().len() > MAX_LINK_BYTES {
         Some(Refusal::TooLong)
     } else if crate::extensions::urls::is_ext_like(url) {
         Some(Refusal::Extension)
-    } else if keys::is_app_url(&keys::app_origin(), url) || TAURI_HOSTS.contains(&host.as_str()) {
+    } else if keys::is_app_url(&keys::app_origin(), url) || navigation::intercepted_by_app(url) {
+        // The app's origin, and anything WebView2 would hand to its protocols (`http://tauri.*`,
+        // `http://ipc.*`, also as user info): navigation.rs.
         Some(Refusal::App)
     } else if !navigation::is_allowed_navigation(url) || !navigation::is_external_openable(url) {
         // The typed-address rules, last: everything above already covers what they refuse.
@@ -146,14 +146,18 @@ pub struct Batch {
     pub ignored: usize,
 }
 
-pub fn pick(urls: &[Url]) -> Batch {
+/// `bounced` is the loop guard (asked only of a link that would open): a page Little Joan just
+/// handed on is refused, and the next acceptable link of the batch may open instead.
+pub fn pick(urls: &[Url], mut bounced: impl FnMut(&Url) -> bool) -> Batch {
     let mut batch = Batch {
         open: None,
         refused: Vec::new(),
         ignored: 0,
     };
     for url in urls {
-        match (refusal(url), &batch.open) {
+        let why = refusal(url)
+            .or_else(|| (batch.open.is_none() && bounced(url)).then_some(Refusal::Loop));
+        match (why, &batch.open) {
             (Some(why), _) => batch.refused.push(why),
             (None, None) => batch.open = Some(url.clone()),
             (None, Some(_)) => batch.ignored += 1,
@@ -200,7 +204,7 @@ pub fn ready<R: Runtime>(app: &AppHandle<R>) {
 }
 
 fn open_batch<R: Runtime>(app: &AppHandle<R>, urls: &[Url]) {
-    let batch = pick(urls);
+    let batch = pick(urls, crate::browsers::bounced);
     for why in batch.refused {
         refused(why);
     }
@@ -208,7 +212,7 @@ fn open_batch<R: Runtime>(app: &AppHandle<R>, urls: &[Url]) {
         smoke::log("link-ignored", &batch.ignored.to_string());
     }
     if let Some(url) = batch.open {
-        open(app, url);
+        show(app, url);
     }
 }
 
@@ -218,6 +222,10 @@ fn open<R: Runtime>(app: &AppHandle<R>, url: Url) {
         refused(Refusal::Loop);
         return;
     }
+    show(app, url);
+}
+
+fn show<R: Runtime>(app: &AppHandle<R>, url: Url) {
     smoke::log("link-opened", "");
     // Create, Summon or FocusAndNavigate (toggle.rs): the window comes to the front — it was asked
     // for — and the command bar closes for the page; the page before stays in the back trail.

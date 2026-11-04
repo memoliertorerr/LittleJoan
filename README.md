@@ -269,6 +269,11 @@ browsers; **it never makes itself the default**. You choose it yourself:
   (Apps → Default Apps on newer GNOME), KDE System Settings → Default Applications — or run
   `xdg-settings set default-web-browser "Little Joan.desktop"` yourself. The AppImage installs
   nothing, so it can't be chosen as the system's browser (everything else works the same).
+  **Note:** on a Linux system where no default web browser has been set at all, GIO and `xdg-mime`
+  fall back to the first browser they find — which, once the `.deb` is installed, can be Little
+  Joan, without anything having been written. Settings → General → Browser shows what your system
+  uses ("Little Joan is your default browser"); choose another browser in your desktop's settings
+  if that isn't what you want.
 
 Settings → General → **Browser** says whether Little Joan is your default and has **Open default
 apps settings**, which opens those settings (that is all it does). Only http and https links open
@@ -282,7 +287,8 @@ default", pages go to the first other browser your system lists — Settings nam
 pages in Safari, because Little Joan is your default browser") — and if there is none, the page
 stays where it is and the toolbar says "No other browser to open this in". A page Little Joan
 has just handed on that comes straight back isn't opened again, so nothing can go round in a
-loop.
+loop. A page that asks for many new windows at once gets at most one handed on a second; an
+extension's panel gets them only with the `openBrowser` permission, as for `openUrl`.
 
 ## Translate
 

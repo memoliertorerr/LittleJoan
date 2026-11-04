@@ -87,6 +87,9 @@ describe("the Windows registration", () => {
     expect(hooks).not.toMatch(/UserChoice"|UserChoice\\/);
     // The uninstaller removes all three.
     const uninstall = hooks.slice(hooks.indexOf("NSIS_HOOK_POSTUNINSTALL"));
+    // Only when the ProgId is still this install's own (phase 21's security review).
+    expect(uninstall).toContain('ReadRegStr $R7 HKCU "${LJ_PROGID_KEY}\\shell\\open\\command" ""');
+    expect(uninstall).toContain('${If} $R7 == "$\\"$INSTDIR\\${MAINBINARYNAME}.exe$\\" --link $\\"%1$\\""');
     for (const what of ["DeleteRegKey HKCU \"${LJ_CLIENT_KEY}\"", 'DeleteRegValue HKCU "${LJ_REGISTERED_KEY}" "${PRODUCTNAME}"', 'DeleteRegKey HKCU "${LJ_PROGID_KEY}"']) {
       expect(uninstall).toContain(what);
     }

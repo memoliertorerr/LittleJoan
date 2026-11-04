@@ -264,10 +264,16 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
                 history_store::page_loaded(app, url);
             }
         })
-        // target=_blank and window.open go to the main browser (web URLs only; browsers.rs).
+        // target=_blank and window.open go to the main browser (web URLs only; browsers.rs): one
+        // under way and one a second at most, a panel's only with openUrl's checks.
         .on_new_window(move |url, _features| {
+            smoke::log("new-window", "");
             if navigation::is_external_openable(&url) {
-                crate::browsers::hand_off(&app, url, |_, _| {});
+                crate::browsers::hand_off_new_window(
+                    &app,
+                    url,
+                    crate::browsers::NewWindowFrom::Page,
+                );
             } else {
                 smoke::log("new-window-refused", url.as_str());
             }

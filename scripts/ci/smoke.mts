@@ -104,7 +104,7 @@ import {
   type GlassRun,
 } from "./smoke-glass.mts";
 import { macKeyToken } from "./smoke-keys.mts";
-import { mayChangeThisMachine, skippedChange } from "./smoke-runner.mts";
+import { mayChangeThisMachine, runnerFailures, runnerLine, skippedChange } from "./smoke-runner.mts";
 import { linksFailures, linksRun, linksSummary, type ExecOptions, type ExecResult, type LinksApp, type LinksDriver } from "./smoke-links.mts";
 import { handoffFailures, handoffRun, handoffSummary } from "./smoke-handoff.mts";
 import {
@@ -178,6 +178,8 @@ if (!app || !existsSync(app)) {
   process.exit(2);
 }
 mkdirSync(out, { recursive: true });
+// Whether this run may change the machine (smoke-runner.mts): a GitHub-hosted runner only.
+console.log(runnerLine(process.env));
 const logPath = join(out, startedOnly ? "smoke-started-only.log" : "smoke.log");
 rmSync(logPath, { force: true });
 // LJ_SMOKE_EXTRA_ENV="KEY=VALUE KEY2=VALUE2" adds variables to the app's environment (CI
@@ -2248,6 +2250,7 @@ const failures = evaluate(
   .concat(downloadFailures(downloadCheck, os))
   .concat(linksFailures(linksCheck))
   .concat(handoffFailures(handoffCheck, os))
+  .concat(runnerFailures(process.env))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
 if (failures.length > 0) {

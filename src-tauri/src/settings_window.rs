@@ -108,7 +108,11 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
                 let app = app.clone();
                 move |url, _features| {
                     if navigation::is_external_openable(&url) {
-                        crate::browsers::hand_off(&app, url, |_, _| {});
+                        crate::browsers::hand_off_new_window(
+                            &app,
+                            url,
+                            crate::browsers::NewWindowFrom::Settings,
+                        );
                     }
                     NewWindowResponse::Deny
                 }

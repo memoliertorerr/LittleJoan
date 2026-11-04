@@ -154,29 +154,110 @@ fn a_page_handed_on_bounces_back_once_within_the_window() {
 
 #[test]
 fn windows_start_menu_entries() {
+    let chrome_exe = r#""C:\Program Files\Google\Chrome\Application\chrome.exe""#;
+    let chrome_html =
+        r#""C:\Program Files\Google\Chrome\Application\chrome.exe" --single-argument %1"#;
     let chrome = start_menu_entry(
         "Google Chrome",
         Some("Google Chrome"),
         Some("Google Chrome"),
-        Some(r#""C:\Program Files\Google\Chrome\Application\chrome.exe""#),
+        Some(chrome_exe),
+        Some(chrome_html),
     )
     .expect("a browser");
     assert_eq!(chrome.name, "Google Chrome");
+    // Through the ProgId its Capabilities give https to (phase 21's security review).
+    assert_eq!(chrome.launch, Launch::Command(chrome_html.into()));
+    // Without one: its own command, the URL appended.
+    let own = start_menu_entry("Google Chrome", None, None, Some(chrome_exe), None);
     assert_eq!(
-        chrome.launch,
-        Launch::Command(r#""C:\Program Files\Google\Chrome\Application\chrome.exe""#.into())
+        own.expect("a browser").launch,
+        Launch::Command(chrome_exe.into())
     );
     let edge = start_menu_entry(
         "Microsoft Edge",
         None,
         Some("@C:\\edge.dll,-1"),
         Some("edge.exe"),
+        None,
     );
     assert_eq!(edge.expect("a browser").name, "Microsoft Edge");
-    let named = start_menu_entry("X", Some(" "), Some("X Browser"), Some("x.exe"));
+    let named = start_menu_entry("X", Some(" "), Some("X Browser"), Some("x.exe"), None);
     assert_eq!(named.expect("a browser").name, "X Browser");
-    assert_eq!(start_menu_entry("Y", Some("Y"), None, None), None);
-    assert_eq!(start_menu_entry("Y", Some("Y"), None, Some("  ")), None);
+    assert_eq!(start_menu_entry("Y", Some("Y"), None, None, None), None);
+    assert_eq!(
+        start_menu_entry("Y", Some("Y"), None, Some("  "), None),
+        None
+    );
+}
+
+#[test]
+fn windows_browsers_never_start_an_interpreter() {
+    for program in [
+        "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "msedge.exe",
+        "C:/Tools/BROWSER.EXE",
+        "C:\\hostedtoolcache\\node\\24\\node.exe",
+    ] {
+        assert!(launchable_program(program), "{program}");
+    }
+    for program in [
+        "cmd.exe",
+        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "PWSH.EXE",
+        "wscript.exe",
+        "cscript.exe",
+        "mshta.exe",
+        "C:\\Windows\\System32\\rundll32.exe",
+        "regsvr32.exe",
+        "C:\\x\\browser.bat",
+        "C:\\x\\browser.cmd",
+        "C:\\x\\browser.ps1",
+        "C:\\x\\browser",
+        ".exe",
+    ] {
+        assert!(!launchable_program(program), "{program}");
+    }
+    // An entry whose only command runs an interpreter isn't offered at all.
+    assert_eq!(
+        start_menu_entry(
+            "Evil",
+            Some("Evil"),
+            None,
+            Some(r#"cmd.exe /c start %1"#),
+            Some(r#"powershell.exe -c "%1""#)
+        ),
+        None
+    );
+    // A ProgId that runs an interpreter falls back to the entry's own launchable command.
+    let fallback = start_menu_entry(
+        "B",
+        None,
+        None,
+        Some("b.exe"),
+        Some(r#"cmd.exe /c b.exe %1"#),
+    );
+    assert_eq!(
+        fallback.expect("a browser").launch,
+        Launch::Command("b.exe".into())
+    );
+}
+
+#[test]
+fn windows_user_choice_latest_first() {
+    assert_eq!(
+        pick_progid(Some("ChromeHTML".into()), Some("MSEdgeHTM".into())),
+        Some("ChromeHTML".into())
+    );
+    assert_eq!(
+        pick_progid(None, Some("MSEdgeHTM".into())),
+        Some("MSEdgeHTM".into())
+    );
+    assert_eq!(
+        pick_progid(Some(" ".into()), Some("MSEdgeHTM".into())),
+        Some("MSEdgeHTM".into())
+    );
+    assert_eq!(pick_progid(None, None), None);
 }
 
 #[test]
@@ -374,23 +455,39 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
 
 #[test]
 fn every_handoff_goes_through_browsers_rs() {
-    // LJ46: the opener (which hands a URL to the OS default — maybe Little Joan itself) is called
-    // only from browsers.rs's glue; everything else calls hand_off.
+    // LJ46 and its security review: the opener (which hands a URL to the OS default — maybe Little
+    // Joan itself) is used only by browsers.rs's glue; elsewhere only the two "show in folder"
+    // calls may name the opener plugin at all.
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
     let glue = src.join("browsers.rs");
+    let reveals = [
+        src.join("commands.rs"),
+        src.join("commands").join("downloads.rs"),
+    ];
     let mut calls_in_glue = 0;
     for path in rust_files(&src) {
-        let text = fs::read_to_string(&path).expect("read a source file");
-        let calls = text.matches("tauri_plugin_opener::open_url").count()
-            + text.matches("OpenerExt").count()
-            + text.matches(".opener()").count();
-        if path == glue {
-            calls_in_glue = calls;
-        } else if path.ends_with("browsers/tests.rs") {
+        if path.ends_with("browsers/tests.rs") {
             continue;
+        }
+        let text = fs::read_to_string(&path).expect("read a source file");
+        let uses = text.matches("tauri_plugin_opener::").count();
+        let other_ways = text.matches("OpenerExt").count() + text.matches(".opener()").count();
+        assert_eq!(other_ways, 0, "{}: no opener extension", path.display());
+        if path == glue {
+            calls_in_glue = text.matches("tauri_plugin_opener::open_url(").count();
+            assert_eq!(uses, calls_in_glue, "browsers.rs: open_url only");
+        } else if reveals.contains(&path) {
+            assert_eq!(
+                uses,
+                text.matches("tauri_plugin_opener::reveal_item_in_dir(")
+                    .count(),
+                "{}: reveal_item_in_dir only",
+                path.display()
+            );
+            assert_eq!(uses, 1, "{}", path.display());
         } else {
             assert_eq!(
-                calls,
+                uses,
                 0,
                 "{}: hand pages on through browsers.rs",
                 path.display()

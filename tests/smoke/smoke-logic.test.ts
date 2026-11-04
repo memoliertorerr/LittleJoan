@@ -5,6 +5,10 @@ import {
   BLANK_READY_TITLE,
   BLANK_TARGET,
   blankRequest,
+  FLOOD_PER_CLICK,
+  FLOOD_READY_TITLE,
+  FLOOD_TARGET,
+  floodRequest,
   CODECS,
   codecSupport,
   fullscreenTitle,
@@ -187,5 +191,17 @@ describe("the new-window page (LJ46)", () => {
     expect(BLANK_TARGET).toBe("smoke.html?from=blank");
     expect(blankRequest(`?${BLANK_TARGET.split("?")[1] ?? ""}`)).toBe(false);
     expect(BLANK_READY_TITLE).toMatch(/^LJ-BLANK /);
+  });
+});
+
+describe("the flood page (phase 21's security review)", () => {
+  it("is asked for with ?flood=1 only, and asks for several windows a click", () => {
+    expect(floodRequest("?flood=1")).toBe(true);
+    for (const other of ["", "?flood=0", "?blank=1", "?from=flood"]) {
+      expect(floodRequest(other), other).toBe(false);
+    }
+    expect(FLOOD_PER_CLICK).toBeGreaterThan(1);
+    expect(FLOOD_TARGET).toBe("smoke.html?from=flood");
+    expect(FLOOD_READY_TITLE).toMatch(/^LJ-FLOOD /);
   });
 });

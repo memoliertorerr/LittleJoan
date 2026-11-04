@@ -146,6 +146,17 @@ impl Recent {
         self.pages.push((url.as_str().to_owned(), now));
     }
 
+    /// A launch failed: `url` was never handed on.
+    pub fn forget(&mut self, url: &Url) {
+        if let Some(at) = self
+            .pages
+            .iter()
+            .rposition(|(page, _)| page == url.as_str())
+        {
+            self.pages.remove(at);
+        }
+    }
+
     /// Whether `url` is a page handed on within the window (it is forgotten then: one bounce).
     pub fn bounced(&mut self, url: &Url, now: Instant) -> bool {
         self.forget_old(now);

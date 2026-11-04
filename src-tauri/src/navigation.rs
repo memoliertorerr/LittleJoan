@@ -2,12 +2,33 @@
 //!
 //! Extension URLs — `ljext:` and WebView2's `http(s)://ljext.*` form — are never web pages
 //! here: the page webview reaches them only when the app opened them (extensions/session.rs),
-//! and the bar never does.
+//! and the bar never does. Nor is any `http://` address WebView2 would hand to one of the app's own
+//! protocols: wry intercepts `http://<scheme>.*` **by prefix** — `tauri.`, `ipc.`, `ljext.`, also
+//! as user info (`http://tauri.@host/`) — so only the app's exact origin passes (phase 21's
+//! security review).
 
 use url::Url;
 
 use crate::extensions::urls::is_ext_like;
 use crate::keys;
+
+/// The prefixes WebView2 routes to the app's own protocols when they follow `http://` (Tauri
+/// serves custom schemes as `http://<scheme>.localhost` on Windows; wry's filter is
+/// `http://<scheme>.*`). Https isn't used for them (`useHttpsScheme` is off).
+const INTERCEPTED_PREFIXES: [&str; 3] = ["tauri.", "ipc.", "ljext."];
+
+/// Whether `url`, as text, would reach one of the app's own protocols on Windows — the host's
+/// first label, or user info written where a host is expected. Refused everywhere, so links and
+/// typed addresses behave alike on every OS.
+pub fn intercepted_by_app(url: &Url) -> bool {
+    url.scheme() == "http"
+        && url.as_str().get("http://".len()..).is_some_and(|rest| {
+            let rest = rest.to_ascii_lowercase();
+            INTERCEPTED_PREFIXES
+                .iter()
+                .any(|prefix| rest.starts_with(prefix))
+        })
+}
 
 /// Whether the webview may navigate (top level or frame) to `url`.
 ///
@@ -17,7 +38,8 @@ use crate::keys;
 /// `file:`, `javascript:`, and custom schemes that would launch other apps — is refused, and so
 /// is every extension URL (only extensions/session.rs's gate admits one).
 pub fn is_allowed_navigation(url: &Url) -> bool {
-    if is_ext_like(url) {
+    if is_ext_like(url) || (intercepted_by_app(url) && !keys::is_app_url(&keys::app_origin(), url))
+    {
         return false;
     }
     match url.scheme() {
@@ -52,7 +74,6 @@ mod tests {
         for s in [
             "https://example.com/",
             "http://localhost:3000/",
-            "http://tauri.localhost/index.html",
             "tauri://localhost/index.html?u=x",
             "about:blank",
             "about:srcdoc",
@@ -61,6 +82,13 @@ mod tests {
         ] {
             assert!(is_allowed_navigation(&url(s)), "{s} should be allowed");
         }
+        // The app's own origin (`http://tauri.localhost` on Windows): only there is it the app's.
+        let start = keys::app_origin().join("index.html").expect("joins");
+        assert!(is_allowed_navigation(&start));
+        assert_eq!(
+            is_allowed_navigation(&url("http://tauri.localhost/index.html")),
+            cfg!(windows)
+        );
     }
 
     #[test]
@@ -120,5 +148,37 @@ mod tests {
         assert!(!is_external_openable(&url("mailto:me@example.com")));
         assert!(!is_external_openable(&url("tauri://localhost/")));
         assert!(!is_external_openable(&url("javascript:alert(1)")));
+    }
+
+    #[test]
+    fn addresses_windows_would_hand_to_the_app_are_refused() {
+        for s in [
+            "http://tauri.evil.example/",
+            "http://TAURI.localhost.evil/",
+            "http://ipc.localhost/open_input",
+            "http://ipc.example.com/",
+            "http://tauri.@evil.example/",
+            "http://ipc.:x@evil.example/",
+            "http://ljext.@evil.example/",
+        ] {
+            let parsed = url(s);
+            assert!(intercepted_by_app(&parsed), "{s}");
+            assert!(!is_allowed_navigation(&parsed), "{s}");
+        }
+        // Not intercepted: https, other first labels, the app's own origin on Windows.
+        for s in [
+            "https://tauri.app/",
+            "https://ipc.example.com/",
+            "http://example.com/tauri.",
+            "http://mytauri.example/",
+            "http://user@tauri-apps.example/",
+        ] {
+            assert!(!intercepted_by_app(&url(s)), "{s}");
+            assert!(is_allowed_navigation(&url(s)), "{s}");
+        }
+        let origin = keys::app_origin();
+        assert!(is_allowed_navigation(
+            &origin.join("index.html").expect("joins")
+        ));
     }
 }

@@ -209,3 +209,19 @@ export const BLANK_TARGET = "smoke.html?from=blank";
 export function blankRequest(search) {
   return new URLSearchParams(search).get("blank") === "1";
 }
+
+/** The title a `?flood=1` page reports once it is up (phase 21's security review). */
+export const FLOOD_READY_TITLE = "LJ-FLOOD ready";
+/** Where the flood's windows go: the smoke page again, marked and numbered. */
+export const FLOOD_TARGET = "smoke.html?from=flood";
+/** Windows asked for per click on a `?flood=1` page. */
+export const FLOOD_PER_CLICK = 5;
+
+/**
+ * `?flood=1`: every click on the page asks for FLOOD_PER_CLICK new windows at once — the handoff
+ * gate must let at most one a second through to a browser.
+ * @param {string} search location.search
+ */
+export function floodRequest(search) {
+  return new URLSearchParams(search).get("flood") === "1";
+}

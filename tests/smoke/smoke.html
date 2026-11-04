@@ -185,6 +185,10 @@
         BLANK_READY_TITLE,
         BLANK_TARGET,
         blankRequest,
+        FLOOD_PER_CLICK,
+        FLOOD_READY_TITLE,
+        FLOOD_TARGET,
+        floodRequest,
       } from "./smoke-logic.mjs";
       import { probeApi, probeFile, probeRequest, probeTitle, raceRequest, RACE } from "./ext-probe.mjs";
       import {
@@ -230,7 +234,18 @@
           fetch(pingUrl(ping.id, sent), { cache: "no-store" }).catch(() => undefined);
         }, PING_EVERY_MS);
       }
-      if (blankRequest(location.search)) {
+      if (floodRequest(location.search)) {
+        // ?flood=1 (phase 21's security review): each click asks for several new windows at once.
+        let sent = 0;
+        stage.style.background = "#e57373";
+        document.addEventListener("click", () => {
+          for (let i = 0; i < FLOOD_PER_CLICK; i += 1) {
+            sent += 1;
+            window.open(`${FLOOD_TARGET}&n=${sent}`, "_blank");
+          }
+        });
+        show(FLOOD_READY_TITLE);
+      } else if (blankRequest(location.search)) {
         // ?blank=1 (LJ46): one big target=_blank link, so a click anywhere asks for a new window.
         const link = document.createElement("a");
         link.id = "blank";

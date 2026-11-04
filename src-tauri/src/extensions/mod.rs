@@ -26,6 +26,7 @@ pub mod list;
 pub mod manifest;
 pub mod nonce;
 pub mod paths;
+pub mod popups;
 pub mod protocol;
 pub mod registry;
 pub mod session;

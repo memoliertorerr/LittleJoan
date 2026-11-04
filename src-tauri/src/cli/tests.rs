@@ -352,3 +352,30 @@ fn link_with_nothing_after_it_is_a_plain_launch() {
     assert_eq!(parse_all(&["--toggle"]).link, None);
     assert_eq!(parse_all(&["--linked", "https://x.test/"]).link, None);
 }
+
+#[test]
+fn arguments_that_are_not_unicode_never_panic() {
+    #[cfg(unix)]
+    let odd = {
+        use std::os::unix::ffi::OsStringExt;
+        std::ffi::OsString::from_vec(vec![0x2d, 0x2d, 0xff, 0xfe])
+    };
+    #[cfg(windows)]
+    let odd = {
+        use std::os::windows::ffi::OsStringExt;
+        std::ffi::OsString::from_wide(&[0x2d, 0x2d, 0xd800])
+    };
+    let args = lossy_args([
+        std::ffi::OsString::from("little-joan"),
+        std::ffi::OsString::from("--link"),
+        odd.clone(),
+    ]);
+    assert_eq!(args.len(), 3);
+    assert!(args[2].contains('\u{fffd}'));
+    let parsed = parse_args(&args);
+    assert!(matches!(&parsed.link, Some(Link::Given(text)) if text.contains('\u{fffd}')));
+    assert!(crate::links::parse(&args[2]).is_err());
+    // On its own it is no flag: a plain launch.
+    let plain = parse_args(&lossy_args([std::ffi::OsString::from("little-joan"), odd]));
+    assert_eq!(plain.forwarded_command(), Some(Command::Show(None)));
+}

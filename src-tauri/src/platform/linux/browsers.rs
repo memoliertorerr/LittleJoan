@@ -3,9 +3,9 @@
 //! default, read-only; a browser starts with `gio launch <file> <url>` (GLib ≥ 2.68), or its own
 //! `Exec` with the URL when gio can't (no shell either way).
 
-use std::io;
+use std::io::{self, Read};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use url::Url;
@@ -76,13 +76,38 @@ pub fn read() -> Browsers {
             }
         }
     }
-    browsers.os_default = Command::new("xdg-mime")
-        .args(["query", "default", "x-scheme-handler/https"])
-        .output()
-        .ok()
-        .and_then(|out| xdg_answer(&String::from_utf8_lossy(&out.stdout)))
+    let mut query = Command::new("xdg-mime");
+    query.args(["query", "default", "x-scheme-handler/https"]);
+    browsers.os_default = stdout_within(query, GIO_WAIT)
+        .and_then(|out| xdg_answer(&out))
         .or_else(default_from_mimeapps);
     browsers
+}
+
+/// `command`'s output, if it ends within `limit` (else it is stopped: nothing).
+fn stdout_within(mut command: Command, limit: Duration) -> Option<String> {
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if started.elapsed() > limit => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(_) => return None,
+        }
+    }
+    let mut out = String::new();
+    child.stdout.take()?.read_to_string(&mut out).ok()?;
+    Some(out)
 }
 
 /// Without xdg-mime (or no answer from it): the mimeapps.list files themselves, in the spec's
@@ -122,7 +147,8 @@ fn default_from_mimeapps() -> Option<String> {
     mimeapps_default(texts.iter().map(String::as_str))
 }
 
-/// How long gio may take to say it launched the browser before it is left to it.
+/// How long gio may take to say it launched the browser before it is left to it, and how long
+/// `xdg-mime` may take to answer.
 const GIO_WAIT: Duration = Duration::from_secs(5);
 
 pub fn open_with(browser: &Browser, url: &Url) -> io::Result<()> {

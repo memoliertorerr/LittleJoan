@@ -471,6 +471,10 @@ src-tauri/src/browsers.rs          the main browser (LJ46): `hand_off` / `hand_o
                                    memory, the default-apps button's glue
 src-tauri/src/browsers/target.rs   `handoff_target` (main browser → OS default unless Little Joan →
                                    the first other → nowhere; never Little Joan), `Recent` (pure)
+src-tauri/src/browsers/limits.rs   the new-window gate (one under way, one a second) and the 2 s
+                                   reuse of the OS's list (pure, tested; the security review)
+src-tauri/src/extensions/popups.rs a panel's new windows: openUrl's checks (openBrowser, public
+                                   host, one every 2 s), pure decision tested
 src-tauri/src/browsers/parse.rs    the readers' pure parts: StartMenuInternet entries, UserChoice,
                                    MSVC command lines, desktop files and their Exec, xdg-mime's
                                    answer, Little Joan's own ids (tests in browsers/tests.rs)
@@ -1553,7 +1557,8 @@ a default (Ground Rule 21: no Windows `UserChoice`, no `LSSetDefaultHandlerForUR
   `Little Joan` → its Capabilities, and the ProgId `Software\Classes\LittleJoanURL` whose command is
   `"<exe>" --link "%1"`, then tells the shell (`SHChangeNotify`); the uninstaller deletes exactly
   those (not during an update, when the new installer writes them again) — never
-  `Software\Classes\http(s)` themselves. Linux: Tauri's `Little Joan.desktop` comes from
+  `Software\Classes\http(s)` themselves — and only while the ProgId's command is still this
+  install's own (as Tauri's deep-link removal checks). Linux: Tauri's `Little Joan.desktop` comes from
   `src-tauri/linux/little-joan.desktop.hbs` (`bundle.linux.deb.desktopTemplate`) with
   `Exec=little-joan --link %u`, `MimeType=x-scheme-handler/http;x-scheme-handler/https;` and
   `Categories=Network;WebBrowser;` (GNOME's Default Apps lists browsers by them); from the app menu
@@ -1575,7 +1580,11 @@ a default (Ground Rule 21: no Windows `UserChoice`, no `LSSetDefaultHandlerForUR
 - **What opens** (`links::accept`, pure): an absolute `http` / `https` URL with a host, at most
   4,096 bytes, that the typed-address rules allow (navigation.rs) — never `file:`, `javascript:`,
   `data:`, `about:`, `ljext:` or WebView2's `http://ljext.<id>.localhost`, the app's origin or
-  Tauri's `tauri.localhost` / `ipc.localhost`. `input::normalize` isn't used: a link is never a
+  anything WebView2 hands to the app's protocols: wry intercepts `http://tauri.*`, `http://ipc.*`
+  and `http://ljext.*` **by prefix**, so any such address — also as user info, `http://tauri.@host/`
+  — is refused, as a link and (but for the app's exact origin) as a page navigation
+  (`navigation::intercepted_by_app`, the security review). The first launch reads its arguments
+  without panicking on non-Unicode ones (`cli::lossy_args`). `input::normalize` isn't used: a link is never a
   search. From a batch (macOS) only the first acceptable link opens. It goes through the toggle
   table as `Show(Some(url))` (source `link`): `Create(url)` while hibernating, `Summon(url)` from
   ready, `FocusAndNavigate(url)` with the window open — it comes to the front (it was asked for;
@@ -1604,17 +1613,30 @@ the one place that calls the opener (`browsers/tests.rs` checks the sources).
   mimeapps.list files themselves, in the XDG MIME Applications spec's order. Little Joan's own ids are known per OS (its bundle id; its
   key and ProgId, or a command running this executable; its desktop files, or an Exec running
   `little-joan`, this executable or `$APPIMAGE`).
+- **New windows are gated** (the security review): the page's and Settings' new-window requests go
+  through `hand_off_new_window` — at most one under way and one a second (`browsers/limits.rs`),
+  the rest dropped (`handoff-throttled`); while the page shows an extension's panel, its new windows
+  get `openUrl(where: "browser")`'s checks (`extensions/popups.rs`: the `openBrowser` permission, a
+  public web address, one every 2 s shared with `openUrl`), else `handoff-refused <why>`. The OS's
+  list is reused for 2 s. Open in browser (the user's own key, button or menu) isn't gated.
 - **Where a page goes** (`browsers::handoff_target`, pure): the main browser (`settings.mainBrowser`)
   if installed; else the OS default unless it is Little Joan (an unknown default counts as not:
   the opener, as before); else the first other browser in the OS's order; else nowhere — the toolbar
   says "No other browser to open this in" and nothing opens in Little Joan. A target that is Little
   Joan is always passed over (`handoff-self-refused`). **The loop guard:** a page handed on is
-  remembered for 10 s, and a link from another app that is exactly that page is refused once
-  (`link-refused http loop`) — so even a default that couldn't be read can't bounce a page back.
-- **Starting a browser, no shell:** macOS `open -b <bundle id> <url>`; Windows the registered
-  command split by the MSVC rules, `%1` replaced or the URL appended as one argument; Linux `gio
-  launch <desktop file> <url>`, or (no gio) its Exec per the Desktop Entry spec with the URL as one
-  argument. The OS default: `tauri_plugin_opener::open_url`.
+  remembered for 10 s — before the launch (macOS's `open` can deliver the link back before it
+  returns), forgotten if the launch fails — and a link from another app that is exactly that page
+  is refused once (`link-refused http loop`; in a macOS batch the next acceptable link may open
+  instead) — so even a default that couldn't be read can't bounce a page back.
+- **Starting a browser, no shell:** macOS `open -b <bundle id> <url>`; Windows the command of the
+  ProgId the browser's Capabilities give https to (`%1` = the URL as one argument), else its
+  StartMenuInternet command with the URL appended — split by the MSVC rules, and never an
+  interpreter (cmd, powershell, pwsh, wscript, cscript, mshta, rundll32, regsvr32, msiexec, wsl,
+  bash, conhost) or anything but an `.exe`: such an entry isn't offered; the default's ProgId from
+  `UserChoiceLatest` (newer Windows 11) before `UserChoice`; Linux `gio launch <desktop file>
+  <url>`, or (no gio) its Exec per the Desktop Entry spec with the URL as one argument;
+  `xdg-mime` gets 5 s to answer. The OS default: `tauri_plugin_opener::open_url`. Errors are
+  printed as a fixed message (a launcher's own text can hold the URL).
 - **The default-apps button** (`open_default_apps_settings`) only opens the OS's own settings
   (Ground Rule 21).
 - **Smoke log:** `browsers-listed <n> default=<self|other|none>`, `handoff os-default |
@@ -1709,7 +1731,9 @@ download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't t
 default=<self|other|none>` / `handoff os-default | browser=<id>` / `handoff-none` /
 `handoff-self-refused` / `default-apps-settings <what>` / `settings-scrolled browser` (LJ46: the
 OS's browsers read, where a page was handed, the default-apps button, the smoke-only scroll to
-Settings' Browser section), `link-opened` / `link-refused
+Settings' Browser section), `new-window` / `handoff-throttled` / `handoff-refused <why>` (a page's
+new-window request reached the app; dropped by the gate; an extension panel's refused —
+the security review), `link-opened` / `link-refused
 <scheme>[ <why>]` / `link-ignored <n>` (a link from another app opened, was refused, or came after
 the first in a batch; never the URL — LJ45), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
@@ -2180,7 +2204,10 @@ and pushes to `main`:
   writes the URL it gets to a file; the `handoff` launch has it as `mainBrowser`, the smoke page's
   `?blank=1` (one big `target=_blank` link) is clicked at the screen's centre, and the app must log
   `handoff browser=<fake>`, the fake must get `…smoke.html?from=blank`, and no `link-opened` may
-  follow; on every OS Settings → General is scrolled to its Browser section (smoke only,
+  follow; then the flood (`?flood=1`: five new windows per click, three clicks): every
+  `new-window` handed on or dropped (`handoff-throttled`), at most one handoff a second over the
+  flood's span, the fake receiving no more than were handed on (Windows' fake launches through
+  its ProgId, `LJFakeBrowserURL`); on every OS Settings → General is scrolled to its Browser section (smoke only,
   `LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`) for `settings-general-browser.png`, with a
   `browsers-listed` line; on Linux the smoke itself then makes Little Joan the runner's default
   (`xdg-mime default`, never the app) and the `handoff-default` launch, with no main browser, must

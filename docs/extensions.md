@@ -177,7 +177,9 @@ extension only once that panel has actually loaded. A panel is one page: links t
 same extension don't open (build your UI in the page; that includes `#anchor` links and
 `location.reload()` — scroll with `scrollIntoView()`, re-render instead of reloading), and a panel
 can't become a `blob:` or `data:` document. Following a link to the web leaves the panel, like `openUrl`. Popups
-(`target=_blank`, `window.open`) open web addresses in the user's main browser.
+(`target=_blank`, `window.open`) get exactly `openUrl(url, { where: "browser" })`'s checks: only
+with the `openBrowser` permission, only public web addresses, at most one every 2 seconds (shared
+with `openUrl`) — and, like any page's, at most one a second overall; anything else is refused.
 
 **Files** are served by plain paths only: names of letters, digits, `.`, `_` and `-` (no spaces,
 no names starting with `.`), at most 8 folders deep; `__lj/` is Little Joan's. Served types:

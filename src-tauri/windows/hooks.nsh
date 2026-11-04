@@ -3,7 +3,9 @@
 ; makes itself the default: no Software\Classes\http or \https, never UserChoice (Windows protects
 ; it anyway). Links arrive as `little-joan.exe --link "<url>"`, and `--link` takes exactly the
 ; argument after it, whatever it holds (src-tauri/src/cli.rs). The uninstaller removes exactly what
-; is written here (not while updating, when the new installer writes it again).
+; is written here (not while updating, when the new installer writes it again), and only when the
+; ProgId's command is still this install's own (as Tauri's deep-link removal checks): another copy
+; of Little Joan installed elsewhere keeps its registration.
 ;
 ; Included by Tauri's installer.nsi (bundle.windows.nsis.installerHooks); MAINBINARYNAME and
 ; PRODUCTNAME are its own defines, UpdateMode its own variable.
@@ -31,9 +33,12 @@
 
 !macro NSIS_HOOK_POSTUNINSTALL
   ${If} $UpdateMode <> 1
-    DeleteRegKey HKCU "${LJ_CLIENT_KEY}"
-    DeleteRegValue HKCU "${LJ_REGISTERED_KEY}" "${PRODUCTNAME}"
-    DeleteRegKey HKCU "${LJ_PROGID_KEY}"
-    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+    ReadRegStr $R7 HKCU "${LJ_PROGID_KEY}\shell\open\command" ""
+    ${If} $R7 == "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" --link $\"%1$\""
+      DeleteRegKey HKCU "${LJ_CLIENT_KEY}"
+      DeleteRegValue HKCU "${LJ_REGISTERED_KEY}" "${PRODUCTNAME}"
+      DeleteRegKey HKCU "${LJ_PROGID_KEY}"
+      System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+    ${EndIf}
   ${EndIf}
 !macroend

@@ -11,6 +11,8 @@ export const PROGID_KEY = `HKEY_CURRENT_USER\\Software\\Classes\\${PROGID}`;
 export const REGISTERED_KEY = "HKEY_CURRENT_USER\\Software\\RegisteredApplications";
 export const USER_CHOICE = (scheme: string) =>
   `HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\${scheme}\\UserChoice`;
+/** Newer Windows 11's effective choice (the ProgId as a value, or a `ProgId` subkey's value). */
+export const USER_CHOICE_LATEST = (scheme: string) => `${USER_CHOICE(scheme)}Latest`;
 export const BUNDLE_ID = "io.github.memoliertorerr.littlejoan";
 /** Tauri's desktop file (named after the product), which the template makes a web browser. */
 export const DESKTOP_ID = "Little Joan.desktop";

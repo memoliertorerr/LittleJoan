@@ -8752,6 +8752,60 @@ STOP. Never merge it: an independent security review comes next, and the owner d
   `handoff-self-refused`, no `link-opened`); the AppImage's Settings says it can't be the system's
   browser. Screenshots looked at on every OS (`settings-general-browser.png`), then deleted.
 
+**Security review (2026-11-04, the coordinator's independent review of PR #40 at feb996e):**
+approve with minor fixes, no Critical or High findings. Each finding, its fix (`lj-step-46-fix4`)
+and what covers it:
+
+1. **Medium — a page could flood external browser launches** (every `window.open` /
+   `target=_blank` a fresh `hand_off` with a fresh read of the OS's list; WKWebView lets scripts
+   open windows, WebView2 doesn't say whether a click asked), **and an extension's panel bypassed
+   `openUrl`'s checks** (it runs in `joan-page`, so its popups skipped `openBrowser`, the public-host
+   check and the 1-per-2 s limit). Fix: the page's and Settings' new windows go through one gate
+   (`browsers/limits.rs` `HandoffGate`, reusing `extensions::limits::RateLimit`: one under way, one
+   a second, the rest dropped with `handoff-throttled`); the OS's list is reused for 2 s; while the
+   page shows a panel, its new windows get exactly `openUrl(where: "browser")`'s checks
+   (`extensions/popups.rs`), else `handoff-refused <why>`; docs/extensions.md says so. Covered by
+   `browsers::limits` tests (one under way, one a second, 200 requests over 3 s → 3), `popups`
+   tests (permission, private hosts and extension URLs refused, the rate counted only for a window
+   that would open), and the smoke's **flood** (`?flood=1`: five windows per click, three clicks —
+   every `new-window` handed on or dropped, at most one handoff a second over the span, the fake
+   receiving no more).
+2. **Low — the loop guard recorded the page after the launch returned** (macOS's `open` can deliver
+   the link back first). Fix: recorded before the launch, forgotten if it fails (`Recent::forget`).
+   **And Windows 11's `UserChoiceLatest`:** the default's ProgId is read from it first (as a value or
+   a `ProgId` subkey's), then `UserChoice` (`parse::pick_progid`, tested); the links run records
+   both and refuses either naming `LittleJoanURL`.
+3. **Low — Tauri's hosts were refused only exactly.** On Windows wry intercepts `http://<scheme>.*`
+   by prefix (`tauri.`, `ipc.`, `ljext.`; Tauri uses http there, `useHttpsScheme` is off). Fix:
+   `navigation::intercepted_by_app` — any `http://` address whose text after the scheme starts with
+   those prefixes, also as user info (`http://tauri.@evil/`) — refused for links and for page
+   navigation (but the app's exact origin); tested in navigation.rs and links/tests.rs.
+4. **Low — the first launch could panic on a non-Unicode argument** (`std::env::args()`). Fix:
+   `cli::lossy_args(std::env::args_os())`; `cli/tests.rs` parses such an argument (as a link it is
+   refused; alone it is a plain launch).
+5. **Low — Windows launched browsers from `StartMenuInternet\<id>\shell\open\command` with the
+   URL appended.** Fix: through the ProgId its `Capabilities\URLAssociations\https` names (that
+   ProgId's command, `%1` as one argument), falling back to the entry's own; never an interpreter
+   (cmd, powershell, pwsh, wscript, cscript, mshta, rundll32, regsvr32, msiexec, wsl, bash,
+   conhost) or a non-`.exe` — such an entry isn't offered, and `open_with` refuses it again
+   (`parse::launchable_program`, tested). The smoke's Windows fake now registers a ProgId too.
+6. **Low — README:** with no https default set at all, GIO / `xdg-mime` fall back to the first
+   handler in mimeinfo.cache, so the `.deb` can become the effective default without anything
+   written (CI saw it): the README says so, and that Settings → General → Browser shows it.
+7. **Note — the uninstaller** deletes the three entries only while
+   `LittleJoanURL\shell\open\command` is this install's `"$INSTDIR\…exe" --link "%1"` (Tauri's
+   deep-link removal does the same); smoke-links-read.test.ts checks the macro; CI's uninstall step
+   stays green.
+8. **Note — the smoke's machine-change guard** also requires `RUNNER_ENVIRONMENT=github-hosted`
+   (`act` and self-hosted runners set `GITHUB_ACTIONS=true` too); the smoke logs the runner line
+   once (`runner: GITHUB_ACTIONS=… RUNNER_ENVIRONMENT=…`), and a GitHub job without
+   `RUNNER_ENVIRONMENT` fails rather than skip the runner-only checks silently; smoke-runner.test.ts.
+9. **Small:** the opener source test is strict (any `tauri_plugin_opener::` outside browsers.rs
+   fails, but the two `reveal_item_in_dir` calls); `xdg-mime query` gets gio's 5 s limit;
+   `hand_off_now` prints a fixed message (a launcher's error text can hold the URL); in a macOS batch
+   a bounced first link is refused as a loop and the next acceptable one may open
+   (`links::pick` takes the guard; tested).
+
 ### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
 
 > Phase 22 (v0.3, security-sensitive). Branch `lj/p22-popups` from the latest `main`, after phase

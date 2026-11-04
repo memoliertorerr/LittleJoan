@@ -57,6 +57,11 @@ fn the_app_and_extensions_never_open_from_a_link() {
         ("http://tauri.localhost/index.html", Refusal::App),
         ("http://ipc.localhost/open_input", Refusal::App),
         ("http://IPC.localhost/", Refusal::App),
+        // WebView2 intercepts these by prefix (phase 21's security review).
+        ("http://tauri.evil.example/", Refusal::App),
+        ("http://ipc.example.com/x", Refusal::App),
+        ("http://tauri.@evil.example/", Refusal::App),
+        ("http://ljext.@evil.example/", Refusal::App),
     ] {
         assert_eq!(accept(&url(s)), None, "{s}");
         assert_eq!(refusal(&url(s)), Some(why), "{s}");
@@ -127,28 +132,61 @@ fn the_log_never_holds_the_link() {
 
 #[test]
 fn from_a_batch_only_the_first_acceptable_link_opens() {
-    let batch = pick(&[
-        url("file:///etc/passwd"),
-        url("https://a.example/"),
-        url("javascript:alert(1)"),
-        url("https://b.example/"),
-        url("https://c.example/"),
-    ]);
+    let batch = pick(
+        &[
+            url("file:///etc/passwd"),
+            url("https://a.example/"),
+            url("javascript:alert(1)"),
+            url("https://b.example/"),
+            url("https://c.example/"),
+        ],
+        |_| false,
+    );
     assert_eq!(batch.open, Some(url("https://a.example/")));
     assert_eq!(
         batch.refused,
         [Refusal::Scheme("file"), Refusal::Scheme("javascript")]
     );
     assert_eq!(batch.ignored, 2);
-    let none = pick(&[url("about:blank")]);
+    let none = pick(&[url("about:blank")], |_| false);
     assert_eq!(none.open, None);
     assert_eq!(none.ignored, 0);
     assert_eq!(
-        pick(&[]),
+        pick(&[], |_| true),
         Batch {
             open: None,
             refused: Vec::new(),
             ignored: 0
         }
     );
+}
+
+#[test]
+fn a_bounced_first_link_lets_the_next_one_open() {
+    let bounced = url("https://a.example/");
+    let batch = pick(
+        &[
+            bounced.clone(),
+            url("https://b.example/"),
+            url("https://c.example/"),
+        ],
+        |u| *u == bounced,
+    );
+    assert_eq!(batch.open, Some(url("https://b.example/")));
+    assert_eq!(batch.refused, [Refusal::Loop]);
+    assert_eq!(batch.ignored, 1);
+    // The guard is asked only of links that would open.
+    let mut asked = Vec::new();
+    let _ = pick(
+        &[
+            url("file:///x"),
+            url("https://a.example/"),
+            url("https://b.example/"),
+        ],
+        |u| {
+            asked.push(u.clone());
+            false
+        },
+    );
+    assert_eq!(asked, [url("https://a.example/")]);
 }

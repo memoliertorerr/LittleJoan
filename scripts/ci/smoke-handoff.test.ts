@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { BLANK_TARGET, FAKE_DESKTOP_ID, fakeDesktopFile, fakeReceived, handoffFailures, ourMimeapps, type HandoffRun } from "./smoke-handoff.mts";
-import { BLANK_TARGET as PAGE_TARGET } from "../../tests/smoke/smoke-logic.mjs";
+import { BLANK_TARGET, FAKE_DESKTOP_ID, FLOOD_TARGET, fakeDesktopFile, fakeReceived, floodFailures, handoffFailures, ourMimeapps, type HandoffRun } from "./smoke-handoff.mts";
+import { BLANK_TARGET as PAGE_TARGET, FLOOD_TARGET as PAGE_FLOOD } from "../../tests/smoke/smoke-logic.mjs";
 import { expandExec } from "./smoke-links-read.mts";
 
 const log = (lines: string[]) => parseLog(lines.map((line, i) => `${i + 1} ${line}`).join("\n") + "\n");
+/** Lines at given milliseconds: [ms, line]. */
+const timed = (lines: [number, string][]) => parseLog(lines.map(([ms, line]) => `${ms} ${line}`).join("\n") + "\n");
+const FLOOD_URL = (n: number) => `http://127.0.0.1:8123/${FLOOD_TARGET}&n=${n}`;
 const URL = `http://127.0.0.1:8123/${BLANK_TARGET}`;
 
 function run(over: Partial<HandoffRun> = {}): HandoffRun {
@@ -14,6 +17,19 @@ function run(over: Partial<HandoffRun> = {}): HandoffRun {
     listed: ["2 default=other"],
     scrolled: true,
     main: { afterClick: log(["browsers-listed 2 default=other", `handoff browser=${FAKE_DESKTOP_ID}`]), received: [URL] },
+    flood: {
+      afterClicks: timed([
+        [1000, "new-window"],
+        [1001, `handoff browser=${FAKE_DESKTOP_ID}`],
+        [1002, "new-window"],
+        [1003, "handoff-throttled"],
+        [1004, "new-window"],
+        [1005, "handoff-throttled"],
+        [2100, "new-window"],
+        [2101, `handoff browser=${FAKE_DESKTOP_ID}`],
+      ]),
+      received: [FLOOD_URL(1), FLOOD_URL(4)],
+    },
     loop: {
       afterClick: log(["browsers-listed 2 default=self", "handoff-self-refused", `handoff browser=${FAKE_DESKTOP_ID}`]),
       received: [URL],
@@ -29,10 +45,24 @@ describe("the handoff run", () => {
     expect(handoffFailures(run({ loop: null, fake: "LJFakeBrowser", main: { afterClick: log(["handoff browser=LJFakeBrowser"]), received: [URL] } }), "win32")).toEqual([]);
   });
 
+  it("lets a flood hand on at most one page a second, and logs every one it drops", () => {
+    expect(floodFailures(run().flood)).toEqual([]);
+    const tooMany = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"], [5, "new-window"], [6, "handoff browser=x"]]), received: [] };
+    expect(floodFailures(tooMany)[0]).toContain("at most 1");
+    const unaccounted = { afterClicks: timed([[0, "new-window"], [1, "new-window"], [2, "handoff browser=x"]]), received: [] };
+    expect(floodFailures(unaccounted)[0]).toContain("every one must be one or the other");
+    const received = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"]]), received: [FLOOD_URL(1), FLOOD_URL(2)] };
+    expect(floodFailures(received)[0]).toContain("more than the 1 handed on");
+    expect(floodFailures({ afterClicks: [], received: [] })[0]).toContain("no new window");
+    expect(floodFailures(null)[0]).toContain("never ran");
+    expect(handoffFailures(run({ flood: null }), "linux").join("\n")).toContain("never ran");
+  });
+
   it("asks only for the list and the screenshot on macOS", () => {
-    expect(handoffFailures(run({ fake: null, main: null, loop: null }), "darwin")).toEqual([]);
-    expect(handoffFailures(run({ fake: null, main: null, loop: null, listed: [] }), "darwin")[0]).toContain("browsers-listed");
-    expect(handoffFailures(run({ fake: null, main: null, loop: null, scrolled: false }), "darwin")[0]).toContain("Browser section");
+    const mac = { fake: null, main: null, flood: null, loop: null };
+    expect(handoffFailures(run(mac), "darwin")).toEqual([]);
+    expect(handoffFailures(run({ ...mac, listed: [] }), "darwin")[0]).toContain("browsers-listed");
+    expect(handoffFailures(run({ ...mac, scrolled: false }), "darwin")[0]).toContain("Browser section");
   });
 
   it("fails a page that went elsewhere, or came back", () => {
@@ -69,7 +99,8 @@ describe("the handoff run", () => {
     expect(ourMimeapps(undefined)).toContain("[Default Applications]");
   });
 
-  it("clicks the smoke page's own link", () => {
+  it("clicks the smoke page's own link, and counts its flood", () => {
     expect(BLANK_TARGET).toBe(PAGE_TARGET);
+    expect(FLOOD_TARGET).toBe(PAGE_FLOOD);
   });
 });

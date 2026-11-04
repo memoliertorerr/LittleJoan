@@ -16,16 +16,59 @@ pub const DESKTOP_IDS: [&str; 2] = [
 ];
 const BINARY: &str = "little-joan";
 
+/// Programs a browser's command may never start (phase 21's security review): shells, script
+/// hosts and launchers that would run whatever their arguments say.
+const INTERPRETERS: [&str; 12] = [
+    "cmd.exe",
+    "powershell.exe",
+    "pwsh.exe",
+    "wscript.exe",
+    "cscript.exe",
+    "mshta.exe",
+    "rundll32.exe",
+    "regsvr32.exe",
+    "msiexec.exe",
+    "wsl.exe",
+    "bash.exe",
+    "conhost.exe",
+];
+
+/// Windows: whether a browser's command may start `program` — an `.exe`, and no interpreter.
+pub fn launchable_program(program: &str) -> bool {
+    let name = program
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(program)
+        .trim()
+        .to_ascii_lowercase();
+    name.ends_with(".exe") && name.len() > 4 && !INTERPRETERS.contains(&name.as_str())
+}
+
+/// Windows: a command line whose program may be started (`launchable_program`).
+pub fn launchable_command(line: &str) -> bool {
+    split_command(line).is_some_and(|(program, _)| launchable_program(&program))
+}
+
+/// A command line that is there and may be started.
+fn usable_command(command: Option<&str>) -> Option<&str> {
+    command
+        .map(str::trim)
+        .filter(|c| !c.is_empty() && launchable_command(c))
+}
+
 /// Windows: one `StartMenuInternet\<id>` entry as a browser — its name (the key's default value,
-/// else Capabilities' ApplicationName unless it is an indirect `@…` string, else the id) and its
-/// `shell\open\command`. `None` without a command.
+/// else Capabilities' ApplicationName unless it is an indirect `@…` string, else the id) and how to
+/// open a URL with it: the `shell\open\command` of the ProgId its Capabilities give https to
+/// (`progid_command`, `%1` = the URL), else its own `shell\open\command` with the URL appended.
+/// `None` without a command, or when the command's program isn't launchable.
 pub fn start_menu_entry(
     id: &str,
     default_name: Option<&str>,
     app_name: Option<&str>,
     command: Option<&str>,
+    progid_command: Option<&str>,
 ) -> Option<Browser> {
-    let command = command.map(str::trim).filter(|c| !c.is_empty())?;
+    let command = usable_command(progid_command).or_else(|| usable_command(command))?;
     let name = default_name
         .map(str::trim)
         .filter(|n| !n.is_empty())
@@ -40,6 +83,13 @@ pub fn start_menu_entry(
         name: name.to_owned(),
         launch: Launch::Command(command.to_owned()),
     })
+}
+
+/// Windows: the effective choice — `UserChoiceLatest`'s (newer Windows 11) over `UserChoice`'s.
+pub fn pick_progid(latest: Option<String>, legacy: Option<String>) -> Option<String> {
+    latest
+        .filter(|p| !p.trim().is_empty())
+        .or(legacy.filter(|p| !p.trim().is_empty()))
 }
 
 /// Windows: the browser a `UserChoice` ProgId means — the entry whose Capabilities give https to
