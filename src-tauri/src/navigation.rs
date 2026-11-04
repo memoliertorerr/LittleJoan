@@ -82,12 +82,14 @@ mod tests {
         ] {
             assert!(is_allowed_navigation(&url(s)), "{s} should be allowed");
         }
-        // The app's own origin (`http://tauri.localhost` on Windows): only there is it the app's.
+        // The app's own origin passes (`http://tauri.localhost` in a Windows release build; test
+        // builds are `dev`, whose origin is the dev server's): `http://tauri.localhost` only there.
         let start = keys::app_origin().join("index.html").expect("joins");
         assert!(is_allowed_navigation(&start));
+        let windows_start = url("http://tauri.localhost/index.html");
         assert_eq!(
-            is_allowed_navigation(&url("http://tauri.localhost/index.html")),
-            cfg!(windows)
+            is_allowed_navigation(&windows_start),
+            keys::is_app_url(&keys::app_origin(), &windows_start)
         );
     }
 
