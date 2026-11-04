@@ -212,8 +212,22 @@ src-tauri/capabilities/bar.json    the bar may call open_input, page_url, focus_
 src-tauri/capabilities/settings.json  settings window: get/save settings, suspend shortcut, set
                                    start at login, clear history, preview a theme, list / reload
                                    extensions, show their folder, read the keys, quit
-                                   (quit_from_settings, LJ19.7), close
-src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons
+                                   (quit_from_settings, LJ19.7), read the browsers and open the
+                                   OS's default-apps settings (browsers_info,
+                                   open_default_apps_settings, LJ46), close
+src-tauri/tauri.conf.json          product config: no windows at startup, CSP, bundle icons, the
+                                   NSIS hooks and the deb's desktop template (LJ45)
+src-tauri/Info.plist               macOS: merged into the app's Info.plist — http and https as URL
+                                   types (role Viewer), no document types (LJ45)
+src-tauri/windows/hooks.nsh        Windows: NSIS hooks — the per-user browser registration
+                                   (StartMenuInternet\LittleJoan, RegisteredApplications, the
+                                   LittleJoanURL ProgId running `--link "%1"`) and its removal (LJ45)
+src-tauri/linux/little-joan.desktop.hbs  Linux: the deb's desktop file template:
+                                   `Exec=little-joan --link %u`, the web MIME types,
+                                   Categories=Network;WebBrowser; (LJ45)
+src-tauri/linux/little-joan-appimage.desktop  the AppImage's own entry, put over the generated one
+                                   (`bundle.linux.appimage.files`): a plain `Exec=little-joan`, no
+                                   web MIME types — its AppRun prepends Exec's arguments (LJ45)
 src-tauri/icons/                   generated icons (npm run icons); tray-template*.png for macOS
 src-tauri/src/main.rs              calls little_joan_lib::run()
 src-tauri/src/lib.rs               builder: plugins, commands, setup, run loop
@@ -349,7 +363,7 @@ src-tauri/src/autostart.rs         start at login: tauri-plugin-autostart (Rust 
                                    macOS translocation guard (pure, tested)
 src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close): its tabs
                                    (`SettingsTab`, tested), open on a tab or switch an open one,
-                                   links to the default browser
+                                   links to the main browser (browsers.rs)
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/summon_timing.rs     smoke mode only: a summon's marks from the request to the command
                                    bar on screen and its field taking keys, one `summon-timing` line
@@ -451,7 +465,28 @@ src-tauri/src/toggle.rs            the toggle table: (window state — hibernati
                                    page in fullscreen —, command) → action (pure, tested)
 src-tauri/src/cli.rs               --toggle / --show [url] / --hide / --size WxH /
                                    --start-at-login on|off / --settings [tab] / --extension <id> /
-                                   --quit parsing
+                                   --quit / --link <url> parsing (tests in cli/tests.rs)
+src-tauri/src/browsers.rs          the main browser (LJ46): `hand_off` / `hand_off_now` — the one
+                                   place that calls the opener (a source test) —, the loop guard's
+                                   memory, the default-apps button's glue
+src-tauri/src/browsers/target.rs   `handoff_target` (main browser → OS default unless Little Joan →
+                                   the first other → nowhere; never Little Joan), `Recent` (pure)
+src-tauri/src/browsers/limits.rs   the new-window gate (one under way, one a second) and the 2 s
+                                   reuse of the OS's list (pure, tested; the security review)
+src-tauri/src/extensions/popups.rs a panel's new windows: openUrl's checks (openBrowser, public
+                                   host, one every 2 s), pure decision tested
+src-tauri/src/browsers/parse.rs    the readers' pure parts: StartMenuInternet entries, UserChoice,
+                                   MSVC command lines, desktop files and their Exec, xdg-mime's
+                                   answer, Little Joan's own ids (tests in browsers/tests.rs)
+src-tauri/src/platform/browsers.rs the OS's browser list, default and a launch, read-only, no shell:
+                                   mac/browsers.rs (NSWorkspace), win/browsers.rs (the registry),
+                                   linux/browsers.rs (XDG desktop files, xdg-mime, gio launch)
+src-tauri/src/commands/browsers.rs Settings' `browsers_info`, `open_default_apps_settings` (LJ46)
+src-tauri/src/settings/main_browser.rs  the `mainBrowser` field: an id or null (tolerant, tested)
+src-tauri/src/links.rs             links from other apps (LJ45): `accept` (only absolute http(s), no
+                                   app or extension URL, ≤ 4,096 bytes), a batch's first acceptable
+                                   link, macOS's events waiting for setup; then `Show(url)` (pure
+                                   parts tested in links/tests.rs)
 scripts/ci/smoke.mts               CI: drives the installed app (show, page, click, hide, start at
                                    login on/off, cookies and storage across close and quit),
                                    reads the OS login entry, screenshots
@@ -464,6 +499,15 @@ scripts/ci/smoke-glass.mts         CI: Liquid Glass (LJ19.9) — Off changes not
                                    glass runs over a striped backdrop window (macOS 26+: the glass
                                    view, the clear bar, Reduce Transparency / Increase Contrast),
                                    glass timing no worse; unit-tested
+scripts/ci/smoke-runner.mts        CI: what the harness may change on its machine — only a GitHub
+                                   Actions runner (GITHUB_ACTIONS=true), never a developer's own
+                                   settings; unit-tested
+scripts/ci/smoke-handoff.mts       CI: the handoff run (LJ46) — a fake browser as the main one, a
+                                   target=_blank click, Settings' Browser section, Linux's loop
+                                   check with Little Joan the default (unit-tested)
+scripts/ci/smoke-links.mts         CI: the links run (LJ45) — the registration read back, the OS's
+                                   defaults untouched, a link launched as the OS would, refusals;
+                                   smoke-links-read.mts parses each OS's tools (both unit-tested)
 scripts/ci/smoke-keys.mts          CI: typing on macOS runners — characters as real key codes (US
                                    layout), a Unicode string only for the rest (unit-tested)
 scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which panels open, and when a
@@ -537,7 +581,7 @@ tests/smoke/ext-probe.mjs          the smoke page's ?ext=probe: a web page tryin
 ```
 launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewarm: the hidden window
            and the bar, no page ──► ready          (Hibernate: nothing ──► hibernating)
-              │  shortcut / --toggle / --show [url] / second launch
+              │  shortcut / --toggle / --show [url] / second launch / a link from another app
               ▼
            ready: the window shown (cold: built first), the command bar open over it, its field
            focused; then the page webview, built after the bar (at once for a URL)
@@ -744,7 +788,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `focus_page()` | the toolbar, Esc | give the keyboard back to the page |
 | `set_overlay(on)` | the bar: a click on the toolbar's domain (on), Esc or × in the command bar with a page (off) | open the command bar with the address selected (as Ctrl/Cmd+L), or close it and give the keyboard to the page |
 | `go_back()` | the toolbar's back button | the page action Back (`history.back()` in the page, as Alt+Left / Cmd+[) |
-| `open_in_browser()` | the toolbar's "open in default browser" | the page action OpenInBrowser: the page goes to the default browser, the window hibernates |
+| `open_in_browser()` | the toolbar's "open in browser" | the page action OpenInBrowser: the page goes to the main browser (`browsers::hand_off`, LJ46), then the window closes; with no other browser it stays, and the toolbar says "No other browser to open this in" |
 | `hibernate()` | the bar, Esc with no page | close the window (same path as `--hide`) |
 | `start_info()` | the bar, on load | `{ shortcut, platform, firstRun, trayHint, startAtLogin, waylandNoShortcut, portalShortcut, theme }`: the theme the bar applies (with `glass: clear \| tinted` while Liquid Glass shows, LJ19.9 — left out for Off), and the welcome's facts; `firstRun` is true once; `waylandNoShortcut` is a Wayland session whose portal doesn't hold the shortcut, `portalShortcut` `{ trigger }` while it does (LJ17; `shortcut` is then `null`); logs `theme <mode> colors=<n>` |
 | `get_settings()` | settings window, on load | settings + engine and language lists + platform + `shortcutProblem` (the saved shortcut failed at launch, LJ44) + `waylandNoShortcut` + `storage` (`folder`: where settings.json and history.json are; `siteData`: the web engine's folder, or on macOS WebKit's store) + `version` + `builtInSiteModes` (`[{ host, mode }]`: YouTube on desktop on macOS and Linux, none on Windows) + `glassSupport` (`{ available, blockedBy }`: Liquid Glass on this system — macOS 26+ — and `reduceTransparency` / `increaseContrast` / `null`, LJ19.9); logs `settings-loaded` |
@@ -768,6 +812,8 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `keymap_info()` | Settings' Keyboard tab (LJ44); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut, shortcutProblem, portalShortcut, systemShortcuts }` — `portalShortcut` `{ trigger }` while the XDG GlobalShortcuts portal holds the summon shortcut (LJ17), else `null` — — the last macOS's own shortcuts as read from its preferences (`[{ id, enabled, accelerator }]`, empty elsewhere; smoke log `system-shortcuts <n> keys=<k>`) — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
 | `reveal_download()` | the toolbar's **Show in folder**, after a download was saved (LJ15) | shows the last file saved in this window in the file manager, selected (`tauri_plugin_opener::reveal_item_in_dir`) — which file is Rust's, never the bar's; an error when there is none |
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
+| `browsers_info()` | Settings → General's Browser section, on load and when the window comes back to the front (LJ46) | `{ platform, defaultKind: self \| other \| none, defaultName, browsers: [{ id, name }] (never Little Joan), mainBrowser, firstOther, canOpenSettings, candidate }` (`candidate` false for the AppImage — `$APPIMAGE` set —, which can't be chosen: Settings says so and hides the button), read from the OS now (read-only); logs `browsers-listed <n> default=<kind>`. Settings only (`capability_tests.rs`) |
+| `open_default_apps_settings()` | Settings → General's **Open default apps settings** (LJ46) | opens the OS's own settings and nothing else: macOS `x-apple.systempreferences:com.apple.Desktop-Settings.extension` (12: `…preference.general`), Windows `ms-settings:defaultapps?registeredAppUser=Little%20Joan`, Linux `gnome-control-center default-apps` or `systemsettings kcm_componentchooser`; `none` where there is nothing to open (Settings then names `xdg-settings` for the user to run). Logs `default-apps-settings <what>`. Settings only |
 | `quit_from_settings()` | Settings → General's **Quit Little Joan** (LJ19.7) | the same `joan::quit`; logs `settings-quit`, then `quit`. A command of its own so the settings window gets no bar command: `capability_tests.rs` allows it to the settings window's capability only (never the bar's, which keeps `quit_app`, never the page). What Settings hasn't saved goes with its window, as with Cancel |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) and its **Settings** row (tab `general`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
@@ -889,7 +935,7 @@ all fields, whichever tab they are on):
 
 | Tab | Holds |
 |---|---|
-| General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, **After closing** (LJ19.4, `afterClose`: **Stay ready** / **Stay ready for 15 minutes** / **Hibernate**, with a note under the list saying what the chosen one does — "Opens instantly; holds about N MB more memory while closed than Hibernate" with this OS's figure from `READY_MEMORY_MB` (CI's own-memory numbers: macOS 30, Windows 110, Linux 200), "… then hibernates", "Uses the least memory while closed; opens a little slower" — and that closing always ends the page; drawn as text; it takes effect on Save, at once — `after_close_changed`), search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), start at login, and last **Quit Little Joan** (LJ19.7: a Quit button, `quit_from_settings`; the note under it says that changes not saved are dropped, as with Cancel — the window goes with the app; `ui/settings/quit.ts`, tested) |
+| General | the shortcut — a line with it and **Change…**, which switches to Keyboard (and the launch's problem line, below) —, **Show the icon in the menu bar** (macOS) / **in the system tray** (Windows, Linux) — `showTrayIcon`, with the note that the shortcut or opening Little Joan again reaches it and that the icon comes back by itself whenever the shortcut can't work —, **After closing** (LJ19.4, `afterClose`: **Stay ready** / **Stay ready for 15 minutes** / **Hibernate**, with a note under the list saying what the chosen one does — "Opens instantly; holds about N MB more memory while closed than Hibernate" with this OS's figure from `READY_MEMORY_MB` (CI's own-memory numbers: macOS 30, Windows 110, Linux 200), "… then hibernates", "Uses the least memory while closed; opens a little slower" — and that closing always ends the page; drawn as text; it takes effect on Save, at once — `after_close_changed`), search engine, translate language, mobile sites, **Phone or desktop per site** (the user's entries and this OS's built-in ones — "youtube.com — Desktop, built in on macOS and Linux" —, each with Remove, or Reset for an overridden built-in; Remove on a built-in keeps `"auto"` for it), **Browser** (LJ46: "Little Joan is / isn't your default browser", **Open default apps settings** with a note naming where each OS chooses it — and that Little Joan never changes it —, **Main browser** (`mainBrowser`: System default or a browser the OS lists, a saved one that is gone shown as "(not installed)") with a note saying where pages go with the choice shown — "Opening pages in Safari, because Little Joan is your default browser" —; read again when the window comes back to the front; `ui/settings/browser-logic.ts`, tested), start at login, and last **Quit Little Joan** (LJ19.7: a Quit button, `quit_from_settings`; the note under it says that changes not saved are dropped, as with Cancel — the window goes with the app; `ui/settings/quit.ts`, tested) |
 | Keyboard | **Summon Little Joan** — the global shortcut's recorder (moved here from General; it pauses the shortcut while it listens, as before), Reset when it isn't the default; on a Linux Wayland session without the portal a note to bind `little-joan --toggle` instead; while the portal holds the shortcut (LJ17) the desktop's key as text instead of the recorder (no Reset, no problems: the desktop's key is never judged, so it can't block Save, and Reset all leaves the preferred trigger alone), with "Change it in your desktop's keyboard settings." — and General's line shows that key with the same note instead of **Change…** — then **Little Joan's keys**: every keymap action (`keymap_info`) with its key as a recorder button (the next key with a modifier, or an F-key; a letter is the one the key types in the user's layout; Esc cancels, Backspace means no key), **No key**, **Reset** when it isn't the default, its problems under it; **Reset all** at the bottom (every key and the summon shortcut). Problems (`keyboard-logic.ts`, the keymap's own rules): errors block Save and say why — "⌘L is already Open Location", "That's the shortcut that summons Little Joan", "Plain keys type text — add ⌘ or ⌃", "On macOS a key needs ⌘ or ⌃", the editing keys ("⌘C is used for editing in pages") —; warnings don't — the OSes' reserved shortcuts ("macOS uses ⌘Space for Spotlight", `reserved-shortcuts.ts`, curated from the OSes' documentation; `Super+*` on Windows and Linux), "Ctrl+Alt is AltGr on many keyboards". **On macOS the user's own changes refine the curated table** (decided by a CI runner's export, LJ44): Rust reads the `com.apple.symbolichotkeys` domain (NSUserDefaults, read-only; `system_shortcuts.rs`), which lists only entries that were written — an entry switched off (or moved to another key) drops that curated warning (curated macOS entries carry their domain id: Spotlight 64, input sources 60 / 61, screenshots 28 / 30 / 184, …), and an entry that is on with a key warns there (under the curated name when its id is known, else "one of its keyboard shortcuts"); entries without a key say nothing, so the curated defaults stay. A saved summon shortcut that isn't one shows as written and is an error until it is recorded again or Reset. On Windows a note says WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these. The summon recorder gets the same rules (one of Little Joan's keys → error, a reserved one → warning). When the saved shortcut couldn't be registered at launch (`shortcut::settle` keeps `AppState::shortcut_problem`: what was wanted, what is active instead, `taken` or `invalid`; `get_settings` and `keymap_info` report it), Keyboard and General say so: "⌘⇧K couldn't be registered: another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little Joan has no shortcut now."); a Save whose shortcut registers clears it. Save sends `keys` only when they were edited |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders; then **Liquid Glass — Off / Clear / Tinted** (LJ19.9, `glass`), only where `get_settings`'s `glassSupport` says this Mac has it (macOS 26+; never on Windows, Linux or older Macs), with a one-line note under it: what the choice does ("More transparent…" / "More opaque, more contrast…", no grain), or, while Reduce Transparency or Increase Contrast is on, that the theme shows solid; with the row shown the tab's other gaps close a little (`:has()`), so it still fits its window. Every edit re-themes this window and calls `preview_theme` (the glass choice with it: previewed in the open page window); Save sends the theme and the glass with the rest |
 | Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
@@ -900,7 +946,7 @@ A new window gets its first tab from an initialization script (`window.__littleJ
 that runs before the page's own; an open window is focused and switched with
 `window.littleJoanSettings.showTab(<tab>)`. Tab names come from `SettingsTab`, never from user
 text. The window may only navigate within the app's origin; a link (About's) opens in the
-default browser (web URLs only), like the page's new-window requests. Smoke log:
+main browser (web URLs only, `browsers::hand_off`), like the page's new-window requests. Smoke log:
 `settings-window <tab>` (or `focus`), `settings-loaded`. **A quick command that changes a
 setting while Settings is open** (LJ42) reaches it as `window.littleJoanSettings.savedChanged(...)`:
 `rebase` (settings-logic.ts, tested) keeps what the window edited and lets every field it didn't
@@ -919,8 +965,8 @@ shows the error.
   extension URL only when the app opened it (above). Refusals are logged.
 - **Title:** the window title follows the page title (`on_document_title_changed`).
 - **New windows** (`target=_blank`, `window.open`): denied inside Little Joan; web URLs are
-  handed to the OS default browser (`tauri_plugin_opener::open_url`, used as a plain function —
-  the opener plugin and its JS commands are not registered).
+  handed to the main browser (`browsers::hand_off`, LJ46 — never Little Joan; the opener is used
+  only there, as a plain function: the opener plugin and its JS commands are not registered).
 - **Keys:** remote pages get no IPC and no injected scripts, so page keys are caught natively
   before the page sees them. **Every one comes from the keymap** (`keymap.rs`, LJ43; Ground Rule
   25): the native hooks (`platform/win.rs`, `platform/linux.rs`) turn a press into a `Key` and
@@ -1495,13 +1541,114 @@ Safari's (H.264, HEVC, VP9 on recent macOS); WebKitGTK uses GStreamer, so Linux 
 depends on them; the AppImage bundles them). `tests/smoke/smoke.html` reports what each engine
 supports (`LJ-SMOKE ready h264=… vp9=… av1=…` in the title).
 
+## Links from other apps
+
+Since LJ45 Little Joan can be the system's browser for http and https links. Installing it makes it
+a **candidate** only; choosing it is the user's, in the OS's own settings — Little Joan never writes
+a default (Ground Rule 21: no Windows `UserChoice`, no `LSSetDefaultHandlerForURLScheme`, no
+`xdg-settings set` / `xdg-mime default`, from the app, an installer or a package script).
+
+- **Registration** (per user, like the install): macOS `src-tauri/Info.plist` (merged by Tauri's
+  bundler) declares `CFBundleURLTypes` for `http` and `https`, role Viewer, and no document types —
+  Little Joan never opens files; Launch Services indexes it when the app is installed. Windows
+  `src-tauri/windows/hooks.nsh` (`bundle.windows.nsis.installerHooks`) writes, under HKCU,
+  `Software\Clients\StartMenuInternet\LittleJoan` (name, Capabilities with `URLAssociations`
+  http / https → `LittleJoanURL`, icon, `shell\open\command`), `Software\RegisteredApplications`
+  `Little Joan` → its Capabilities, and the ProgId `Software\Classes\LittleJoanURL` whose command is
+  `"<exe>" --link "%1"`, then tells the shell (`SHChangeNotify`); the uninstaller deletes exactly
+  those (not during an update, when the new installer writes them again) — never
+  `Software\Classes\http(s)` themselves — and only while the ProgId's command is still this
+  install's own (as Tauri's deep-link removal checks). Linux: Tauri's `Little Joan.desktop` comes from
+  `src-tauri/linux/little-joan.desktop.hbs` (`bundle.linux.deb.desktopTemplate`) with
+  `Exec=little-joan --link %u`, `MimeType=x-scheme-handler/http;x-scheme-handler/https;` and
+  `Categories=Network;WebBrowser;` (GNOME's Default Apps lists browsers by them); from the app menu
+  `%u` is nothing, and `--link` alone is a plain launch. LJ17's
+  `io.github.memoliertorerr.littlejoan.desktop` stays hidden and no browser. **The AppImage is no
+  browser candidate:** it reuses the deb's generated data (tauri-utils 2.10 has no AppImage
+  template), but its AppRun starts the binary with the root entry's `Exec` arguments in front of the
+  launch's own — `--link` there turned every `--show` into a refused link (LJ45-fix2, Landmines) — so
+  `bundle.linux.appimage.files` puts its pre-LJ45 entry back (`linux/little-joan-appimage.desktop`:
+  `Exec=little-joan`, no web MIME types). An AppImage installs nothing for the OS anyway; a link
+  reaches it as `<image> --link <url>`.
+- **Receiving:** Windows and Linux start `little-joan --link <url>`; single-instance forwards it to
+  the running app (lib.rs). `cli.rs` takes **exactly the argument after the first `--link`** as
+  data — even `--quit` — and a command line with `--link` sets nothing else, so quotes or spaces
+  in a crafted link can only add arguments that are ignored. macOS sends an open-URL Apple event:
+  tao's `application:openURLs:` → `RunEvent::Opened { urls }` in lib.rs's run loop; one can come
+  before setup is done (between AppKit's "will" and "did finish launching"), so links.rs keeps such
+  links (at most 64) until setup's end (`links::ready`).
+- **What opens** (`links::accept`, pure): an absolute `http` / `https` URL with a host, at most
+  4,096 bytes, that the typed-address rules allow (navigation.rs) — never `file:`, `javascript:`,
+  `data:`, `about:`, `ljext:` or WebView2's `http://ljext.<id>.localhost`, the app's origin or
+  anything WebView2 hands to the app's protocols: wry intercepts `http://tauri.*`, `http://ipc.*`
+  and `http://ljext.*` **by prefix**, so any such address — also as user info, `http://tauri.@host/`
+  — is refused, as a link and (but for the app's exact origin) as a page navigation
+  (`navigation::intercepted_by_app`, the security review). The first launch reads its arguments
+  without panicking on non-Unicode ones (`cli::lossy_args`). `input::normalize` isn't used: a link is never a
+  search. From a batch (macOS) only the first acceptable link opens. It goes through the toggle
+  table as `Show(Some(url))` (source `link`): `Create(url)` while hibernating, `Summon(url)` from
+  ready, `FocusAndNavigate(url)` with the window open — it comes to the front (it was asked for;
+  `--show <url>` could already do that), the command bar closes, the page before stays in the
+  back trail; the visit records as a link. A flood of links is one navigation of the one window
+  each, as `--show` is. No command and no capability was added for any of this.
+- **Smoke log:** `link-opened`, `link-refused <scheme>[ <why>]` (`invalid`, `too-long`, `file`,
+  `javascript` …, `http app`, `http extension`; unknown schemes as `other`), `link-ignored <n>` —
+  never the URL.
+
+## The main browser
+
+Once Little Joan can be the OS's default browser (LJ45), handing a page to "the default browser"
+could bring it straight back. Since LJ46 every handoff — Open Page in Browser, the page's
+`target=_blank` / `window.open`, Settings' links, extensions' `openUrl(where: "browser")` — calls
+`browsers::hand_off` (a thread of its own; extensions' blocking handler calls `hand_off_now`),
+the one place that calls the opener (`browsers/tests.rs` checks the sources).
+
+- **The OS's list** (`platform/browsers.rs`, read-only, never from a page): macOS NSWorkspace's
+  `URLsForApplicationsToOpenURL:` / `URLForApplicationToOpenURL:` for an https URL (bundle ids and
+  Finder names); Windows HKCU then HKLM `Software\Clients\StartMenuInternet\*` (name, command, the
+  https ProgId of its Capabilities) and `UserChoice`'s ProgId, mapped to the entry that claims it;
+  Linux the desktop files of the XDG data directories whose MimeType has
+  `x-scheme-handler/https` (shown ones; the first file of an id masks later ones) and `xdg-mime
+  query default x-scheme-handler/https` — without xdg-utils (GitHub's arm64 images), the
+  mimeapps.list files themselves, in the XDG MIME Applications spec's order. Little Joan's own ids are known per OS (its bundle id; its
+  key and ProgId, or a command running this executable; its desktop files, or an Exec running
+  `little-joan`, this executable or `$APPIMAGE`).
+- **New windows are gated** (the security review): the page's and Settings' new-window requests go
+  through `hand_off_new_window` — at most one under way and one a second (`browsers/limits.rs`),
+  the rest dropped (`handoff-throttled`); while the page shows an extension's panel, its new windows
+  get `openUrl(where: "browser")`'s checks (`extensions/popups.rs`: the `openBrowser` permission, a
+  public web address, one every 2 s shared with `openUrl`), else `handoff-refused <why>`. The OS's
+  list is reused for 2 s. Open in browser (the user's own key, button or menu) isn't gated.
+- **Where a page goes** (`browsers::handoff_target`, pure): the main browser (`settings.mainBrowser`)
+  if installed; else the OS default unless it is Little Joan (an unknown default counts as not:
+  the opener, as before); else the first other browser in the OS's order; else nowhere — the toolbar
+  says "No other browser to open this in" and nothing opens in Little Joan. A target that is Little
+  Joan is always passed over (`handoff-self-refused`). **The loop guard:** a page handed on is
+  remembered for 10 s — before the launch (macOS's `open` can deliver the link back before it
+  returns), forgotten if the launch fails — and a link from another app that is exactly that page
+  is refused once (`link-refused http loop`; in a macOS batch the next acceptable link may open
+  instead) — so even a default that couldn't be read can't bounce a page back.
+- **Starting a browser, no shell:** macOS `open -b <bundle id> <url>`; Windows the command of the
+  ProgId the browser's Capabilities give https to (`%1` = the URL as one argument), else its
+  StartMenuInternet command with the URL appended — split by the MSVC rules, and never an
+  interpreter (cmd, powershell, pwsh, wscript, cscript, mshta, rundll32, regsvr32, msiexec, wsl,
+  bash, conhost) or anything but an `.exe`: such an entry isn't offered; the default's ProgId from
+  `UserChoiceLatest` (newer Windows 11) before `UserChoice`; Linux `gio launch <desktop file>
+  <url>`, or (no gio) its Exec per the Desktop Entry spec with the URL as one argument;
+  `xdg-mime` gets 5 s to answer. The OS default: `tauri_plugin_opener::open_url`. Errors are
+  printed as a fixed message (a launcher's own text can hold the URL).
+- **The default-apps button** (`open_default_apps_settings`) only opens the OS's own settings
+  (Ground Rule 21).
+- **Smoke log:** `browsers-listed <n> default=<self|other|none>`, `handoff os-default |
+  browser=<id>`, `handoff-none`, `handoff-self-refused` — never the URL.
+
 ## Translate and open in browser
 
 - **Translate Page** navigates the page window to Google Translate's proxy for the current
   page (`translate::translate_url`, language from settings). It does nothing on the start page,
   on non-web pages, and on pages that are already translated.
-- **Open Page in Browser** hands the current web page to the OS default browser and then
-  hibernates, like Little Arc's "open in the main browser".
+- **Open Page in Browser** hands the current web page to the main browser (below) and then
+  closes, like Little Arc's "open in the main browser".
 - Both live in the tray menu (enabled only while a web page is open — updated on page load and
   on hibernate), the macOS File menu, and (translate only) the page keys; Open Page in Browser
   is also the toolbar's right-hand button.
@@ -1580,7 +1727,15 @@ follows=<bool>` (macOS: a webview's autoresizing mask was set), `bar-background 
 when the window closed) / `download-deciders-removed <n>` (Linux: wry's handlers taken off a
 download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't the page's) /
 `download-noted` / `download-cancelled <n>` (macOS: a WKDownload noted; cancelled on close),
-`zoom <percent>` (a zoom key set the page's level, LJ16), `fullscreen-off <version>`
+`zoom <percent>` (a zoom key set the page's level, LJ16), `browsers-listed <n>
+default=<self|other|none>` / `handoff os-default | browser=<id>` / `handoff-none` /
+`handoff-self-refused` / `default-apps-settings <what>` / `settings-scrolled browser` (LJ46: the
+OS's browsers read, where a page was handed, the default-apps button, the smoke-only scroll to
+Settings' Browser section), `new-window` / `handoff-throttled` / `handoff-refused <why>` (a page's
+new-window request reached the app; dropped by the gate; an extension panel's refused —
+the security review), `link-opened` / `link-refused
+<scheme>[ <why>]` / `link-ignored <n>` (a link from another app opened, was refused, or came after
+the first in a batch; never the URL — LJ45), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
 `window-spaces <label> behavior=<names> was=<names> level=<n>` (macOS: a window's collection
 behaviour was set before it was first shown, and what it had before; LJ19.2), `summon-fullscreen
@@ -1637,7 +1792,7 @@ The modules below hold every decision the app makes; the native glue only calls 
   (Google, DuckDuckGo, Bing, Brave). The start field can never open a non-web URL.
 - **navigation** — the page may go to `http`, `https`, `about`, `blob`, `data`, and the app's own
   origin; `file:`, `javascript:`, and app-launching custom schemes are refused. Only `http(s)`
-  URLs are ever handed to the OS default browser.
+  URLs are ever handed to a browser (browsers.rs).
 - **translate** — `https://translate.google.com/translate?sl=auto&tl=<lang>&hl=<lang>&u=<page>`,
   which redirects to `<host>.translate.goog`; skipped for non-web pages and pages that are
   already translated.
@@ -1715,9 +1870,9 @@ Installers are built in CI only (`package` job), never on a developer machine:
 
 | OS | Runner | Command | Artifact |
 |---|---|---|---|
-| Windows | windows-latest | `tauri build --bundles nsis` | `Little Joan_<v>_x64-setup.exe` — per-user install (no admin), downloads the WebView2 runtime if missing |
-| macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+ |
-| Linux (`linux`) | ubuntu-22.04 | `tauri build --bundles deb` | `.deb` — depends on the system's WebKitGTK and the GStreamer plugins for video; built on 22.04, its binary needs glibc 2.34, so it installs on Ubuntu 22.04+ and Debian 12+. Two desktop files: Tauri's `Little Joan.desktop` (named after the product, for the app list) and, from `bundle.linux.deb.files`, `io.github.memoliertorerr.littlejoan.desktop` (`NoDisplay=true`), which the XDG portals' host registry needs to accept the app id (LJ17) |
+| Windows | windows-latest | `tauri build --bundles nsis` | `Little Joan_<v>_x64-setup.exe` — per-user install (no admin), downloads the WebView2 runtime if missing; its hooks (`windows/hooks.nsh`) register Little Joan as a browser candidate under HKCU and the uninstaller removes it (LJ45) |
+| macOS | macos-latest | `tauri build --target universal-apple-darwin --bundles app,dmg` | `Little Joan_<v>_universal.dmg` — Intel + Apple silicon, ad-hoc signed (`signingIdentity: "-"`), macOS 12.3+; `Info.plist` merged in: http / https URL types (LJ45) |
+| Linux (`linux`) | ubuntu-22.04 | `tauri build --bundles deb` | `.deb` — depends on the system's WebKitGTK and the GStreamer plugins for video; built on 22.04, its binary needs glibc 2.34, so it installs on Ubuntu 22.04+ and Debian 12+. Two desktop files: Tauri's `Little Joan.desktop` (named after the product, for the app list; from `linux/little-joan.desktop.hbs` since LJ45: a web browser, `Exec=little-joan --link %u` — the AppImage keeps a plain one, `linux/little-joan-appimage.desktop`) and, from `bundle.linux.deb.files`, `io.github.memoliertorerr.littlejoan.desktop` (`NoDisplay=true`), which the XDG portals' host registry needs to accept the app id (LJ17) |
 | Linux (`linux-appimage`) | ubuntu-24.04 | `tauri build --bundles appimage` | `.AppImage` — bundles the WebKitGTK of the machine that built it (24.04's 2.52: 22.04's 2.50 aborts on element fullscreen) and the media framework; glibc floor 2.39 (Ubuntu 24.04+, Debian 13, Fedora 40+) |
 | Linux ARM64 (`linux-arm64`) | ubuntu-22.04-arm | `tauri build --bundles deb` | `arm64` `.deb` (`Little Joan_<v>_arm64.deb`, ~3 MB) — the `linux` package built natively on GitHub's arm64 runner: the system's WebKitGTK, glibc floor 2.34 (Ubuntu 22.04+, Debian 12+), both desktop files (LJ18.1) |
 | Linux ARM64 (`linux-appimage-arm64`) | ubuntu-24.04-arm | `tauri build --bundles appimage` | `aarch64` `.AppImage` (`Little Joan_<v>_aarch64.AppImage`, ~149 MB) — the `linux-appimage` package built natively on arm64 (Tauri doesn't cross-build AppImages): bundles 24.04's arm64 WebKitGTK 2.52 and media framework; glibc floor 2.39 (LJ18.1) |
@@ -1852,7 +2007,9 @@ and pushes to `main`:
   Reduce Transparency on: every glass launch starts with the stand-in file saying `none`, and the
   runner's own setting is switched off around the glass runs and the glass timing runs (`defaults
   write com.apple.universalaccess reduceTransparency`, put back after; `summary.json`'s
-  `glass.systemSaid` says what the system reported). Then the
+  `glass.systemSaid` says what the system reported) — only on a GitHub Actions runner
+  (`smoke-runner.mts`): run anywhere else, the harness logs that it skipped the write and never
+  touches the machine's own accessibility setting. Then the
   **fullscreen run** (`smoke-fullscreen.mts`, LJ36),
   its own launch: the smoke page in `?fs=both` mode at 390×600 (phone agent) and 720×600 (desktop
   agent); at each size the page's "Element fullscreen" (`requestFullscreen` on a container, as
@@ -2019,7 +2176,45 @@ and pushes to `main`:
   `LITTLEJOAN_SMOKE_READY_MS=6000` (read only with the smoke log) the ready window must go by
   itself twice (`released timer`: after the launch's prewarm and after the close), the summon
   between them cold. Logs `smoke-rest-<mode>.log`; the table goes into `rest.md` and the job's
-  summary, `summary.json`'s `restRuns`. Last comes the
+  summary, `summary.json`'s `restRuns`. Then the **links run** (`smoke-links.mts`, LJ45), its own
+  launch: the registration read back as installed — Windows `reg query` of the keys hooks.nsh
+  writes (the ProgId's command must be `"<app>" --link "%1"`), macOS the installed app's Info.plist
+  (`plutil`: http and https as a Viewer, no document types) and Launch Services' handlers for http
+  and https naming `io.github.memoliertorerr.littlejoan` (a Swift snippet, read-only; if a fresh
+  runner hasn't indexed the copied app, `lsregister -f` registers it as Finder does on install —
+  only on a GitHub runner), Linux the installed desktop entry with `Exec=little-joan --link %u`,
+  the web MIME types and categories, accepted by `desktop-file-validate` (installed on the runner if
+  missing), and LJ17's entry still hidden — the AppImage's own entry (extracted) must stay plain
+  (`Exec=little-joan`, no web MIME types), and its link is sent as `<image> --link <url>`; the
+  OS's default untouched (no `UserChoice` names `LittleJoanURL` and no `HKCU\Software\Classes\http(s)`
+  names the app; Launch Services' defaults aren't ours; no mimeapps.list / defaults.list names our
+  desktop file — `xdg-mime query default` is recorded, and when nothing is written anywhere it falls
+  back to mimeinfo.cache, which is no default); a link launched the way the OS would (the ProgId's
+  command line with `%1`, handed to CreateProcess verbatim as Explorer does; `open -a <app> <url>`;
+  the desktop entry's `Exec` with `%u`) must log `link-opened` and load the smoke page
+  (`?link=os`, `LJ-SMOKE ready`); `--link --quit`, `--link file:///etc/passwd` and `--link
+  javascript:alert(1)` must log `link-refused invalid`, `file`, `javascript` and nothing else (no
+  quit, page, window or Settings; the app still running); macOS also gets a file URL and two links
+  at once through `open -a` (informational; nothing may open from the file). Log `smoke-links.log`,
+  `summary.json`'s `linksRun`. After the smoke, the Windows job **uninstalls** (`uninstall.exe /S`):
+  the StartMenuInternet entry, the RegisteredApplications value and the ProgId must be gone with
+  the app. Then the **handoff run** (`smoke-handoff.mts`, LJ46): on Windows and Linux (on a GitHub
+  runner only) a fake browser is installed for it — `StartMenuInternet\LJFakeBrowser` under HKCU,
+  or `~/.local/share/applications/lj-fake-browser.desktop` — whose command is a node script that
+  writes the URL it gets to a file; the `handoff` launch has it as `mainBrowser`, the smoke page's
+  `?blank=1` (one big `target=_blank` link) is clicked at the screen's centre, and the app must log
+  `handoff browser=<fake>`, the fake must get `…smoke.html?from=blank`, and no `link-opened` may
+  follow; then the flood (`?flood=1`: five new windows per click, three clicks): every
+  `new-window` handed on or dropped (`handoff-throttled`), at most one handoff a second over the
+  flood's span, the fake receiving no more than were handed on (Windows' fake launches through
+  its ProgId, `LJFakeBrowserURL`); on every OS Settings → General is scrolled to its Browser section (smoke only,
+  `LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`) for `settings-general-browser.png`, with a
+  `browsers-listed` line; on Linux the smoke itself then makes Little Joan the runner's default
+  (`xdg-mime default`, never the app) and the `handoff-default` launch, with no main browser, must
+  hand the same click to the fake (the first other browser: `~/.local/share` comes first) with
+  `handoff-self-refused` and no `link-opened` (no loop); mimeapps.list is put back and the fakes
+  removed. macOS and Windows never get a default changed; macOS's handoff is unit tests and the
+  owner's check (logs `smoke-handoff*.log`, `summary.json`'s `handoffRun`). Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (the prewarm,

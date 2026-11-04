@@ -37,7 +37,8 @@
         "type": "downloadBootstrapper"
       },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "windows/hooks.nsh"
       }
     },
     "macOS": {
@@ -53,10 +54,14 @@
         ],
         "files": {
           "/usr/share/applications/io.github.memoliertorerr.littlejoan.desktop": "linux/io.github.memoliertorerr.littlejoan.desktop"
-        }
+        },
+        "desktopTemplate": "linux/little-joan.desktop.hbs"
       },
       "appimage": {
-        "bundleMediaFramework": true
+        "bundleMediaFramework": true,
+        "files": {
+          "/usr/share/applications/Little Joan.desktop": "linux/little-joan-appimage.desktop"
+        }
       }
     }
   }

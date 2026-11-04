@@ -102,15 +102,20 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
                 tab.name()
             ))
             // A trusted window stays on the app's own pages; links (About's repository link)
-            // open in the default browser (web URLs only).
+            // open in the main browser (web URLs only; browsers.rs).
             .on_navigation(|url| may_navigate(url, &keys::app_origin()))
-            .on_new_window(|url, _features| {
-                if navigation::is_external_openable(&url)
-                    && let Err(err) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>)
-                {
-                    eprintln!("little-joan: could not open the link in the default browser: {err}");
+            .on_new_window({
+                let app = app.clone();
+                move |url, _features| {
+                    if navigation::is_external_openable(&url) {
+                        crate::browsers::hand_off_new_window(
+                            &app,
+                            url,
+                            crate::browsers::NewWindowFrom::Settings,
+                        );
+                    }
+                    NewWindowResponse::Deny
                 }
-                NewWindowResponse::Deny
             })
             .build();
         match built {
@@ -197,6 +202,32 @@ pub fn smoke_click_quit<R: Runtime>(app: &AppHandle<R>) {
 
 /// How long after Settings loaded the smoke test's click comes (its screenshot is taken first).
 const SMOKE_QUIT_AFTER: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// Smoke tests only (LJ46; `LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`, ignored without the smoke
+/// log): 2 s after the settings page asked for its settings, General scrolls to its Browser section
+/// (below the fold) for the screenshot, and logs `settings-scrolled browser`.
+pub fn smoke_scroll<R: Runtime>(app: &AppHandle<R>) {
+    if !smoke::enabled()
+        || std::env::var("LITTLEJOAN_SMOKE_SETTINGS_SCROLL")
+            .ok()
+            .as_deref()
+            != Some("browser")
+    {
+        return;
+    }
+    let app = app.clone();
+    let _ = std::thread::Builder::new()
+        .name("little-joan-smoke-scroll".into())
+        .spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            if let Some(window) = app.get_webview_window(LABEL) {
+                let _ = window.eval(
+                    "document.getElementById(\"browser-label\")?.scrollIntoView({ block: \"start\" })",
+                );
+                smoke::log("settings-scrolled", "browser");
+            }
+        });
+}
 
 /// When the window closes: the shortcut it may have paused while recording comes back, and a
 /// theme (or Liquid Glass setting) it was previewing without saving (Cancel, or the close button)

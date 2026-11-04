@@ -7,6 +7,7 @@
 pub mod autostart;
 pub mod back_stack;
 pub mod bar;
+pub mod browsers;
 pub mod cli;
 pub mod commands;
 pub mod cookies;
@@ -21,6 +22,7 @@ pub mod joan;
 pub mod keymap;
 pub mod keys;
 pub mod layout;
+pub mod links;
 pub mod navigation;
 pub mod page_actions;
 pub mod page_address;
@@ -61,6 +63,11 @@ pub fn run() {
         // First: a second launch hands its arguments to the running instance and exits.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let args = cli::parse_args(&argv);
+            // A link from another app (LJ45): data only — nothing else on its command line counts.
+            if let Some(cli::Link::Given(text)) = &args.link {
+                links::open_text(app, text);
+                return;
+            }
             if let Some(enabled) = args.start_at_login {
                 // `set` logs the outcome; there is no window to show an error in.
                 let _ = autostart::set(app, enabled);
@@ -104,6 +111,8 @@ pub fn run() {
             commands::site::set_site_mode,
             commands::app::quit_app,
             commands::app::quit_from_settings,
+            commands::browsers::browsers_info,
+            commands::browsers::open_default_apps_settings,
             commands::downloads::reveal_download,
             commands::quick::quick_state,
             commands::quick::quick_command,
@@ -153,7 +162,7 @@ pub fn run() {
             // A first launch with flags (e.g. `--show <url>`, `--start-at-login on`, `--settings`) acts on
             // them; without flags Little Joan starts hibernating — except on the very first run
             // (no settings.json yet), which opens the window once with the welcome.
-            let args = cli::parse_args(&std::env::args().collect::<Vec<_>>());
+            let args = cli::parse_args(&cli::lossy_args(std::env::args_os()));
             let first_run = state::with(handle, |s| {
                 s.first_run
                     .then(|| (s.data_dir.clone(), s.settings.clone()))
@@ -169,7 +178,10 @@ pub fn run() {
             if let Some(tab) = args.settings.filter(|_| !args.quit) {
                 settings_window::open(handle, Some(tab));
             }
-            if args.quit {
+            if let Some(cli::Link::Given(text)) = &args.link {
+                // Started by the OS for a link (LJ45): it opens, or nothing does.
+                links::open_text(handle, text);
+            } else if args.quit {
                 // `little-joan --quit` with nothing running: nothing to quit, so this one ends.
                 joan::quit(handle);
             } else if let Some(command) = args.command {
@@ -184,6 +196,8 @@ pub fn run() {
             if !args.quit {
                 joan::prewarm_after_launch(handle, welcome);
             }
+            // macOS: links that arrived while this ran (the open-URL event can come first).
+            links::ready(handle);
             Ok(())
         });
     // macOS: a WebContent process that ended (crashed, killed) is the bar's — a resting window is
@@ -208,14 +222,15 @@ pub fn run() {
         }
     };
 
-    app.run(|_app, event| {
+    app.run(|_app, event| match event {
         // Closing the last window must never quit: Little Joan goes back to hibernation.
         // Only an explicit exit (Quit in the tray menu) carries an exit code.
-        if let RunEvent::ExitRequested {
+        RunEvent::ExitRequested {
             code: None, api, ..
-        } = event
-        {
-            api.prevent_exit();
-        }
+        } => api.prevent_exit(),
+        // macOS: a link from another app, as an open-URL event (LJ45): checked like `--link`.
+        #[cfg(target_os = "macos")]
+        RunEvent::Opened { urls } => links::opened(_app, urls),
+        _ => {}
     });
 }

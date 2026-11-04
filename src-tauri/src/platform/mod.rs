@@ -14,6 +14,8 @@ mod portal;
 #[cfg(windows)]
 mod win;
 
+/// The OS's browsers for web links, read-only, and starting one (LJ46).
+pub mod browsers;
 /// Liquid Glass behind the bar, macOS 26+ only (LJ19.9).
 mod glass;
 /// A summon leaving the page's element fullscreen (LJ19.5).

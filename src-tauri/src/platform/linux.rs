@@ -30,6 +30,7 @@ use crate::smoke;
 use crate::state;
 
 /// The page's downloads, through WebKitGTK itself (LJ15).
+pub mod browsers;
 mod downloads;
 pub use downloads::cancel as cancel_downloads;
 /// A summoned window in front, with the keyboard (LJ19.2).

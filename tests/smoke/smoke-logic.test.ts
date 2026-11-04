@@ -2,6 +2,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  BLANK_READY_TITLE,
+  BLANK_TARGET,
+  blankRequest,
+  FLOOD_PER_CLICK,
+  FLOOD_READY_TITLE,
+  FLOOD_TARGET,
+  floodRequest,
   CODECS,
   codecSupport,
   fullscreenTitle,
@@ -169,5 +176,32 @@ describe("the ping page (LJ19.4)", () => {
 
   it("pings its own origin", () => {
     expect(pingUrl("ready-1", 7)).toBe("/ping?id=ready-1&n=7");
+  });
+});
+
+describe("the new-window page (LJ46)", () => {
+  it("is asked for with ?blank=1 only", () => {
+    expect(blankRequest("?blank=1")).toBe(true);
+    for (const other of ["", "?blank=0", "?blank=", "?from=blank", "?blank=yes"]) {
+      expect(blankRequest(other), other).toBe(false);
+    }
+  });
+
+  it("opens the smoke page again in a new window, marked", () => {
+    expect(BLANK_TARGET).toBe("smoke.html?from=blank");
+    expect(blankRequest(`?${BLANK_TARGET.split("?")[1] ?? ""}`)).toBe(false);
+    expect(BLANK_READY_TITLE).toMatch(/^LJ-BLANK /);
+  });
+});
+
+describe("the flood page (phase 21's security review)", () => {
+  it("is asked for with ?flood=1 only, and asks for several windows a click", () => {
+    expect(floodRequest("?flood=1")).toBe(true);
+    for (const other of ["", "?flood=0", "?blank=1", "?from=flood"]) {
+      expect(floodRequest(other), other).toBe(false);
+    }
+    expect(FLOOD_PER_CLICK).toBeGreaterThan(1);
+    expect(FLOOD_TARGET).toBe("smoke.html?from=flood");
+    expect(FLOOD_READY_TITLE).toMatch(/^LJ-FLOOD /);
   });
 });

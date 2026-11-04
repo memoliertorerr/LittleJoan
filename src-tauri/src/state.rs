@@ -5,7 +5,7 @@ use std::sync::{Mutex, PoisonError};
 
 use tauri::{AppHandle, Manager, Runtime};
 
-use crate::cli::Args;
+use crate::cli::{Args, Link};
 use crate::cookies::SessionCookies;
 use crate::extensions::theme::Tokens;
 use crate::history_store::OpenHistory;
@@ -144,12 +144,17 @@ pub fn is_first_run(dir: &Path) -> bool {
 
 /// A first run's bookkeeping: saves `settings` (the defaults) at once, so the welcome appears
 /// only once even if the user quits straight away. Returns whether to show the welcome: only
-/// when the first launch had no flags — with flags it acts on them instead.
+/// when the first launch had no flags — with flags it acts on them instead (a link from another
+/// app opens, or nothing does; `--link` alone is no flag).
 pub fn finish_first_run(dir: &Path, settings: &Settings, args: &Args) -> bool {
     if let Err(err) = settings::save(dir, settings) {
         eprintln!("little-joan: could not save the first settings: {err}");
     }
-    args.command.is_none() && args.start_at_login.is_none() && args.settings.is_none() && !args.quit
+    args.command.is_none()
+        && args.start_at_login.is_none()
+        && args.settings.is_none()
+        && !args.quit
+        && !matches!(args.link, Some(Link::Given(_)))
 }
 
 /// Runs `f` with the state locked. Never call anything that waits on the main thread (window
@@ -225,6 +230,15 @@ mod tests {
             &Args::default()
         ));
         assert!(!is_first_run(&dir));
+        // `--link` with nothing after it (the app menu's launch of the desktop file) is no flag.
+        assert!(finish_first_run(
+            &dir,
+            &Settings::default(),
+            &Args {
+                link: Some(Link::Empty),
+                ..Args::default()
+            }
+        ));
         assert_eq!(settings::load(&dir), Settings::default());
         let _ = fs::remove_dir_all(&dir);
     }
@@ -250,6 +264,15 @@ mod tests {
             },
             Args {
                 settings: Some(crate::settings_window::SettingsTab::Privacy),
+                ..Args::default()
+            },
+            // A link from another app (LJ45) opens — or, refused, nothing does.
+            Args {
+                link: Some(Link::Given("https://example.com/".into())),
+                ..Args::default()
+            },
+            Args {
+                link: Some(Link::Given("--quit".into())),
                 ..Args::default()
             },
         ] {

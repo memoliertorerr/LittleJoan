@@ -38,6 +38,7 @@ const saved: Settings = {
   keys: {},
   afterClose: "ready",
   glass: "off",
+  mainBrowser: null,
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -267,6 +268,40 @@ describe("Liquid Glass (LJ19.9)", () => {
     const next = { ...saved, glass: "clear" as const };
     expect(rebase(saved, saved, next).glass).toBe("clear");
     expect(rebase({ ...saved, glass: "tinted" }, saved, next).glass).toBe("tinted");
+  });
+});
+
+describe("the main browser (LJ46)", () => {
+  const withBrowser = (mainBrowser?: string) =>
+    toInput(
+      saved.shortcut,
+      saved.searchEngine,
+      saved.translateTo,
+      saved.mobileSites,
+      saved.rememberHistory,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mainBrowser,
+    );
+
+  it("counts a new choice as a change, System default as the saved null, and leaves it out until the system answered", () => {
+    expect(isChanged(saved, withBrowser(""))).toBe(false);
+    expect(isChanged(saved, withBrowser("org.mozilla.firefox"))).toBe(true);
+    expect(isChanged({ ...saved, mainBrowser: "org.mozilla.firefox" }, withBrowser("org.mozilla.firefox"))).toBe(false);
+    expect(isChanged({ ...saved, mainBrowser: "org.mozilla.firefox" }, withBrowser(""))).toBe(true);
+    expect("mainBrowser" in withBrowser(undefined)).toBe(false);
+    expect(withBrowser("").mainBrowser).toBe("");
+  });
+
+  it("follows a change made elsewhere unless the window edited it", () => {
+    const next = { ...saved, mainBrowser: "com.apple.Safari" };
+    expect(rebase(saved, saved, next).mainBrowser).toBe("com.apple.Safari");
+    expect(rebase({ ...saved, mainBrowser: "x" }, saved, next).mainBrowser).toBe("x");
   });
 });
 

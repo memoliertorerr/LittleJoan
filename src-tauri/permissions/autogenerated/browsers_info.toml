@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-browsers-info"
+description = "Enables the browsers_info command without any pre-configured scope."
+commands.allow = ["browsers_info"]
+
+[[permission]]
+identifier = "deny-browsers-info"
+description = "Denies the browsers_info command without any pre-configured scope."
+commands.deny = ["browsers_info"]

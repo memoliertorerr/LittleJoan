@@ -4,6 +4,7 @@ use tauri::{AppHandle, Runtime};
 use url::Url;
 
 use crate::bar;
+use crate::browsers;
 use crate::extensions;
 use crate::history::VisitKind;
 use crate::history_store;
@@ -86,7 +87,8 @@ fn translate_page<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     }
 }
 
-/// Opens the page in the default browser, then hibernates — the page moved to the main browser.
+/// Hands the page to the main browser (browsers.rs: never Little Joan itself), then closes —
+/// the page moved there. With no other browser it stays, and the toolbar says so.
 fn open_in_browser<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let Some(current) = bar::page_url(app) else {
         return Ok(());
@@ -96,10 +98,11 @@ fn open_in_browser<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     {
         return Ok(());
     }
-    match tauri_plugin_opener::open_url(current.as_str(), None::<&str>) {
-        Ok(()) => joan::handle(app, Command::Hide),
-        Err(err) => eprintln!("little-joan: could not open the page in the default browser: {err}"),
-    }
+    browsers::hand_off(app, current, |app, outcome| {
+        if outcome == browsers::Outcome::Opened {
+            joan::handle(app, Command::Hide);
+        }
+    });
     Ok(())
 }
 

@@ -543,6 +543,32 @@ jobs:
           xvfb-run -a -s "-screen 0 $LJ_SCREEN" dbus-run-session -- bash -c \
             'if [ "$LJ_WM" != none ]; then openbox & sleep 2; fi; node scripts/ci/smoke.mts --app "$APP" --out test-results/smoke'
 
+      # LJ45: the uninstaller takes Little Joan's browser registration with it (src-tauri/windows/
+      # hooks.nsh): the per-user StartMenuInternet entry, RegisteredApplications' value and the
+      # LittleJoanURL ProgId — after the smoke, which read them back and launched a link through them.
+      - name: Uninstall (Windows) — nothing of the links registration is left
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          Get-Process little-joan -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 2
+          $client = 'HKCU:\Software\Clients\StartMenuInternet\LittleJoan'
+          $progId = 'HKCU:\Software\Classes\LittleJoanURL'
+          $registered = { Get-ItemProperty -Path 'HKCU:\Software\RegisteredApplications' -Name 'Little Joan' -ErrorAction SilentlyContinue }
+          if (-not ((Test-Path $client) -and (Test-Path $progId) -and (& $registered))) {
+            throw "The installer's links registration wasn't there to remove"
+          }
+          $dir = Split-Path $env:APP
+          # `_?=` runs the uninstaller in place (it would copy itself away and -Wait return early).
+          Start-Process -FilePath (Join-Path $dir 'uninstall.exe') -ArgumentList '/S', "_?=$dir" -Wait
+          $left = @()
+          if (Test-Path $client) { $left += 'Software\Clients\StartMenuInternet\LittleJoan' }
+          if (Test-Path $progId) { $left += 'Software\Classes\LittleJoanURL' }
+          if (& $registered) { $left += 'Software\RegisteredApplications\Little Joan' }
+          if (Test-Path $env:APP) { $left += "the app ($env:APP)" }
+          if ($left.Count -gt 0) { throw "The uninstaller left behind: $($left -join ', ')" }
+          "The uninstaller removed the app and its links registration (StartMenuInternet, RegisteredApplications, the LittleJoanURL ProgId)." | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -24,6 +24,7 @@ use crate::phone;
 use crate::smoke;
 
 /// The page's WKDownloads, cancelled when the window closes (LJ15).
+pub mod browsers;
 mod downloads;
 pub use downloads::{cancel as cancel_downloads, follow as follow_downloads};
 /// App Nap and a summon (LJ19.1).
