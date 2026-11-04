@@ -8806,6 +8806,21 @@ and what covers it:
    a bounced first link is refused as a loop and the next acceptable one may open
    (`links::pick` takes the guard; tested).
 
+**CI after the review:** run 41744056220 (head 8eed728, fix4) — `verify (windows-latest)` red:
+navigation.rs's new test assumed `http://tauri.localhost` is the app's origin on Windows, but test
+builds are `dev` (the origin is the dev server's) → `lj-step-46-fix5` (the test asks `is_app_url`).
+Run 41744543104 (head 84cc182): 17 of 18 green — the flood held (Windows: 15 new windows, 2 handed
+on, 13 dropped; Linux: 15, 1, 14, the same on arm64), every job logged `runner: GITHUB_ACTIONS=true
+RUNNER_ENVIRONMENT=github-hosted` (so hosted jobs have it), windows-latest has no
+`UserChoiceLatest` (UserChoice = MSEdgeHTM) — and `smoke (macos)` failed only LJ29's race rule:
+the panel loaded 5.3 s after `extension-opened hello`, straight from the racing web page (no
+start-page detour), hello never reported, and the page's racer stopped after six refusals. Those
+are exactly the symptoms of the race flake recorded in Deferred follow-ups (runs 39226938206 and
+40920554558, before phase 21); nothing fix4 changed is on that path (the racer's `window.open`s are
+`ljext:` URLs, refused before the gate; the start-page detour is `tauri://localhost`, which the new
+prefix rule doesn't touch; feb996e's green macOS run shows the same racer). Recorded as its third
+occurrence; `lj-step-46-fix6` (this note) ran the whole CI again.
+
 ### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
 
 > Phase 22 (v0.3, security-sensitive). Branch `lj/p22-popups` from the latest `main`, after phase
@@ -9769,7 +9784,9 @@ smoke run; nothing changed in the direct-download build.
   detour didn't show, no `ljext` request was answered for the panel, and hello never reported — the
   security rules held (every racer refused). If it recurs, look at the main thread's load during
   the race (the detour's 1 s limit) first. *(Recurred once more on 2026-10-29, run 40920554558,
-  during LJ19.4-fix4's diagnostics — same symptoms.)*
+  during LJ19.4-fix4's diagnostics — same symptoms; and on 2026-11-04, run 41744543104, phase 21's
+  security fixes — the same again: 5.3 s, no detour, the racer stopped after six refusals, a
+  `window-front joan unknown` 1.8 s in. Three in a few hundred macOS smoke runs.)*
 - **macOS: "webview helper processes of the page left after hibernating: 1"** (the main run's rule
   since LJ9, Stay ready since LJ19.4): twice on 2026-10-29 in about 25 macOS smoke runs (40931268551
   before LJ19.4-fix4, 40942144444 after it), green on the others. One of the page's WebKit helpers
