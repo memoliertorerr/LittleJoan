@@ -1117,8 +1117,9 @@ shows the error.
   handler a block2 block carrying its find's number): its `WKFindResult` says only `matchFound` —
   **no count, no active match** — so macOS shows "Found" / "No matches"; next and previous find the
   same text again from the selection the last find left, and stop leaves that selection.
-  **WebKitGTK** the view's `WebKitFindController`: `search` (case-insensitive, wrap-around, at most
-  1,000 matches highlighted) with `count_matches` beside it, `search_next`, `search_previous`,
+  **WebKitGTK** the view's `WebKitFindController`: `count_matches`, then `search` (case-insensitive,
+  wrap-around, at most 1,000 matches highlighted — in that order: WebKit's count unmarks every match
+  once it has counted, so counting after the search took its highlights away), `search_next`, `search_previous`,
   `search_finish`; `found-text` / `failed-to-find-text` / `counted-matches` report — it never says
   which match is active, so `find.rs` tracks it (1 after a search, ± with next / previous, wrapping
   at the ends). Results go to the bar as `window.littleJoan.setFindResult({ matches, active, found

@@ -1,5 +1,5 @@
-//! WebKitGTK's find (LJ49): the page view's `WebKitFindController` — `search` (case-insensitive,
-//! wrapping, at most `find::MAX_MATCHES` highlighted) with `count_matches` beside it, then
+//! WebKitGTK's find (LJ49): the page view's `WebKitFindController` — `count_matches`, then `search`
+//! (case-insensitive, wrapping, at most `find::MAX_MATCHES` highlighted), then
 //! `search_next`, `search_previous` and `search_finish`. Its `found-text` / `failed-to-find-text`
 //! say whether a match was found and `counted-matches` how many; it never says which match is
 //! active, so find.rs tracks that. The signals are connected once per page view (`install`).
@@ -59,8 +59,11 @@ pub fn run<R: Runtime>(page: &Webview<R>, _generation: u64, op: EngineOp) {
         };
         match op {
             EngineOp::Start(query) => {
-                controller.search(&query, options(), find::MAX_MATCHES);
+                // Count first: WebKit's count unmarks every match once it has counted, so after
+                // the search it took the search's highlights away (CI's find.png: only the active
+                // match showed). GNOME Web counts first too.
                 controller.count_matches(&query, options(), find::MAX_MATCHES);
+                controller.search(&query, options(), find::MAX_MATCHES);
             }
             EngineOp::Next(_) => controller.search_next(),
             EngineOp::Previous(_) => controller.search_previous(),

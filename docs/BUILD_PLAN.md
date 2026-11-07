@@ -9288,8 +9288,8 @@ Look at find.png on every OS.
 - **macOS:** `msg_send` with a `block2::RcBlock` (as wry calls WebKit), not objc2-web-kit — the
   call is one message; `block2 = "0.6"` is the only new line in Cargo.toml (0.6.2 was in the lock).
   The block carries its find's number: an answer for an older query is dropped.
-- **Linux:** `search` + `count_matches` (at most 1,000; `counted-matches` says `u32::MAX` beyond: the
-  strip says "Found"), the signals connected once per page view in `install_page`. Their reports
+- **Linux:** `count_matches`, then `search` (at most 1,000; `counted-matches` says `u32::MAX` beyond: the
+  strip says "Found"; the order is `lj-step-49-fix`'s, below), the signals connected once per page view in `install_page`. Their reports
   can't say which query they are for; with typing debounced 120 ms an older one's late count is
   possible but unlikely (a Deferred follow-up if CI ever shows it).
 - **The find ends** on the page's `Started` (from a task of its own, off the engine's callback),
@@ -9298,6 +9298,23 @@ Look at find.png on every OS.
   (never the query), `find-result`, `find-closed <user|page|overlay>`, `find-engine` once.
 - `npm run verify`: 823 TS tests, 506 Rust tests, clippy clean (macOS compiles here; the Windows
   and Linux glue only in CI).
+- **CI (PR #42).** Run 42408683033 (head 8367c0b, LJ49): all 18 jobs passed, first attempt — the run
+  shows "cancelled" only because LJ50's push superseded it and my cancel request (the concurrency
+  group hadn't cancelled it after 10 min, and the new run waited behind it) landed after its last
+  job had finished. Run 42409581439 (head a337453, LJ49 + LJ50): green on all 18 jobs, first
+  attempt, no re-runs. **The find run passed on every smoke job:** Windows — `find-engine webview2
+  156.0.4314.58 find=true` (CI's WebView2 runtime has `ICoreWebView2_28`; its `ActiveMatchIndex`
+  counts from 1), `matches=3 active=1` → Enter → `active=2`; macOS — the synthetic keys reached the
+  app, `wkwebview find=true`, `found=true`, Enter, Esc; Linux (all seven, WebKitGTK 2.50.4 and
+  2.52.6) — `matches=3 active=1` → `active=2` (on 22.04 ARM `found-text` came before
+  `counted-matches`: `found=true` first, as find.rs merges). `find.png`: the strip in the toolbar
+  ("1 of 3" on Windows and Linux, "Found" on macOS), Windows' every match highlighted (the active one
+  orange), macOS' the match selected — **but on Linux only the active match was marked:** the
+  other two had no highlight.
+- **`lj-step-49-fix`: WebKitGTK highlights every match.** `count_matches` ran after `search`, and
+  WebKit's count unmarks every match once it has counted — it took the search's highlights away.
+  Counted first now (GNOME Web's order); the count and the search reach the web process in that
+  order. Recorded in Landmines.
 
 ### LJ50 — Pinned sites at the top of the command bar · standard · auto
 
@@ -9357,6 +9374,12 @@ merge commit (Ground Rule 24), then stop and report.
   run's rows stay as they were; the other page is `?other=1` (no "pin" in its address or title, so
   no history row comes before "Pin this site").
 - `npm run verify`: 834 TS tests, 517 Rust tests, clippy clean.
+- **CI run 42409581439 (head a337453): green on all 18 jobs, first attempt.** The pinned run passed
+  on all nine smoke jobs: the very first window's `suggestions 1 first=127.0.0.1:<port> typed=0` (no
+  history yet), `quick-command setPinned true` after "pin" ↓ ↓ Enter over `?other=1` (typed on macOS
+  too), settings.json pinning `?pinned=1` and then `?other=1`. `pinned.png` on every OS: the empty
+  command bar led by "LJ pinned — 127.0.0.1:<port>" with its lettered icon and the pin glyph at the
+  row's end, then Settings & extensions.
 
 ### LJ51 — Saved logins on Windows: the engine's password saving and autofill as Privacy settings · strong · auto
 
@@ -10237,6 +10260,15 @@ smoke run; nothing changed in the direct-download build.
   own on each controller). **A Windows smoke probe** (a web page framing
   `http://tauri.localhost/index.html` must report it blocked) would watch the CSP header there; not
   built yet.
+- **Ctrl+F in a sign-in popup on Windows** (LJ49): a popup takes only Close (LJ48's `route_key`),
+  so Ctrl+F reaches WebView2, whose own find bar opens inside the popup — harmless (it is the
+  engine's UI in a page that has no IPC), but unlike the page window. Catching it there too (marked
+  handled, no strip: a popup has no toolbar) is a one-line change in `bar/popup/window.rs`'s
+  `key_pressed` — left alone in phase 23 because it is phase 22's reviewed code.
+- **Find's reports on Linux can't say which query they are for** (LJ49): WebKitGTK's signals carry
+  no tag, so a late count for an earlier query (typing debounced 120 ms) would be taken for the new
+  one. Not seen in CI (each run's results were the needle's own); WKWebView's carry their find's
+  number.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -10678,6 +10710,15 @@ Populated from real friction, not speculation:
   `ci:` commit)* That write happens only on a GitHub Actions runner (`GITHUB_ACTIONS=true`,
   `scripts/ci/smoke-runner.mts`): run anywhere else, the smoke logs that it skipped it — the
   harness must never change a developer's own accessibility setting.
+- *(LJ49, CI run 42409581439)* **WebKitGTK's `count_matches` unmarks the matches a `search`
+  highlighted.** WebKit's count takes every text-match marker away once it has counted, so a count
+  sent after the search left only the active match (the selection) visible — CI's `find.png` on
+  every Linux job. Count first, then search (GNOME Web's order); both go to the web process in the
+  order they are called.
+- *(LJ50)* **Typing a word in the command bar over a page can match a smoke page's own address or
+  title** (history matching counts a substring of the whole URL): a smoke run that types a word and
+  then presses ↓ ↓ Enter must load pages whose address and title don't contain it (the pinned run
+  uses `?other=1`, never visits `?pinned=1`).
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the
