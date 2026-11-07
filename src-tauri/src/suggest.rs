@@ -1,14 +1,16 @@
 //! What the command bar suggests (pure, tested; ui/command/rows.ts orders and shows it).
 //!
-//! Nothing typed: the top sites by frecency (history.rs), leaving out the page that is open, or
-//! four generic starters when there is no site to show yet. Typing: the history records that
-//! match every word, and one row that searches for the text with the chosen engine.
+//! Nothing typed: the pinned sites first (LJ50, settings' `pinnedSites`, in the order pinned), then
+//! the top sites by frecency (history.rs) — leaving out the pinned sites' hosts and the page that is
+//! open —, at most 8 rows in all; four generic starters when there is neither. Typing: the history
+//! records that match every word, and one row that searches for the text with the chosen engine.
 
 use serde::Serialize;
 use url::Url;
 
 use crate::history::{self, History};
 use crate::input::SearchEngine;
+use crate::settings::PinnedSite;
 
 /// The most top sites, and the most history matches, one answer holds.
 pub const MAX_ROWS: usize = 8;
@@ -24,6 +26,8 @@ pub const STARTERS: [(&str, &str, &str); 4] = [
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
+    /// A site the user pinned (LJ50).
+    Pinned,
     TopSite,
     History,
     /// Search for the typed text: `title` is the engine's name, `url` its results page.
@@ -41,25 +45,28 @@ pub struct Suggestion {
     pub score: f64,
 }
 
-/// The suggestions for `query`. `current` is the page that is open (its site isn't suggested
-/// while nothing is typed).
+/// The suggestions for `query`. `current` is the page that is open (its site isn't suggested as a
+/// top site while nothing is typed); `pinned` the user's pinned sites (settings' `pinnedSites`).
 pub fn suggestions(
     history: &History,
     query: &str,
     current: Option<&Url>,
     engine: SearchEngine,
     now: u64,
+    pinned: &[PinnedSite],
 ) -> Vec<Suggestion> {
     let query = query.trim();
     if query.is_empty() {
-        let exclude: Vec<String> = current
+        let pins = pinned_rows(pinned);
+        let mut exclude: Vec<String> = current
             .filter(|url| matches!(url.scheme(), "http" | "https"))
             .map(history::host_key)
             .into_iter()
             .collect();
+        exclude.extend(pins.iter().map(|row| row.host.clone()));
         let exclude: Vec<&str> = exclude.iter().map(String::as_str).collect();
         let top: Vec<Suggestion> = history
-            .top_sites(MAX_ROWS, &exclude, now)
+            .top_sites(MAX_ROWS.saturating_sub(pins.len()), &exclude, now)
             .into_iter()
             .map(|row| Suggestion {
                 kind: Kind::TopSite,
@@ -69,7 +76,10 @@ pub fn suggestions(
                 score: row.score,
             })
             .collect();
-        return if top.is_empty() { starters() } else { top };
+        if pins.is_empty() && top.is_empty() {
+            return starters();
+        }
+        return pins.into_iter().chain(top).collect();
     }
     let mut rows: Vec<Suggestion> = history
         .search(query, MAX_ROWS, now)
@@ -91,6 +101,25 @@ pub fn suggestions(
         score: 0.0,
     });
     rows
+}
+
+/// The pinned sites as rows, in the order pinned (at most `MAX_ROWS`; one that isn't an address
+/// any more is left out).
+fn pinned_rows(pinned: &[PinnedSite]) -> Vec<Suggestion> {
+    pinned
+        .iter()
+        .filter_map(|site| {
+            let url = Url::parse(&site.url).ok()?;
+            Some(Suggestion {
+                kind: Kind::Pinned,
+                title: site.title.clone(),
+                host: history::host_key(&url),
+                url: site.url.clone(),
+                score: 0.0,
+            })
+        })
+        .take(MAX_ROWS)
+        .collect()
 }
 
 /// The four generic starters.
@@ -138,7 +167,14 @@ mod tests {
 
     #[test]
     fn empty_history_offers_the_four_starters() {
-        let got = suggestions(&History::default(), "  ", None, SearchEngine::Google, NOW);
+        let got = suggestions(
+            &History::default(),
+            "  ",
+            None,
+            SearchEngine::Google,
+            NOW,
+            &[],
+        );
         assert_eq!(got.len(), 4);
         assert!(got.iter().all(|s| s.kind == Kind::Starter));
         let titles: Vec<&str> = got.iter().map(|s| s.title.as_str()).collect();
@@ -152,7 +188,7 @@ mod tests {
             ("http://127.0.0.1:5000/smoke.html", "LJ-SMOKE ready", 3),
             ("https://example.com/", "Example", 1),
         ]);
-        let got = suggestions(&history, "", None, SearchEngine::Google, NOW);
+        let got = suggestions(&history, "", None, SearchEngine::Google, NOW, &[]);
         assert_eq!(got.len(), 2);
         assert_eq!(got[0].kind, Kind::TopSite);
         assert_eq!(got[0].host, "127.0.0.1:5000");
@@ -160,7 +196,7 @@ mod tests {
         assert_eq!(got[1].host, "example.com");
 
         let open = url("http://127.0.0.1:5000/other");
-        let got = suggestions(&history, "", Some(&open), SearchEngine::Google, NOW);
+        let got = suggestions(&history, "", Some(&open), SearchEngine::Google, NOW, &[]);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].host, "example.com");
     }
@@ -169,11 +205,11 @@ mod tests {
     fn the_starters_fill_in_when_the_only_site_is_the_open_page() {
         let history = visited(&[("https://example.com/", "Example", 1)]);
         let open = url("https://www.example.com/a");
-        let got = suggestions(&history, "", Some(&open), SearchEngine::Google, NOW);
+        let got = suggestions(&history, "", Some(&open), SearchEngine::Google, NOW, &[]);
         assert!(got.iter().all(|s| s.kind == Kind::Starter));
         // The app's own start page is never "the open page" of any site.
         let start = url("tauri://localhost/index.html");
-        let got = suggestions(&history, "", Some(&start), SearchEngine::Google, NOW);
+        let got = suggestions(&history, "", Some(&start), SearchEngine::Google, NOW, &[]);
         assert_eq!(got[0].host, "example.com");
     }
 
@@ -183,7 +219,7 @@ mod tests {
             ("http://127.0.0.1:5000/smoke.html", "LJ-SMOKE ready", 3),
             ("https://example.com/", "Example", 1),
         ]);
-        let got = suggestions(&history, "127", None, SearchEngine::DuckDuckGo, NOW);
+        let got = suggestions(&history, "127", None, SearchEngine::DuckDuckGo, NOW, &[]);
         assert_eq!(got.len(), 2);
         assert_eq!(got[0].kind, Kind::History);
         assert_eq!(got[0].host, "127.0.0.1:5000");
@@ -203,6 +239,7 @@ mod tests {
             None,
             SearchEngine::Google,
             NOW,
+            &[],
         );
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].kind, Kind::Search);
@@ -220,13 +257,101 @@ mod tests {
             .map(|(u, t)| (u.as_str(), t.as_str(), 1))
             .collect();
         let history = visited(&refs);
-        let got = suggestions(&history, "site", None, SearchEngine::Google, NOW);
+        let got = suggestions(&history, "site", None, SearchEngine::Google, NOW, &[]);
         assert_eq!(got.iter().filter(|s| s.kind == Kind::History).count(), 8);
         assert_eq!(got.last().map(|s| s.kind), Some(Kind::Search));
         assert_eq!(
-            suggestions(&history, "", None, SearchEngine::Google, NOW).len(),
+            suggestions(&history, "", None, SearchEngine::Google, NOW, &[]).len(),
             8
         );
+    }
+
+    fn pins(urls: &[&str]) -> Vec<PinnedSite> {
+        urls.iter()
+            .map(|u| crate::settings::pinned::site(u, "Pinned").expect("a site"))
+            .collect()
+    }
+
+    #[test]
+    fn pinned_sites_lead_the_empty_state_then_top_sites_without_their_hosts() {
+        let history = visited(&[
+            ("http://127.0.0.1:5000/smoke.html", "LJ-SMOKE ready", 5),
+            ("https://example.com/", "Example", 3),
+            ("https://news.test/", "News", 1),
+        ]);
+        let pinned = pins(&[
+            "https://news.test/today",
+            "http://127.0.0.1:5000/pinned.html",
+        ]);
+        let got = suggestions(&history, "", None, SearchEngine::Google, NOW, &pinned);
+        let kinds: Vec<Kind> = got.iter().map(|s| s.kind).collect();
+        assert_eq!(kinds, [Kind::Pinned, Kind::Pinned, Kind::TopSite]);
+        // In the order pinned, with their own addresses.
+        assert_eq!(got[0].url, "https://news.test/today");
+        assert_eq!(got[0].host, "news.test");
+        assert_eq!(got[1].host, "127.0.0.1:5000");
+        assert_eq!(got[0].title, "Pinned");
+        // The top sites leave the pinned hosts out.
+        assert_eq!(got[2].host, "example.com");
+        // The open page's site stays pinned (only top sites leave it out).
+        let open = url("https://news.test/other");
+        let got = suggestions(
+            &history,
+            "",
+            Some(&open),
+            SearchEngine::Google,
+            NOW,
+            &pinned,
+        );
+        assert_eq!(got[0].host, "news.test");
+    }
+
+    #[test]
+    fn pinned_sites_alone_need_no_starters_and_the_rows_stay_eight() {
+        let pinned = pins(&["http://127.0.0.1:5000/smoke.html"]);
+        let got = suggestions(
+            &History::default(),
+            "",
+            None,
+            SearchEngine::Google,
+            NOW,
+            &pinned,
+        );
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].kind, Kind::Pinned);
+        assert_eq!(got[0].host, "127.0.0.1:5000");
+        let pages: Vec<(String, String)> = (0..12)
+            .map(|i| (format!("https://site{i}.test/"), format!("Site {i}")))
+            .collect();
+        let refs: Vec<(&str, &str, u32)> = pages
+            .iter()
+            .map(|(u, t)| (u.as_str(), t.as_str(), 1))
+            .collect();
+        let history = visited(&refs);
+        let three = pins(&["https://a.test/", "https://b.test/", "https://c.test/"]);
+        let got = suggestions(&history, "", None, SearchEngine::Google, NOW, &three);
+        assert_eq!(got.len(), MAX_ROWS);
+        assert_eq!(got.iter().filter(|s| s.kind == Kind::Pinned).count(), 3);
+        let eight: Vec<String> = (0..8).map(|i| format!("https://p{i}.test/")).collect();
+        let eight: Vec<&str> = eight.iter().map(String::as_str).collect();
+        let got = suggestions(&history, "", None, SearchEngine::Google, NOW, &pins(&eight));
+        assert!(got.iter().all(|s| s.kind == Kind::Pinned));
+        assert_eq!(got.len(), MAX_ROWS);
+    }
+
+    #[test]
+    fn typing_never_offers_pins() {
+        let pinned = pins(&["https://news.test/"]);
+        let got = suggestions(
+            &History::default(),
+            "news",
+            None,
+            SearchEngine::Google,
+            NOW,
+            &pinned,
+        );
+        assert!(got.iter().all(|s| s.kind != Kind::Pinned));
+        assert_eq!(serde_json::to_value(Kind::Pinned).expect("json"), "pinned");
     }
 
     #[test]

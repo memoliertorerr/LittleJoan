@@ -361,6 +361,8 @@ pub async fn save_settings<R: Runtime>(
         after_close: settings.after_close,
         glass: settings.glass,
         main_browser: settings.main_browser,
+        // Settings has no pins (the command bar's): they stay as they are.
+        pin: None,
     };
     // A refused part changes nothing — not even the shortcut.
     let current = state::with(&app, |s| s.settings.clone());

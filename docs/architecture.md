@@ -110,7 +110,10 @@ ui/command/panel.ts                the welcome in the command bar, with its star
                                    checkbox; DOM glue only
 ui/command/rows.ts                 the command bar's rows: order, autofill, keys, site icons
                                    (pure, unit-tested)
-ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document)
+ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document); a
+                                   pinned site's pin glyph (LJ50)
+ui/command/pins.css                the pin glyph of pinned rows and of Pin this site (LJ50; linked by
+                                   bar.html)
 ui/answers/                        quick answers, our own code in the bar: calc.ts (a tokenizer
                                    and precedence-climbing parser, never eval), units.ts, time.ts
                                    (+ cities.ts, ~200 names → IANA zones; Intl with a passed-in
@@ -250,8 +253,9 @@ src-tauri/src/history_store.rs     history.json on disk and in AppState while th
                                    load / title events), autosave, atomic save,
                                    remove one and clear a range (both rewrite the file at once,
                                    with no window straight on disk), the list, the suggestions
-src-tauri/src/suggest.rs           what the command bar suggests: top sites or the starters,
-                                   history matches and a search row (pure, tested)
+src-tauri/src/suggest.rs           what the command bar suggests: the pinned sites (LJ50), then top
+                                   sites or the starters, history matches and a search row (pure,
+                                   tested)
 src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is; a Linux Wayland
                                    session (pure)
 src-tauri/src/joan.rs              the page window's lifecycle: requests through `toggle`, focus,
@@ -520,6 +524,8 @@ src-tauri/src/platform/browsers.rs the OS's browser list, default and a launch, 
                                    linux/browsers.rs (XDG desktop files, xdg-mime, gio launch)
 src-tauri/src/commands/browsers.rs Settings' `browsers_info`, `open_default_apps_settings` (LJ46)
 src-tauri/src/settings/main_browser.rs  the `mainBrowser` field: an id or null (tolerant, tested)
+src-tauri/src/settings/pinned.rs   the `pinnedSites` field (LJ50): at most 8 `{ url, title }`, http(s)
+                                   only, one per URL, no credentials; pin / unpin (tolerant, tested)
 src-tauri/src/links.rs             links from other apps (LJ45): `accept` (only absolute http(s), no
                                    app or extension URL, ≤ 4,096 bytes), a batch's first acceptable
                                    link, macOS's events waiting for setup; then `Show(url)` (pure
@@ -576,6 +582,9 @@ scripts/ci/smoke-keymap.mts        CI: the keymap run (History on Ctrl/Cmd+Shift
                                    the old one, macOS's menu) and its rules; unit-tested
 scripts/ci/smoke-find.mts          CI: the find run (`?find=1`: Ctrl/Cmd+F, "lj-needle" ×3, Enter,
                                    Esc; find.png) and its rules; unit-tested (LJ49)
+scripts/ci/smoke-pinned.mts        CI: the pinned run (the smoke page pinned leads the first command
+                                   bar; "pin" over another page pins it; pinned.png) and its rules;
+                                   unit-tested (LJ50)
 scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a second launch, Quit
                                    from the command bar, Settings' Quit and a relaunch, a Wayland
                                    session) and its rules; unit-tested
@@ -846,7 +855,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 | `history_list()` | the history view, when it opens and after a change | every record, latest visit first: `[{ url, title, host, lastVisit, visitCount }]` (empty with no window); the view searches, groups and draws them; logs `history-list <n>` |
-| `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → up to 8 top sites, leaving out the open page's site, or the 4 starters when there are none; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) |
+| `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: pinned \| topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → the pinned sites first (LJ50, settings' `pinnedSites`, in the order pinned), then top sites leaving out the pinned sites' hosts and the open page's site, at most 8 rows in all — or the 4 starters when there are neither; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) — never the pins |
 | `history_remove(url)` | the command bar (Shift+Delete on a history row), the history view (× or Shift+Delete) | forget that record and rewrite `history.json` at once; returns whether there was one |
 | `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
 | `preview_theme(theme?, glass?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` — and the Liquid Glass choice `glass` (LJ19.9) — (checked like saved ones, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
@@ -857,8 +866,8 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `open_extensions_folder()` | Settings → Extensions → Open extensions folder | create `<config dir>/extensions/` if needed and show it in the file manager (`tauri_plugin_opener::reveal_item_in_dir`) |
 | `site_mode_info()` | the bar, on load (Rust also pushes it: `window.littleJoan.setSiteMode`, on every address change and agent switch) | `{ host, mode, builtIn, agent }` for the open web page's site — `host` the key a mode is kept under (`youtube.com` for `m.youtube.com`), `mode` `auto` \| `phone` \| `desktop`, `builtIn` whether the built-in list decides, `agent` `phone` \| `desktop`; `null` without a web page (the start page, a panel) |
 | `set_site_mode(mode)` | the toolbar's pill, the command bar's site rows ("Desktop site" / "Phone site" / "Automatic", LJ42's quick rows) | keeps `mode` for the open web page's site in `siteModes` — the site is Rust's (`bar::page_url`), the bar sends only the mode; `auto` removes the entry, or keeps `"auto"` when a built-in or a parent's entry would still decide —, saves the settings and applies it at once: the agent switches and the page loads again only when it really changed (going to desktop on a known phone host: its desktop address). Refused without a web page, or with 500 sites already. Logs `site-mode <site> <mode>`; returns the new info |
-| `quick_state()` | the command bar, each time it opens (with `extensions_list`), and after a quick command | `{ page: { url, title } \| null (a web page only; the title is the window's), theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool \| null, showTrayIcon, iconForced }` — what the quick rows show (LJ42) |
-| `quick_command(command)` | the command bar's quick rows (LJ42) | one of a fixed set, `{ kind, …fields }` (a serde enum with `deny_unknown_fields`: any other kind or field is refused): `translate`, `openInBrowser`, `reload` (the page actions; refused without a web page), `setThemeMode { mode }`, `setTheme { theme }` (a preset's whole theme, checked like Save's), `setSearchEngine { id }`, `setMobileSites { on }`, `setRememberHistory { on }`, `clearHistory { range }` (as `history_clear`; returns how many pages went), `setStartAtLogin { on }`, `openSettings { tab }`, `reloadExtensions`, `setTrayIcon { on }`. Settings ones go through `settings_live::apply` (as Save) and an open settings window rebases its draft (`window.littleJoanSettings.savedChanged(<settings>, <startAtLogin \| null>)`, by `eval`). Never: the shortcut or keys, developer mode, switching extensions, custom colors — Settings only. Logs `quick-command <kind> [<value>]`, never a URL or a title |
+| `quick_state()` | the command bar, each time it opens (with `extensions_list`), and after a quick command | `{ page: { url, title } \| null (a web page only; the title is the window's), theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool \| null, showTrayIcon, iconForced, pinned }` (`pinned`: the open page is pinned, LJ50) — what the quick rows show (LJ42) |
+| `quick_command(command)` | the command bar's quick rows (LJ42) | one of a fixed set, `{ kind, …fields }` (a serde enum with `deny_unknown_fields`: any other kind or field is refused): `translate`, `openInBrowser`, `reload` (the page actions; refused without a web page), `setThemeMode { mode }`, `setTheme { theme }` (a preset's whole theme, checked like Save's), `setSearchEngine { id }`, `setMobileSites { on }`, `setRememberHistory { on }`, `clearHistory { range }` (as `history_clear`; returns how many pages went), `setStartAtLogin { on }`, `openSettings { tab }`, `reloadExtensions`, `setTrayIcon { on }`, `setPinned { url, title, on }` (LJ50: `on` pins the open web page — refused unless `url` is its address; the title is the page's own as Rust knows it — and `off` unpins `url`; through `settings::apply_change`'s `Pin`, done on the settings of the moment; at most 8). Settings ones go through `settings_live::apply` (as Save) and an open settings window rebases its draft (`window.littleJoanSettings.savedChanged(<settings>, <startAtLogin \| null>)`, by `eval`). Never: the shortcut or keys, developer mode, switching extensions, custom colors — Settings only. Logs `quick-command <kind> [<value>]`, never a URL or a title |
 | `keymap_info()` | Settings' Keyboard tab (LJ44); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut, shortcutProblem, portalShortcut, systemShortcuts }` — `portalShortcut` `{ trigger }` while the XDG GlobalShortcuts portal holds the summon shortcut (LJ17), else `null` — — the last macOS's own shortcuts as read from its preferences (`[{ id, enabled, accelerator }]`, empty elsewhere; smoke log `system-shortcuts <n> keys=<k>`) — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
 | `find(action)` | the toolbar's find strip (LJ49) | one of a fixed set (`find.rs`'s serde enum, `deny_unknown_fields`): `{ kind: "start", query }` (cut at 1,000 characters; `""` clears the find, the strip stays), `next`, `previous`, `stop` (the strip closed: the find ends, the page gets the keyboard). Only while the strip is open (Ctrl/Cmd+F opened it). The page's engine finds natively (`platform/find.rs`) and Rust pushes the result: `window.littleJoan.setFindResult({ matches, active, found[, unavailable] })`. Logs `find-action <kind> [length=<n>]` — never the query |
 | `reveal_download()` | the toolbar's **Show in folder**, after a download was saved (LJ15) | shows the last file saved in this window in the file manager, selected (`tauri_plugin_opener::reveal_item_in_dir`) — which file is Rust's, never the bar's; an error when there is none |
@@ -1247,8 +1256,10 @@ page; it is a separate webview with its own capability, and the page webview has
   ("Search or enter URL…") and a × button (back to the page, or with no page, close the window);
   under it the welcome on the first run, then the rows — a site icon, then "Title — domain" with
   the domain muted; the selected row is filled with the accent color; **"Settings & extensions"**
-  (a gear) is always the last row. Rows (`rows.ts`): nothing typed → the top sites (or the
-  starters); typing → a quick answer, the best history match, "Search <engine> for …", more
+  (a gear) is always the last row. Rows (`rows.ts`): nothing typed → the **pinned sites** (LJ50:
+  settings' `pinnedSites`, in the order pinned, each with a pin glyph after its text — a CSS mask,
+  `command/pins.css` — and "(pinned)" for screen readers), then the top sites without the pinned
+  sites' hosts (or the starters when there are neither), 8 rows at most; typing → a quick answer, the best history match, "Search <engine> for …", more
   matches, the built-in commands (**History**, **Settings** — for "settings", "preferences",
   "options" —, **Quit Little Joan** — for "quit", "exit" (LJ41), each when what is typed starts
   one of its words, two letters or more, or names it), the **quick commands**, extension commands
@@ -1256,8 +1267,10 @@ page; it is a separate webview with its own capability, and the page webview has
   three quick commands; history matches make way. **Quick commands** (LJ42, `ui/command/quick.ts`)
   show their state after the title, as text: with a web page open Translate page, Open in browser,
   Copy link, Copy as Markdown link (copied in the bar on the keypress, the Markdown from the
-  bundled extension's own `link("markdown", …)`), Reload, and the site rows (Desktop site, Phone
-  site, Automatic — "this site", the current ✓); always Theme: System / Light / Dark and Theme:
+  bundled extension's own `link("markdown", …)`), Reload, the site rows (Desktop site, Phone
+  site, Automatic — "this site", the current ✓), and **Pin this site — not pinned** / **Unpin this
+  site — pinned** (LJ50: `setPinned` with the page `quick_state` named; it keeps the command bar
+  open, the row then showing the new state); always Theme: System / Light / Dark and Theme:
   <preset> (the current ✓; a preset keeps the user's mode), Search with <engine> (✓), Mobile sites
   — on/off, Remember history — on/off, Clear history — last hour / 24 hours / 7 days / everything
   (the first Enter turns the row into "press Enter again to remove …"; a second Enter on that row
@@ -1287,7 +1300,7 @@ page; it is a separate webview with its own capability, and the page webview has
   typing at the end of the field, never after a deletion. **Keys:** ↑/↓ move without wrapping (↑
   from the first row goes back to the field), Enter opens the selected row — or with none,
   `open_input` on the field's text, as before —, Tab accepts the autofill, Shift+Delete removes a
-  history row; the mouse selects on hover and opens on click. Picking a row goes through
+  history row — or, on a pinned row, unpins it (`setPinned … on: false`; history stays); the mouse selects on hover and opens on click. Picking a row goes through
   `open_input`, so the visit counts as typed. Typing asks `suggest` after 60 ms; only the latest
   answer is drawn. While the field shows the open page's address untouched (Ctrl/Cmd+L), the
   command bar shows the top sites.
@@ -2016,9 +2029,10 @@ The modules below hold every decision the app makes; the native glue only calls 
   already translated.
 - **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
   mobileSites, rememberHistory, theme, developerMode, disabledExtensions, siteModes,
-  showTrayIcon, keys, afterClose}` (camelCase
+  showTrayIcon, keys, afterClose, glass, mainBrowser, pinnedSites}` (camelCase
   JSON; `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once; `siteModes` keeps
-  at most 500 valid `host: auto|phone|desktop` entries). Each field falls back to its default on its own; sizes are clamped to
+  at most 500 valid `host: auto|phone|desktop` entries; `pinnedSites`, LJ50, at most 8 `{url,
+  title}` — http(s) without credentials, one per URL, a bad entry dropped alone). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; `theme` = `{mode, colors, intensity, grain}`, each part on its own too
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
@@ -2304,7 +2318,13 @@ and pushes to `main`:
   (Windows, Linux), Esc `find-closed user`; never `find-result unavailable`. `find.png` shows the
   strip with the matches found. On macOS the menu must show `menu-keys find=⌘F`, and the rest
   applies once the key reached the app (best effort). The log's `find-engine` line names the engine
-  (WebView2: its runtime version). Log `smoke-find.log`, `summary.json`'s `findRun`. Then a short launch whose
+  (WebView2: its runtime version). Log `smoke-find.log`, `summary.json`'s `findRun`. Then the
+  **pinned run** (`smoke-pinned.mts`, LJ50), its own launch on a fresh data folder whose
+  settings.json pins the smoke page's `?pinned=1` (`LJ pinned`): the log's very first `suggestions`
+  line must say `first=127.0.0.1:<port>` (no history yet), and `pinned.png` shows that row with its
+  pin; then over `?other=1`, Ctrl/Cmd+L, `pin`, ↓ ↓ Enter must log `quick-command setPinned true` and
+  leave settings.json pinning both, the first page first (typed on Windows and Linux; best effort on
+  macOS). Log `smoke-pinned.log`, `summary.json`'s `pinnedRun`. Then a short launch whose
   settings.json holds a shortcut that doesn't parse (`Hyper+Nope`, LJ44): it must log
   `shortcut-failed`, register the default instead, and `--settings keyboard` must open Keyboard
   (`settings-keyboard-problem.png`: the problem line; log `smoke-keyboard-problem.log`). On macOS

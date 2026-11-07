@@ -132,7 +132,7 @@
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (phase 22, `lj/p22-popups`; Linux's size fixed in `lj-step-47-fix` → `lj-step-48-fix`; run 42398526340 green 18/18) |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 (head e7d13c8, run 42401453791 green 18/18) merged as 7f0edd2 by the coordinator after the review (Ground Rule 24); main's run 42404243947 green 18/18 |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; CI: see notes) |
-| LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
+| LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes) |
 | LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
 | LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ⬜ todo |
 | LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
@@ -9337,6 +9337,26 @@ Enter / Shift+Enter; Esc; pin two sites and summon: they lead the list; unpin on
 Shift+Delete; the must-not-disturb list. Once every job is green, merge the PR into main with a
 merge commit (Ground Rule 24), then stop and report.
 ```
+
+**Implementation notes (2026-11-07; disk 11 GB free, `.cache/target` 1.5 GB):**
+- **As designed:** `settings/pinned.rs` (the field, tolerant; pin / unpin; tests), `suggest.rs`
+  (pinned first as kind `pinned`, then top sites minus the pinned hosts and the open page's, 8 rows
+  in all, the starters only with neither; typing never offers pins), `history_store::suggest` hands
+  it the settings' pins (history.rs unchanged), `rows.ts` / `view.ts` (pinned rows, a pin glyph in
+  `command/pins.css`, Shift+Delete → unpin), `quick.ts` ("Pin this site — not pinned" / "Unpin this
+  site — pinned" after the site rows, keeping the command bar open so the row shows the new state).
+- **`setPinned { url, title, on }`** goes through `settings::apply_change` as a `Pin` (Add / Remove),
+  done on the settings of the moment inside `settings_live::apply`'s lock — two quick pins can't
+  lose each other. Pinning checks the URL the bar sent is the open web page's and takes the title
+  Rust knows (the window's); unpinning takes any URL (a pinned row's). Settings' Save sends no pins
+  (`pin: None`), so they stay; a ninth pin is refused with a message.
+- **Beyond the prompt, for safety:** a pinned address with a user name or password is refused (it
+  would sit in settings.json in plain text), and titles lose bidi overrides as well as control
+  characters (a row is text, but an override could make it read as another site).
+- **Smoke:** a short launch of its own (`smoke-pinned.mts`) rather than the quick run, so the quick
+  run's rows stay as they were; the other page is `?other=1` (no "pin" in its address or title, so
+  no history row comes before "Pin this site").
+- `npm run verify`: 834 TS tests, 517 Rust tests, clippy clean.
 
 ### LJ51 — Saved logins on Windows: the engine's password saving and autofill as Privacy settings · strong · auto
 

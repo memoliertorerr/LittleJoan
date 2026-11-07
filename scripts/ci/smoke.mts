@@ -30,7 +30,9 @@
 // (its own launch with History on Ctrl/Cmd+Shift+K: the new key works, the old one doesn't, the
 // macOS menu shows it; smoke-keymap.mts), then the find run (its own launch over `?find=1`: Ctrl/Cmd+F,
 // "lj-needle" found three times by the page's engine, Enter, Esc; find.png; smoke-find.mts), then
-// the downloads run (its own launch: a download named
+// the pinned run (its own launch with the smoke page pinned: it leads the first command bar, and
+// "pin" over another page pins that one; pinned.png; smoke-pinned.mts), then the downloads run (its
+// own launch: a download named
 // by its Content-Disposition lands in the OS's Downloads folder with its exact bytes, the same one
 // again as "lj-smoke (1).bin", none while an extension's panel shows; download.png;
 // smoke-downloads.mts), then the tray
@@ -134,6 +136,7 @@ import { findApp, listProcs } from "./smoke-linux.mts";
 import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
 import { findFailures, findRun, findSummary } from "./smoke-find.mts";
+import { pinnedFailures, pinnedRun, pinnedSummary } from "./smoke-pinned.mts";
 import { summonTimings, timingFailures, timingRun, timingSummary, timingTable, type TimingDriver } from "./smoke-timing.mts";
 import { repeatLaunch, repeatSummary, spacesFailures, spacesRepeat, spacesRun, spacesSummary, type SpacesDriver, type SpacesRun } from "./smoke-spaces.mts";
 import { restFailures, restRun, restSummary, restTable, type EngineProc, type RestRun } from "./smoke-rest.mts";
@@ -1817,6 +1820,18 @@ const findCheck = await findRun({
   pressShortcut,
 });
 console.log(`find: ${JSON.stringify(findSummary(findCheck, os))}`);
+// The pinned run (LJ50, smoke-pinned.mts): its own launch with the smoke page pinned.
+const pinnedCheck = await pinnedRun({
+  os,
+  pageUrl: smokePageUrl,
+  launch: fullscreenLaunch,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  typeText,
+  pressKeys,
+  pressShortcut,
+});
+console.log(`pinned: ${JSON.stringify(pinnedSummary(pinnedCheck, os))}`);
 // Settings → Keyboard with a saved shortcut that can't be used (LJ44): the problem line.
 const keyboardProblem = await keyboardProblemRun({ launch: fullscreenLaunch, screenshot, sleep: (ms) => sleep(ms).then(() => undefined) });
 if (os === "darwin") {
@@ -2217,6 +2232,8 @@ const summary = {
   keymapRun: keymapSummary(keymapCheck, os),
   // LJ49: find in page.
   findRun: findSummary(findCheck, os),
+  // LJ50: pinned sites.
+  pinnedRun: pinnedSummary(pinnedCheck, os),
   keyboardProblem: {
     events: keyboardProblem.map((e) => `${e.event} ${e.detail}`.trim()).filter((line) => /^(shortcut|settings|system-shortcuts)/.test(line)),
     rules: keyboardProblemFailures(keyboardProblem).concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os)),
@@ -2313,6 +2330,7 @@ const failures = evaluate(
   .concat(quickFailures(quickCheck, os))
   .concat(keymapFailures(keymapCheck, os))
   .concat(findFailures(findCheck, os))
+  .concat(pinnedFailures(pinnedCheck, os))
   .concat(keyboardProblemFailures(keyboardProblem))
   .concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os))
   .concat(trayFailures(trayCheck, os))
@@ -2337,6 +2355,7 @@ if (failures.length > 0) {
     "quick",
     "keymap",
     "find",
+    "pinned",
     "keyboard-problem",
     "downloads",
     "tray",

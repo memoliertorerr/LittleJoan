@@ -14,6 +14,11 @@ All notable changes to Little Joan are recorded here. The format follows
   engine says only whether it found something ("Found" / "No matches"). Nothing is added to the
   page to do it. Loading another page or opening the command bar closes the field. The key can be
   changed in Settings → Keyboard (it is also **View → Find…** on macOS).
+- **Pinned sites.** Pin the page you are on — type "pin" in the command bar and choose **Pin this
+  site** — and it leads the command bar whenever nothing is typed, with a small pin, before the
+  sites you open most (up to eight, in the order you pinned them). **Unpin this site** in the same
+  place, or Shift+Delete on a pinned row, unpins it. They are kept in `settings.json`
+  (`pinnedSites`).
 - **Liquid Glass on macOS 26 Tahoe and later.** Settings → Appearance → **Liquid Glass**: Off (the
   default), **Clear** (more transparent) or **Tinted** (more opaque, with more contrast) — the same
   choices as macOS 26.1's own setting. The toolbar and the command bar become glass, tinted by your

@@ -112,10 +112,15 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   "hi") offers **History**; "settings" (or "preferences", "options") offers **Settings**; "quit"
   (or "exit") offers **Quit Little Joan**. The last row, **Settings & extensions**, opens Settings
   on its Extensions tab.
+- **Pinned sites** lead the command bar when nothing is typed, in the order you pinned them, each
+  with a small pin — up to eight, before the sites you open most. On a page, type "pin" and choose
+  **Pin this site** (the same row then says **Unpin this site**); Shift+Delete on a pinned row
+  unpins it. In `settings.json` they are `"pinnedSites"`: `[{ "url": …, "title": … }]`.
 - **Quick commands** in the command bar, each showing how things are now — type a word and pick
   the row with ↓ and Enter:
   - on a page: **Translate page**, **Open in browser**, **Copy link**, **Copy as Markdown link**,
-    **Reload**, and Desktop site / Phone site / Automatic for the site;
+    **Reload**, Desktop site / Phone site / Automatic for the site, and **Pin this site** /
+    **Unpin this site**;
   - **Theme: System / Light / Dark** and **Theme: Sand**, **Dusk**… (the presets; the current one
     marked ✓), **Search with Google / DuckDuckGo / Bing / Brave** (✓), **Mobile sites — on/off**,
     **Remember history — on/off**, **Start at login — on/off**, **Icon — shown/hidden**;

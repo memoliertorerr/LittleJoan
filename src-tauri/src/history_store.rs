@@ -380,8 +380,8 @@ fn edit_in<T>(
     Ok(outcome)
 }
 
-/// The command bar's suggestions for `query` (suggest.rs); with no window open, those of empty
-/// history.
+/// The command bar's suggestions for `query` (suggest.rs), the pinned sites among them; with no
+/// window open, those of empty history.
 pub fn suggest<R: Runtime>(
     app: &AppHandle<R>,
     query: &str,
@@ -389,9 +389,14 @@ pub fn suggest<R: Runtime>(
     engine: SearchEngine,
 ) -> Vec<Suggestion> {
     wait_loaded();
-    state::with(app, |s| match s.history.as_ref() {
-        Some(open) => suggest::suggestions(&open.history, query, current, engine, now_millis()),
-        None => suggest::suggestions(&History::default(), query, current, engine, now_millis()),
+    state::with(app, |s| {
+        // The pinned sites lead the empty state (LJ50).
+        let pinned = &s.settings.pinned_sites;
+        let now = now_millis();
+        match s.history.as_ref() {
+            Some(open) => suggest::suggestions(&open.history, query, current, engine, now, pinned),
+            None => suggest::suggestions(&History::default(), query, current, engine, now, pinned),
+        }
     })
 }
 

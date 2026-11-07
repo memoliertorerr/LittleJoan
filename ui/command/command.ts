@@ -378,6 +378,14 @@ export function commandBar(
             .catch(() => undefined)
             .finally(() => ask(queryFor(typed, shown())));
           return true;
+        case "unpin":
+          // LJ50: the pinned site goes (settings.json); the rows and the quick rows follow.
+          event.preventDefault();
+          keep = selected;
+          invoke("quick_command", { command: { kind: "setPinned", url: outcome.url, title: outcome.title, on: false } })
+            .catch(() => undefined)
+            .finally(() => loadQuick(() => ask(queryFor(typed, shown()))));
+          return true;
         case "none":
           return false;
       }

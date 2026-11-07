@@ -4,7 +4,8 @@
 //! chooses one: the bar builds them from its own rows (ui/command/quick.ts). Settings changes take
 //! the path Settings' Save takes (settings_live.rs). Never from here, only from Settings: the
 //! shortcut and the keys, developer mode, switching extensions, custom theme colors — they change
-//! what code runs or what keys do.
+//! what code runs or what keys do. Pinning (LJ50) pins only the open web page — Rust checks the
+//! address the bar sends is that page's, and takes its title itself.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -17,7 +18,7 @@ use crate::history_store;
 use crate::input::SearchEngine;
 use crate::keys::PageAction;
 use crate::page_actions;
-use crate::settings::{Change, Theme};
+use crate::settings::{Change, Pin, Theme, pinned};
 use crate::settings_live;
 use crate::settings_window::{self, SettingsTab};
 use crate::smoke;
@@ -43,6 +44,8 @@ pub struct QuickState {
     show_tray_icon: bool,
     /// Shown although the setting is off: the shortcut can't work (LJ41's rule).
     icon_forced: bool,
+    /// The open web page is pinned (LJ50): its row says "Unpin this site" then.
+    pinned: bool,
 }
 
 /// One quick command, as the bar sends it: `{ "kind": "<kind>", …its fields }`. Values are checked
@@ -84,6 +87,13 @@ pub enum QuickCommand {
     SetTrayIcon {
         on: bool,
     },
+    /// Pin the open web page (`on`), or unpin a pinned address (LJ50). Pinning checks `url` is the
+    /// open page's; the title is the page's own, as Rust knows it.
+    SetPinned {
+        url: String,
+        title: String,
+        on: bool,
+    },
 }
 
 impl QuickCommand {
@@ -109,6 +119,7 @@ impl QuickCommand {
             QuickCommand::OpenSettings { tab } => format!("openSettings {}", word(tab)),
             QuickCommand::ReloadExtensions {} => "reloadExtensions".to_owned(),
             QuickCommand::SetTrayIcon { on } => format!("setTrayIcon {on}"),
+            QuickCommand::SetPinned { on, .. } => format!("setPinned {on}"),
         }
     }
 
@@ -177,6 +188,9 @@ pub async fn quick_state<R: Runtime>(app: AppHandle<R>) -> QuickState {
         )
     });
     let works = tray::shortcut_works(active.as_deref(), welcome::wayland_session_here(), &portal);
+    let pinned = page
+        .as_ref()
+        .is_some_and(|page| pinned::is_pinned(&settings.pinned_sites, &page.url));
     QuickState {
         page,
         theme: settings.theme,
@@ -187,7 +201,30 @@ pub async fn quick_state<R: Runtime>(app: AppHandle<R>) -> QuickState {
         start_at_login: autostart::is_enabled(&app),
         show_tray_icon: settings.show_tray_icon,
         icon_forced: !settings.show_tray_icon && tray::icon_visible(false, works),
+        pinned,
     }
+}
+
+/// The change a `setPinned` makes: pinning the open web page (the address the bar sent must be
+/// its), or unpinning an address.
+fn pin_change<R: Runtime>(app: &AppHandle<R>, url: &str, on: bool) -> Result<Change, String> {
+    let pin = if on {
+        let page = web_page(app).ok_or_else(|| "That works on a web page.".to_owned())?;
+        if pinned::clean_url(url).is_none()
+            || pinned::clean_url(url) != pinned::clean_url(&page.url)
+        {
+            return Err("Only the open page can be pinned.".to_owned());
+        }
+        let site = pinned::site(&page.url, &page.title)
+            .ok_or_else(|| "This page can't be pinned.".to_owned())?;
+        Pin::Add(site)
+    } else {
+        Pin::Remove(url.to_owned())
+    };
+    Ok(Change {
+        pin: Some(pin),
+        ..Change::default()
+    })
 }
 
 /// Runs a quick command. Settings ones apply and save at once (and an open settings window's
@@ -229,6 +266,11 @@ pub async fn quick_command<R: Runtime>(
         }
         QuickCommand::ReloadExtensions {} => {
             extensions::registry::forget();
+            None
+        }
+        QuickCommand::SetPinned { url, on, .. } => {
+            let updated = settings_live::apply(&app, &pin_change(&app, url, *on)?)?;
+            settings_window::saved_changed(&app, &updated, None);
             None
         }
         // The settings ones, above.
@@ -285,6 +327,16 @@ mod tests {
                 tab: "privacy".into()
             })
         );
+        assert_eq!(
+            parse(
+                json!({ "kind": "setPinned", "url": "https://a.example/", "title": "A", "on": true })
+            ),
+            Ok(QuickCommand::SetPinned {
+                url: "https://a.example/".into(),
+                title: "A".into(),
+                on: true
+            })
+        );
     }
 
     #[test]
@@ -307,6 +359,8 @@ mod tests {
             json!({ "kind": "setMobileSites" }),
             json!({ "kind": "clearHistory", "range": "year" }),
             json!({ "kind": "setSearchEngine", "id": 3 }),
+            json!({ "kind": "setPinned", "url": "https://a.example/", "on": true }),
+            json!({ "kind": "setPinned", "url": "https://a.example/", "title": "A", "on": true, "at": 0 }),
             json!("reload"),
             json!(null),
         ] {
@@ -379,6 +433,26 @@ mod tests {
             }
             .log_line(),
             "clearHistory hour"
+        );
+        // Pinning: never the address or the title.
+        assert_eq!(
+            QuickCommand::SetPinned {
+                url: "https://secret.example/a".into(),
+                title: "Secret".into(),
+                on: false
+            }
+            .log_line(),
+            "setPinned false"
+        );
+        assert_eq!(
+            QuickCommand::SetPinned {
+                url: String::new(),
+                title: String::new(),
+                on: true
+            }
+            .change(),
+            None,
+            "pinning needs the open page: quick_command makes its change"
         );
     }
 }

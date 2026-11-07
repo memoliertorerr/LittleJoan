@@ -101,6 +101,21 @@ describe("drawing rows", () => {
     expect(history?.text()).toBe("History");
   });
 
+  it("draws a pinned site with a pin glyph after its text, and says so to screen readers (LJ50)", () => {
+    const { rows } = buildRows("", [
+      { kind: "pinned", title: "Example", url: "https://example.com/", host: "example.com", score: 0 },
+      { kind: "topSite", title: "Other", url: "https://other.test/", host: "other.test", score: 1 },
+    ]);
+    const [pinned, top] = draw(rows, null);
+    const glyph = pinned?.children.at(-1);
+    expect(glyph?.className).toBe("row-pin");
+    expect(glyph?.attributes.get("aria-hidden")).toBe("true");
+    expect(pinned?.className).toContain("row-pinned");
+    expect(pinned?.all().find((el) => el.className === "row-text")?.text()).toBe("Example — example.com (pinned)");
+    expect(pinned?.all().find((el) => el.tag === "img")?.attributes.get("src")).toBe("https://example.com/favicon.ico");
+    expect(top?.all().some((el) => el.className === "row-pin")).toBe(false);
+  });
+
   it("numbers the rows for the mouse", () => {
     const { rows } = buildRows("", []);
     expect(draw(rows, null).map((item) => item.attributes.get("data-index"))).toEqual(["0"]);

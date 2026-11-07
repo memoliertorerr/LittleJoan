@@ -20,12 +20,14 @@ pub mod change;
 pub mod glass;
 pub mod keys;
 pub mod main_browser;
+pub mod pinned;
 pub mod site_modes;
 pub mod theme;
 
 pub use after_close::AfterClose;
-pub use change::{Change, apply_change};
+pub use change::{Change, Pin, apply_change};
 pub use glass::Glass;
+pub use pinned::PinnedSite;
 pub use site_modes::SiteMode;
 pub use theme::{Theme, ThemeMode};
 
@@ -80,6 +82,9 @@ pub struct Settings {
     /// Where pages are handed on (LJ46, settings/main_browser.rs): a browser's id as the OS lists
     /// it, or `None` for the system default.
     pub main_browser: Option<String>,
+    /// The sites that lead the command bar's empty state (LJ50, settings/pinned.rs): at most 8
+    /// `{ url, title }`, http(s) only, one per URL, in the order pinned.
+    pub pinned_sites: Vec<PinnedSite>,
 }
 
 impl Default for Settings {
@@ -102,6 +107,7 @@ impl Default for Settings {
             after_close: AfterClose::default(),
             glass: Glass::default(),
             main_browser: None,
+            pinned_sites: Vec::new(),
         }
     }
 }
@@ -183,6 +189,7 @@ pub fn parse(json: &str) -> Settings {
         after_close: after_close::parse(map.get("afterClose")),
         glass: glass::parse(map.get("glass")),
         main_browser: main_browser::parse(map.get("mainBrowser")),
+        pinned_sites: pinned::parse(map.get("pinnedSites")),
     }
 }
 
@@ -306,6 +313,10 @@ mod tests {
             after_close: AfterClose::Ready15,
             glass: Glass::Tinted,
             main_browser: Some("com.apple.Safari".into()),
+            pinned_sites: vec![PinnedSite {
+                url: "https://example.com/".into(),
+                title: "Example".into(),
+            }],
             ..Settings::default()
         };
         save(&dir, &settings).expect("save");

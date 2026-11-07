@@ -298,6 +298,35 @@ describe("keys", () => {
   });
 });
 
+describe("pinned sites (LJ50)", () => {
+  const PINNED: Suggestion = { kind: "pinned", title: "Pinned smoke", url: "http://127.0.0.1:5000/pinned.html", host: "127.0.0.1:5000", score: 0 };
+  const TOP: Suggestion = { ...EXAMPLE, kind: "topSite" };
+
+  it("lead the empty command bar, in Rust's order, before the top sites", () => {
+    const { rows } = buildRows("", [PINNED, TOP]);
+    expect(kinds(rows)).toEqual(["pinned", "topSite", "settings"]);
+    expect(rows[0]).toMatchObject({ title: "Pinned smoke", domain: "127.0.0.1:5000", pinned: PINNED.url });
+    expect(rows[0]?.action).toEqual({ kind: "open", url: PINNED.url });
+    expect(rows[0]?.removable).toBeUndefined();
+    expect(rows[1]?.pinned).toBeUndefined();
+    // Eight at most, then Settings & extensions.
+    const many = Array.from({ length: 10 }, (_, i) => ({ ...PINNED, url: `https://p${i}.test/`, host: `p${i}.test` }));
+    expect(buildRows("", many).rows).toHaveLength(MAX_SUGGESTIONS + 1);
+  });
+
+  it("are unpinned by Shift+Delete, which never removes history then", () => {
+    const list = buildRows("", [PINNED, TOP]);
+    expect(listKey(list, 0, "Delete", true, "")).toEqual({ kind: "unpin", url: PINNED.url, title: "Pinned smoke" });
+    expect(listKey(list, 0, "Delete", false, "")).toEqual({ kind: "none" });
+    expect(listKey(list, 1, "Delete", true, ""), "a top site isn't history to remove").toEqual({ kind: "none" });
+  });
+
+  it("aren't offered while typing", () => {
+    const { rows } = buildRows("127", [PINNED, SMOKE, GOOGLE]);
+    expect(kinds(rows)).not.toContain("pinned");
+  });
+});
+
 describe("site icons", () => {
   it("fetch the favicon from the site over HTTPS, if the host is a plain one", () => {
     expect(faviconUrl("example.com")).toBe("https://example.com/favicon.ico");

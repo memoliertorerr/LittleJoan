@@ -4,7 +4,9 @@
 // (src-tauri/src/commands/quick.rs) — nothing a page supplies picks a command, rows are built
 // here from this list. Copy link and Copy as Markdown link copy in the bar itself (copy.ts), the
 // Markdown text from the bundled Copy as Markdown link extension's own logic (one escaping).
-// "Clear history" asks for a second Enter on the same row. view.ts draws the rows as text only.
+// "Clear history" asks for a second Enter on the same row. With a web page open, "Pin this site" /
+// "Unpin this site" (LJ50) pins it to the top of the empty command bar. view.ts draws the rows as
+// text only.
 import { link } from "../../extensions/markdown-link/logic.js";
 import { CLEAR_CHOICES, type ClearRange } from "../history/logic.ts";
 import { PRESETS, type Preset } from "../lib/presets.ts";
@@ -26,6 +28,8 @@ export interface QuickState {
   showTrayIcon: boolean;
   /** Shown although the setting is off: the shortcut can't work. */
   iconForced: boolean;
+  /** The open web page is pinned (LJ50). */
+  pinned: boolean;
 }
 
 /** The fixed commands Rust's quick_command() takes (a serde enum there). */
@@ -42,7 +46,8 @@ export type QuickCommand =
   | { kind: "setStartAtLogin"; on: boolean }
   | { kind: "openSettings"; tab: string }
   | { kind: "reloadExtensions" }
-  | { kind: "setTrayIcon"; on: boolean };
+  | { kind: "setTrayIcon"; on: boolean }
+  | { kind: "setPinned"; url: string; title: string; on: boolean };
 
 /** The mark on the choice that is current ("Theme: Dark ✓"). */
 export const CHECK = "✓";
@@ -71,6 +76,7 @@ export function quickStateFrom(value: unknown): QuickState | null {
     !bool(raw.rememberHistory) ||
     !bool(raw.showTrayIcon) ||
     !bool(raw.iconForced) ||
+    !bool(raw.pinned) ||
     !(login === null || bool(login))
   ) {
     return null;
@@ -85,6 +91,7 @@ export function quickStateFrom(value: unknown): QuickState | null {
     startAtLogin: login,
     showTrayIcon: raw.showTrayIcon,
     iconForced: raw.iconForced,
+    pinned: raw.pinned,
   };
 }
 
@@ -187,6 +194,17 @@ function candidates(state: QuickState, site: SiteModeInfo | null, armed: string 
         action: { kind: "siteMode", mode: row.mode },
       });
     }
+  }
+  if (page) {
+    // LJ50: the open page at the top of the empty command bar (Rust checks it is the open page).
+    list.push({
+      key: "pin",
+      title: state.pinned ? "Unpin this site" : "Pin this site",
+      keywords: ["pin", "unpin", "pinned", "favorite", "favourite"],
+      icon: "pin",
+      state: state.pinned ? "pinned" : "not pinned",
+      action: quick({ kind: "setPinned", url: page.url, title: page.title, on: !state.pinned }, "pin", false),
+    });
   }
   for (const { mode, title } of MODES) {
     list.push({ key: `mode:${mode}`, title, keywords: ["appearance", "mode"], icon: "theme", state: "", current: state.theme.mode === mode, action: quick({ kind: "setThemeMode", mode }, `mode:${mode}`, false) });

@@ -18,7 +18,7 @@ const VIEWS = ["overlay", "toolbar", "history", "finding"];
 
 describe("the bar's view classes", () => {
   it("are checked in every stylesheet the bar links", () => {
-    expect(sheets).toEqual(["style.css", "history/history.css", "toolbar/find.css"]);
+    expect(sheets).toEqual(["style.css", "history/history.css", "toolbar/find.css", "command/pins.css"]);
   });
 
   it("are only on <body>", () => {
