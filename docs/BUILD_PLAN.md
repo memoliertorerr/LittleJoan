@@ -127,9 +127,9 @@
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ✅ done |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ✅ done |
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
-| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`) |
-| LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done (CI: see notes; PR #40 ready, NOT merged — the independent security review, then the owner) |
-| LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ⬜ todo |
+| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`; PR #40 merged as 12e5024) |
+| LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done — PR #40 (head c05ea86, run 41821630411 green 18/18) merged as 12e5024 after the independent security review (approve with minor fixes; all nine findings fixed in `lj-step-46-fix4` → `fix6`); main's run 42385385626 green 18/18 |
+| LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | 🔄 in progress (phase 22, `lj/p22-popups`) |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ⬜ todo |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ⬜ todo |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
@@ -295,7 +295,15 @@ untrusted data) and the main browser for handing pages on without loops, with th
 button — security-sensitive (`review`): the PR ends ready and green, NOT merged, for an independent
 review and the owner's decision. **2026-11-03: LJ45 and LJ46 are done — PR #40 is ready and green
 (run 41730050366, 18 jobs), NOT merged:** the independent security review comes next, then the
-owner decides. Phase 22 waits for the merge (it changes the same new-window code).
+owner decides. Phase 22 waits for the merge (it changes the same new-window code). **2026-11-04 → 11-07:
+the independent security review of PR #40 (approve with minor fixes, no Critical or High) — all nine
+findings fixed in `lj-step-46-fix4` → `fix6` (LJ46's notes); PR #40 (head c05ea86, run 41821630411
+green on all 18 jobs) merged as 12e5024; main's run 42385385626 green on all 18 jobs.** **The
+owner's decision (2026-11-07):** they test phases in batches, and the coordinator merges a
+security-sensitive phase's PR after a clean independent review (Ground Rule 24); the phase's own
+agent still marks it ready and stops. **Phase 22 (LJ47 → LJ48, 2026-11-07)** is on
+`lj/p22-popups`: sign-in popups in a small IPC-free window of their own — `review`: ready and green,
+not merged by its agent.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -732,7 +740,9 @@ devices, real GPUs, or a real user session is the human's, collected in LJ10's c
     by the agent — for an independent review and the owner's decision; a `checkpoint` step fills
     the PR with a precise checklist, may merge its green PR, and STOPS — the next phase starts
     only when the owner says go; tags and releases happen only on the owner's word, one at a
-    time.
+    time. *(The owner's update 2026-11-07: they test phases in batches, and after a clean
+    independent review the coordinator merges a `review` phase's PR; the phase's own agent still
+    marks it ready and stops.)*
 25. *(round 3)* **One keymap.** From LJ43 on, every key of Little Joan's own (page keys, the macOS
     menu's key equivalents, keys shown in the bar or Settings) comes from `keymap.rs` and the
     user's overrides in settings; no other file hard-codes such a key. Typing keys (a letter or
@@ -8383,7 +8393,8 @@ rerun --failed` once: green (Deferred follow-ups).
 > phase 25 is LJ56 alone, and round 4 — LJ58, LJ59 — follows phase 26). Phases 21, 22 and 24 are
 > **security-sensitive**: each ends in a `review` step — the PR is marked ready, green, and NOT
 > merged; an independent read-only review follows (as for phase 16), its findings are fixed in
-> `lj-step-N-fix<k>` commits, and the owner decides the merge. The next phase starts from `main`
+> `lj-step-N-fix<k>` commits, and the owner decides the merge (since 2026-11-07: the coordinator
+> merges after a clean review, and the owner tests phases in batches). The next phase starts from `main`
 > only when the owner says go; phase 22 changes the same new-window code as phase 21, so it waits
 > until phase 21 is merged. The `auto` phases 23 and 25 are merged by the agent once green, as in
 > v0.2 (CLAUDE.md's standing exception covers v0.3; Ground Rule 24); LJ57 is a checkpoint.
@@ -8820,6 +8831,11 @@ are exactly the symptoms of the race flake recorded in Deferred follow-ups (runs
 `ljext:` URLs, refused before the gate; the start-page detour is `tauri://localhost`, which the new
 prefix rule doesn't touch; feb996e's green macOS run shows the same racer). Recorded as its third
 occurrence; `lj-step-46-fix6` (this note) ran the whole CI again.
+
+**Merged (2026-11-07):** run 41821630411 (head c05ea86) green on all 18 jobs on its first attempt;
+PR #40 merged into `main` as 12e5024 (a merge commit), and main's run 42385385626 green on all 18
+jobs. The owner decided that day to test phases in batches and to let the coordinator merge
+security-sensitive phases after a clean independent review (Ground Rule 24).
 
 ### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
 
