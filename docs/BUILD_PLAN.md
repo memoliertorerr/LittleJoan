@@ -131,10 +131,10 @@
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done — PR #40 (head c05ea86, run 41821630411 green 18/18) merged as 12e5024 after the independent security review (approve with minor fixes; all nine findings fixed in `lj-step-46-fix4` → `fix6`); main's run 42385385626 green 18/18 |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (phase 22, `lj/p22-popups`; Linux's size fixed in `lj-step-47-fix` → `lj-step-48-fix`; run 42398526340 green 18/18) |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 (head e7d13c8, run 42401453791 green 18/18) merged as 7f0edd2 by the coordinator after the review (Ground Rule 24); main's run 42404243947 green 18/18 |
-| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; CI: see notes) |
-| LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes) |
-| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
-| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ⬜ todo |
+| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; Linux's highlights fixed in `lj-step-49-fix`; PR #42 (head 0964ee6, run 42414060894 green 18/18 after one re-run of Windows smoke's lost-keys flake) merged as f335e62; main's run 42418522861 green 18/18) |
+| LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes; PR #42 merged as f335e62) |
+| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | 🔄 in progress (phase 24, `lj/p24-saved-logins`) |
+| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | 🔄 in progress (phase 24, `lj/p24-saved-logins`) |
 | LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
@@ -308,7 +308,12 @@ security review found one High (a title spoof), two Medium and six Low; all fixe
 e7d13c8, run 42401453791 green on all 18 jobs) was merged by the coordinator as 7f0edd2 on 2026-11-07;
 main's run 42404243947 green on all 18 jobs. **Phase 23 (LJ49 → LJ50, 2026-11-07)** is on
 `lj/p23-find-pins`: find in page (the engines' own find, a strip in the toolbar) and pinned sites at
-the top of the command bar — `auto`, merged by its agent once every job is green.
+the top of the command bar — `auto`, merged by its agent once every job is green. **Done:** PR #42
+(head 0964ee6, run 42414060894 green on all 18 jobs — its first attempt failed only Windows smoke's
+known lost-keys flake, the re-run passed) merged as f335e62; main's run 42418522861 green on all 18
+jobs. **Phase 24 (LJ51 → LJ52, 2026-11-07)** is on `lj/p24-saved-logins`: Windows' own password
+saving and autofill as Privacy settings, removing them, and what each engine offers for passkeys —
+security-sensitive (`review`): the PR ends ready and green, NOT merged by its agent.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -9315,6 +9320,13 @@ Look at find.png on every OS.
   WebKit's count unmarks every match once it has counted — it took the search's highlights away.
   Counted first now (GNOME Web's order); the count and the search reach the web process in that
   order. Recorded in Landmines.
+- **CI for `lj-step-49-fix` (head 0964ee6, run 42414060894): green on all 18 jobs.** Its first
+  attempt failed only Windows smoke, in the site-mode run's typing — the known lost synthetic keys
+  (a typing step timed out; 0964ee6 changed Linux code only); the failed job's re-run passed. The
+  Linux `find.png` now shows all three matches marked (the coordinator's look at the artifact).
+  **Merged (2026-11-07):** PR #42 merged into `main` as f335e62 (a merge commit, by its agent:
+  phase 23 is `auto`); main's run 42418522861 green on all 18 jobs, first attempt. Phase 24 starts
+  from f335e62.
 
 ### LJ50 — Pinned sites at the top of the command bar · standard · auto
 
