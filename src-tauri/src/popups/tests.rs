@@ -163,45 +163,56 @@ fn webkitgtk_requests_wait_for_the_size() {
 
 #[test]
 fn webkitgtk_asked_for_a_size_only_when_its_features_gave_one() {
-    // WebKitGTK 2.44–2.52, read from its source (popups.rs's gtk_asked): what the new view's window
-    // properties hold for `window.open(url, name, "width=480,height=600")` and for a target=_blank
-    // link (or a bare window.open(url)). The features' geometry, right after `create`:
-    let sized_features = Some((480, 600));
-    let link_features = Some((0, 0));
-    // At ready-to-show both have a geometry (WebCore set the frame: the request's size, or the
-    // popup window's default size for a link) and the same bars — toolbar hidden, location and
-    // menu bars shown —, so neither can say (CI runs 42390685720 and 42393350263).
-    let at_ready_to_show = |features: Option<(i32, i32)>| {
-        let (width, height) = match features {
-            Some((w, h)) if w > 0 && h > 0 => (w, h),
-            _ => (480, 640),
-        };
-        ([false, true, true], width, height)
+    // What WebKitGTK reported in CI run 42398526340 (`popup-gtk` in the smoke log) for
+    // `window.open(url, name, "width=480,height=600")` and for a target=_blank link (or a bare
+    // window.open(url)): (features right after `create`, [toolbar, location, menubar] and the
+    // geometry at ready-to-show), on 2.50.4 (Ubuntu 22.04) and 2.52.6 (24.04, the AppImage).
+    struct Seen {
+        features: (i32, i32),
+        bars: [bool; 3],
+        geometry: (i32, i32),
+    }
+    let sized = |toolbar| Seen {
+        features: (480, 600),
+        bars: [toolbar, true, true],
+        geometry: (480, 600),
     };
-    assert_eq!(
-        at_ready_to_show(sized_features).0,
-        at_ready_to_show(link_features).0
-    );
-    assert!(at_ready_to_show(link_features).1 > 0);
-    // The features' geometry does.
-    assert_eq!(gtk_asked(sized_features), Some((480.0, 600.0)));
-    assert_eq!(gtk_asked(link_features), None);
+    // A link's geometry is the popup window's own default size (480 × 640 for a pending one).
+    let link = |toolbar| Seen {
+        features: (0, 0),
+        bars: [toolbar, true, true],
+        geometry: (480, 640),
+    };
+    for toolbar in [false, true] {
+        let (sized, link) = (sized(toolbar), link(toolbar));
+        // At ready-to-show both have a geometry and the same bars: neither can say (CI runs
+        // 42390685720 and 42393350263).
+        assert_eq!(sized.bars, link.bars);
+        assert!(link.geometry.0 > 0 && link.geometry.1 > 0);
+        assert!(sized.geometry.0 > 0 && sized.geometry.1 > 0);
+        // The features' geometry does.
+        assert_eq!(gtk_asked(Some(sized.features)), Some((480.0, 600.0)));
+        assert_eq!(gtk_asked(Some(link.features)), None);
+        assert_eq!(
+            settle(&url(SIGNIN), gtk_asked(Some(sized.features)).is_some()),
+            Decision::InApp
+        );
+        assert_eq!(
+            settle(&url(SIGNIN), gtk_asked(Some(link.features)).is_some()),
+            Decision::Browser
+        );
+        assert_eq!(
+            settle(
+                &url("about:blank"),
+                gtk_asked(Some(sized.features)).is_some()
+            ),
+            Decision::InApp
+        );
+    }
     // Only one of the two (or none read at all): no size asked.
     assert_eq!(gtk_asked(Some((480, 0))), None);
     assert_eq!(gtk_asked(Some((0, 600))), None);
     assert_eq!(gtk_asked(None), None);
-    assert_eq!(
-        settle(&url(SIGNIN), gtk_asked(sized_features).is_some()),
-        Decision::InApp
-    );
-    assert_eq!(
-        settle(&url(SIGNIN), gtk_asked(link_features).is_some()),
-        Decision::Browser
-    );
-    assert_eq!(
-        settle(&url("about:blank"), gtk_asked(sized_features).is_some()),
-        Decision::InApp
-    );
     // The wait before an undecided popup settles as unsized is far longer than ready-to-show takes.
     assert!(GTK_SETTLE_WAIT >= Duration::from_secs(5));
 }

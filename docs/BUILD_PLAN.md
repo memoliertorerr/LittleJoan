@@ -129,8 +129,8 @@
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`; PR #40 merged as 12e5024) |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done — PR #40 (head c05ea86, run 41821630411 green 18/18) merged as 12e5024 after the independent security review (approve with minor fixes; all nine findings fixed in `lj-step-46-fix4` → `fix6`); main's run 42385385626 green 18/18 |
-| LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (CI: see notes; phase 22, `lj/p22-popups`) |
-| LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done (CI: see notes; PR #41 — ready when green, NOT merged by its agent: the independent security review next) |
+| LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (phase 22, `lj/p22-popups`; Linux's size fixed in `lj-step-47-fix` → `lj-step-48-fix`; run 42398526340 green 18/18) |
+| LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 ready, NOT merged by its agent: the coordinator merges after a clean review (Ground Rule 24) |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ⬜ todo |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
 | LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
@@ -302,7 +302,9 @@ green on all 18 jobs) merged as 12e5024; main's run 42385385626 green on all 18 
 owner's decision (2026-11-07):** they test phases in batches, and the coordinator merges a
 security-sensitive phase's PR after a clean independent review (Ground Rule 24); the phase's own
 agent still marks it ready and stops. **Phase 22 (LJ47 → LJ48, 2026-11-07)** is on
-`lj/p22-popups`: sign-in popups in a small IPC-free window of their own — `review`: ready and green,
+`lj/p22-popups`: sign-in popups in a small IPC-free window of their own — `review`. An independent
+security review found one High (a title spoof), two Medium and six Low; all fixed in
+`lj-step-48-fix` with Linux's popup size (run 42398526340 green on all 18 jobs). PR #41 is ready,
 not merged by its agent.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
@@ -8991,11 +8993,14 @@ on every OS.
   the browser, the blank one nowhere); Windows and macOS green. Read in WebKitGTK 2.44–2.52's
   source (`webkitWindowPropertiesUpdateFromWebWindowFeatures`, WebCore's `Page::applyWindowFeatures`,
   the GTK `UIClient`): the features only *set* what they name — `width=480,height=600` names no bar,
-  so the location and menu bars stay at their default (shown) —, and `setToolbarsVisible(toolbar ||
-  location)` tests whether those features were *named* (`std::optional`), so the toolbar is hidden
-  for every request. At `ready-to-show` a sized request and a link have the same bars (toolbar
-  hidden, location and menu shown) and both a geometry: the size asked for, or the popup window's
-  own default size (tao's `set_default_size`, 480 × 640 here) when WebCore sets the frame. What does
+  so the location and menu bars stay at their default (shown) —, and the toolbar comes out the same
+  for every request. At `ready-to-show` a sized request and a link have the same bars and both a
+  geometry: the size asked for, or the popup window's own default size (tao's `set_default_size`,
+  480 × 640 here) when WebCore sets the frame. **What CI logged (run 42398526340, `popup-gtk`):**
+  sized — features 480 × 600, geometry 480 × 600; link (the handoff run's `?blank=1` and flood) —
+  features 0 × 0, geometry 480 × 640; bars toolbar / location / menubar = 0 / 1 / 1 on WebKitGTK
+  2.50.4 (Ubuntu 22.04) and 1 / 1 / 1 on 2.52.6 (24.04, the AppImage), the same for both kinds
+  (`webkitgtk_asked_for_a_size_only_when_its_features_gave_one` holds these values). What does
   differ is the geometry right after `create`: WebKitGTK writes the features' `width` / `height`
   into the new view's window properties as `create` returns, and nothing touches it again until
   the page process — waiting on that very reply — sets the frame. → `lj-step-48-fix`: a pending
@@ -9159,6 +9164,19 @@ STOP. Never merge it: an independent security review comes next, and the owner d
 - The split: bar/popup.rs (opening, titles, navigation), bar/popup/window.rs (place, owner,
   WebKitGTK's settle, keys, the keyboard), bar/popup/closing.rs (the gate and every close),
   popups/title.rs. `npm run verify`: 795 TS tests, 486 Rust tests, clippy clean.
+- **CI run 42398526340 (head e3a7d1a): green on all 18 jobs, first attempt, no re-runs.** On every
+  OS the click reached the page (macOS included) and: the **spoof** popup was built titled by the
+  opener (`popup-title http://127.0.0.1:<port1>`), the opener wrote its form (`spoofed opened=1
+  written=1`) and closed it, and no title named the second origin (Windows logged `popup-loaded
+  about:blank` for the stopped navigation — a finish, which no longer sets a title); the sign-in
+  flows are retitled at the provider page's commit (`popup-title http://127.0.0.1:<port2>`), and
+  `popup.png` shows that title over the window on all three. **Linux** decided every popup from
+  the features (sized 480 × 600 → shown, links 0 × 0 → `popup-settled unsized` → handed on; the
+  values above), so the popups run and the handoff run pass together. **onblur:** exercised on
+  macOS (four new windows after the `--hide`, all `new-window-dropped closing`) and Windows (one);
+  on Linux the hidden page asked for none (GTK gave it no blur or visibilitychange) — the gate is
+  the same code, unit-tested through `onBlurFailures`. The flood: Windows 2 handed on / 13
+  throttled, Linux 1 / 14 (the rest `popup-limited rate`), admissions ≥ 1 s apart.
 
 ### LJ49 — Find in page · strong · auto
 
@@ -10556,10 +10574,11 @@ Populated from real friction, not speculation:
   scheduled inside it: `platform/linux/popups.rs`). At `ready-to-show` nothing tells them apart any
   more: **every request has a geometry** (WebCore sets the frame — from the popup window's own
   default size when the page asked for none; CI run 42390685720: a link opened inside), and **the
-  bars don't say** (the features set only the bars they name; `setToolbarsVisible` tests whether
-  they were named, so the toolbar is hidden for every request and the location and menu bars stay
-  shown — CI run 42393350263: every sized request settled as unsized). Upstream's `is-popup`
-  property (after 2.52) would answer it directly.
+  bars don't say** (the features set only the bars they name, so the location and menu bars stay
+  shown, and the toolbar is the same for every request — hidden on 2.50.4, shown on 2.52.6; CI run
+  42393350263: every sized request settled as unsized; run 42398526340 logged the values: sized
+  480 × 600 / link 0 × 0 right after `create`). Upstream's `is-popup` property (after 2.52) would
+  answer it directly.
 - *(LJ47, read in vendored wry 0.57)* **wry's `window.close()` handling closes only the webview.**
   WebView2's `WindowCloseRequested` destroys the webview's container HWND, WebKitGTK's `close`
   destroys the view, and WKWebView's delegate has no `-webViewDidClose:` at all — a webview window

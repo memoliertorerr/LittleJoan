@@ -242,10 +242,10 @@ pub fn settle(target: &Url, sized: bool) -> Decision {
 /// view is created; nothing else does until WebCore sets the window frame — for a request with no
 /// size, from the popup window's own default size (or the opener's) — and then shows the page
 /// (`ready-to-show`). So at `ready-to-show` every request has a geometry (CI run 42390685720: a
-/// link opened inside), and the bars say nothing either: the toolbar is hidden for every request
-/// (`setToolbarsVisible(toolbar || location)` tests whether the features *named* them) and the
-/// location and menu bars stay at their default (shown) unless the features name them (CI run
-/// 42393350263: every sized request settled as unsized). Only the geometry the features left says.
+/// link opened inside), and the bars say nothing either: the location and menu bars stay at their
+/// default (shown) unless the features name them, and the toolbar is the same for a sized request
+/// and a link (hidden on 2.50.4, shown on 2.52.6 — CI run 42393350263: every sized request settled
+/// as unsized; run 42398526340 logged the values). Only the geometry the features left says.
 pub fn gtk_asked(features: Option<(i32, i32)>) -> Option<(f64, f64)> {
     match features {
         Some((width, height)) if width > 0 && height > 0 => {
