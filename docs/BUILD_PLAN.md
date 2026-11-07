@@ -129,7 +129,7 @@
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`; PR #40 merged as 12e5024) |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done — PR #40 (head c05ea86, run 41821630411 green 18/18) merged as 12e5024 after the independent security review (approve with minor fixes; all nine findings fixed in `lj-step-46-fix4` → `fix6`); main's run 42385385626 green 18/18 |
-| LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | 🔄 in progress (phase 22, `lj/p22-popups`) |
+| LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (CI: see notes; phase 22, `lj/p22-popups`) |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ⬜ todo |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ⬜ todo |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
@@ -8922,6 +8922,53 @@ CI until every job is green (Ground Rule 3; two honest fix attempts, then stop).
 on every OS.
 ```
 
+**Implementation notes (2026-11-07; disk 13 GB free before and after, `.cache/target` 1.4 GB):**
+- **Phase 21 changed the ground first** (the coordinator's brief): the page's `on_new_window` now
+  calls `bar/popup.rs::new_window`, which asks `popups::decide`; its Browser outcome is exactly
+  LJ46's path — `browsers::hand_off_new_window(.., NewWindowFrom::Page)`, so phase 21's gate (one
+  under way, one a second), its loop guard and a panel's `openUrl` checks all still apply — and its
+  Refuse is today's `new-window-refused`. An extension panel (`session::showing()` /
+  `committed()`) or an app page is never an opener (`Opener::Other`): today's behaviour. A popup's
+  own new windows go through the same gate as `NewWindowFrom::Popup` (no panel check — a popup is
+  no panel).
+- **`decide`** as the Verify says, plus **an opening limit the brief asked for**: at most 2 open and
+  3 opened in any 10 s (`extensions::limits::RateLimit`, counted only for a request that would get
+  a popup); beyond either, where it went before (`popup-limited cap|rate`). `may_navigate`: http(s)
+  and `about:blank`, plus **`about:srcdoc`** — WKWebView and WebKitGTK ask the guard for frames too,
+  so a sign-in page's srcdoc iframe would break otherwise (it can never be a top-level page);
+  nothing `is_allowed_navigation` or `intercepted_by_app` refuses, no extension URL in any form, not
+  the app's origin, no `data:` / `blob:`.
+- **WebKitGTK gives no size** (wry's `create` handler passes `size: None` always — the plan's Verify
+  assumed every engine says): a request that isn't a known sign-in flow is `Pending` — built hidden,
+  its http(s) navigations held (`popup-early`), and decided at its `ready-to-show` from
+  `webkit_web_view_get_window_properties`' geometry (`popups::settle`; WebCore shows a new page
+  before it loads anything in it, so ready-to-show comes first): it shows (and makes the held
+  navigation) or closes unseen and goes to the browser / nowhere (`popup-settled unsized`). So a
+  plain `target=_blank` on Linux builds a hidden window before it is handed on; the handoff run's
+  flood rule now measures the rate up to the last handoff (`smoke-handoff.mts`: such a handoff can
+  come after the last request — still one a second, a test shows a leak still fails).
+- **The window** as the prompt says, built blank (`about:blank`, tauri's example; WebView2 wants a
+  new window's webview not navigated) and owned through the raw handles (`owner_raw` / `parent_raw` /
+  `transient_for_raw`: the Little Joan window is a `Window`, not a `WebviewWindow`); not
+  minimizable or maximizable. **`window.close()`**: wry destroys only the webview (WebView2's
+  container HWND; WebKitGTK's view) and WKWebView's delegate has no `-webViewDidClose:` at all, so
+  `platform/{win,mac,linux}/popups.rs` close the whole popup (WebView2's own `WindowCloseRequested`;
+  the method added once to wry's delegate class, found through the opener's `UIDelegate`, before
+  the first popup's delegate is set — WebKit caches which methods a delegate has; the WebKitGTK
+  view's `destroy`). The close button marks `user` at `CloseRequested`; `Destroyed` forgets it and
+  gives the keyboard back. Windows are destroyed from a thread of their own.
+- **Its store and its engine:** macOS's popup configuration is WebKit's copy of the page's, so its
+  custom-scheme requests reach the page's handlers under the page's label (nothing: joan-page has no
+  capability), and Tauri's own scripts are added once more to the shared WKUserContentController
+  per popup (Tauri's, harmless; recorded in Landmines). On Linux the popup has WebKitSettings of
+  its own, so LJ14.1's fullscreen-off is applied to it too, and its downloads are refused by the
+  emission hook (`Source::Popup`).
+- `browsers/tests.rs`'s opener source test forbids the text `.opener()` anywhere (the opener
+  plugin's): macOS's glue names tauri's new-window opener as `NewWindowFeatures::opener(features)`.
+- Tests: `popups/tests.rs` (16), `capability_tests::no_capability_reaches_a_popup`,
+  `popup-logic.test.ts`, `smoke-popups.test.ts`, the handoff tests (no popup for `?blank=1`, the
+  deferred handoff). `npm run verify`: 788 TS tests, 478 Rust tests, clippy clean.
+
 ### LJ48 — Popups: closing with their page, keys, docs and the review · strong · review
 
 **Verify:** `npm run verify` green, including Rust tests: popups close when the page webview
@@ -9940,6 +9987,15 @@ smoke run; nothing changed in the direct-download build.
 - **The glass's corner radius is a constant** (LJ19.9): 16 pt matched CI's macOS 26 window corners
   (no un-blurred rim in the zoomed screenshots); macOS 26 has no public API for a window's radius, so
   a future macOS changing it would need the constant changed.
+- **The page webview has no permission handler** (surfaced by LJ47, read in vendored wry 0.57):
+  without one, wry's macOS UI delegate *grants* a page's camera / microphone request
+  (`WKPermissionDecision::Grant`; macOS's own per-app prompt still comes), WebView2 and WebKitGTK
+  use their defaults. Popups deny every permission (LJ47). The owner may want the page to ask, or to
+  deny as popups do — a small `on_permission_request` on the page's builder.
+- **A sign-in popup in WebKit's own fullscreen on macOS** (surfaced by LJ47): element fullscreen
+  stays on in popups (macOS shares the page's WKPreferences, so it can't be switched off for the
+  popup alone); a summon then is LJ19.5's case for a window that isn't the page. Sign-in pages don't
+  go fullscreen; if one does, the shortcut focuses the Little Joan window.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -10334,6 +10390,21 @@ Populated from real friction, not speculation:
   became `--link --show` — a refused link — and both AppImage smoke jobs ran into their 75-minute
   limit. The AppImage keeps a plain `Exec=little-joan` (`bundle.linux.appimage.files` overrides the
   deb's generated entry); any argument added to the deb's Exec must stay out of the AppImage's.
+- *(LJ47, read in vendored wry 0.57 / tauri 2.12.4)* **A new window's size isn't known on
+  WebKitGTK when it is asked for.** wry's `create` handler passes `size: None` always; the engine
+  sets the new view's window properties after the handler returns. Decide such a window at its
+  `ready-to-show` (`popups::settle`) — and hold its navigations until then.
+- *(LJ47, read in vendored wry 0.57)* **wry's `window.close()` handling closes only the webview.**
+  WebView2's `WindowCloseRequested` destroys the webview's container HWND, WebKitGTK's `close`
+  destroys the view, and WKWebView's delegate has no `-webViewDidClose:` at all — a webview window
+  of its own stays on screen, empty (or open). Close the window yourself (`platform/*/popups.rs`);
+  on macOS add the method before the web view's delegate is set: WebKit reads which methods a
+  delegate has at `setUIDelegate:`.
+- *(LJ47)* **On macOS a popup built from the opener's configuration shares its
+  WKUserContentController and URL scheme handlers.** wry skips handlers already registered, so the
+  popup's `tauri:` / `ipc:` / `ljext:` requests reach the page's handlers under the page's label,
+  and Tauri's own scripts are added to the shared controller once more per popup. Anything that
+  checks a webview's label for these must treat a popup like the page.
 - *(LJ46, run 41724602261)* **GitHub's arm64 Ubuntu images have no xdg-utils.** No `xdg-mime`,
   no `xdg-open`: Little Joan then reads the default for https from the mimeapps.list files itself
   (the XDG MIME Applications spec's order), and the opener still works through GIO.

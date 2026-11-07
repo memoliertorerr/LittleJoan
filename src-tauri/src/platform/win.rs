@@ -49,6 +49,8 @@ use crate::state;
 pub mod browsers;
 mod front;
 pub use front::{foreground, front};
+/// Sign-in popups (LJ47).
+pub mod popups;
 /// The bar's processes failing, its rest, the page's downloads (LJ19.4).
 mod rest;
 pub use rest::{bar_at_rest, cancel_downloads};

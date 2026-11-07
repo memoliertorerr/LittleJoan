@@ -37,6 +37,8 @@ pub use spaces::{activate_app, front, join_active_space};
 mod glass;
 /// Smoke mode: AppKit's window and app notifications, for WebKit's fullscreen (LJ19.4-fix4).
 mod notes;
+/// Sign-in popups' `window.close()` (LJ47).
+pub mod popups;
 pub use glass::{os_major, set as set_glass, support as glass_support, watch_accessibility};
 pub use notes::{context as smoke_context, install as install_notes};
 

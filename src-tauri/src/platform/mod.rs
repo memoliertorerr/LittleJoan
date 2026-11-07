@@ -28,7 +28,8 @@ use std::sync::OnceLock;
 use std::thread::ThreadId;
 use std::time::Duration;
 
-use tauri::{AppHandle, Runtime, Webview, Window};
+use tauri::webview::NewWindowFeatures;
+use tauri::{AppHandle, Runtime, Webview, WebviewWindow, Window};
 
 use crate::smoke;
 use crate::spaces::Front;
@@ -58,6 +59,43 @@ pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
 pub fn install_page<R: Runtime>(page: &Webview<R>) {
     win::install_page(page);
 }
+
+/// A sign-in popup was built (LJ47): its `window.close()` closes it — wry only destroys the
+/// webview —, and on WebKitGTK its size is decided at `ready-to-show` (`pending`), its fullscreen is
+/// off where it aborts, and its downloads are refused.
+#[cfg(windows)]
+pub fn install_popup<R: Runtime>(app: &AppHandle<R>, popup: &WebviewWindow<R>, _pending: bool) {
+    win::popups::install(app, popup);
+}
+
+#[cfg(target_os = "macos")]
+pub fn install_popup<R: Runtime>(_app: &AppHandle<R>, popup: &WebviewWindow<R>, _pending: bool) {
+    mac::popups::install(popup);
+}
+
+#[cfg(target_os = "linux")]
+pub fn install_popup<R: Runtime>(app: &AppHandle<R>, popup: &WebviewWindow<R>, pending: bool) {
+    linux::popups::install(app, popup, pending);
+}
+
+/// Before a popup is built: macOS adds `-webViewDidClose:` to wry's web view delegate (once).
+#[cfg(target_os = "macos")]
+pub fn prepare_popups<R: Runtime>(app: &AppHandle<R>, features: &NewWindowFeatures) {
+    mac::popups::prepare(app, features);
+}
+
+/// Windows and Linux follow `window.close()` on the popup's own webview (`install_popup`).
+#[cfg(not(target_os = "macos"))]
+pub fn prepare_popups<R: Runtime>(_app: &AppHandle<R>, _features: &NewWindowFeatures) {}
+
+/// A popup is gone (macOS forgets its web view).
+#[cfg(target_os = "macos")]
+pub fn forget_popup(label: &str) {
+    mac::popups::forget(label);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn forget_popup(_label: &str) {}
 
 /// Linux: pack the bar at a fixed height in the window's GtkBox.
 #[cfg(target_os = "linux")]

@@ -43,6 +43,9 @@ thread_local! {
         const { RefCell::new(None) };
     /// The page's downloads under way, cancelled when its window closes.
     static UNDER_WAY: RefCell<Vec<webkit2gtk::Download>> = const { RefCell::new(Vec::new()) };
+    /// The sign-in popups' web views (LJ47): their downloads are refused.
+    static POPUP_VIEWS: RefCell<Vec<gtk::glib::WeakRef<webkit2gtk::WebView>>> =
+        const { RefCell::new(Vec::new()) };
     /// What the emission hook calls (it needs the app handle, which an extern fn can't hold).
     static DECIDE: RefCell<Option<Decide>> = const { RefCell::new(None) };
 }
@@ -91,6 +94,15 @@ pub fn take<R: Runtime>(app: &AppHandle<R>, view: &webkit2gtk::WebView) {
     });
 }
 
+/// A sign-in popup's web view (GTK main thread): its downloads are refused (LJ47).
+pub fn popup(view: &webkit2gtk::WebView) {
+    POPUP_VIEWS.with(|views| {
+        let mut views = views.borrow_mut();
+        views.retain(|view| view.upgrade().is_some());
+        views.push(view.downgrade());
+    });
+}
+
 /// `decide-destination`'s emission hook: (the download, its suggested file name).
 unsafe extern "C" fn on_decide_destination(
     _hint: *mut gobject_ffi::GSignalInvocationHint,
@@ -135,13 +147,27 @@ enum Source {
     /// No web view (none of Little Joan's starts one so; taken as the page's while a page
     /// window is open — the bar and Settings never leave the app's own pages).
     NoView,
+    /// A sign-in popup's (LJ47): refused.
+    Popup,
     /// Another web view, or no page window: left to WebKitGTK (and wry).
     Other,
 }
 
 fn source_of(download: &webkit2gtk::Download) -> Source {
     let page = PAGE_VIEW.with(|page| page.borrow().as_ref().and_then(gtk::glib::WeakRef::upgrade));
-    match (download.web_view(), page) {
+    let view = download.web_view();
+    let from_popup = view.as_ref().is_some_and(|view| {
+        POPUP_VIEWS.with(|views| {
+            views
+                .borrow()
+                .iter()
+                .any(|popup| popup.upgrade().as_ref() == Some(view))
+        })
+    });
+    if from_popup {
+        return Source::Popup;
+    }
+    match (view, page) {
         (_, None) => Source::Other,
         (None, Some(_)) => Source::NoView,
         (Some(view), Some(page)) if view == page => Source::Page,
@@ -160,10 +186,17 @@ fn decide_destination<R: Runtime>(
         match source {
             Source::Page => "page",
             Source::NoView => "no-view",
+            Source::Popup => "popup",
             Source::Other => "other",
         },
     );
     if source == Source::Other {
+        return;
+    }
+    if source == Source::Popup {
+        take_destination(download);
+        smoke::log("download-refused", "popup");
+        download.cancel();
         return;
     }
     let Some(url) = download

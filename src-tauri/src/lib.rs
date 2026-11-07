@@ -29,6 +29,7 @@ pub mod page_address;
 pub mod phone;
 pub mod phone_mode;
 pub mod placement;
+pub mod popups;
 pub mod settings;
 pub mod settings_live;
 pub mod settings_window;
@@ -128,6 +129,7 @@ pub fn run() {
         )
         .on_window_event(|window, event| {
             joan::on_window_event(window, event);
+            bar::popup::on_window_event(window, event);
             settings_window::on_window_event(window, event);
         })
         .setup(|app| {

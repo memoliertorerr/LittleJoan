@@ -192,6 +192,16 @@
       } from "./smoke-logic.mjs";
       import { probeApi, probeFile, probeRequest, probeTitle, raceRequest, RACE } from "./ext-probe.mjs";
       import {
+        POPUP_FEATURES,
+        POPUP_NAME,
+        POPUP_READY_TITLE,
+        isSignedIn,
+        openedTitle,
+        popupRequest,
+        popupTitle,
+        signinUrl,
+      } from "./popup-logic.mjs";
+      import {
         BEGIN_WAIT_MS,
         FS_BUTTONS,
         FsAttempt,
@@ -222,6 +232,8 @@
       const probe = probeRequest(location.search);
       // ?ext=race&base=<origin>: iframes and window.open at the panel while the app opens it.
       const race = raceRequest(location.search);
+      // ?popup=oauth|blank&at=<sign-in origin>: a sign-in popup (LJ47).
+      const popup = popupRequest(location.search);
       // ?ping=<id>: a ping to the smoke server every 250 ms while the page runs (LJ19.4: after a
       // close they must stop — nothing of the page survives it). With ?fs=both too (LJ19.5) the
       // fullscreen run's page pings as well, without the ping title (a summon during its
@@ -256,6 +268,8 @@
         stage.hidden = true;
         document.body.append(link);
         show(BLANK_READY_TITLE);
+      } else if (popup) {
+        runPopup(popup);
       } else if (ping && !fsRequest(location.search)) {
         show(`LJ-PING ${ping.id}`);
       } else if (fsRequest(location.search)) {
@@ -272,6 +286,47 @@
         );
       } else {
         startCodecAndViewportReports();
+      }
+
+      // ?popup=… (LJ47): one big "Sign in" button that opens the fake provider's page (another
+      // origin) in a sized popup — or a sized about:blank popup sent there — as sign-in libraries
+      // do; the opener reports the messages it gets and when its popup is closed.
+      function runPopup({ mode, at, stay }) {
+        const target = signinUrl(at, stay);
+        let received = 0;
+        let closed = false;
+        const report = () => show(popupTitle(received, closed));
+        window.addEventListener("message", (event) => {
+          if (isSignedIn(event.data, event.origin, at)) {
+            received += 1;
+            report();
+          }
+        });
+        const button = document.createElement("button");
+        button.id = "signin";
+        button.type = "button";
+        button.textContent = mode === "blank" ? "Sign in (blank popup)" : "Sign in";
+        button.style.cssText = "position:fixed;inset:0;border:0;background:#f7c948;color:#1f2a44;font-size:28px;font-weight:600;cursor:pointer";
+        button.addEventListener("click", () => {
+          const opened =
+            mode === "blank"
+              ? window.open("about:blank", POPUP_NAME, POPUP_FEATURES)
+              : window.open(target, POPUP_NAME, POPUP_FEATURES);
+          if (opened && mode === "blank") {
+            opened.location.href = target;
+          }
+          show(openedTitle(Boolean(opened)));
+          const timer = setInterval(() => {
+            if (opened && opened.closed) {
+              clearInterval(timer);
+              closed = true;
+              report();
+            }
+          }, 200);
+        });
+        stage.hidden = true;
+        document.body.append(button);
+        show(POPUP_READY_TITLE);
       }
 
       function runRace(base) {

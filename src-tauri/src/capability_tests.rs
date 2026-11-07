@@ -1,7 +1,8 @@
-//! Ground Rule 18: the page webview (`joan-page`) has no IPC at all. Tauri treats custom-scheme
-//! pages as local, so extensions (which will run there as `ljext:` pages) would get every local
-//! capability that reaches the page webview — by its label, or through a window-level scope that
-//! covers the page window (it applies to every webview in it). These tests read every capability
+//! Ground Rules 18 and 23: the page webview (`joan-page`) and every sign-in popup (`joan-popup-<n>`,
+//! LJ47) have no IPC at all. Tauri treats custom-scheme pages as local, so extensions (which will
+//! run there as `ljext:` pages) would get every local capability that reaches the page webview — by
+//! its label, or through a window-level scope that covers the page window (it applies to every
+//! webview in it). These tests read every capability
 //! the build can see: the files under `capabilities/` (tauri-build takes `capabilities/**/*`)
 //! and inline ones in tauri.conf.json.
 
@@ -10,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::{bar, joan, settings_window};
+use crate::{bar, joan, popups, settings_window};
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -130,6 +131,32 @@ fn the_page_webview_has_no_capability() {
                 "{place}: {pattern:?} is a window scope over the page window ({}), which holds the page webview",
                 joan::LABEL
             );
+        }
+    }
+}
+
+#[test]
+fn no_capability_reaches_a_popup() {
+    // Ground Rule 23 (LJ47): a sign-in popup (`joan-popup-<n>`) is a web page with the page's trust
+    // — no IPC at all. A popup is a window of its own, so neither a webview scope nor a window
+    // scope may match any popup's label.
+    let labels: Vec<String> = [1, 2, 3, 10, 99, u64::MAX]
+        .into_iter()
+        .map(popups::label)
+        .collect();
+    for label in &labels {
+        assert!(popups::is_popup_label(label), "{label}");
+    }
+    for (place, capability) in all_capabilities() {
+        for key in ["webviews", "windows"] {
+            for pattern in scopes(&capability, key) {
+                for label in &labels {
+                    assert!(
+                        !pattern_matches(pattern, label),
+                        "{place}: {key} {pattern:?} grants the popup {label} IPC"
+                    );
+                }
+            }
         }
     }
 }
@@ -399,4 +426,7 @@ fn the_pattern_matcher_matches_like_a_glob() {
     assert!(!pattern_matches("joan", "joan-page"));
     assert!(!pattern_matches("settings", "joan"));
     assert!(pattern_matches("jo*", "joan"));
+    assert!(pattern_matches("joan-*", "joan-popup-1"));
+    assert!(pattern_matches("*popup*", "joan-popup-12"));
+    assert!(!pattern_matches("joan-page", "joan-popup-1"));
 }

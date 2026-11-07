@@ -43,7 +43,9 @@
 // the real shortcut and `--settings`: in front with the keyboard, on the same Space;
 // over-fullscreen*.png; smoke-spaces.mts), then the rest runs (LJ19.4, smoke-rest.mts: one launch per
 // "After closing" mode — what stays at rest, a pinging page stopping at the close, memory at rest,
-// keys typed right after the shortcut, the ready bar's web process killed), then check the logs
+// keys typed right after the shortcut, the ready bar's web process killed), the links and handoff
+// runs (LJ45–LJ46), then the popups run (LJ47, smoke-popups.mts: the fake provider on the server's
+// second port opened in a sized popup that posts back and closes; popup.png), then check the logs
 // (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper processes.
 // The app runs on a fresh LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it
 // starts at rest as every launch after the first does — since LJ19.4 that is "Stay ready", the
@@ -107,6 +109,7 @@ import { macKeyToken } from "./smoke-keys.mts";
 import { mayChangeThisMachine, runnerFailures, runnerLine, skippedChange } from "./smoke-runner.mts";
 import { linksFailures, linksRun, linksSummary, type ExecOptions, type ExecResult, type LinksApp, type LinksDriver } from "./smoke-links.mts";
 import { handoffFailures, handoffRun, handoffSummary } from "./smoke-handoff.mts";
+import { popupsFailures, popupsRun, popupsSummary } from "./smoke-popups.mts";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
@@ -820,9 +823,12 @@ function serveSlow(res: ServerResponse): void {
   send();
 }
 
-function serve(): Promise<Server> {
+/** The smoke server; `fresh` starts the agent log anew (the first one; LJ47's second port doesn't). */
+function serve(fresh = true): Promise<Server> {
   const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".mjs": "text/javascript" };
-  rmSync(agentLogPath, { force: true });
+  if (fresh) {
+    rmSync(agentLogPath, { force: true });
+  }
   const server = createServer((req, res) => {
     const name = (req.url ?? "/").split("?")[0]?.replace(/^\//, "") ?? "";
     const header = (key: string) => {
@@ -1039,6 +1045,9 @@ if (startedOnly) {
 
 const server = await serve();
 const port = (server.address() as AddressInfo).port;
+// The same pages on a second port: another origin, like a sign-in provider's (LJ47's popups run).
+const signinServer = await serve(false);
+const signinOrigin = `http://127.0.0.1:${(signinServer.address() as AddressInfo).port}`;
 const child = launch();
 
 await waitFor("started + shortcut", (e) => count(e, "started") > 0 && (count(e, "shortcut-registered") > 0 || count(e, "shortcut-failed") > 0));
@@ -2048,6 +2057,18 @@ const handoffCheck = await handoffRun({
   clickCentre,
 });
 console.log(`handoff: ${JSON.stringify(handoffSummary(handoffCheck, os))}`);
+// The popups run (LJ47, smoke-popups.mts): sign-in popups in a small window of their own.
+const popupsCheck = await popupsRun({
+  os,
+  pageUrl: smokePageUrl,
+  signinOrigin,
+  launch: (name, settings) => fullscreenLaunch(name, settings),
+  clickCentre,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  helperPids,
+});
+console.log(`popups: ${JSON.stringify(popupsSummary(popupsCheck, os, signinOrigin))}`);
 const restMd = restTable(restRuns, os);
 writeFileSync(join(out, "rest.md"), restMd);
 console.log(restMd);
@@ -2055,6 +2076,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${restMd}`);
 }
 server.close();
+signinServer.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
 // and the default settings are saved; the next launch on the same folder hibernates.
@@ -2166,6 +2188,8 @@ const summary = {
   linksRun: linksSummary(linksCheck),
   // LJ46: pages handed on to the main browser.
   handoffRun: handoffSummary(handoffCheck, os),
+  // LJ47: sign-in popups.
+  popupsRun: popupsSummary(popupsCheck, os, signinOrigin),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   // LJ19.9: Liquid Glass — what the main run's launch said, and the glass runs (macOS 26+).
   glass: {
@@ -2250,6 +2274,7 @@ const failures = evaluate(
   .concat(downloadFailures(downloadCheck, os))
   .concat(linksFailures(linksCheck))
   .concat(handoffFailures(handoffCheck, os))
+  .concat(popupsFailures(popupsCheck, os, signinOrigin))
   .concat(runnerFailures(process.env))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
@@ -2280,6 +2305,7 @@ if (failures.length > 0) {
     "links",
     "handoff",
     "handoff-default",
+    "popups",
   ].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);

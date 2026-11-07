@@ -35,6 +35,8 @@ mod downloads;
 pub use downloads::cancel as cancel_downloads;
 /// A summoned window in front, with the keyboard (LJ19.2).
 mod front;
+/// Sign-in popups (LJ47).
+pub mod popups;
 pub use front::{bring_to_front, front};
 
 /// The bar: a fixed height at the top of the window's box instead of an equal share.

@@ -12,7 +12,8 @@
 //! it is added zero-sized and hidden, and laid out afterwards. It never takes the keyboard from the
 //! bar's field (`focused(false)`).
 //!
-//! **Closing:** the session cookies are kept first (Windows, cookies.rs), downloads under way end
+//! **Closing:** its sign-in popups close first (bar/popup.rs), the session cookies are kept (Windows,
+//! cookies.rs), downloads under way end
 //! (bar/download.rs), on macOS the page is unloaded (`about:blank`) before it goes — WKWebView's
 //! processes otherwise outlive it, and a video's audio with them (LJ9) —, then `Webview::close`.
 
@@ -21,7 +22,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
-use tauri::webview::{NewWindowResponse, PageLoadEvent};
+use tauri::webview::PageLoadEvent;
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, Runtime, Webview, WebviewBuilder, WebviewUrl,
     Window,
@@ -264,20 +265,12 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
                 history_store::page_loaded(app, url);
             }
         })
-        // target=_blank and window.open go to the main browser (web URLs only; browsers.rs): one
-        // under way and one a second at most, a panel's only with openUrl's checks.
-        .on_new_window(move |url, _features| {
+        // A web page's sign-in popup opens in a small window of its own (bar/popup.rs, LJ47);
+        // other target=_blank and window.open go to the main browser (web URLs only; browsers.rs):
+        // one under way and one a second at most, a panel's only with openUrl's checks.
+        .on_new_window(move |url, features| {
             smoke::log("new-window", "");
-            if navigation::is_external_openable(&url) {
-                crate::browsers::hand_off_new_window(
-                    &app,
-                    url,
-                    crate::browsers::NewWindowFrom::Page,
-                );
-            } else {
-                smoke::log("new-window-refused", url.as_str());
-            }
-            NewWindowResponse::Deny
+            super::popup::new_window(&app, url, features)
         });
     // Downloads go to the Downloads folder, the toolbar says how they went (bar/download.rs).
     // WebKitGTK's come through platform/linux.rs instead: wry's handler there is the web
@@ -297,6 +290,8 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
 /// under way end, macOS unloads it first. Nothing of it is kept: its address and trail go too.
 pub fn close_page<R: Runtime>(app: &AppHandle<R>) {
     page_summon();
+    // Its popups first: nothing of a page outlives the window (LJ47).
+    super::popup::close_all(app, "hibernate");
     let _building = building();
     let Some(page) = app.get_webview(PAGE) else {
         return;

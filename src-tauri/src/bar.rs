@@ -25,6 +25,7 @@ mod background;
 mod boot;
 pub mod download;
 pub mod page;
+pub mod popup;
 mod status;
 mod view;
 mod watch;

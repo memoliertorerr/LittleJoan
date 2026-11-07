@@ -54,6 +54,12 @@ describe("the handoff run", () => {
     const received = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"]]), received: [FLOOD_URL(1), FLOOD_URL(2)] };
     expect(floodFailures(received)[0]).toContain("more than the 1 handed on");
     expect(floodFailures({ afterClicks: [], received: [] })[0]).toContain("no new window");
+    // Linux (LJ47): a request decided at ready-to-show is handed on after the last request — still
+    // one a second: a second handoff 1.1 s after the first passes, one 0.1 s after fails.
+    const deferred = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"], [5, "new-window"], [1101, "handoff browser=x"]]), received: [] };
+    expect(floodFailures(deferred)).toEqual([]);
+    const leaked = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"], [5, "new-window"], [101, "handoff browser=x"]]), received: [] };
+    expect(floodFailures(leaked)[0]).toContain("at most 1");
     expect(floodFailures(null)[0]).toContain("never ran");
     expect(handoffFailures(run({ flood: null }), "linux").join("\n")).toContain("never ran");
   });
@@ -76,6 +82,9 @@ describe("the handoff run", () => {
     const loopText = handoffFailures(notSelf, "linux").join("\n");
     expect(loopText).toContain("handoff-self-refused");
     expect(loopText).toContain("default=self");
+    // LJ47: a plain target=_blank link never opens a sign-in popup.
+    const popup = run({ main: { afterClick: log([`handoff browser=${FAKE_DESKTOP_ID}`, "popup-opened 127.0.0.1:8123"]), received: [URL] } });
+    expect(handoffFailures(popup, "linux").join("\n")).toContain("opened a popup inside Little Joan");
   });
 
   it("reads what the fake browser got", () => {
