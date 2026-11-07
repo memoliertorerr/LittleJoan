@@ -463,6 +463,11 @@ You can write your own with plain HTML, CSS and JavaScript — see
   and history stay. macOS and Linux: Little Joan saves no passwords there yet — Apple lets only
   browsers with a special entitlement use Passwords and passkeys, and WebKitGTK has no password
   manager; Settings → Privacy says so.
+- **Passkeys** are the web engine's too, where it offers them. On Windows, WebView2 — the engine
+  Edge is built on — handles a site's passkeys and security keys itself, with Windows Hello;
+  Windows keeps them, not Little Joan. On macOS an app other than Safari may use passkeys in its
+  web view only with an entitlement Apple grants to browsers on request, which Little Joan doesn't
+  have yet; WebKitGTK on Linux offers none. Little Joan never sees a passkey either way.
 - **Downloads** land in your Downloads folder; Little Joan keeps no list of them (only the last
   one's place, for **Show in folder**, until the window closes).
 - **Site icons in the command bar** are loaded straight from each suggested site

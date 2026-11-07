@@ -1,7 +1,10 @@
 // The smoke test's logins runs (LJ51) and their rules: Windows' web engine's own password saving and
 // form autofill as Settings → Privacy switches them, and removing what it saved. Two launches:
-// - "logins" (default switches, "afterClose": "hibernate"): `--show <smoke page>` — the page's
-//   engine reads back `logins password-autosave=false autofill=true webview=page` and its profile
+// - "logins" (default switches, "afterClose": "hibernate"): `--show <smoke page>?webauthn=1` — the
+//   page reports what its engine offers for passkeys (LJ52: `LJ-WEBAUTHN api=<0|1>
+//   platform=<true|false|error> conditional=<true|false|error> secure=<bool>`, availability only, no
+//   prompt; summary.json on every OS, evidence and not a rule), its engine reads back (Windows)
+//   `logins password-autosave=false autofill=true webview=page` and its profile
 //   folder (`webview-profile page=<path>`); `--hide` (it hibernates: no window, no webview); then
 //   `--settings privacy` with LITTLEJOAN_SMOKE_SETTINGS_SCROLL=logins and
 //   LITTLEJOAN_SMOKE_SETTINGS_LOGINS=remove: the settings window's profile (`webview-profile
@@ -21,6 +24,7 @@ import { count, lastTitle, type LogEvent } from "./smoke-log.mts";
 import type { LinksApp } from "./smoke-links.mts";
 import { openerUrl } from "./smoke-popups.mts";
 import { POPUP_READY_TITLE } from "../../tests/smoke/popup-logic.mjs";
+import { WEBAUTHN_PREFIX, parseWebauthnTitle } from "../../tests/smoke/webauthn-logic.mjs";
 
 /** What the runs need from smoke.mts. */
 export interface LoginsDriver {
@@ -42,6 +46,8 @@ export interface LoginsRun {
   on: LogEvent[];
   /** Whether the "logins-on" popup opened (its "Sign in" was clicked). */
   popupOpened: boolean;
+  /** The smoke page's `?webauthn=1` report (LJ52), as its title said it. */
+  webauthn?: string;
 }
 
 /** `webview-profile <place>=<path>` lines: the last path per place. */
@@ -126,8 +132,8 @@ async function firstRun(d: LoginsDriver): Promise<LogEvent[]> {
   await app.waitFor("logins: started", (e) => e.some((x) => x.event === "started"), 30_000);
   await d.sleep(1000);
   const from = app.events().length;
-  await app.forward(["--show", d.pageUrl]);
-  await app.waitFor("logins: the page", (e) => lastTitle(e.slice(from), "LJ-SMOKE") !== undefined, 30_000);
+  await app.forward(["--show", `${d.pageUrl}?webauthn=1`]);
+  await app.waitFor("logins: the page's passkey report", (e) => lastTitle(e.slice(from), `${WEBAUTHN_PREFIX} api=`) !== undefined, 30_000);
   if (windows) {
     await app.waitFor("logins: the page's profile", (e) => e.slice(from).some((x) => x.event === "webview-profile" && x.detail.startsWith("page=")), 10_000);
   }
@@ -148,6 +154,11 @@ async function firstRun(d: LoginsDriver): Promise<LogEvent[]> {
   }
   await app.quit();
   return app.events();
+}
+
+/** The page's passkey report (LJ52) in a launch's log, if it came. */
+export function webauthnOf(events: LogEvent[]): string | undefined {
+  return lastTitle(events, `${WEBAUTHN_PREFIX} api=`);
 }
 
 /** `savePasswords: true`: the page, a sign-in popup, then Settings (what its engine says). */
@@ -185,7 +196,8 @@ async function onRun(d: LoginsDriver): Promise<{ events: LogEvent[]; popupOpened
 export async function loginsRun(d: LoginsDriver): Promise<LoginsRun> {
   const first = await firstRun(d);
   const on = await onRun(d);
-  return { first, on: on.events, popupOpened: on.popupOpened };
+  const webauthn = webauthnOf(first);
+  return { first, on: on.events, popupOpened: on.popupOpened, ...(webauthn ? { webauthn } : {}) };
 }
 
 /** What summary.json records of the runs. */
@@ -199,6 +211,8 @@ export function loginsSummary(run: LoginsRun, os: string) {
     sameProfile: paths.page !== undefined && paths.page === paths.settings,
     cleared: run.first.find((e) => e.event === "saved-logins-cleared")?.detail ?? null,
     popupOpened: run.popupOpened,
+    // LJ52: what the page's engine offers for passkeys (evidence, not a rule).
+    webauthn: { title: run.webauthn ?? null, report: parseWebauthnTitle(run.webauthn) },
     rules: loginsFailures(run, os),
   };
 }

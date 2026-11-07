@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { loginsFailures, loginsSummary, profiles, switches, type LoginsRun } from "./smoke-logins.mts";
+import { loginsFailures, loginsSummary, profiles, switches, webauthnOf, type LoginsRun } from "./smoke-logins.mts";
 
 const log = (rows: string[]) => parseLog(rows.map((row, i) => `${1000 + i} ${row}`).join("\n") + "\n");
 const PROFILE = "C:\\Users\\runner\\AppData\\Local\\Temp\\lj\\logins\\webview\\EBWebView\\Default";
@@ -11,7 +11,8 @@ const FIRST = [
   "logins password-autosave=false autofill=true webview=page",
   `webview-profile page=${PROFILE}`,
   "logins-seen password-autosave=false autofill=true webview=page",
-  "title LJ-SMOKE ready h264=mse vp9=mse av1=mse",
+  "title LJ-WEBAUTHN asking",
+  "title LJ-WEBAUTHN api=1 platform=false conditional=true secure=true",
   "hibernated",
   `webview-profile settings=${PROFILE}`,
   "logins-seen password-autosave=false autofill=true webview=settings",
@@ -99,5 +100,17 @@ describe("the logins runs' rules (LJ51)", () => {
     expect(summary).toMatchObject({ sameProfile: true, cleared: "ok", popupOpened: true, rules: [] });
     expect(summary.settingsSaw).toEqual(["password-autosave=true autofill=true webview=settings"]);
     expect(loginsSummary(run({ first: MAC_FIRST }), "darwin")).toMatchObject({ sameProfile: false, cleared: null, profiles: {} });
+  });
+
+  it("records the page's passkey report as evidence, never as a rule (LJ52)", () => {
+    expect(webauthnOf(log(FIRST))).toBe("LJ-WEBAUTHN api=1 platform=false conditional=true secure=true");
+    expect(webauthnOf(log(["title LJ-WEBAUTHN asking"]))).toBeUndefined();
+    const reported = { ...run(), webauthn: "LJ-WEBAUTHN api=1 platform=error conditional=false secure=true" };
+    expect(loginsSummary(reported, "darwin").webauthn).toEqual({
+      title: "LJ-WEBAUTHN api=1 platform=error conditional=false secure=true",
+      report: { api: true, platform: "error", conditional: false, secure: true },
+    });
+    // No report changes no rule.
+    expect(loginsSummary(run(), "win32")).toMatchObject({ webauthn: { title: null, report: null }, rules: [] });
   });
 });

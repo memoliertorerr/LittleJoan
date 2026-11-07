@@ -134,7 +134,7 @@
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; Linux's highlights fixed in `lj-step-49-fix`; PR #42 (head 0964ee6, run 42414060894 green 18/18 after one re-run of Windows smoke's lost-keys flake) merged as f335e62; main's run 42418522861 green 18/18) |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes; PR #42 merged as f335e62) |
 | LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ✅ done (phase 24, `lj/p24-saved-logins`; CI: see notes) |
-| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | 🔄 in progress (phase 24, `lj/p24-saved-logins`) |
+| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ✅ done (phase 24; CI: see notes) — PR #43 ready, NOT merged by its agent: the independent security review comes next (Ground Rule 24) |
 | LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
@@ -9540,6 +9540,34 @@ Privacy says it isn't available. Mark the PR ready once every job is green and S
 an independent security review comes next, and the owner decides.
 ```
 
+**Implementation notes (2026-11-07; disk 11 GB free, `.cache/target` 1.5 GB):**
+- **The report:** `tests/smoke/webauthn-logic.mjs` (+ test) asks only availability —
+  `PublicKeyCredential`, `isUserVerifyingPlatformAuthenticatorAvailable()`,
+  `isConditionalMediationAvailable()` (5 s each, a throw / rejection / odd answer / hang is `error`,
+  a missing method `false`) — and never creates or asks for a credential, so no prompt shows. The
+  title adds `secure=<bool>` after the prompt's three fields (WebAuthn needs a secure context;
+  `http://127.0.0.1` is one), so an `api=0` can't be blamed on the page's address. The logins run's
+  first launch opens the smoke page at `?webauthn=1`; `summary.json`'s `loginsRun.webauthn` has the
+  title and its parse on every OS (no rule).
+- **Docs:** README (Privacy: saved passwords on Windows, passkeys per engine), SECURITY.md (saved
+  passwords, form data and passkeys stay in the engine), docs/architecture.md (Where data lives:
+  rows for saved passwords and passkeys). Later: the macOS row rewritten with Apple's entitlement
+  page (`com.apple.developer.web-browser.public-key-credential`, macOS 13.3+, any relying party;
+  only an **organization** account's Account Holder can request it; criteria: http/https in
+  `Info.plist`, a URL field at launch, navigating straight to a given URL; a managed capability, so
+  signing with a provisioning profile), and a Linux row.
+- **How "no code reads the engine's stores" was checked** (for the review's threat model): `git
+  grep` over `src-tauri/src`, `ui`, `scripts`, `extensions` and `tests` for the store files
+  (`Login Data`, `Web Data`, `EBWebView`), DevTools domains that reach credentials (`Autofill.*`,
+  `WebAuthn.*`, `Storage.*`), `CallDevToolsProtocolMethod`, `ICoreWebView2Profile*` and
+  `password` / `credential` / `passkey`: the only DevTools methods called are LJ40's
+  `Emulation.setUserAgentOverride` and `Page.getLayoutMetrics`; the profile is touched only for
+  `ProfilePath` and `ClearBrowsingData`; every other hit is a UI text, a test, the Random quick
+  answer's password generator, or URL credential stripping. The smoke log carries booleans and a
+  folder path only, and no smoke run types a password (the popups run's spoof page has a password
+  field nobody types into).
+- `npm run verify`: 855 TS tests, 528 Rust tests, clippy clean.
+
 ### LJ53 — More bundled extensions: Reading list and To-do · standard · auto
 
 > **⏸ Moved after v0.3 by the owner (2026-10-29)**, with LJ54 and LJ55: kept as designed, run after
@@ -10817,7 +10845,8 @@ or round 3 picked up point at their step and stay here for the record.
 | *(round 2)* **Extension gallery / signing** | A list of reviewed community extensions in the repository; signed bundles | Review process, a trust model |
 | *(round 2)* **Custom window chrome on Windows and Linux** | Frameless window with our own close / minimize, resize borders | Per-OS hit-testing; accessibility |
 | *(round 2)* **One user agent per signed-in site** | Remember the agent a site was signed in with and keep it across phone-mode switches | Per-host user agent at navigation time |
-| *(round 3, deferred by the owner)* **macOS saved passwords and passkeys** | Passkeys (WebAuthn) in an app's WKWebView that isn't Safari need Apple's restricted web-browser entitlement (`com.apple.developer.web-browser.public-key-credential`), which Apple grants on request to apps that are web browsers, and which needs Developer ID signing with a provisioning profile (LJ18 first); WKWebView's password AutoFill for embedding apps isn't dependable. LJ52 records what CI's `?webauthn=1` page showed | Apple's entitlement (a request to Apple), signing with a profile, then the engine's own UI — never a password store of Little Joan's own (Ground Rule 26) |
+| *(round 3, deferred by the owner)* **macOS saved passwords and passkeys** | **Passkeys:** WebAuthn in an app's WKWebView that isn't Safari needs Apple's managed entitlement `com.apple.developer.web-browser.public-key-credential` (macOS 13.3+): "registration and assertion requests for passkeys and security keys for any relying party identifier", for apps that can act as the user's web browser. Only the **Account Holder of an organization's** Apple Developer account can ask for it (the "macOS Browsers Passkeys" request form); Apple reviews it against fixed criteria — the http and https schemes in `Info.plist` (LJ45 has them), a field for a URL or search at launch (the command bar), navigating straight to a URL it is given — and adds it as a managed capability, so the app then needs Developer ID signing with a provisioning profile that carries it (LJ58's signing first; Little Joan is ad-hoc signed today). Without it, a WKWebView's WebAuthn requests are refused (Apple's developer forums: authorization errors until the entitlement was granted). **Saved passwords:** WKWebView's password AutoFill isn't dependable for an embedding app (round 3's research) — it isn't a browser's password manager —, and building Little Joan's own UI over the Keychain is what Ground Rule 26 rules out. LJ52 recorded what CI's `?webauthn=1` page showed on macOS (LJ52's notes) | The owner's decision; an organization account's Account Holder asks Apple for the entitlement; signing with a profile (LJ58, and LJ60's for the App Store); then WebKit's own passkey UI — never a password store of Little Joan's own (Ground Rule 26) |
+| *(LJ52)* **Linux saved passwords and passkeys** | WebKitGTK has no password manager and offers an app no WebAuthn authenticator of its own; saving passwords would need libsecret and Little Joan's own UI (Ground Rule 26 rules that out). LJ52 recorded what CI's `?webauthn=1` page showed on Linux | Upstream WebKitGTK support first |
 | *(round 3)* **Saved logins on Linux** | WebKitGTK has no password manager; one would be Little Joan's own (libsecret + UI) | A new dependency and a credential store to secure — big; against Ground Rule 26's spirit |
 | *(round 3, the owner's decision)* **Measuring a page's width on macOS and Linux** | Skip a phone-mode reload when the page already fits the window, as Windows does with CDP's `Page.getLayoutMetrics` (LJ40) | A script in the page (an isolated world, still app code in a web page) — against Ground Rule 10 unless the owner decides otherwise |
 | *(round 3)* **Viewport emulation** | A mobile viewport for narrow windows (Windows: CDP `Emulation.setDeviceMetricsOverride { mobile: true }`) | Windows only — macOS has only private SPI; Little Arc doesn't do it, and phase 19 reflows instead |

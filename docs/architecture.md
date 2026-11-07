@@ -649,6 +649,9 @@ tests/smoke/signin.html            the popups run's fake provider (served on a s
                                    ?stay=1)
 tests/smoke/popup-logic.mjs        the smoke page's ?popup=oauth|blank|spoof|onblur and
                                    signin.html's logic (plain JS, unit-tested)
+tests/smoke/webauthn-logic.mjs     the smoke page's ?webauthn=1 (LJ52): what the engine offers for
+                                   passkeys — PublicKeyCredential, a platform authenticator,
+                                   passkey autofill —, availability only, no prompt (unit-tested)
 .github/workflows/ci.yml           verify on ubuntu-24.04, windows-latest, macos-latest; package; smoke
 .github/ISSUE_TEMPLATE/            issue forms: bug report, feature request; config.yml turns blank
                                    issues off and links private vulnerability reporting
@@ -938,6 +941,7 @@ sources):
 | Cookies and site data | `%LOCALAPPDATA%\io.github.memoliertorerr.littlejoan\` (the WebView2 user data folder, `EBWebView\` inside): Tauri forces `app_local_data_dir` when the app sets no `data_directory` | WebKit's `defaultDataStore`, keyed by the bundle id (under `~/Library/WebKit/` and `~/Library/HTTPStorages/`); `data_directory` does nothing there | `~/.local/share/io.github.memoliertorerr.littlejoan/` (Tauri forces `app_local_data_dir`); cookies are a text file, `cookies`, there |
 | Extension storage, developer extensions | `extension-data\<id>.json`, `extensions\<id>\` next to `settings.json` | the same, next to `settings.json` | the same, next to `settings.json` |
 | Saved passwords and form data (LJ51) | WebView2's own password saving and general autofill keep them in its profile inside the folder above (`EBWebView\Default\`); Little Joan only switches them (`savePasswords`, `autofillForms`) and asks the engine to remove them — it never opens those files | none: Little Joan saves no passwords (WKWebView's AutoFill for apps needs Apple's browser entitlement; LJ52) | none: WebKitGTK has no password manager |
+| Passkeys (LJ52) | WebView2's own WebAuthn, with Windows Hello: Windows keeps the keys | none: WKWebView refuses WebAuthn in an app without Apple's `com.apple.developer.web-browser.public-key-credential` (granted to browsers on request; needs signing with a profile — the plan's Later) | none: WebKitGTK offers no authenticator |
 | With `LITTLEJOAN_DATA_DIR` (dev builds, CI) | `<dir>\settings.json`, `<dir>\webview\` | `<dir>/settings.json`; site data stays in WebKit's default store | `<dir>/settings.json`, `<dir>/webview/` |
 
 Switching between a dev build and the installed app therefore looks like a logout on Windows and
@@ -2540,7 +2544,11 @@ and pushes to `main`:
   flow whose click asked for no new window is reported there, not failed (logs `smoke-popups.log`,
   `summary.json`'s `popupsRun`). Then the **logins runs** (`smoke-logins.mts`, LJ51; two launches
   of their own): one with the default switches and `"afterClose": "hibernate"` — `--show` on the
-  smoke page must log (Windows) `logins password-autosave=false autofill=true webview=page` as the
+  smoke page's `?webauthn=1` (LJ52: its title `LJ-WEBAUTHN api=<0|1> platform=<true|false|error>
+  conditional=<true|false|error> secure=<bool>` — `PublicKeyCredential`, a user-verifying platform
+  authenticator, passkey autofill, a secure context — goes into `summary.json`'s
+  `loginsRun.webauthn` on every OS, evidence and not a rule) must log (Windows) `logins
+  password-autosave=false autofill=true webview=page` as the
   engine reads it back and `webview-profile page=<folder>`; `--hide` (it hibernates); `--settings
   privacy` with `LITTLEJOAN_SMOKE_SETTINGS_SCROLL=logins` and `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=
   remove` must log `webview-profile settings=<the same folder>`, scroll to the section for

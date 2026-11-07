@@ -70,6 +70,10 @@ exports, logs or syncs a password, a passkey or a form entry, and no code of Lit
 the engine's stores. Report anything that lets a page, a popup or an extension reach saved
 passwords or form data through Little Joan, turn password saving on, or keep the engine's saved
 data after a removal reported success. macOS and Linux save no passwords in Little Joan yet.
+Passkeys are the engine's alone as well: on Windows WebView2 runs a site's WebAuthn requests with
+Windows Hello and Windows keeps the keys; on macOS WebKit refuses them in an app without Apple's
+browser entitlement, which Little Joan doesn't have; WebKitGTK offers none. Little Joan adds
+nothing to WebAuthn and handles no key.
 
 Extensions (experimental) have their own model — one origin each, a strict Content-Security-Policy,
 no IPC, and a small API that checks every request (see `docs/architecture.md`, "Extensions"). Also
