@@ -42,6 +42,7 @@ fn main() {
             "keymap_info",
             "reveal_download",
             "report_timing",
+            "find",
         ]),
     ))
     .expect("failed to run tauri-build");

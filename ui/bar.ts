@@ -12,6 +12,8 @@
 // window.littleJoan.setSiteMode what the open web page's site is on (the toolbar's "Phone" /
 // "Desktop" pill and the command bar's "Request desktop site" rows, LJ40), and
 // window.littleJoan.setStatus what just happened (the toolbar's status area: downloads, LJ15).
+// window.littleJoan.openFind opens the toolbar's find strip (Ctrl/Cmd+F, LJ49), setFindResult says
+// what the page's engine found, and closeFind closes it (a new page, the command bar).
 // Before all of that, at the top: the theme Rust's initialization script left (bar-boot.ts), so
 // the first frame isn't the default theme. In smoke tests the bar also says how its start went —
 // its navigation, this script, the first answers, its first frame, the command bar's first rows
@@ -32,6 +34,7 @@ import { initialState, onCloseButton, onKey, withOverlay, withShown, type KeyOut
 import { historyView } from "./history/history.ts";
 import { extensionLabel, isMac, siteModeInfo, type ExtensionLabel, type SiteModeInfo } from "./toolbar/logic.ts";
 import { themeFrom, type ThemeTokens } from "./lib/theme.ts";
+import { findBar } from "./toolbar/find.ts";
 import { toolbar } from "./toolbar/toolbar.ts";
 
 declare global {
@@ -46,6 +49,9 @@ declare global {
       setExtension(label: unknown): void;
       setSiteMode(info: unknown): void;
       setStatus(message: unknown): void;
+      openFind(): void;
+      setFindResult(result: unknown): void;
+      closeFind(): void;
       rest(): void;
       summoned(info: unknown): void;
     };
@@ -57,6 +63,7 @@ const rowList = document.querySelector<HTMLElement>("#rows");
 const closeButton = document.querySelector<HTMLButtonElement>("#close");
 const toolbarRoot = document.querySelector<HTMLElement>(".toolstrip");
 const historyRoot = document.querySelector<HTMLElement>("#history");
+const findRoot = document.querySelector<HTMLElement>("#find");
 
 /** A summon's timing (smoke tests only: start_info, or the summon, says so), reported once (bar-timing.ts). */
 const newTiming = () =>
@@ -199,6 +206,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
   });
   const historyPanel = historyView(historyRoot, showCommand);
   const tools = toolbar(toolbarRoot);
+  const find = findRoot ? findBar(findRoot, document.body) : null;
 
   const setUrl = (url: string | null): void => {
     const next = textFor(url);
@@ -285,6 +293,15 @@ if (field && rowList && toolbarRoot && historyRoot) {
     setStatus(message: unknown) {
       tools.setStatus(message);
     },
+    openFind() {
+      find?.open();
+    },
+    setFindResult(result: unknown) {
+      find?.setResult(result);
+    },
+    closeFind() {
+      find?.closed();
+    },
     rest() {
       // The window closed and rests (LJ19.4): back to how a summon opens the bar — the command
       // bar over the window, an empty field, no rows, history view, welcome or status.
@@ -302,6 +319,7 @@ if (field && rowList && toolbarRoot && historyRoot) {
         welcomeSection.hidden = true;
       }
       command.reset(false);
+      find?.rest();
       tools.clearStatus();
       tools.update("", canGoBack, extension, siteInfo);
       render();

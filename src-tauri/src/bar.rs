@@ -24,6 +24,7 @@ use url::Url;
 mod background;
 mod boot;
 pub mod download;
+pub mod find;
 pub mod page;
 pub mod popup;
 mod status;

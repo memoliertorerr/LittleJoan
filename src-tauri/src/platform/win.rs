@@ -48,6 +48,8 @@ use crate::state;
 
 /// A summoned window in front, for the smoke log (LJ19.2).
 pub mod browsers;
+/// Find in page through WebView2's own find (LJ49).
+pub(super) mod find;
 mod front;
 pub use front::{foreground, front};
 /// Sign-in popups (LJ47).
@@ -62,7 +64,7 @@ pub fn install_bar<R: Runtime>(bar: &Webview<R>) {
     install(bar, false);
 }
 
-/// The page: page keys, element fullscreen, and its downloads noted.
+/// The page: page keys, element fullscreen, its downloads noted, and its find's events (LJ49).
 pub fn install_page<R: Runtime>(page: &Webview<R>) {
     install(page, true);
 }
@@ -75,6 +77,7 @@ fn install<R: Runtime>(webview: &Webview<R>, page: bool) {
         if page {
             install_fullscreen(&controller, app.clone(), window);
             note_downloads(&controller);
+            find::install(&controller, app.clone());
         } else {
             install_process_failed(&controller, app.clone());
         }

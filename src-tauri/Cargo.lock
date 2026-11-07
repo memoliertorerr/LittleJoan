@@ -1989,6 +1989,7 @@ name = "little-joan"
 version = "0.2.1"
 dependencies = [
  "ashpd",
+ "block2",
  "gtk",
  "objc2",
  "objc2-foundation",

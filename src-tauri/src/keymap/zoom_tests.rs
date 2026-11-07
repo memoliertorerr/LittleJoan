@@ -192,7 +192,8 @@ fn zoom_keys_follow_the_keymaps_rules() {
             "zoom-out",
             "zoom-reset",
             "open-in-browser",
-            "close"
+            "close",
+            "find"
         ]
     );
     let reset = info

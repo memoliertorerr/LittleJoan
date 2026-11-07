@@ -32,6 +32,8 @@ use crate::state;
 /// The page's downloads, through WebKitGTK itself (LJ15).
 pub mod browsers;
 mod downloads;
+/// Find in page through WebKitGTK's own find controller (LJ49).
+pub(super) mod find;
 pub use downloads::cancel as cancel_downloads;
 /// A summoned window in front, with the keyboard (LJ19.2).
 mod front;
@@ -177,13 +179,15 @@ fn fullscreen_off_where_it_aborts(view: &webkit2gtk::WebView) {
     }
 }
 
-/// The page: element fullscreen and its downloads (page keys are the window's, `install_bar`).
+/// The page: element fullscreen, its downloads and its find's signals (page keys are the
+/// window's, `install_bar`).
 pub fn install_page<R: Runtime>(page: &Webview<R>) {
     let app = page.app_handle().clone();
     let result = page.with_webview(move |webview| {
         let view = webview.inner();
         fullscreen_off_where_it_aborts(&view);
         downloads::take(&app, &view);
+        find::install(&app, &view);
         for (signal, on) in [("enter-fullscreen", true), ("leave-fullscreen", false)] {
             let app = app.clone();
             view.connect_local(signal, false, move |_| {

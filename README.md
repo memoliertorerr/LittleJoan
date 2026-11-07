@@ -112,10 +112,15 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   "hi") offers **History**; "settings" (or "preferences", "options") offers **Settings**; "quit"
   (or "exit") offers **Quit Little Joan**. The last row, **Settings & extensions**, opens Settings
   on its Extensions tab.
+- **Pinned sites** lead the command bar when nothing is typed, in the order you pinned them, each
+  with a small pin — up to eight, before the sites you open most. On a page, type "pin" and choose
+  **Pin this site** (the same row then says **Unpin this site**); Shift+Delete on a pinned row
+  unpins it. In `settings.json` they are `"pinnedSites"`: `[{ "url": …, "title": … }]`.
 - **Quick commands** in the command bar, each showing how things are now — type a word and pick
   the row with ↓ and Enter:
   - on a page: **Translate page**, **Open in browser**, **Copy link**, **Copy as Markdown link**,
-    **Reload**, and Desktop site / Phone site / Automatic for the site;
+    **Reload**, Desktop site / Phone site / Automatic for the site, and **Pin this site** /
+    **Unpin this site**;
   - **Theme: System / Light / Dark** and **Theme: Sand**, **Dusk**… (the presets; the current one
     marked ✓), **Search with Google / DuckDuckGo / Bing / Brave** (✓), **Mobile sites — on/off**,
     **Remember history — on/off**, **Start at login — on/off**, **Icon — shown/hidden**;
@@ -148,6 +153,12 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   the toolbar, and you can drag the window by its empty parts; double-click them to zoom the
   window (and again to bring it back) — on Windows and Linux too, like the title bar. The toolbar
   hides while a video is fullscreen.
+- **Find in page:** press **Ctrl+F** (Windows, Linux) or **Cmd+F** (macOS) on a page and a find
+  field takes the site's place in the toolbar. Type, and the page's own web engine finds it as you
+  go (case doesn't matter): **Enter** goes to the next match, **Shift+Enter** to the previous (or
+  the ↓ ↑ buttons), **Esc** or × closes it and you are back in the page. Windows and Linux say
+  where you are ("3 of 12"); on macOS the engine only says whether it found something ("Found",
+  "No matches"). Loading another page, or opening the command bar, closes it.
 - **Themes:** the toolbar, the command bar, the history view and Settings wear one theme — one
   to three colors turned into a soft, muted gradient with a little grain, in light, dark, or
   following your system. Whatever colors you pick, Little Joan keeps them pale in light mode and
@@ -200,6 +211,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
   | History | Ctrl+H | Cmd+Y |
+  | Find in page | Ctrl+F | Cmd+F |
   | Zoom in / out | Ctrl+= (or Ctrl++, keypad +) / Ctrl+- (keypad −) | Cmd+= / Cmd+- |
   | Actual size (100 %) | Ctrl+0 (keypad 0) | Cmd+0 |
   | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |

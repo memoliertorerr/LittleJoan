@@ -1,0 +1,27 @@
+/* Pinned sites (LJ50): a pinned row leads the empty command bar and carries a small pin after its
+   text; the quick command "Pin this site" / "Unpin this site" shows the same pin as its symbol.
+   Masks painted in the theme's muted text color, in the selected row's text color when selected. */
+.row-pin,
+.row-icon-pin {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.6 1.9 14.1 6.4M10.8 3.1 6.5 6.4 3.9 6.9 9.1 12.1 9.6 9.5 12.9 5.2M6.5 9.5 2.2 13.8'/%3E%3C/svg%3E");
+  background-color: var(--lj-fg-muted);
+  -webkit-mask: var(--icon) center / 14px no-repeat;
+  mask: var(--icon) center / 14px no-repeat;
+}
+
+.row-pin {
+  flex: none;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+}
+
+.row-icon-pin {
+  -webkit-mask-size: 16px;
+  mask-size: 16px;
+}
+
+.row.selected .row-pin,
+.row.selected .row-icon-pin {
+  background-color: var(--lj-on-selected);
+}

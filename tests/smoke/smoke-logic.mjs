@@ -225,3 +225,27 @@ export const FLOOD_PER_CLICK = 5;
 export function floodRequest(search) {
   return new URLSearchParams(search).get("flood") === "1";
 }
+
+/** The title a `?find=1` page reports once its text is up (LJ49). */
+export const FIND_READY_TITLE = "LJ-FIND ready";
+/** The word the find run looks for. */
+export const FIND_NEEDLE = "lj-needle";
+/** How often the `?find=1` page shows it. */
+export const FIND_NEEDLES = 3;
+
+/**
+ * `?find=1` (LJ49's find run): FIND_NEEDLE three times in plain, visible text, for the engine's own
+ * find to count.
+ * @param {string} search location.search
+ */
+export function findRequest(search) {
+  return new URLSearchParams(search).get("find") === "1";
+}
+
+/**
+ * The `?find=1` page's paragraphs: each shows the needle once (and nothing else is like it).
+ * @returns {string[]}
+ */
+export function findParagraphs() {
+  return Array.from({ length: FIND_NEEDLES }, (_, i) => `Paragraph ${i + 1}: here is the ${FIND_NEEDLE} to find.`);
+}

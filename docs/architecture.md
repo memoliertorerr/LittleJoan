@@ -110,7 +110,10 @@ ui/command/panel.ts                the welcome in the command bar, with its star
                                    checkbox; DOM glue only
 ui/command/rows.ts                 the command bar's rows: order, autofill, keys, site icons
                                    (pure, unit-tested)
-ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document)
+ui/command/view.ts                 draws the rows, as text only (tested with a stand-in document); a
+                                   pinned site's pin glyph (LJ50)
+ui/command/pins.css                the pin glyph of pinned rows and of Pin this site (LJ50; linked by
+                                   bar.html)
 ui/answers/                        quick answers, our own code in the bar: calc.ts (a tokenizer
                                    and precedence-climbing parser, never eval), units.ts, time.ts
                                    (+ cities.ts, ~200 names → IANA zones; Intl with a passed-in
@@ -142,6 +145,11 @@ ui/toolbar/logic.ts                the toolbar: the domain shown (or an extensio
                                    button, how long it stays), macOS from the user agent (pure,
                                    unit-tested)
 ui/toolbar/toolbar.ts              the toolbar's buttons and site; DOM glue only
+ui/toolbar/find-logic.ts           the find strip (LJ49): open, typing debounced 120 ms → `find`,
+                                   Enter / Shift+Enter, Esc, Rust's result checked and its label
+                                   ("3 of 12", "Found", "No matches", no find) (pure, unit-tested)
+ui/toolbar/find.ts                 the find strip's field, count, ↑ ↓ and ×; DOM glue only
+ui/toolbar/find.css                the find strip's styles (linked by bar.html; the body's `finding`)
 ui/index.html                      the page webview's first page: a plain background, no script
 ui/lib/shortcut.ts                 accelerator ↔ key press (recorder) and display text ("⌘⇧Space")
 ui/lib/color.ts                    color math: hex ↔ sRGB ↔ OKLab ↔ OKLCH, fitting into sRGB,
@@ -245,8 +253,9 @@ src-tauri/src/history_store.rs     history.json on disk and in AppState while th
                                    load / title events), autosave, atomic save,
                                    remove one and clear a range (both rewrite the file at once,
                                    with no window straight on disk), the list, the suggestions
-src-tauri/src/suggest.rs           what the command bar suggests: top sites or the starters,
-                                   history matches and a search row (pure, tested)
+src-tauri/src/suggest.rs           what the command bar suggests: the pinned sites (LJ50), then top
+                                   sites or the starters, history matches and a search row (pure,
+                                   tested)
 src-tauri/src/welcome.rs           the welcome's per-OS text: where the tray icon is; a Linux Wayland
                                    session (pure)
 src-tauri/src/joan.rs              the page window's lifecycle: requests through `toggle`, focus,
@@ -293,6 +302,14 @@ src-tauri/src/bar/status.rs        the toolbar's status area from Rust: a downlo
                                    level (`setStatus`), told again when the bar's script runs
 src-tauri/src/bar/zoom.rs          page zoom at run time: the window's level, `set_zoom` on the page
 src-tauri/src/zoom.rs              page zoom's levels and steps (pure, tested)
+src-tauri/src/bar/find.rs          find in page at run time (LJ49): Ctrl/Cmd+F opens the toolbar's
+                                   strip, the bar's actions to the engine, its reports back to the
+                                   bar (`setFindResult`), the find ending (a new page, the command
+                                   bar, the window)
+src-tauri/src/find.rs              find in page's state (LJ49): the query (≤ 1,000 characters), the
+                                   bar's actions, each engine's reports merged into what the strip
+                                   shows, WebKitGTK's active match tracked, the smoke-log line (pure;
+                                   tests in find/tests.rs)
 src-tauri/src/downloads.rs         downloads: which are saved, the file's name (cleaned, capped,
                                    unique), the window's downloads under way (pure; tests in
                                    downloads/tests.rs)
@@ -340,6 +357,8 @@ src-tauri/src/commands/app.rs      the bar: quit_app (the command bar's "Quit Li
 src-tauri/src/commands/timing.rs   the bar: report_timing (its start's marks; smoke tests only,
                                    LJ19.1)
 src-tauri/src/commands/downloads.rs  the bar: reveal_download (the toolbar's "Show in folder")
+src-tauri/src/commands/find.rs     the bar: find (the find strip's start / next / previous / stop;
+                                   find.rs's serde enum, deny_unknown_fields) (LJ49)
 src-tauri/src/commands/keys.rs     the bar and Settings: keymap_info; the portal's shortcut as they
                                    show it (PortalShortcut)
 src-tauri/src/commands/quick.rs    the bar: quick_state, quick_command (a serde enum of fixed
@@ -395,7 +414,8 @@ src-tauri/src/keymap.rs            the keymap: every Little Joan key, the defaul
                                    user's overrides, matching, validation, keymap_info's list
                                    (pure; tests in keymap/tests.rs)
 src-tauri/src/page_actions.rs      close / open location / reload / back / forward / translate /
-                                   open in browser / history / zoom in, out, reset; translate_target
+                                   open in browser / history / zoom in, out, reset / find;
+                                   translate_target
                                    (skips the start page)
 src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView) + the page items,
                                    their keys from the keymap (set again when the keys change);
@@ -403,6 +423,10 @@ src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
 src-tauri/src/platform/glass.rs    Liquid Glass's native side per OS: macOS 26+ only; elsewhere no
                                    support and nothing done (LJ19.9)
+src-tauri/src/platform/find.rs     find in page per engine (LJ49): win/find.rs (ICoreWebView2_28's
+                                   ICoreWebView2Find, its count / active events), mac/find.rs
+                                   (findString:withConfiguration:completionHandler:, a block2 block),
+                                   linux/find.rs (WebKitFindController and its signals)
 src-tauri/src/platform/win.rs      Windows: WebView2 AcceleratorKeyPressed → keys.rs;
                                    ContainsFullScreenElementChanged → window fullscreen; phone
                                    mode's agent through the DevTools protocol (SetUserAgent as the
@@ -500,6 +524,8 @@ src-tauri/src/platform/browsers.rs the OS's browser list, default and a launch, 
                                    linux/browsers.rs (XDG desktop files, xdg-mime, gio launch)
 src-tauri/src/commands/browsers.rs Settings' `browsers_info`, `open_default_apps_settings` (LJ46)
 src-tauri/src/settings/main_browser.rs  the `mainBrowser` field: an id or null (tolerant, tested)
+src-tauri/src/settings/pinned.rs   the `pinnedSites` field (LJ50): at most 8 `{ url, title }`, http(s)
+                                   only, one per URL, no credentials; pin / unpin (tolerant, tested)
 src-tauri/src/links.rs             links from other apps (LJ45): `accept` (only absolute http(s), no
                                    app or extension URL, ≤ 4,096 bytes), a batch's first acceptable
                                    link, macOS's events waiting for setup; then `Show(url)` (pure
@@ -554,6 +580,11 @@ scripts/ci/smoke-quick.mts         CI: the quick-commands run ("mobile", "dark",
                                    Copy link over the smoke page) and its rules; unit-tested
 scripts/ci/smoke-keymap.mts        CI: the keymap run (History on Ctrl/Cmd+Shift+K: the new key,
                                    the old one, macOS's menu) and its rules; unit-tested
+scripts/ci/smoke-find.mts          CI: the find run (`?find=1`: Ctrl/Cmd+F, "lj-needle" ×3, Enter,
+                                   Esc; find.png) and its rules; unit-tested (LJ49)
+scripts/ci/smoke-pinned.mts        CI: the pinned run (the smoke page pinned leads the first command
+                                   bar; "pin" over another page pins it; pinned.png) and its rules;
+                                   unit-tested (LJ50)
 scripts/ci/smoke-tray.mts          CI: the tray run (the icon switched off; a second launch, Quit
                                    from the command bar, Settings' Quit and a relaunch, a Wayland
                                    session) and its rules; unit-tested
@@ -801,7 +832,7 @@ permission, and capabilities grant them per webview label or window:
 
 | Capability | Scope | Grants |
 |---|---|---|
-| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `allow-keymap-info` (the bar and Settings only, a test says), `allow-reveal-download` (the toolbar's "Show in folder"; only the bar, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
+| `capabilities/bar.json` | webview `joan-bar` | `allow-open-input`, `allow-page-url`, `allow-focus-page`, `allow-set-overlay`, `allow-go-back`, `allow-open-in-browser`, `allow-hibernate`, `allow-history-list`, `allow-suggest`, `allow-history-remove`, `allow-history-clear`, `allow-open-settings`, `allow-start-info`, `allow-set-start-at-login`, `allow-set-theme-tokens`, `allow-extensions-list`, `allow-open-extension`, `allow-site-mode-info`, `allow-set-site-mode` (only the bar, a `capability_tests.rs` test says), `allow-quit-app` (the command bar's Quit; only the bar, a test says), `allow-quick-state`, `allow-quick-command` (the quick commands; only the bar, a test says), `allow-keymap-info` (the bar and Settings only, a test says), `allow-reveal-download` (the toolbar's "Show in folder"; only the bar, a test says), `allow-find` (the toolbar's find strip, LJ49; only the bar, a test says), `core:window:allow-start-dragging` (the toolbar's drag regions), `core:window:allow-internal-toggle-maximize` (a double click on them zooms the window; `capability_tests.rs` allows it to no other capability) |
 | `capabilities/settings.json` | window `settings` | `allow-get-settings`, `allow-save-settings`, `allow-suspend-shortcut`, `allow-set-start-at-login`, `allow-history-clear`, `allow-preview-theme`, `allow-extensions-list`, `allow-reload-extensions`, `allow-open-extensions-folder`, `allow-keymap-info`, `allow-quit-from-settings` (General's Quit Little Joan; only Settings, a test says), `core:window:allow-close` |
 | — | `joan-page`, window `joan`, every sign-in popup `joan-popup-<n>` (LJ47), remote URLs | nothing |
 
@@ -824,7 +855,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `suspend_shortcut(suspended)` | settings window, recorder | pause / resume the active shortcut while recording |
 | `set_start_at_login(enabled)` | settings window, Save (only when the switch changed); the welcome's checkbox (the bar) | add / remove the OS login entry; returns whether it exists afterwards (read back) |
 | `history_list()` | the history view, when it opens and after a change | every record, latest visit first: `[{ url, title, host, lastVisit, visitCount }]` (empty with no window); the view searches, groups and draws them; logs `history-list <n>` |
-| `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → up to 8 top sites, leaving out the open page's site, or the 4 starters when there are none; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) |
+| `suggest(query)` | the command bar, as you type (60 ms after the last key) | `[{ kind: pinned \| topSite \| history \| search \| starter, title, url, host, score }]` (`suggest.rs`): nothing typed → the pinned sites first (LJ50, settings' `pinnedSites`, in the order pinned), then top sites leaving out the pinned sites' hosts and the open page's site, at most 8 rows in all — or the 4 starters when there are neither; typing → up to 8 history matches, then one `search` row (title = the engine's name, url = its results page) — never the pins |
 | `history_remove(url)` | the command bar (Shift+Delete on a history row), the history view (× or Shift+Delete) | forget that record and rewrite `history.json` at once; returns whether there was one |
 | `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
 | `preview_theme(theme?, glass?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` — and the Liquid Glass choice `glass` (LJ19.9) — (checked like saved ones, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
@@ -835,9 +866,10 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `open_extensions_folder()` | Settings → Extensions → Open extensions folder | create `<config dir>/extensions/` if needed and show it in the file manager (`tauri_plugin_opener::reveal_item_in_dir`) |
 | `site_mode_info()` | the bar, on load (Rust also pushes it: `window.littleJoan.setSiteMode`, on every address change and agent switch) | `{ host, mode, builtIn, agent }` for the open web page's site — `host` the key a mode is kept under (`youtube.com` for `m.youtube.com`), `mode` `auto` \| `phone` \| `desktop`, `builtIn` whether the built-in list decides, `agent` `phone` \| `desktop`; `null` without a web page (the start page, a panel) |
 | `set_site_mode(mode)` | the toolbar's pill, the command bar's site rows ("Desktop site" / "Phone site" / "Automatic", LJ42's quick rows) | keeps `mode` for the open web page's site in `siteModes` — the site is Rust's (`bar::page_url`), the bar sends only the mode; `auto` removes the entry, or keeps `"auto"` when a built-in or a parent's entry would still decide —, saves the settings and applies it at once: the agent switches and the page loads again only when it really changed (going to desktop on a known phone host: its desktop address). Refused without a web page, or with 500 sites already. Logs `site-mode <site> <mode>`; returns the new info |
-| `quick_state()` | the command bar, each time it opens (with `extensions_list`), and after a quick command | `{ page: { url, title } \| null (a web page only; the title is the window's), theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool \| null, showTrayIcon, iconForced }` — what the quick rows show (LJ42) |
-| `quick_command(command)` | the command bar's quick rows (LJ42) | one of a fixed set, `{ kind, …fields }` (a serde enum with `deny_unknown_fields`: any other kind or field is refused): `translate`, `openInBrowser`, `reload` (the page actions; refused without a web page), `setThemeMode { mode }`, `setTheme { theme }` (a preset's whole theme, checked like Save's), `setSearchEngine { id }`, `setMobileSites { on }`, `setRememberHistory { on }`, `clearHistory { range }` (as `history_clear`; returns how many pages went), `setStartAtLogin { on }`, `openSettings { tab }`, `reloadExtensions`, `setTrayIcon { on }`. Settings ones go through `settings_live::apply` (as Save) and an open settings window rebases its draft (`window.littleJoanSettings.savedChanged(<settings>, <startAtLogin \| null>)`, by `eval`). Never: the shortcut or keys, developer mode, switching extensions, custom colors — Settings only. Logs `quick-command <kind> [<value>]`, never a URL or a title |
+| `quick_state()` | the command bar, each time it opens (with `extensions_list`), and after a quick command | `{ page: { url, title } \| null (a web page only; the title is the window's), theme, searchEngine, engines: [{ id, name }], mobileSites, rememberHistory, startAtLogin: bool \| null, showTrayIcon, iconForced, pinned }` (`pinned`: the open page is pinned, LJ50) — what the quick rows show (LJ42) |
+| `quick_command(command)` | the command bar's quick rows (LJ42) | one of a fixed set, `{ kind, …fields }` (a serde enum with `deny_unknown_fields`: any other kind or field is refused): `translate`, `openInBrowser`, `reload` (the page actions; refused without a web page), `setThemeMode { mode }`, `setTheme { theme }` (a preset's whole theme, checked like Save's), `setSearchEngine { id }`, `setMobileSites { on }`, `setRememberHistory { on }`, `clearHistory { range }` (as `history_clear`; returns how many pages went), `setStartAtLogin { on }`, `openSettings { tab }`, `reloadExtensions`, `setTrayIcon { on }`, `setPinned { url, title, on }` (LJ50: `on` pins the open web page — refused unless `url` is its address; the title is the page's own as Rust knows it — and `off` unpins `url`; through `settings::apply_change`'s `Pin`, done on the settings of the moment; at most 8). Settings ones go through `settings_live::apply` (as Save) and an open settings window rebases its draft (`window.littleJoanSettings.savedChanged(<settings>, <startAtLogin \| null>)`, by `eval`). Never: the shortcut or keys, developer mode, switching extensions, custom colors — Settings only. Logs `quick-command <kind> [<value>]`, never a URL or a title |
 | `keymap_info()` | Settings' Keyboard tab (LJ44); the bar may ask too | `{ platform, actions: [{ id, title, binding, defaults }], globalShortcut, shortcutProblem, portalShortcut, systemShortcuts }` — `portalShortcut` `{ trigger }` while the XDG GlobalShortcuts portal holds the summon shortcut (LJ17), else `null` — — the last macOS's own shortcuts as read from its preferences (`[{ id, enabled, accelerator }]`, empty elsewhere; smoke log `system-shortcuts <n> keys=<k>`) — every keymap action in Settings' order, titles as the macOS menu has them, `binding` its changeable key's accelerator (`null`: no key), `defaults` its default accelerators (the first is what Reset brings back), and the saved global shortcut (LJ43) |
+| `find(action)` | the toolbar's find strip (LJ49) | one of a fixed set (`find.rs`'s serde enum, `deny_unknown_fields`): `{ kind: "start", query }` (cut at 1,000 characters; `""` clears the find, the strip stays), `next`, `previous`, `stop` (the strip closed: the find ends, the page gets the keyboard). Only while the strip is open (Ctrl/Cmd+F opened it). The page's engine finds natively (`platform/find.rs`) and Rust pushes the result: `window.littleJoan.setFindResult({ matches, active, found[, unavailable] })`. Logs `find-action <kind> [length=<n>]` — never the query |
 | `reveal_download()` | the toolbar's **Show in folder**, after a download was saved (LJ15) | shows the last file saved in this window in the file manager, selected (`tauri_plugin_opener::reveal_item_in_dir`) — which file is Rust's, never the bar's; an error when there is none |
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
 | `browsers_info()` | Settings → General's Browser section, on load and when the window comes back to the front (LJ46) | `{ platform, defaultKind: self \| other \| none, defaultName, browsers: [{ id, name }] (never Little Joan), mainBrowser, firstOther, canOpenSettings, candidate }` (`candidate` false for the AppImage — `$APPIMAGE` set —, which can't be chosen: Settings says so and hides the button), read from the OS now (read-only); logs `browsers-listed <n> default=<kind>`. Settings only (`capability_tests.rs`) |
@@ -1011,6 +1043,7 @@ shows the error.
   | Back / Forward | Alt+Left / Alt+Right (built-in) | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate page | Ctrl+Shift+T | Ctrl+Shift+T | Cmd+Shift+T |
   | History view (the command bar's overlay) | Ctrl+H | Ctrl+H | Cmd+Y (View menu) |
+  | Find in page (the toolbar's find strip, LJ49) | Ctrl+F (before WebView2's own find bar) | Ctrl+F | Cmd+F (View → Find…) |
   | Zoom in (LJ16) | Ctrl+= (also Ctrl+Shift+=, keypad +) | Ctrl+= (also Ctrl+Shift+=, keypad +) | Cmd+= (View → Zoom In) |
   | Zoom out | Ctrl+- (also keypad −) | Ctrl+- (also keypad −) | Cmd+- (View → Zoom Out) |
   | Zoom back to 100 % | Ctrl+0 (also keypad 0) | Ctrl+0 (also keypad 0) | Cmd+0 (View → Actual Size) |
@@ -1020,9 +1053,10 @@ shows the error.
   Matches are exact: Ctrl+Shift+W is not Ctrl+W, and a Ctrl+Alt press (AltGr) never matches a
   Ctrl key. In a sign-in popup only Close acts — it closes the popup (LJ48, "Sign-in popups"). On macOS the menu bar is hidden (Accessory app) but its key equivalents work; Cmd+Q
   quits for real.
-- **The keymap** (`keymap.rs`, pure; tests in `keymap/tests.rs` and `keymap/zoom_tests.rs`):
-  actions `open-location`, `history`, `translate`, `reload`, `back`, `forward`, `zoom-in`,
-  `zoom-out`, `zoom-reset` (LJ16), `open-in-browser`, `close` (LJ49 adds find), each with an
+- **The keymap** (`keymap.rs`, pure; tests in `keymap/tests.rs`, `keymap/zoom_tests.rs` and
+  `keymap/find_tests.rs`): actions `open-location`, `history`, `translate`, `reload`, `back`,
+  `forward`, `zoom-in`, `zoom-out`, `zoom-reset` (LJ16), `open-in-browser`, `close`, `find` (LJ49:
+  last, so a key someone gave an older action before it existed stays theirs), each with an
   ordered list of default bindings per OS — the first is the one Settings
   shows and changes, the rest are fixed aliases (Linux's F5 for reload); an action may have none
   (Windows leaves Reload, Back and Forward to WebView2, which handles Ctrl+R, F5 and Alt+← / Alt+→
@@ -1061,6 +1095,39 @@ shows the error.
   saved. Each change shows "Zoom 110 %" in the toolbar's status area for 1.5 s ("Zoom 100 %" once,
   then nothing); smoke log `zoom <percent>`. Phone mode is unaffected: its 600 / 640 px are the
   window's logical width, not the page's CSS width.
+- **Find in page** (LJ49; `find.rs` pure, `bar/find.rs`, `platform/find.rs`, the strip in
+  `ui/toolbar/find*.ts`): the keymap's `find` (Ctrl+F / Cmd+F) is a page action like the others —
+  on Windows caught in `AcceleratorKeyPressed` on both webviews, so WebView2's own find bar never
+  opens; macOS's View → Find…. With a web page or an extension's panel open (never the start page,
+  nor during element fullscreen) it closes the command bar if it is open, gives the bar the
+  keyboard and opens the **find strip** in the toolbar's middle, in the site's place (the body's
+  `finding` class): the field, the count, ↑ ↓ and ×; back and open-in-browser stay; drawn as
+  text. Typing goes to Rust 120 ms after the last key (`find { kind: start, query }`, ≤ 1,000
+  characters; an empty field clears the find), Enter / ↓ is `next`, Shift+Enter / ↑ `previous`,
+  Esc / × `stop` (the page gets the keyboard back); opened again, it finds its last text again.
+  **The engines do the finding** — nothing goes into the page, no script, no IPC: **WebView2**
+  `ICoreWebView2_28::Find` → `ICoreWebView2Find::Start` with options from
+  `ICoreWebView2Environment15::CreateFindOptions` (the term, case-insensitive, every match
+  highlighted, its default find dialog suppressed), `FindNext`, `FindPrevious`, `Stop`; the count
+  and the active match (1-based) from its `MatchCountChanged` / `ActiveMatchIndexChanged` events
+  (connected once per page) and again when a `Start` completes; a runtime without
+  `ICoreWebView2_28` has no find, and the strip says "Find isn't available in this version of
+  Windows' web engine". **WKWebView** `findString:withConfiguration:completionHandler:` (macOS 11+;
+  a `WKFindConfiguration`: case-insensitive, wrapping, backwards for previous; the completion
+  handler a block2 block carrying its find's number): its `WKFindResult` says only `matchFound` —
+  **no count, no active match** — so macOS shows "Found" / "No matches"; next and previous find the
+  same text again from the selection the last find left, and stop leaves that selection.
+  **WebKitGTK** the view's `WebKitFindController`: `count_matches`, then `search` (case-insensitive,
+  wrap-around, at most 1,000 matches highlighted — in that order: WebKit's count unmarks every match
+  once it has counted, so counting after the search took its highlights away), `search_next`, `search_previous`,
+  `search_finish`; `found-text` / `failed-to-find-text` / `counted-matches` report — it never says
+  which match is active, so `find.rs` tracks it (1 after a search, ± with next / previous, wrapping
+  at the ends). Results go to the bar as `window.littleJoan.setFindResult({ matches, active, found
+  })` — "3 of 12" / "No matches" / "Found" (`find-logic.ts`). **The find ends** — the engine stops,
+  the strip closes (`window.littleJoan.closeFind()`) — when the page starts loading a document
+  (`Started`), when the command bar opens, and with the window; reports for an older query are
+  dropped (WKWebView's carry their number; the others are counted for the current query). Not in
+  it (Later): whole word, regex, find in the bar's own screens.
 - **Downloads** (LJ15; `downloads.rs` decides, `bar/download.rs` runs it): a page's download goes
   to the OS Downloads folder (`PathResolver::download_dir`; without one — Linux without XDG user
   dirs — `~/Downloads`, created when missing). Only web downloads are saved: `http` / `https`, and
@@ -1142,7 +1209,8 @@ page; it is a separate webview with its own capability, and the page webview has
   (`back_stack.rs`, pure): a trail of the web pages that finished loading, where a load of the
   page before the last one is a step back and a load of the last one again a reload; the app's
   own pages and `about:` don't count; Rust pushes `window.littleJoan.setCanGoBack(<bool>)` on
-  every change and when the bar loads. In the middle the site's icon (the command bar's lettered
+  every change and when the bar loads. Ctrl/Cmd+F puts the **find strip** in the middle instead of
+  the site (LJ49, "Find in page" above). In the middle the site's icon (the command bar's lettered
   stand-in under the favicon) and its domain (`www.` stripped, IPs as they are, long names
   shortened in the middle; `logic.ts`, tested): a click opens the command bar with the full
   address selected. On the right "open in default browser": the existing page action (the page
@@ -1189,8 +1257,10 @@ page; it is a separate webview with its own capability, and the page webview has
   ("Search or enter URL…") and a × button (back to the page, or with no page, close the window);
   under it the welcome on the first run, then the rows — a site icon, then "Title — domain" with
   the domain muted; the selected row is filled with the accent color; **"Settings & extensions"**
-  (a gear) is always the last row. Rows (`rows.ts`): nothing typed → the top sites (or the
-  starters); typing → a quick answer, the best history match, "Search <engine> for …", more
+  (a gear) is always the last row. Rows (`rows.ts`): nothing typed → the **pinned sites** (LJ50:
+  settings' `pinnedSites`, in the order pinned, each with a pin glyph after its text — a CSS mask,
+  `command/pins.css` — and "(pinned)" for screen readers), then the top sites without the pinned
+  sites' hosts (or the starters when there are neither), 8 rows at most; typing → a quick answer, the best history match, "Search <engine> for …", more
   matches, the built-in commands (**History**, **Settings** — for "settings", "preferences",
   "options" —, **Quit Little Joan** — for "quit", "exit" (LJ41), each when what is typed starts
   one of its words, two letters or more, or names it), the **quick commands**, extension commands
@@ -1198,8 +1268,10 @@ page; it is a separate webview with its own capability, and the page webview has
   three quick commands; history matches make way. **Quick commands** (LJ42, `ui/command/quick.ts`)
   show their state after the title, as text: with a web page open Translate page, Open in browser,
   Copy link, Copy as Markdown link (copied in the bar on the keypress, the Markdown from the
-  bundled extension's own `link("markdown", …)`), Reload, and the site rows (Desktop site, Phone
-  site, Automatic — "this site", the current ✓); always Theme: System / Light / Dark and Theme:
+  bundled extension's own `link("markdown", …)`), Reload, the site rows (Desktop site, Phone
+  site, Automatic — "this site", the current ✓), and **Pin this site — not pinned** / **Unpin this
+  site — pinned** (LJ50: `setPinned` with the page `quick_state` named; it keeps the command bar
+  open, the row then showing the new state); always Theme: System / Light / Dark and Theme:
   <preset> (the current ✓; a preset keeps the user's mode), Search with <engine> (✓), Mobile sites
   — on/off, Remember history — on/off, Clear history — last hour / 24 hours / 7 days / everything
   (the first Enter turns the row into "press Enter again to remove …"; a second Enter on that row
@@ -1229,7 +1301,7 @@ page; it is a separate webview with its own capability, and the page webview has
   typing at the end of the field, never after a deletion. **Keys:** ↑/↓ move without wrapping (↑
   from the first row goes back to the field), Enter opens the selected row — or with none,
   `open_input` on the field's text, as before —, Tab accepts the autofill, Shift+Delete removes a
-  history row; the mouse selects on hover and opens on click. Picking a row goes through
+  history row — or, on a pinned row, unpins it (`setPinned … on: false`; history stays); the mouse selects on hover and opens on click. Picking a row goes through
   `open_input`, so the visit counts as typed. Typing asks `suggest` after 60 ms; only the latest
   answer is drawn. While the field shows the open page's address untouched (Ctrl/Cmd+L), the
   command bar shows the top sites.
@@ -1882,7 +1954,11 @@ follows=<bool>` (macOS: a webview's autoresizing mask was set), `bar-background 
 when the window closed) / `download-deciders-removed <n>` (Linux: wry's handlers taken off a
 download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't the page's) /
 `download-noted` / `download-cancelled <n>` (macOS: a WKDownload noted; cancelled on close),
-`zoom <percent>` (a zoom key set the page's level, LJ16), `browsers-listed <n>
+`zoom <percent>` (a zoom key set the page's level, LJ16), `find-open` / `find-action <start
+length=<n> | next | previous | stop>` (never the query) / `find-result <matches=<n>[ active=<n>] |
+found=<bool> | unavailable>` / `find-closed <user | page | overlay>` / `find-engine <webview2
+<runtime version> find=<bool> | wkwebview find=<bool> | webkitgtk <version>>` (find in page, LJ49),
+`browsers-listed <n>
 default=<self|other|none>` / `handoff os-default | browser=<id>` / `handoff-none` /
 `handoff-self-refused` / `default-apps-settings <what>` / `settings-scrolled browser` (LJ46: the
 OS's browsers read, where a page was handed, the default-apps button, the smoke-only scroll to
@@ -1954,9 +2030,10 @@ The modules below hold every decision the app makes; the native glue only calls 
   already translated.
 - **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
   mobileSites, rememberHistory, theme, developerMode, disabledExtensions, siteModes,
-  showTrayIcon, keys, afterClose}` (camelCase
+  showTrayIcon, keys, afterClose, glass, mainBrowser, pinnedSites}` (camelCase
   JSON; `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once; `siteModes` keeps
-  at most 500 valid `host: auto|phone|desktop` entries). Each field falls back to its default on its own; sizes are clamped to
+  at most 500 valid `host: auto|phone|desktop` entries; `pinnedSites`, LJ50, at most 8 `{url,
+  title}` — http(s) without credentials, one per URL, a bad entry dropped alone). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; `theme` = `{mode, colors, intensity, grain}`, each part on its own too
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
@@ -1993,6 +2070,11 @@ The modules below hold every decision the app makes; the native glue only calls 
   keyboard, appearance, extensions, privacy, about, any case; General without one or for a name
   it doesn't know) opens Settings and leaves the page window alone too. `--quit` is a third result; it
   replaces the window command (a quitting launch never opens the window, nor Settings).
+- **find** (LJ49) — the find strip's state: open or not, the query (cut at 1,000 characters; a new
+  one restarts, an empty one clears), what the bar may send (`start` / `next` / `previous` / `stop`,
+  nothing while the strip is closed), each engine's reports merged into `{ matches, active, found }`
+  (WebView2 and WebKitGTK count, WKWebView only finds; WebKitGTK's active match is tracked here and
+  wraps), reports for an older query dropped, and the smoke log's `find-result` line.
 
 ## Building
 
@@ -2229,7 +2311,21 @@ and pushes to `main`:
   `ctrl+shift+k`) must open the history view, and the old key (Ctrl+H), pressed with the view
   closed again, must open nothing within 2 s; on macOS the log's `menu-keys history=⌘⇧K` (and
   `open-location=⌘L`) shows the menu was built from the keymap (required; the presses are best
-  effort there). Log `smoke-keymap.log`, `summary.json`'s `keymapRun`. Then a short launch whose
+  effort there). Log `smoke-keymap.log`, `summary.json`'s `keymapRun`. Then the **find run**
+  (`smoke-find.mts`, LJ49), its own launch over the smoke page's `?find=1` (`lj-needle` three times
+  in plain text, `LJ-FIND ready`): Ctrl/Cmd+F must log `find-open`, typing `lj-needle` in the strip
+  `find-action start length=9` and then `find-result matches=3 active=1` (Windows, Linux) or
+  `find-result found=true` (macOS), Enter `find-action next` and `find-result matches=3 active=2`
+  (Windows, Linux), Esc `find-closed user`; never `find-result unavailable`. `find.png` shows the
+  strip with the matches found. On macOS the menu must show `menu-keys find=⌘F`, and the rest
+  applies once the key reached the app (best effort). The log's `find-engine` line names the engine
+  (WebView2: its runtime version). Log `smoke-find.log`, `summary.json`'s `findRun`. Then the
+  **pinned run** (`smoke-pinned.mts`, LJ50), its own launch on a fresh data folder whose
+  settings.json pins the smoke page's `?pinned=1` (`LJ pinned`): the log's very first `suggestions`
+  line must say `first=127.0.0.1:<port>` (no history yet), and `pinned.png` shows that row with its
+  pin; then over `?other=1`, Ctrl/Cmd+L, `pin`, ↓ ↓ Enter must log `quick-command setPinned true` and
+  leave settings.json pinning both, the first page first (typed on Windows and Linux; best effort on
+  macOS). Log `smoke-pinned.log`, `summary.json`'s `pinnedRun`. Then a short launch whose
   settings.json holds a shortcut that doesn't parse (`Hyper+Nope`, LJ44): it must log
   `shortcut-failed`, register the default instead, and `--settings keyboard` must open Keyboard
   (`settings-keyboard-problem.png`: the problem line; log `smoke-keyboard-problem.log`). On macOS

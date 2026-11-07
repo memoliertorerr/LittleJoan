@@ -189,6 +189,9 @@
         FLOOD_READY_TITLE,
         FLOOD_TARGET,
         floodRequest,
+        FIND_READY_TITLE,
+        findParagraphs,
+        findRequest,
       } from "./smoke-logic.mjs";
       import { probeApi, probeFile, probeRequest, probeTitle, raceRequest, RACE } from "./ext-probe.mjs";
       import {
@@ -274,6 +277,19 @@
         stage.hidden = true;
         document.body.append(link);
         show(BLANK_READY_TITLE);
+      } else if (findRequest(location.search)) {
+        // ?find=1 (LJ49): the needle three times in plain text, for the engine's own find.
+        const text = document.createElement("main");
+        text.id = "find";
+        text.style.cssText = "position:fixed;inset:0;padding:24px;overflow:auto;background:#ffffff;color:#1f2a44;font-size:20px;line-height:1.7";
+        for (const line of findParagraphs()) {
+          const paragraph = document.createElement("p");
+          paragraph.textContent = line;
+          text.append(paragraph);
+        }
+        stage.hidden = true;
+        document.body.append(text);
+        show(FIND_READY_TITLE);
       } else if (popup?.mode === "onblur") {
         runOnBlur(popup);
       } else if (popup) {

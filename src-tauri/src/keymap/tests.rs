@@ -97,6 +97,7 @@ fn the_defaults_are_todays_keys() {
         (KeyAction::ZoomReset, "CommandOrControl+Digit0"),
         (KeyAction::OpenInBrowser, "CommandOrControl+Shift+KeyO"),
         (KeyAction::Close, "CommandOrControl+KeyW"),
+        (KeyAction::Find, "CommandOrControl+KeyF"),
     ];
     assert_eq!(mac.len(), want.len());
     for ((action, got), (want_action, want_key)) in mac.iter().zip(want) {

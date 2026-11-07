@@ -35,13 +35,18 @@ pub fn perform<R: Runtime>(app: &AppHandle<R>, action: PageAction) {
         match action {
             PageAction::OpenLocation => return bar::focus_bar(&app),
             PageAction::History => return bar::show_history(&app),
+            // The toolbar's find strip (LJ49): it checks for a page itself.
+            PageAction::Find => return bar::find::open(&app),
             _ => {}
         }
         let Some(page) = bar::page(&app) else {
             return;
         };
         let result = match action {
-            PageAction::OpenLocation | PageAction::History | PageAction::Close => Ok(()),
+            PageAction::OpenLocation
+            | PageAction::History
+            | PageAction::Find
+            | PageAction::Close => Ok(()),
             PageAction::Reload => {
                 // A reload is a visit that adds nothing to frecency (history.rs).
                 history_store::set_next_kind(&app, VisitKind::Reload);

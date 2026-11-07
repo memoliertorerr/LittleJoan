@@ -39,6 +39,8 @@ pub mod app;
 pub mod browsers;
 /// The toolbar's "Show in folder" for a download (LJ15): `reveal_download`.
 pub mod downloads;
+/// The toolbar's find strip (LJ49): `find`.
+pub mod find;
 /// Little Joan's keys for Settings (LJ43): `keymap_info`.
 pub mod keys;
 /// Quick commands in the command bar (LJ42): `quick_state`, `quick_command`.
@@ -359,6 +361,8 @@ pub async fn save_settings<R: Runtime>(
         after_close: settings.after_close,
         glass: settings.glass,
         main_browser: settings.main_browser,
+        // Settings has no pins (the command bar's): they stay as they are.
+        pin: None,
     };
     // A refused part changes nothing — not even the shortcut.
     let current = state::with(&app, |s| s.settings.clone());

@@ -49,7 +49,10 @@ windows = { version = "0.62", features = [
 winreg = "0.10"
 
 # Phone mode sets WKWebView's customUserAgent (same versions as wry uses; nothing new to fetch).
+# Find in page (LJ49) hands WKWebView's findString:… a completion block: block2, as wry does (0.6.2
+# is in Cargo.lock through wry already).
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
 

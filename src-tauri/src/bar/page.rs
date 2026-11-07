@@ -137,8 +137,10 @@ fn build<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) -> tauri::Result<()
     let rect = layout(logical.width, logical.height, Mode::Toolbar)
         .page
         .unwrap_or(whole);
-    // Its new windows are taken from now on, its sign-in popups counted afresh (LJ47).
+    // Its new windows are taken from now on, its sign-in popups counted afresh (LJ47), and no
+    // find of an earlier page is kept (LJ49).
     super::popup::page_built();
+    super::find::forget();
     let page = add(window, data_dir, rect)?;
     platform::install_page(&page);
     super::view::page_added(window, &page);
@@ -241,6 +243,8 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
                     // A sign-in popup belongs to the page that opened it (LJ48): another origin
                     // here closes it (before any panel can load).
                     super::popup::page_committed(webview.app_handle(), payload.url());
+                    // A find in the old document ends, its strip closes (LJ49).
+                    super::find::page_started(webview.app_handle());
                     // What the toolbar shows, and what the extension handler serves beyond a
                     // panel's document: an extension only once its panel committed here.
                     extensions::session::page_committed(webview.app_handle(), payload.url());
@@ -339,6 +343,7 @@ pub fn close_page<R: Runtime>(app: &AppHandle<R>) {
     super::popup::close_all(app, "hibernate");
     *address() = PageAddress::new();
     *back() = BackStack::new();
+    super::find::forget();
     tray::set_page_items_enabled(app, false);
     smoke::log("page-closed", "");
 }

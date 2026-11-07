@@ -214,6 +214,10 @@ fn change_overlay<R: Runtime>(app: &AppHandle<R>, on: bool) -> bool {
     if OVERLAY.swap(on, Ordering::Relaxed) == on {
         return false;
     }
+    if on {
+        // The command bar covers the toolbar: a find in its strip ends (LJ49).
+        super::find::end(app, "overlay");
+    }
     if let Some(bar) = app.get_webview(BAR) {
         platform::set_overlay(&bar, app.get_webview(PAGE).as_ref(), on);
         tell_overlay(&bar, on);

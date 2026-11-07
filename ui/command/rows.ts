@@ -1,11 +1,12 @@
 // The command bar's rows (pure, unit-tested): what to show for what is typed, in what order, the
 // inline autofill, and what the keys do. Rust's suggest() supplies the suggestions
-// (src-tauri/src/suggest.rs), quick.ts the quick commands; view.ts draws the rows, as text only.
+// (src-tauri/src/suggest.rs) — the pinned sites first while nothing is typed (LJ50) —, quick.ts the
+// quick commands; view.ts draws the rows, as text only, a pinned one with a pin glyph.
 import type { QuickCommand } from "./quick.ts";
 
 /** One suggestion from Rust's `suggest(query)`. */
 export interface Suggestion {
-  kind: "topSite" | "history" | "search" | "starter";
+  kind: "pinned" | "topSite" | "history" | "search" | "starter";
   /** A page title; for `search`, the engine's name. Shown as text, never as HTML. */
   title: string;
   url: string;
@@ -14,7 +15,7 @@ export interface Suggestion {
   score: number;
 }
 
-export type RowKind = "answer" | "topSite" | "history" | "search" | "starter" | "command" | "settings";
+export type RowKind = "answer" | "pinned" | "topSite" | "history" | "search" | "starter" | "command" | "settings";
 
 /** What choosing a row does. */
 export type Action =
@@ -57,6 +58,8 @@ export interface Row {
   action: Action;
   /** The history record Shift+Delete removes, if this row is one. */
   removable?: string;
+  /** A pinned site's address (LJ50): Shift+Delete unpins it (instead of removing history). */
+  pinned?: string;
 }
 
 /**
@@ -168,6 +171,9 @@ function rowFor(suggestion: Suggestion): Row {
   if (suggestion.kind === "history") {
     row.removable = suggestion.url;
   }
+  if (suggestion.kind === "pinned") {
+    row.pinned = suggestion.url;
+  }
   return row;
 }
 
@@ -212,7 +218,8 @@ export function autofillFor(query: string, history: readonly Suggestion[]): stri
 }
 
 /**
- * The rows for `query`. Nothing typed: the top sites (or the starters), up to 8. Typing: a quick
+ * The rows for `query`. Nothing typed: the pinned sites, then the top sites (or the starters), up
+ * to 8 (Rust orders them). Typing: a quick
  * answer if one applies, the best history match, "Search <engine> for …", more history matches,
  * matching commands (the built-in ones, which always find room; the quick commands, up to three
  * of which always find room; then extensions') — at most 8 in all. "Settings & extensions" is
@@ -221,7 +228,7 @@ export function autofillFor(query: string, history: readonly Suggestion[]): stri
 export function buildRows(query: string, suggestions: readonly Suggestion[], hooks: Hooks = {}): RowList {
   const typed = query.trim();
   if (typed.length === 0) {
-    const sites = suggestions.filter((s) => s.kind === "topSite" || s.kind === "starter");
+    const sites = suggestions.filter((s) => s.kind === "pinned" || s.kind === "topSite" || s.kind === "starter");
     return { rows: [...sites.slice(0, MAX_SUGGESTIONS).map(rowFor), SETTINGS_ROW], autofill: null };
   }
   const history = suggestions.filter((s) => s.kind === "history");
@@ -291,12 +298,15 @@ export type ListOutcome =
   | { kind: "act"; action: Action }
   | { kind: "acceptAutofill"; text: string }
   | { kind: "remove"; url: string }
+  /** Shift+Delete on a pinned row (LJ50): unpin it — its title goes along, as the command wants. */
+  | { kind: "unpin"; url: string; title: string }
   | { kind: "none" };
 
 /**
  * What a key does to the list. ↑/↓ move without wrapping (↑ from the first row goes back to the
  * field); Enter opens the selected row, or with none what the field says (open_input: an address
- * or a search); Tab accepts the autofill; Shift+Delete removes the selected history row.
+ * or a search); Tab accepts the autofill; Shift+Delete removes the selected history row — or
+ * unpins the selected pinned site (LJ50).
  */
 export function listKey(
   list: RowList,
@@ -328,8 +338,14 @@ export function listKey(
     case "Tab":
       return list.autofill ? { kind: "acceptAutofill", text: list.autofill.text } : { kind: "none" };
     case "Delete": {
-      const url = selected === null ? undefined : list.rows[selected]?.removable;
-      return shift && url ? { kind: "remove", url } : { kind: "none" };
+      const row = selected === null ? undefined : list.rows[selected];
+      if (!shift || !row) {
+        return { kind: "none" };
+      }
+      if (row.pinned) {
+        return { kind: "unpin", url: row.pinned, title: row.title };
+      }
+      return row.removable ? { kind: "remove", url: row.removable } : { kind: "none" };
     }
     default:
       return { kind: "none" };

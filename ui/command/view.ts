@@ -1,6 +1,7 @@
 // Draws the command bar's rows. Text only: every title and domain goes in through textContent,
-// never as HTML — titles come from web pages (and, later, extensions). Written against a small
-// slice of the DOM so the tests can draw into a stand-in document.
+// never as HTML — titles come from web pages (and, later, extensions). A pinned site (LJ50) gets a
+// pin glyph after its text (a CSS mask, command/pins.css) and says "pinned" to screen readers.
+// Written against a small slice of the DOM so the tests can draw into a stand-in document.
 import { faviconUrl, hueFor, letterFor, type Row } from "./rows.ts";
 
 /** The part of an element this file uses (an HTMLElement has all of it). */
@@ -90,7 +91,15 @@ export function renderRow<E extends ElementLike>(doc: DocumentLike<E>, row: Row,
   if (row.mark) {
     text.append(element(doc, "span", "row-mark", ` ${row.mark}`));
   }
+  if (row.pinned) {
+    text.append(element(doc, "span", "sr-only", " (pinned)"));
+  }
   item.append(icon(doc, row), text);
+  if (row.pinned) {
+    const pin = element(doc, "span", "row-pin");
+    pin.setAttribute("aria-hidden", "true");
+    item.append(pin);
+  }
   return item;
 }
 

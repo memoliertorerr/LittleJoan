@@ -24,6 +24,7 @@ function state(over: Partial<QuickState> = {}): QuickState {
     startAtLogin: false,
     showTrayIcon: true,
     iconForced: false,
+    pinned: false,
     ...over,
   };
 }
@@ -99,11 +100,17 @@ describe("quick commands (LJ42)", () => {
 
   it("move the site rows in, with the site's mode marked (LJ40's rows)", () => {
     const open = state({ page: PAGE });
-    expect(texts(quickRows("site", open, site("desktop")))).toEqual([`Desktop site — this site ${CHECK}`, "Phone site — this site", "Automatic — this site", "Mobile sites — on"]);
+    expect(texts(quickRows("site", open, site("desktop")))).toEqual([
+      `Desktop site — this site ${CHECK}`,
+      "Phone site — this site",
+      "Automatic — this site",
+      "Pin this site — not pinned",
+      "Mobile sites — on",
+    ]);
     expect(texts(quickRows("request desktop", open, site("auto")))).toEqual(["Desktop site — this site"]);
     expect(texts(quickRows("automatic", open, site("auto")))).toEqual([`Automatic — this site ${CHECK}`]);
     expect(titles(quickRows("mobile", open, site("auto")))).toEqual(["Phone site", "Automatic", "Mobile sites"]);
-    expect(titles(quickRows("site", open, null))).toEqual(["Mobile sites"]);
+    expect(titles(quickRows("site", open, null))).toEqual(["Pin this site", "Mobile sites"]);
     expect(titles(quickRows("site", state(), site("auto")))).toEqual(["Mobile sites"]);
     expect(quickRows("site", open, site("phone")).slice(0, 3).map((row) => row.action)).toEqual([
       { kind: "siteMode", mode: "desktop" },
@@ -154,10 +161,27 @@ describe("quick commands (LJ42)", () => {
     const raw = { ...state({ page: PAGE }), theme: { mode: "dark", colors: ["#123456"], intensity: 0.5, grain: 0.2 } };
     expect(quickStateFrom(raw)).toMatchObject({ page: PAGE, searchEngine: "google", theme: { mode: "dark" } });
     expect(quickStateFrom({ ...raw, page: { url: 3 } })?.page).toBeNull();
-    for (const bad of [null, "x", { ...raw, mobileSites: "yes" }, { ...raw, startAtLogin: "no" }, { ...raw, iconForced: undefined }]) {
+    for (const bad of [null, "x", { ...raw, mobileSites: "yes" }, { ...raw, startAtLogin: "no" }, { ...raw, iconForced: undefined }, { ...raw, pinned: "yes" }]) {
       expect(quickStateFrom(bad)).toBeNull();
     }
     expect(quickRows("mobile", null)).toEqual([]);
+  });
+
+  it("offer Pin this site / Unpin this site with a page open, showing its state (LJ50)", () => {
+    expect(quickRows("pin", state())).toEqual([]);
+    const open = state({ page: PAGE });
+    expect(texts(quickRows("pin", open))).toEqual(["Pin this site — not pinned"]);
+    expect(quickRows("pin", open)[0]?.action).toEqual({
+      kind: "quick",
+      command: { kind: "setPinned", url: PAGE.url, title: PAGE.title, on: true },
+      key: "pin",
+      closes: false,
+    });
+    const pinned = state({ page: PAGE, pinned: true });
+    expect(texts(quickRows("pin", pinned))).toEqual(["Unpin this site — pinned"]);
+    expect(texts(quickRows("unpin", pinned))).toEqual(["Unpin this site — pinned"]);
+    expect(quickRows("pin", pinned)[0]?.action).toMatchObject({ command: { kind: "setPinned", url: PAGE.url, on: false } });
+    expect(quickRows("pin", pinned)[0]?.icon).toBe("pin");
   });
 
   it("keep hostile page titles as text in the copied link, never in a row", () => {

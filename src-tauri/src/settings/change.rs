@@ -6,7 +6,10 @@
 
 use serde_json::Value;
 
-use super::{AfterClose, Glass, Settings, ThemeMode, disabled_extensions, keys, site_modes, theme};
+use super::{
+    AfterClose, Glass, PinnedSite, Settings, ThemeMode, disabled_extensions, keys, pinned,
+    site_modes, theme,
+};
 use crate::input::SearchEngine;
 use crate::keymap;
 use crate::keys::Platform;
@@ -41,6 +44,17 @@ pub struct Change {
     pub glass: Option<String>,
     /// The main browser (LJ46): a browser's id, or `""` for the system default.
     pub main_browser: Option<String>,
+    /// A site pinned or unpinned (LJ50: the command bar's quick commands, Shift+Delete).
+    pub pin: Option<Pin>,
+}
+
+/// Pinning (LJ50), done on the settings of the moment (settings/pinned.rs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pin {
+    /// Pin this site last (a URL pinned already keeps its place); refused with eight pinned.
+    Add(PinnedSite),
+    /// Unpin this URL.
+    Remove(String),
 }
 
 impl Change {
@@ -116,6 +130,14 @@ pub fn apply_change(current: &Settings, change: &Change) -> Result<Settings, Str
     }
     if let Some(id) = &change.main_browser {
         next.main_browser = super::main_browser::from_input(id).map_err(str::to_owned)?;
+    }
+    match &change.pin {
+        Some(Pin::Add(site)) => {
+            next.pinned_sites =
+                pinned::pin(&next.pinned_sites, site.clone()).map_err(str::to_owned)?;
+        }
+        Some(Pin::Remove(url)) => next.pinned_sites = pinned::unpin(&next.pinned_sites, url),
+        None => {}
     }
     if let Some(value) = &change.keys {
         next.keys = keys::from_input(value)
