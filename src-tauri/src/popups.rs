@@ -211,6 +211,23 @@ pub fn settle(target: &Url, sized: bool) -> Decision {
     wanted(target, size)
 }
 
+/// WebKitGTK at `ready-to-show`: whether the request asked for a popup window, and its size. The
+/// engine always sets the window properties' geometry — from the opener's window when the page asked
+/// for none (WebCore's `createWindow`) —, so the size counts only when the request asked for a popup
+/// window: a features string (`width=…,height=…`) hides the toolbar, location and menu bars, a link
+/// or a bare `window.open(url)` shows them (CI's first run: a `target=_blank` link came with a
+/// geometry).
+pub fn gtk_asked(bars_shown: [bool; 3], width: i32, height: i32) -> Option<(f64, f64)> {
+    if bars_shown.into_iter().any(|shown| shown) {
+        return None;
+    }
+    Some(if width > 0 && height > 0 {
+        (f64::from(width), f64::from(height))
+    } else {
+        DEFAULT_SIZE
+    })
+}
+
 fn is_blank(url: &Url) -> bool {
     url.scheme() == "about" && url.path() == "blank"
 }

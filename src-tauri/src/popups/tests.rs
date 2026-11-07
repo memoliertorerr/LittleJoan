@@ -158,6 +158,23 @@ fn webkitgtk_requests_wait_for_the_size() {
 }
 
 #[test]
+fn webkitgtk_asked_for_a_popup_window_only_when_its_bars_are_hidden() {
+    // A link or a bare window.open shows the bars: no size asked, whatever the geometry says.
+    assert_eq!(gtk_asked([true, true, true], 800, 640), None);
+    assert_eq!(gtk_asked([false, true, false], 480, 600), None);
+    // A features string hides them: the geometry is the size asked for.
+    assert_eq!(
+        gtk_asked([false, false, false], 480, 640),
+        Some((480.0, 640.0))
+    );
+    assert_eq!(gtk_asked([false, false, false], 0, 0), Some(DEFAULT_SIZE));
+    let sized = gtk_asked([false, false, false], 480, 640);
+    assert_eq!(settle(&url(SIGNIN), sized.is_some()), Decision::InApp);
+    let link = gtk_asked([true, true, true], 800, 640);
+    assert_eq!(settle(&url(SIGNIN), link.is_some()), Decision::Browser);
+}
+
+#[test]
 fn panels_and_app_pages_keep_todays_behaviour() {
     let other = Opener::Other;
     assert_eq!(decided(&other, SIGNIN, SIZED, 0), Decision::Browser);

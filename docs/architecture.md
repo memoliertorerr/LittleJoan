@@ -1689,7 +1689,11 @@ page and close. A popup is a **web page with the page's trust and less** (Ground
   that isn't a known sign-in flow is built **hidden** (`popup-pending`), its own navigations held
   (`popup-early`), and decided at its `ready-to-show` from the engine's window properties
   (`popups::settle`): it shows (and makes the held navigation), or closes unseen and goes to the
-  browser / nowhere (`popup-settled unsized`).
+  browser / nowhere (`popup-settled unsized`). There "asked for a size" is "asked for a popup
+  window" (`popups::gtk_asked`): the geometry is always set — from the opener's window when the
+  page asked for none —, but a features string (`width=…,height=…`) hides the toolbar, location and
+  menu bars and a link or a bare `window.open(url)` doesn't (so `window.open(url, n, "popup")` opens
+  inside on Linux, and a sized request that keeps `toolbar=yes` goes to the browser).
 - **The window** (`bar/popup.rs`): `WebviewWindowBuilder` with `window_features(features)` — the
   opener's WKWebViewConfiguration (macOS), WebView2 environment (Windows) or related view (Linux) —
   is what gives the popup `window.opener` and the page's own store (cookies, storage: a sign-in

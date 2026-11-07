@@ -8968,6 +8968,24 @@ on every OS.
 - Tests: `popups/tests.rs` (16), `capability_tests::no_capability_reaches_a_popup`,
   `popup-logic.test.ts`, `smoke-popups.test.ts`, the handoff tests (no popup for `?blank=1`, the
   deferred handoff). `npm run verify`: 788 TS tests, 478 Rust tests, clippy clean.
+- **CI (PR #41), run 42390685720 (head ae08bd4):** verify and package green on every job. Smoke
+  **green on Windows** — the popups run whole: the sized popup and the sized `about:blank` one
+  opened (`popup-opened http://127.0.0.1:<port2>`), loaded the fake provider, posted to the opener
+  and closed themselves (`popup-closed by-page`; the opener: `LJ-POPUP received=1 closed=1`), a
+  popup left open closed first at `--hide` (`popup-closed hibernate`, then `page-closed`; its
+  helper gone); the handoff run unchanged (the `?blank=1` link to the fake, the flood 15 → 2 handed
+  on, 13 dropped). **Green on macOS** too: the same three flows, `-webViewDidClose:` closing each
+  sign-in popup (`popup-closed by-page`), each popup unloaded (`about:blank`) before it went, the
+  popup's 3 helpers gone after the hibernate. **All six Linux jobs failed the handoff run** — and passed the popups run
+  (opener, post-back, `window.close()`, hibernate; `popup-pending` → `popup-opened` 12 ms later at
+  `ready-to-show`): the `?blank=1` link opened a popup inside Little Joan. WebCore's `createWindow`
+  always sets the new window's rect — from the opener's window when the page asked for none — so
+  WebKitGTK's geometry was never empty, and every pending request settled as sized; the popup then
+  covered the flood page's centre (no new window from its clicks). → `lj-step-47-fix`: the size
+  counts only when the request asked for a popup window — the window properties' toolbar,
+  location and menu bars hidden, which any features string does and a link or a bare
+  `window.open(url)` doesn't (`popups::gtk_asked`, tested; what GNOME Web uses to tell a popup
+  from a tab).
 
 ### LJ48 — Popups: closing with their page, keys, docs and the review · strong · review
 
@@ -10417,7 +10435,10 @@ Populated from real friction, not speculation:
 - *(LJ47, read in vendored wry 0.57 / tauri 2.12.4)* **A new window's size isn't known on
   WebKitGTK when it is asked for.** wry's `create` handler passes `size: None` always; the engine
   sets the new view's window properties after the handler returns. Decide such a window at its
-  `ready-to-show` (`popups::settle`) — and hold its navigations until then.
+  `ready-to-show` (`popups::settle`) — and hold its navigations until then. **Its geometry is never
+  empty** (WebCore sets the new window's rect from the opener's when the page asked for none, CI run
+  42390685720): whether a popup window was asked for is in the bars — a features string hides the
+  toolbar, location and menu bars (`popups::gtk_asked`).
 - *(LJ47, read in vendored wry 0.57)* **wry's `window.close()` handling closes only the webview.**
   WebView2's `WindowCloseRequested` destroys the webview's container HWND, WebKitGTK's `close`
   destroys the view, and WKWebView's delegate has no `-webViewDidClose:` at all — a webview window
