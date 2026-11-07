@@ -223,7 +223,9 @@ fn window_state<R: Runtime>(app: &AppHandle<R>) -> WindowState {
         },
         Some(window) => {
             let state = WindowState::Open {
-                focused: platform::has_keyboard(&window),
+                // A sign-in popup with the keyboard is Little Joan's too (LJ48): the shortcut then
+                // dismisses the window, and the popup with it.
+                focused: platform::has_keyboard(&window) || bar::popup::focused(app).is_some(),
                 page_fullscreen: bar::element_fullscreen() || bar::page_in_webkit_fullscreen(app),
             };
             // CI: what the toggle saw (and tao's own focus, which differs on Windows: LJ19.5).

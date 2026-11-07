@@ -15,7 +15,10 @@
 //! `popup-closed hibernate`); the popup page's `window.close()` closes it (`popup-closed by-page`:
 //! WebView2's `WindowCloseRequested`, WebKit's `webViewDidClose:`, WebKitGTK's `close` — wired in
 //! platform/, as wry only destroys the webview); its close button too (`popup-closed user`). A popup
-//! that closes gives the keyboard back to the page. Nothing of a popup outlives the window.
+//! that closes gives the keyboard back to the page. Nothing of a popup outlives the window. A popup
+//! belongs to the page that opened it: when the page commits another origin it closes
+//! (`popup-closed opener-left`, LJ48). Of Little Joan's keys only Close acts in a popup — it
+//! closes the popup (`popup-closed user`), never the window behind it.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -26,22 +29,25 @@ use tauri::{
     AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window,
     WindowEvent,
 };
-use url::Url;
+use url::{Origin, Url};
 
 use crate::browsers::{self, NewWindowFrom};
 use crate::extensions;
 use crate::extensions::limits::RateLimit;
 use crate::joan;
+use crate::keymap::KeyAction;
 use crate::layout::Rect;
 use crate::navigation;
 use crate::platform;
-use crate::popups::{self, Decision, Opener, Size};
+use crate::popups::{self, Decision, KeyRoute, Opener, Size};
 use crate::smoke;
 use crate::state;
 
 /// An open popup (or one being built, or closing).
 struct Popup {
     label: String,
+    /// The origin of the page that opened it (it closes when the page leaves it, LJ48).
+    opener: Origin,
     /// What it was opened for.
     target: Url,
     /// WebKitGTK: built hidden until `settle`.
@@ -116,9 +122,9 @@ pub fn new_window<R: Runtime>(
         smoke::log("popup-limited", limit.name());
     }
     match (verdict.decision, opener) {
-        (Decision::InApp | Decision::Pending, Opener::WebPage(_)) => {
+        (Decision::InApp | Decision::Pending, Opener::WebPage(origin)) => {
             let pending = verdict.decision == Decision::Pending;
-            match build(app, &url, size, features, pending) {
+            match build(app, &url, size, features, origin, pending) {
                 Ok(window) => NewWindowResponse::Create { window },
                 Err(err) => {
                     eprintln!("little-joan: could not open the popup: {err}");
@@ -179,6 +185,7 @@ fn build<R: Runtime>(
     target: &Url,
     size: Size,
     features: NewWindowFeatures,
+    opener: Origin,
     pending: bool,
 ) -> tauri::Result<WebviewWindow<R>> {
     let joan = app
@@ -254,6 +261,7 @@ fn build<R: Runtime>(
     builder = owned_by(builder, &joan)?;
     popups().push(Popup {
         label: label.clone(),
+        opener,
         target: target.clone(),
         pending,
         early: None,
@@ -488,6 +496,46 @@ pub fn close_all<R: Runtime>(app: &AppHandle<R>, why: &'static str) {
     if !labels.is_empty() {
         smoke::log("popups-closed", &labels.len().to_string());
     }
+}
+
+/// The page webview committed `url` (bar/page.rs's `Started`, LJ48): popups whose opener's origin
+/// it left close (`popup-closed opener-left`); a reload or a same-origin page keeps them.
+pub fn page_committed<R: Runtime>(app: &AppHandle<R>, url: &Url) {
+    let left: Vec<String> = popups()
+        .iter()
+        .filter(|p| p.closing.is_none() && popups::opener_left(&p.opener, url))
+        .map(|p| p.label.clone())
+        .collect();
+    for label in left {
+        close(app, &label, "opener-left");
+    }
+}
+
+/// One of Little Joan's keys in the popup `label` (LJ48; platform/: WebView2's
+/// `AcceleratorKeyPressed`, the popup's GTK key hook): Close closes the popup, nothing else acts.
+/// Returns whether the key was Little Joan's to take (the page doesn't see it then).
+pub fn key_pressed<R: Runtime>(app: &AppHandle<R>, label: &str, action: KeyAction) -> bool {
+    match popups::route_key(true, action) {
+        KeyRoute::ClosePopup => {
+            close(app, label, "user");
+            true
+        }
+        KeyRoute::Nothing | KeyRoute::Page(_) => false,
+    }
+}
+
+/// The popup that has the keyboard, if one does (macOS's menu: its Close Window closes the key
+/// window, LJ48).
+pub fn focused<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+    let labels: Vec<String> = popups()
+        .iter()
+        .filter(|p| p.closing.is_none() && !p.pending)
+        .map(|p| p.label.clone())
+        .collect();
+    labels.into_iter().find(|label| {
+        app.get_webview_window(label)
+            .is_some_and(|window| window.is_focused().unwrap_or(false))
+    })
 }
 
 /// The popup page called `window.close()` (platform/: WebView2's `WindowCloseRequested`,

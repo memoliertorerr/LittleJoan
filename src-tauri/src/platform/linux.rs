@@ -205,18 +205,7 @@ pub fn install_page<R: Runtime>(page: &Webview<R>) {
 fn connect_page_keys<R: Runtime>(app: &tauri::AppHandle<R>, toplevel: &gtk::Widget) {
     let app = app.clone();
     toplevel.connect_key_press_event(move |_, event| {
-        let state = event.state();
-        let mods = Mods {
-            ctrl: state.contains(gtk::gdk::ModifierType::CONTROL_MASK),
-            shift: state.contains(gtk::gdk::ModifierType::SHIFT_MASK),
-            alt: state.contains(gtk::gdk::ModifierType::MOD1_MASK),
-            meta: state.contains(gtk::gdk::ModifierType::SUPER_MASK)
-                || state.contains(gtk::gdk::ModifierType::META_MASK),
-        };
-        let key = event
-            .keyval()
-            .name()
-            .map_or(Key::Other, |name| Key::from_gdk_name(name.as_str()));
+        let (key, mods) = pressed(event);
         match state::with(&app, |s| s.keymap.action_for(key, mods)) {
             Some(action) => {
                 page_actions::perform(&app, action.page_action());
@@ -225,6 +214,23 @@ fn connect_page_keys<R: Runtime>(app: &tauri::AppHandle<R>, toplevel: &gtk::Widg
             None => Propagation::Proceed,
         }
     });
+}
+
+/// The key a GDK key event is for, with the modifiers held.
+fn pressed(event: &gtk::gdk::EventKey) -> (Key, Mods) {
+    let state = event.state();
+    let mods = Mods {
+        ctrl: state.contains(gtk::gdk::ModifierType::CONTROL_MASK),
+        shift: state.contains(gtk::gdk::ModifierType::SHIFT_MASK),
+        alt: state.contains(gtk::gdk::ModifierType::MOD1_MASK),
+        meta: state.contains(gtk::gdk::ModifierType::SUPER_MASK)
+            || state.contains(gtk::gdk::ModifierType::META_MASK),
+    };
+    let key = event
+        .keyval()
+        .name()
+        .map_or(Key::Other, |name| Key::from_gdk_name(name.as_str()));
+    (key, mods)
 }
 
 /// The GDK window state's fullscreen bit (set by WebKitGTK's own fullscreen, by tao, or by the

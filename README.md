@@ -290,6 +290,24 @@ has just handed on that comes straight back isn't opened again, so nothing can g
 loop. A page that asks for many new windows at once gets at most one handed on a second; an
 extension's panel gets them only with the `openBrowser` permission, as for `openUrl`.
 
+## Sign-in popups
+
+"Sign in with Google", "Sign in with Apple", "Sign in with Microsoft", GitHub and other sign-ins
+that open a small window open it **inside Little Joan**, in a small window over the page, so the
+sign-in finishes, the window closes by itself and the site is signed in. It shares the page's
+cookies, so the login lasts like any other.
+
+- **Its title shows where you are signing in** — the site's address, `accounts.google.com` — never
+  what the page says about itself. Check it before you type a password.
+- It opens for a page's sign-in window (one that asks for a window size, or a known sign-in page);
+  a link that opens a new tab still goes to your main browser.
+- It is a plain web page: no access to Little Joan, no downloads, no camera, microphone or
+  location, and its own new windows go to your main browser. At most two are open at once.
+- **Ctrl+W** (Windows, Linux) or **Cmd+W** (macOS) closes it — only it, not the page behind;
+  Little Joan's other keys do nothing there. It also closes when the page behind goes to another
+  site, and when you close Little Joan (the shortcut dismisses both, even while the popup has the
+  keyboard).
+
 ## Translate
 
 **Translate Page** (tray menu, or Ctrl/Cmd+Shift+T) shows the current page through Google
@@ -428,7 +446,7 @@ You can write your own with plain HTML, CSS and JavaScript — see
   is off (Settings → Privacy). Removing a page or clearing history — in the history view or in
   Settings → Privacy — rewrites `history.json` at once.
 - Web pages get no access to Little Joan's internals: the web view that shows pages can't call
-  into the app at all. Only Little Joan's own screens — the bar (address bar and command bar) and
+  into the app at all, and neither can a sign-in popup's. Only Little Joan's own screens — the bar (address bar and command bar) and
   Settings, each in a web view of its own — can.
 - **Extensions** (experimental) run in that same web view, each on an origin of its own, and
   can reach only what their manifest asks for through a small checked API; they can fetch from

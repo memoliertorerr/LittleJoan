@@ -38,7 +38,8 @@ All notable changes to Little Joan are recorded here. The format follows
   popup's title always shows where you are signing in (`accounts.google.com`), never what the page
   calls itself. It is a plain web page: no access to Little Joan, no downloads, no camera,
   microphone or location, and it can't open further windows (those go to your main browser). At
-  most two are open at once; they close when you close Little Joan. Links that open a new tab
+  most two are open at once. **Ctrl+W** / **Cmd+W** closes the popup (only it); it also closes when
+  the page behind goes to another site, and when you close Little Joan. Links that open a new tab
   still go to your main browser, as before.
 
 ## [0.2.1] — 2026-10-30

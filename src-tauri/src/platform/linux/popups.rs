@@ -4,11 +4,15 @@
 //! (`bar::popup::settle`). wry answers the page's `window.close()` by destroying the web view and
 //! leaving its window, so the view's end closes the popup. Its element fullscreen is off where
 //! WebKitGTK aborts on it (LJ14.1; the popup has settings of its own), and its downloads are
-//! refused (linux/downloads.rs).
+//! refused (linux/downloads.rs). Little Joan's keys reach the popup's own GTK window before
+//! WebKitGTK does (LJ48): only Close acts there, closing the popup; every other key is the page's.
 
+use gtk::glib::Propagation;
 use gtk::prelude::*;
 use tauri::{AppHandle, Runtime, WebviewWindow};
 use webkit2gtk::{WebViewExt, WindowPropertiesExt};
+
+use crate::state;
 
 /// A popup was built (`pending`: not decided yet).
 pub fn install<R: Runtime>(app: &AppHandle<R>, popup: &WebviewWindow<R>, pending: bool) {
@@ -21,6 +25,24 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, popup: &WebviewWindow<R>, pending
         {
             let (app, label) = (app.clone(), label.clone());
             view.connect_destroy(move |_| crate::bar::popup::view_gone(&app, &label));
+        }
+        match view.toplevel() {
+            Some(toplevel) => {
+                let (app, label) = (app.clone(), label.clone());
+                toplevel.connect_key_press_event(move |_, event| {
+                    let (key, mods) = super::pressed(event);
+                    let taken = state::with(&app, |s| s.keymap.action_for(key, mods))
+                        .is_some_and(|action| crate::bar::popup::key_pressed(&app, &label, action));
+                    if taken {
+                        Propagation::Stop
+                    } else {
+                        Propagation::Proceed
+                    }
+                });
+            }
+            None => {
+                eprintln!("little-joan: the popup has no toplevel window; its keys are the page's")
+            }
         }
         if pending {
             view.connect_ready_to_show(move |view| {

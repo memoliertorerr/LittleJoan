@@ -236,6 +236,9 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
                     {
                         summon_timing::mark(Mark::PageStarted);
                     }
+                    // A sign-in popup belongs to the page that opened it (LJ48): another origin
+                    // here closes it (before any panel can load).
+                    super::popup::page_committed(webview.app_handle(), payload.url());
                     // What the toolbar shows, and what the extension handler serves beyond a
                     // panel's document: an extension only once its panel committed here.
                     extensions::session::page_committed(webview.app_handle(), payload.url());

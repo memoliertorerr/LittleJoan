@@ -476,7 +476,7 @@ for code in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the keys `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40, "=": 24, "0": 29 };
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40, w: 13, "=": 24, "0": 29 };
 /** xdotool's names for the keys `pressShortcut` sends that aren't letters. */
 const XDOTOOL_KEYS: Record<string, string> = { "=": "equal" };
 /** The history view's key: Ctrl+H on Windows and Linux, Cmd+Y on macOS (LJ37). */
@@ -523,6 +523,28 @@ usleep(60000)
     run("xdotool", ["key", `ctrl+${shift ? "shift+" : ""}${XDOTOOL_KEYS[letter] ?? letter}`]);
   }
   console.log(`pressed ${os === "darwin" ? "Cmd" : "Ctrl"}+${shift ? "Shift+" : ""}${letter.toUpperCase()}`);
+}
+
+/**
+ * Ctrl+<letter> (Cmd on macOS) in the window titled `title` — a sign-in popup, titled by where it is
+ * (LJ48): Windows activates it by its title, Linux through xdotool's search, macOS activates the app
+ * (the popup is its key window; best effort, as every synthetic key there).
+ */
+function pressInPopup(letter: string, title: string, appPid: number): void {
+  if (os === "win32") {
+    powershell(`Add-Type -AssemblyName System.Windows.Forms
+$shell = New-Object -ComObject WScript.Shell
+$null = $shell.AppActivate('${title}')
+Start-Sleep -Milliseconds 500
+[System.Windows.Forms.SendKeys]::SendWait('^${letter}')`);
+    console.log(`pressed Ctrl+${letter.toUpperCase()} in ${title}`);
+  } else if (os === "linux") {
+    run("xdotool", ["search", "--name", title, "windowactivate", "--sync"]);
+    run("xdotool", ["key", `ctrl+${letter}`]);
+    console.log(`pressed Ctrl+${letter.toUpperCase()} in ${title}`);
+  } else {
+    pressShortcut(letter, appPid);
+  }
 }
 
 /** Resident memory of `pid` in MB (working set on Windows, RSS elsewhere). */
@@ -2067,7 +2089,8 @@ const popupsCheck = await popupsRun({
   screenshot,
   sleep: (ms) => sleep(ms).then(() => undefined),
   helperPids,
-});
+  pressInPopup,
+}, HISTORY_KEY);
 console.log(`popups: ${JSON.stringify(popupsSummary(popupsCheck, os, signinOrigin))}`);
 const restMd = restTable(restRuns, os);
 writeFileSync(join(out, "rest.md"), restMd);

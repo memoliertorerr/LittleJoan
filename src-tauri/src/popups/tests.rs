@@ -364,3 +364,44 @@ fn a_popup_is_centred_over_the_window_and_kept_on_its_screen() {
     };
     assert_eq!(place(there, (480.0, 600.0), Some(left)), (-1000.0, 220.0));
 }
+
+#[test]
+fn a_popup_closes_when_its_opener_leaves_for_another_origin() {
+    let opener = url("https://shop.example/cart").origin();
+    // Reloads and same-origin navigations keep it (sign-in flows reload the opener).
+    for same in [
+        "https://shop.example/cart",
+        "https://shop.example/account?signed-in=1",
+        "https://shop.example:443/#done",
+    ] {
+        assert!(!opener_left(&opener, &url(same)), "{same}");
+    }
+    for other in [
+        "https://other.example/",
+        "http://shop.example/cart",
+        "https://shop.example:8443/",
+        "https://www.shop.example/",
+        "about:blank",
+        "tauri://localhost/index.html",
+        "ljext://hello.localhost/index.html",
+    ] {
+        assert!(opener_left(&opener, &url(other)), "{other}");
+    }
+}
+
+#[test]
+fn in_a_popup_only_close_acts_and_it_closes_the_popup() {
+    for action in KeyAction::ALL {
+        let in_popup = route_key(true, action);
+        if action == KeyAction::Close {
+            assert_eq!(in_popup, KeyRoute::ClosePopup);
+        } else {
+            assert_eq!(in_popup, KeyRoute::Nothing, "{action:?}");
+        }
+        // In the page window every key does what it always did.
+        assert_eq!(
+            route_key(false, action),
+            KeyRoute::Page(action.page_action())
+        );
+    }
+}

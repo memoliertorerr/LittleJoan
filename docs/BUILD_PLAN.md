@@ -130,7 +130,7 @@
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`; PR #40 merged as 12e5024) |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done — PR #40 (head c05ea86, run 41821630411 green 18/18) merged as 12e5024 after the independent security review (approve with minor fixes; all nine findings fixed in `lj-step-46-fix4` → `fix6`); main's run 42385385626 green 18/18 |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (CI: see notes; phase 22, `lj/p22-popups`) |
-| LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ⬜ todo |
+| LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done (CI: see notes; PR #41 — ready when green, NOT merged by its agent: the independent security review next) |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ⬜ todo |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
 | LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
@@ -9014,6 +9014,30 @@ you sign in, it closes, and the site is signed in; close and summon — still si
 left open goes away when you dismiss Little Joan. Mark the PR ready once every job is green and
 STOP. Never merge it: an independent security review comes next, and the owner decides.
 ```
+
+**Implementation notes (2026-11-07; disk 12 GB free, `.cache/target` 1.4 GB):**
+- **Opener-left:** each popup keeps its opener's origin (from `Opener::WebPage`); the page's
+  `Started` load event (the engines' commit: `didCommitNavigation`, `LOAD_COMMITTED`, WebView2's
+  `ContentLoading`) calls `bar::popup::page_committed` before extensions' own commit handling, and
+  `popups::opener_left` (another origin, tested) closes those popups (`popup-closed opener-left`,
+  destroyed from a thread of their own). An extension panel opens only after the page went to the
+  app's start page — another origin —, so no popup lives beside a panel.
+- **Keys** through the keymap and one pure rule (`popups::route_key`: in a popup Close →
+  close the popup, every other action → nothing; tested for every `KeyAction`): Windows'
+  `AcceleratorKeyPressed` on the popup's own controller (win.rs's key reading is now `pressed()`,
+  shared), Linux's `key-press-event` on the popup's own GTK window (linux.rs's `pressed()`, shared),
+  macOS's menu — with a popup as the key window, Close Window closes it and the other page items
+  do nothing (`bar::popup::focused`). Keys a popup doesn't take reach its page.
+- **The shortcut with a popup focused** counts as Little Joan focused (`joan::window_state`): one
+  press dismisses the window and the popup — the owner's check "a popup left open goes away when
+  you dismiss Little Joan" otherwise needed two presses (the first only focused the window).
+- **Docs:** architecture.md (Sign-in popups: lifecycle and keys; the key table; the CI section),
+  README (Sign-in popups), SECURITY.md (popups are page trust; the title is the host), CHANGELOG.
+- **Smoke** (smoke-popups.mts): the opener reloads on its own origin with a popup open (it must
+  stay), then loads the second port's page (`popup-closed opener-left`); a new popup gets the
+  history key (no `history-view`) and Ctrl+W (`popup-closed user`, no `closing`), the popup
+  activated by its title — `AppActivate` on Windows, `xdotool search` on Linux; macOS best effort.
+- `npm run verify`: 791 TS tests, 480 Rust tests, clippy clean.
 
 ### LJ49 — Find in page · strong · auto
 

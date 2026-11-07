@@ -147,6 +147,12 @@ pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             if action == KeyAction::Close && close_settings(app) {
                 return;
             }
+            // A sign-in popup with the keyboard (LJ48): only Close Window acts there, and it
+            // closes the popup — never the Little Joan window behind it.
+            if let Some(popup) = crate::bar::popup::focused(app) {
+                crate::bar::popup::key_pressed(app, &popup, action);
+                return;
+            }
             page_actions::perform(app, action.page_action());
         }
     }

@@ -1,4 +1,4 @@
-// The smoke test's popups run (LJ47) and its rules: sign-in popups open in a small window of
+// The smoke test's popups run (LJ47–LJ48) and its rules: sign-in popups open in a small window of
 // Little Joan's own, with no IPC. Its own launch; the smoke server serves tests/smoke/ on a second
 // port too, so the fake provider (signin.html) is another origin, like a real one:
 // - `?popup=oauth`: a click on the page's "Sign in" opens the sign-in page with
@@ -9,6 +9,10 @@
 // - `?popup=blank`: a sized `about:blank` popup whose location the opener then sets: the same.
 // - `?popup=oauth&stay=1`, then `--hide`: `popup-closed hibernate` before the page goes, and no
 //   webview helper that came with the page and its popup outlives the window.
+// - LJ48, with a popup left open: the opener navigated on its own origin keeps it; to another
+//   origin (the second port) closes it (`popup-closed opener-left`). Then in a new popup the
+//   history key does nothing (no `history-view`) and Ctrl+W closes the popup only (`popup-closed
+//   user`, and no `closing` of the window) — Windows and Linux; best effort on macOS (Cmd+W).
 // A plain target=_blank link opening no popup is the handoff run's (smoke-handoff.mts). macOS
 // runners may not deliver a synthetic click to the page (as in the fullscreen run): there a run
 // whose click asked for no new window is reported, not failed.
@@ -28,6 +32,8 @@ export interface PopupsDriver {
   sleep(ms: number): Promise<void>;
   /** The webview engine's helper processes, system-wide. */
   helperPids(): number[];
+  /** Ctrl+<letter> (Cmd on macOS) in the window titled `title` (the popup's: its place). */
+  pressInPopup(letter: string, title: string, pid: number): void;
 }
 
 export type PopupMode = "oauth" | "blank";
@@ -47,9 +53,29 @@ export interface HibernateCheck {
   left: number[];
 }
 
+/** LJ48: the opener left its origin with a popup open. */
+export interface OpenerCheck {
+  /** From the click to the same-origin navigation's page being up. */
+  sameOrigin: LogEvent[];
+  /** From the navigation to another origin on. */
+  otherOrigin: LogEvent[];
+}
+
+/** LJ48: Little Joan's keys in a popup. */
+export interface KeysCheck {
+  /** After the history key, before Ctrl+W. */
+  afterHistoryKey: LogEvent[];
+  /** After Ctrl+W. */
+  afterClose: LogEvent[];
+  /** Whether the popup had opened (else no key was pressed). */
+  opened: boolean;
+}
+
 export interface PopupsRun {
   flows: PopupFlow[];
   hibernate: HibernateCheck | null;
+  opener: OpenerCheck | null;
+  keys: KeysCheck | null;
 }
 
 /** The opener's address for `mode`. */
@@ -110,7 +136,51 @@ async function hibernate(d: PopupsDriver, app: LinksApp): Promise<HibernateCheck
   return { events: app.events().slice(from), helpers: ours.length, left };
 }
 
-export async function popupsRun(d: PopupsDriver): Promise<PopupsRun> {
+/** Opens a popup that stays, waits for its sign-in page; returns the log index of the click. */
+async function openStaying(d: PopupsDriver, app: LinksApp, what: string): Promise<{ from: number; opened: boolean }> {
+  const from = await openPopup(d, app, "oauth", true);
+  const opened = await app.waitFor(`popups: ${what}: a popup to leave open`, (e) => count(e.slice(from), "popup-opened") > 0, 15_000);
+  if (opened) {
+    await app.waitFor(`popups: ${what}: it loaded the sign-in page`, (e) => count(e.slice(from), "popup-loaded", d.signinOrigin) > 0, 15_000);
+    await d.sleep(3000);
+  }
+  return { from, opened };
+}
+
+async function openerLeaves(d: PopupsDriver, app: LinksApp): Promise<OpenerCheck> {
+  const { from } = await openStaying(d, app, "opener");
+  // The opener loads a page of its own origin: the popup stays.
+  const same = app.events().length;
+  await app.forward(["--show", `${openerUrl(d.pageUrl, d.signinOrigin, "oauth", true)}&again=1`]);
+  await app.waitFor("popups: the opener reloaded on its origin", (e) => lastTitle(e.slice(same), POPUP_READY_TITLE) !== undefined, 30_000);
+  await d.sleep(2000);
+  const sameOrigin = app.events().slice(from);
+  // Another origin: the popup closes.
+  const other = app.events().length;
+  await app.forward(["--show", `${d.signinOrigin}/smoke.html`]);
+  await app.waitFor("popups: the popup closed with its opener gone", (e) => count(e.slice(other), "popup-closed", "opener-left") > 0, 15_000);
+  await d.sleep(1500);
+  return { sameOrigin, otherOrigin: app.events().slice(other) };
+}
+
+async function keysInPopup(d: PopupsDriver, app: LinksApp, historyKey: string): Promise<KeysCheck> {
+  const { opened } = await openStaying(d, app, "keys");
+  if (!opened) {
+    return { afterHistoryKey: [], afterClose: [], opened };
+  }
+  const title = d.signinOrigin;
+  const history = app.events().length;
+  d.pressInPopup(historyKey, title, app.pid());
+  await d.sleep(2500);
+  const afterHistoryKey = app.events().slice(history);
+  const close = app.events().length;
+  d.pressInPopup("w", title, app.pid());
+  await app.waitFor("popups: Ctrl+W closed the popup", (e) => count(e.slice(close), "popup-closed") > 0, 10_000);
+  await d.sleep(3000);
+  return { afterHistoryKey, afterClose: app.events().slice(close), opened };
+}
+
+export async function popupsRun(d: PopupsDriver, historyKey: string): Promise<PopupsRun> {
   const app = await d.launch("popups", {});
   await app.waitFor("popups: started and prewarmed", (e) => count(e, "prewarmed") > 0, 30_000);
   const flows: PopupFlow[] = [];
@@ -118,8 +188,10 @@ export async function popupsRun(d: PopupsDriver): Promise<PopupsRun> {
     flows.push(await flow(d, app, mode));
   }
   const closing = await hibernate(d, app);
+  const opener = await openerLeaves(d, app);
+  const keys = await keysInPopup(d, app, historyKey);
   await app.quit();
-  return { flows, hibernate: closing };
+  return { flows, hibernate: closing, opener, keys };
 }
 
 /** Whether the click reached the page (it asked for a new window). */
@@ -182,12 +254,56 @@ function hibernateFailures(check: HibernateCheck | null, os: string): string[] {
   return failures;
 }
 
+/** LJ48: a same-origin navigation keeps the popup, another origin closes it. */
+export function openerFailures(check: OpenerCheck | null, os: string): string[] {
+  if (!check) {
+    return ["popups: the opener check never ran"];
+  }
+  if (!clicked(check.sameOrigin)) {
+    return os === "darwin" ? [] : ["popups: opener: the click asked for no new window"];
+  }
+  const failures: string[] = [];
+  if (count(check.sameOrigin, "popup-opened") === 0) {
+    return ["popups: opener: no popup opened"];
+  }
+  if (count(check.sameOrigin, "popup-closed") > 0) {
+    failures.push("popups: opener: a navigation on the opener's own origin closed its popup");
+  }
+  if (count(check.otherOrigin, "popup-closed", "opener-left") === 0) {
+    failures.push("popups: opener: the opener left for another origin and its popup stayed (popup-closed opener-left)");
+  }
+  return failures;
+}
+
+/** LJ48: in a popup Ctrl+W closes the popup only, and no other key of Little Joan's acts. */
+export function keysFailures(check: KeysCheck | null, os: string): string[] {
+  if (!check) {
+    return ["popups: the keys check never ran"];
+  }
+  // macOS: synthetic keys reach the app best effort (and the click may not have opened anything).
+  if (os === "darwin" || !check.opened) {
+    return os === "darwin" || check.opened ? [] : ["popups: keys: no popup opened"];
+  }
+  const failures: string[] = [];
+  if (count(check.afterHistoryKey, "history-view") > 0 || count(check.afterHistoryKey, "popup-closed") > 0) {
+    failures.push("popups: keys: the history key acted in a popup (only Close may)");
+  }
+  if (count(check.afterClose, "popup-closed", "user") === 0) {
+    const got = check.afterClose.filter((e) => e.event.startsWith("popup") || e.event === "closing").map((e) => `${e.event} ${e.detail}`.trim());
+    failures.push(`popups: keys: Ctrl+W in the popup didn't close it (popup-closed user; got [${got.join(", ")}])`);
+  }
+  if (count(check.afterClose, "closing") > 0 || count(check.afterClose, "hibernated") > 0) {
+    failures.push("popups: keys: Ctrl+W in the popup closed the Little Joan window too");
+  }
+  return failures;
+}
+
 export function popupsFailures(run: PopupsRun, os: string, signinOrigin: string): string[] {
   const failures = run.flows.flatMap((flow) => flowFailures(flow, os, signinOrigin));
   if (run.flows.length !== 2) {
     failures.push(`popups: ${run.flows.length} sign-in flows ran, not 2`);
   }
-  return failures.concat(hibernateFailures(run.hibernate, os));
+  return failures.concat(hibernateFailures(run.hibernate, os), openerFailures(run.opener, os), keysFailures(run.keys, os));
 }
 
 export function popupsSummary(run: PopupsRun, os: string, signinOrigin: string): Record<string, unknown> {
@@ -199,6 +315,14 @@ export function popupsSummary(run: PopupsRun, os: string, signinOrigin: string):
     flows: run.flows.map((flow) => ({ mode: flow.mode, clicked: clicked(flow.events), log: lines(flow.events) })),
     hibernate: run.hibernate
       ? { clicked: clicked(run.hibernate.events), log: lines(run.hibernate.events), helpers: run.hibernate.helpers, left: run.hibernate.left }
+      : null,
+    opener: run.opener ? { sameOrigin: lines(run.opener.sameOrigin), otherOrigin: lines(run.opener.otherOrigin) } : null,
+    keys: run.keys
+      ? {
+          opened: run.keys.opened,
+          afterHistoryKey: run.keys.afterHistoryKey.filter((e) => e.event.startsWith("popup") || e.event === "history-view").map((e) => `${e.event} ${e.detail}`.trim()),
+          afterClose: lines(run.keys.afterClose).concat(run.keys.afterClose.filter((e) => e.event === "closing" || e.event === "hibernated").map((e) => e.event)),
+        }
       : null,
     rules: popupsFailures(run, os, signinOrigin),
   };

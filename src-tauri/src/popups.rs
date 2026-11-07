@@ -18,13 +18,18 @@
 //! nowhere for `about:blank`). WebKitGTK says nothing about the size when it asks (wry passes none):
 //! there a request that isn't a known sign-in flow is `Pending` — its window is built hidden, and
 //! `settle` decides once the engine has set the popup's window properties (`ready-to-show`).
+//!
+//! **LJ48:** a popup belongs to the page that opened it — when the page webview commits a page of
+//! another origin, its popups close (`opener_left`) —, and of Little Joan's keys only Close acts in
+//! a popup, closing it (`route_key`).
 
 use std::time::Duration;
 
 use url::{Origin, Url};
 
 use crate::extensions::urls::is_ext_like;
-use crate::keys;
+use crate::keymap::KeyAction;
+use crate::keys::{self, PageAction};
 use crate::layout::Rect;
 use crate::navigation;
 
@@ -320,6 +325,29 @@ pub fn place(over: Rect, size: (f64, f64), screen: Option<Rect>) -> (f64, f64) {
         y = inside(y, screen.y, screen.height, height);
     }
     (x.round(), y.round())
+}
+
+/// Whether a page webview that committed `url` has left the popup's `opener` (LJ48): another
+/// origin — a reload or a same-origin navigation keeps the popup (sign-in flows reload the opener).
+pub fn opener_left(opener: &Origin, url: &Url) -> bool {
+    url.origin() != *opener
+}
+
+/// What one of Little Joan's keys does (LJ48): in a popup only the close action acts — it closes
+/// the popup —, every other key is the popup page's own; in the page window, the page action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyRoute {
+    ClosePopup,
+    Nothing,
+    Page(PageAction),
+}
+
+pub fn route_key(in_popup: bool, action: KeyAction) -> KeyRoute {
+    match (in_popup, action) {
+        (true, KeyAction::Close) => KeyRoute::ClosePopup,
+        (true, _) => KeyRoute::Nothing,
+        (false, action) => KeyRoute::Page(action.page_action()),
+    }
 }
 
 #[cfg(test)]

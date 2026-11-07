@@ -715,7 +715,8 @@ launch ──► tray icon + global shortcut; ~3 s later (Stay ready) the prewar
 - **Every close goes through the same path.** The close button, Cmd+W / Alt+F4
   (`CloseRequested` is prevented and turned into `--hide`), Esc in the command bar with no page,
   the shortcut, and `--hide` all end in `joan/rest.rs` `close`: remember the size, save history,
-  then **the page webview is closed** (`bar/page.rs`: its session cookies kept on Windows, a
+  then **the page webview is closed** (`bar/page.rs`: its sign-in popups first — LJ47, `popup-closed
+  hibernate` —, its session cookies kept on Windows, a
   download under way ended — WebView2's noted and cancelled, since the window's environment now
   outlives the page —, macOS navigating it to `about:blank` and waiting for that, at most 400 ms,
   then `Webview::close`). **Stay ready:** the window is hidden first, put back to its remembered
@@ -1011,7 +1012,7 @@ shows the error.
   | Copy / paste / select all | built-in | built-in | Edit menu (needed by WKWebView) |
 
   Matches are exact: Ctrl+Shift+W is not Ctrl+W, and a Ctrl+Alt press (AltGr) never matches a
-  Ctrl key. On macOS the menu bar is hidden (Accessory app) but its key equivalents work; Cmd+Q
+  Ctrl key. In a sign-in popup only Close acts — it closes the popup (LJ48, "Sign-in popups"). On macOS the menu bar is hidden (Accessory app) but its key equivalents work; Cmd+Q
   quits for real.
 - **The keymap** (`keymap.rs`, pure; tests in `keymap/tests.rs` and `keymap/zoom_tests.rs`):
   actions `open-location`, `history`, `translate`, `reload`, `back`, `forward`, `zoom-in`,
@@ -1728,11 +1729,25 @@ page and close. A popup is a **web page with the page's trust and less** (Ground
   `WindowCloseRequested` (Windows), WebKit's `-webViewDidClose:` — added once to wry's delegate
   class, before the first popup's delegate is set, because WebKit reads which methods a delegate
   has then (macOS) — and the WebKitGTK view's end (Linux) close the whole window
-  (`platform/*/popups.rs`). Its close button: `popup-closed user`. A popup that closes gives the
-  keyboard back to the page (the window focused, then the page webview). Windows are destroyed from a
-  thread of their own, never inside the engine's callback.
+  (`platform/*/popups.rs`). Its close button: `popup-closed user`. **A popup belongs to the page
+  that opened it (LJ48):** when the page webview commits a page of another origin than the popup's
+  opener (`bar/page.rs`'s `Started` — the engines' commit), the popup closes (`popup-closed
+  opener-left`, `popups::opener_left`); a reload or a same-origin navigation keeps it (sign-in
+  flows reload the opener) — and since opening an extension's panel first takes the page to the
+  app's start page, no popup lives on beside a panel. A popup that closes gives the keyboard back to
+  the page (the window focused, then the page webview). Windows are destroyed from a thread of
+  their own, never inside the engine's callback.
+- **Keys (LJ48):** of Little Joan's keys only **Close** acts in a popup, and it closes the popup —
+  never the window behind (`popups::route_key`, `popup-closed user`); every other key is the popup
+  page's own (no command bar to open, no history to show). Windows: `AcceleratorKeyPressed` on the
+  popup's controller (`platform/win/popups.rs`); Linux: the popup's own GTK window's
+  `key-press-event` (`platform/linux/popups.rs`); macOS: the menu's Close Window with a popup as the
+  key window closes it, and the other page items do nothing there (`menu.rs`). Through the keymap
+  (LJ43), so a rebound Close works in popups too. **The global shortcut** with a popup that has the
+  keyboard counts as Little Joan having it (`joan::window_state`): one press dismisses the window,
+  and the popup with it.
 - **Smoke log:** `popup-opened <title>`, `popup-pending` / `popup-early` / `popup-settled unsized`
-  (WebKitGTK), `popup-loaded <title>`, `popup-closed <by-page|user|hibernate>`, `popups-closed
+  (WebKitGTK), `popup-loaded <title>`, `popup-closed <by-page|user|opener-left|hibernate>`, `popups-closed
   <n>`, `popup-limited <cap|rate>`, `popup-failed`, `popup-new-window`, `popup-navigation-refused
   <url>`, `popup-unload timeout` (macOS), `permission-refused popup <kind>`, `download-refused
   popup`.
@@ -2322,9 +2337,14 @@ and pushes to `main`:
   opener must report `LJ-POPUP received=1 closed=1`, and nothing may be handed on or refused;
   `?popup=blank` (a sized `about:blank` popup whose location the opener sets) the same; then with
   a popup left open (`&stay=1`) `--hide` must log `popup-closed hibernate` before `page-closed`, and
-  none of the webview helpers that came with the page and its popup may be left 10–30 s later.
-  macOS runners may not deliver the click: a flow whose click asked for no new window is reported
-  there, not failed (logs `smoke-popups.log`, `summary.json`'s `popupsRun`). Last comes the
+  none of the webview helpers that came with the page and its popup may be left 10–30 s later;
+  with a popup open the opener loads a page of its own origin (the popup must stay), then one of
+  the second port's (`popup-closed opener-left`); and in a new popup the history key must do
+  nothing (no `history-view`) and Ctrl+W must close the popup only (`popup-closed user`, no
+  `closing`) — the popup activated by its title (`AppActivate` on Windows, `xdotool search` on
+  Linux; best effort with Cmd on macOS). macOS runners may not deliver the click: a flow whose
+  click asked for no new window is reported there, not failed (logs `smoke-popups.log`,
+  `summary.json`'s `popupsRun`). Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (the prewarm,

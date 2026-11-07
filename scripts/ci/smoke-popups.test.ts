@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { openerUrl, popupsFailures, popupsSummary, type PopupFlow, type PopupsRun } from "./smoke-popups.mts";
+import { keysFailures, openerFailures, openerUrl, popupsFailures, popupsSummary, type PopupFlow, type PopupsRun } from "./smoke-popups.mts";
 import { popupRequest } from "../../tests/smoke/popup-logic.mjs";
 
 const AT = "http://127.0.0.1:8124";
@@ -31,6 +31,15 @@ function run(over: Partial<PopupsRun> = {}): PopupsRun {
       events: log(["new-window", `popup-opened ${AT}`, `popup-loaded ${AT}`, "closing ready", "popup-closed hibernate", "popups-closed 1", "page-closed", "hibernated ready"]),
       helpers: 3,
       left: [0],
+    },
+    opener: {
+      sameOrigin: log(["new-window", `popup-opened ${AT}`, `popup-loaded ${AT}`, "page-started http://127.0.0.1:8123/smoke.html?popup=oauth", "title LJ-POPUP ready"]),
+      otherOrigin: log([`page-started ${AT}/smoke.html`, "popup-closed opener-left"]),
+    },
+    keys: {
+      afterHistoryKey: log([]),
+      afterClose: log(["popup-closed user"]),
+      opened: true,
     },
     ...over,
   };
@@ -72,5 +81,37 @@ describe("the popups run (LJ47)", () => {
     expect(failures).toContain("popup-closed hibernate");
     expect(failures).toContain("1 of the 2 webview helpers");
     expect(popupsFailures(run({ hibernate: null }), "linux", AT)).toEqual(["popups: the hibernate check never ran"]);
+  });
+});
+
+describe("the popups run's lifecycle and keys (LJ48)", () => {
+  it("keeps a popup over a same-origin navigation and closes it when the opener leaves", () => {
+    expect(openerFailures(run().opener, "linux")).toEqual([]);
+    const closedEarly = run({
+      opener: { sameOrigin: log(["new-window", `popup-opened ${AT}`, "popup-closed opener-left"]), otherOrigin: log([]) },
+    });
+    const failures = openerFailures(closedEarly.opener, "win32").join("\n");
+    expect(failures).toContain("own origin closed its popup");
+    expect(failures).toContain("its popup stayed");
+    expect(openerFailures(null, "linux")).toEqual(["popups: the opener check never ran"]);
+  });
+
+  it("lets only Ctrl+W act in a popup, and closes the popup only", () => {
+    expect(keysFailures(run().keys, "linux")).toEqual([]);
+    const acted = { afterHistoryKey: log(["history-view"]), afterClose: log(["closing ready", "popup-closed hibernate", "hibernated ready"]), opened: true };
+    const failures = keysFailures(acted, "win32").join("\n");
+    expect(failures).toContain("the history key acted");
+    expect(failures).toContain("didn't close it");
+    expect(failures).toContain("closed the Little Joan window too");
+    // Best effort on macOS.
+    expect(keysFailures(acted, "darwin")).toEqual([]);
+    expect(keysFailures({ afterHistoryKey: [], afterClose: [], opened: false }, "linux")).toEqual(["popups: keys: no popup opened"]);
+  });
+
+  it("counts the lifecycle and keys among the run's rules", () => {
+    expect(popupsFailures(run({ opener: null, keys: null }), "linux", AT)).toEqual([
+      "popups: the opener check never ran",
+      "popups: the keys check never ran",
+    ]);
   });
 });
