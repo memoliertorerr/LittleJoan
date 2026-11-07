@@ -289,15 +289,12 @@ fn only_settings_may_quit_from_settings() {
     assert_eq!(granted_to, ["settings"]);
 }
 
-#[test]
-fn only_settings_may_switch_liquid_glass() {
-    // Liquid Glass (LJ19.9) changes only through Settings — Save (`save_settings`) and the
-    // Appearance tab's preview (`preview_theme`) — never the bar, never the page: no quick command
-    // or bar command carries it, and the page webview has no capability at all.
-    for wanted in ["allow-save-settings", "allow-preview-theme"] {
+/// Fails unless exactly the settings window's capability grants each of `wanted` (and has them all).
+fn only_settings_grants(wanted: &[&str]) {
+    for permission in wanted {
         let mut granted_to = Vec::new();
         for (place, capability) in all_capabilities() {
-            if !permissions(&capability).contains(&wanted) {
+            if !permissions(&capability).contains(permission) {
                 continue;
             }
             let id = capability.get("identifier").and_then(Value::as_str);
@@ -306,12 +303,27 @@ fn only_settings_may_switch_liquid_glass() {
                 && scopes(&capability, "webviews").is_empty();
             assert!(
                 settings_only,
-                "{place}: only the settings window's capability may grant {wanted}"
+                "{place}: only the settings window's capability may grant {permission}"
             );
             granted_to.extend(id.map(str::to_owned));
         }
-        assert_eq!(granted_to, ["settings"], "{wanted}");
+        assert_eq!(granted_to, ["settings"], "{permission}");
     }
+}
+
+#[test]
+fn only_settings_may_switch_liquid_glass() {
+    // Liquid Glass (LJ19.9) changes only through Settings — Save (`save_settings`) and the
+    // Appearance tab's preview (`preview_theme`) — never the bar, never the page: no quick command
+    // or bar command carries it, and the page webview has no capability at all.
+    only_settings_grants(&["allow-save-settings", "allow-preview-theme"]);
+}
+
+#[test]
+fn only_settings_may_read_browsers_and_open_default_apps() {
+    // Settings → General's Browser section (LJ46): the OS's browser list and default, and the
+    // button that opens the OS's own default-apps settings — never the bar, never the page.
+    only_settings_grants(&["allow-browsers-info", "allow-open-default-apps-settings"]);
 }
 
 #[test]

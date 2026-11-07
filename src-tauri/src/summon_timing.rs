@@ -65,6 +65,8 @@ pub enum Source {
     Launch,
     /// Little Joan itself (closing the window, a page action).
     App,
+    /// A link from another app (LJ45): `--link <url>`, or macOS's open-URL event.
+    Link,
 }
 
 impl Source {
@@ -75,6 +77,7 @@ impl Source {
             Source::Cli => "cli",
             Source::Launch => "launch",
             Source::App => "app",
+            Source::Link => "link",
         }
     }
 }

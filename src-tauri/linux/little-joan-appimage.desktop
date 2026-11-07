@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Utility;
+Comment=A tiny pop-up browser that hibernates until you call it.
+Exec=little-joan
+StartupWMClass=little-joan
+Icon=little-joan
+Name=Little Joan
+Terminal=false
+Type=Application

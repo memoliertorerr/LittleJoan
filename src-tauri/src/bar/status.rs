@@ -18,6 +18,9 @@ pub enum Status {
     Download { state: &'static str, name: String },
     /// The page's zoom level, in percent.
     Zoom { percent: u16 },
+    /// A page couldn't be handed on (LJ46): `state` is `none` — Little Joan is the default browser
+    /// and no other is installed, so it stayed here.
+    Handoff { state: &'static str },
 }
 
 /// The status the toolbar was last told in this window.

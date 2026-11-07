@@ -13,6 +13,11 @@
 //! - `--extension <id>`  open an extension's panel (opens the window if needed; an unknown id
 //!   does nothing)
 //! - `--quit`          quit Little Joan (the tray's Quit); wins over any window flag
+//! - `--link <url>`    a link from another app (LJ45: how the OS starts Little Joan as a browser,
+//!   per its registration). It takes exactly the next argument as data, whatever it looks like —
+//!   `--link --quit` is a link that is refused, never a quit — and a command line with `--link`
+//!   does nothing else: every other flag on it is ignored, so a crafted link can't become one.
+//!   links.rs decides whether it opens; `--link` with nothing after it is a plain launch.
 //!
 //! The last recognized window flag wins; unknown arguments are ignored (macOS can add `-psn_…`).
 
@@ -21,23 +26,38 @@ use url::Url;
 use crate::settings_window::SettingsTab;
 use crate::toggle::Command;
 
+/// The flag the OS's browser registration puts before a link (LJ45).
+pub const LINK_FLAG: &str = "--link";
+
 /// What a command line asks for. `command` goes through the toggle table (the window);
 /// `start_at_login` only changes the OS login entry and is handled before it; `settings` opens
-/// the settings window; `quit` comes last and replaces the window command.
+/// the settings window; `quit` comes last and replaces the window command. With `link`, nothing
+/// else is set (`--link` ignores every other flag).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Args {
     pub command: Option<Command>,
     pub start_at_login: Option<bool>,
     pub settings: Option<SettingsTab>,
     pub quit: bool,
+    pub link: Option<Link>,
+}
+
+/// `--link` and what came after it (LJ45). Untrusted: links.rs checks it before anything opens.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Link {
+    /// `--link` was the last argument (the desktop file's `%u` from the app menu): a plain launch.
+    Empty,
+    /// The argument after `--link`, as it came — never read as a flag.
+    Given(String),
 }
 
 impl Args {
     /// What a second launch does to the window: its window flag, or `--show` when it had no
     /// recognized flag at all. A launch that only changes start at login or opens Settings
-    /// leaves the window alone, and one that quits never opens it.
+    /// leaves the window alone, and one that quits never opens it. A link is never a window
+    /// command here: links.rs opens it, or not (`--link` alone is a plain launch).
     pub fn forwarded_command(&self) -> Option<Command> {
-        if self.quit {
+        if self.quit || matches!(self.link, Some(Link::Given(_))) {
             return None;
         }
         match (&self.command, self.start_at_login, self.settings) {
@@ -48,8 +68,31 @@ impl Args {
     }
 }
 
+/// The process's arguments as text: anything that isn't Unicode is replaced (U+FFFD), never a
+/// panic (`std::env::args` panics on it) — such an argument then matches no flag, and as a link
+/// it is refused.
+pub fn lossy_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> Vec<String> {
+    args.into_iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect()
+}
+
 /// Parses `args` (including argv[0]).
 pub fn parse_args(args: &[String]) -> Args {
+    // A link from another app (LJ45): the first `--link` takes the next argument, and nothing else
+    // on the command line counts. The registrations put `--link` before the OS's placeholder, so
+    // whatever the link holds comes after it — quotes or spaces that split it into more arguments
+    // can only add arguments that are ignored here.
+    let rest = args.get(1..).unwrap_or_default();
+    if let Some(at) = rest.iter().position(|arg| arg == LINK_FLAG) {
+        let link = rest
+            .get(at + 1)
+            .map_or(Link::Empty, |value| Link::Given(value.clone()));
+        return Args {
+            link: Some(link),
+            ..Args::default()
+        };
+    }
     let mut command = None;
     let mut start_at_login = None;
     let mut settings = None;
@@ -102,6 +145,7 @@ pub fn parse_args(args: &[String]) -> Args {
         start_at_login,
         settings,
         quit,
+        link: None,
     }
 }
 
@@ -136,259 +180,4 @@ fn web_url(value: &str) -> Option<Url> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn parse_all(args: &[&str]) -> Args {
-        let args: Vec<String> = std::iter::once("little-joan")
-            .chain(args.iter().copied())
-            .map(String::from)
-            .collect();
-        parse_args(&args)
-    }
-
-    fn parse(args: &[&str]) -> Option<Command> {
-        parse_all(args).command
-    }
-
-    fn url(s: &str) -> Url {
-        Url::parse(s).expect("valid")
-    }
-
-    #[test]
-    fn no_flags() {
-        assert_eq!(parse(&[]), None);
-        assert_eq!(parse(&["-psn_0_12345", "whatever"]), None);
-    }
-
-    #[test]
-    fn single_flags() {
-        assert_eq!(parse(&["--toggle"]), Some(Command::Toggle));
-        assert_eq!(parse(&["--hide"]), Some(Command::Hide));
-        assert_eq!(parse(&["--show"]), Some(Command::Show(None)));
-        assert_eq!(
-            parse(&["--show", "https://x.test/a"]),
-            Some(Command::Show(Some(url("https://x.test/a"))))
-        );
-    }
-
-    #[test]
-    fn last_flag_wins() {
-        assert_eq!(
-            parse(&["--show", "https://x.test", "--toggle"]),
-            Some(Command::Toggle)
-        );
-        assert_eq!(parse(&["--toggle", "--show"]), Some(Command::Show(None)));
-        assert_eq!(parse(&["--show", "--hide"]), Some(Command::Hide));
-    }
-
-    #[test]
-    fn size_takes_width_x_height() {
-        assert_eq!(
-            parse(&["--size", "390x600"]),
-            Some(Command::Resize {
-                width: 390,
-                height: 600
-            })
-        );
-        assert_eq!(
-            parse(&["--size", "900X600"]),
-            Some(Command::Resize {
-                width: 900,
-                height: 600
-            })
-        );
-        for bad in ["390", "x600", "0x600", "390x-1", "390x600x2", "wide"] {
-            assert_eq!(parse(&["--size", bad]), None, "{bad}");
-        }
-        assert_eq!(parse(&["--size"]), None);
-    }
-
-    #[test]
-    fn show_accepts_only_web_urls() {
-        assert_eq!(
-            parse(&["--show", "file:///etc/passwd"]),
-            Some(Command::Show(None))
-        );
-        assert_eq!(
-            parse(&["--show", "javascript:alert(1)"]),
-            Some(Command::Show(None))
-        );
-        assert_eq!(parse(&["--show", "example.com"]), Some(Command::Show(None)));
-        assert_eq!(
-            parse(&["--show", "http://127.0.0.1:8123/smoke.html"]),
-            Some(Command::Show(Some(url("http://127.0.0.1:8123/smoke.html"))))
-        );
-    }
-
-    #[test]
-    fn start_at_login_takes_on_or_off_in_any_case() {
-        for (value, want) in [
-            ("on", true),
-            ("ON", true),
-            ("On", true),
-            ("off", false),
-            ("OFF", false),
-        ] {
-            assert_eq!(
-                parse_all(&["--start-at-login", value]).start_at_login,
-                Some(want),
-                "{value}"
-            );
-        }
-        for bad in ["yes", "true", "1", "", "onn"] {
-            assert_eq!(
-                parse_all(&["--start-at-login", bad]).start_at_login,
-                None,
-                "{bad}"
-            );
-        }
-        assert_eq!(parse_all(&["--start-at-login"]).start_at_login, None);
-        assert_eq!(
-            parse_all(&["--start-at-login", "on", "--start-at-login", "off"]).start_at_login,
-            Some(false)
-        );
-    }
-
-    #[test]
-    fn start_at_login_never_touches_the_window() {
-        for args in [
-            &["--start-at-login", "on"][..],
-            &["--start-at-login", "off"],
-            &["--start-at-login", "maybe"],
-        ] {
-            let parsed = parse_all(args);
-            assert_eq!(parsed.command, None, "{args:?}");
-        }
-        assert_eq!(
-            parse_all(&["--start-at-login", "on"]).forwarded_command(),
-            None
-        );
-        assert_eq!(
-            parse_all(&["--start-at-login", "off"]).forwarded_command(),
-            None
-        );
-        // A flag without a value is no flag: a plain second launch still shows the window.
-        assert_eq!(
-            parse_all(&["--start-at-login", "maybe"]).forwarded_command(),
-            Some(Command::Show(None))
-        );
-        // A missing value doesn't swallow the next flag.
-        assert_eq!(
-            parse_all(&["--start-at-login", "--toggle"]),
-            Args {
-                command: Some(Command::Toggle),
-                start_at_login: None,
-                settings: None,
-                quit: false,
-            }
-        );
-    }
-
-    #[test]
-    fn window_flags_still_apply_next_to_start_at_login() {
-        assert_eq!(
-            parse_all(&["--start-at-login", "on", "--hide"]),
-            Args {
-                command: Some(Command::Hide),
-                start_at_login: Some(true),
-                settings: None,
-                quit: false,
-            }
-        );
-        assert_eq!(
-            parse_all(&["--hide", "--start-at-login", "off"]).forwarded_command(),
-            Some(Command::Hide)
-        );
-    }
-
-    #[test]
-    fn a_plain_second_launch_shows_the_window() {
-        assert_eq!(
-            parse_all(&[]).forwarded_command(),
-            Some(Command::Show(None))
-        );
-        assert_eq!(
-            parse_all(&["-psn_0_12345"]).forwarded_command(),
-            Some(Command::Show(None))
-        );
-        assert_eq!(
-            parse_all(&["--toggle"]).forwarded_command(),
-            Some(Command::Toggle)
-        );
-    }
-
-    #[test]
-    fn settings_opens_on_a_tab_and_leaves_the_window_alone() {
-        assert_eq!(
-            parse_all(&["--settings"]).settings,
-            Some(SettingsTab::General)
-        );
-        for (value, tab) in [
-            ("general", SettingsTab::General),
-            ("keyboard", SettingsTab::Keyboard),
-            ("KEYBOARD", SettingsTab::Keyboard),
-            ("appearance", SettingsTab::Appearance),
-            ("Extensions", SettingsTab::Extensions),
-            ("PRIVACY", SettingsTab::Privacy),
-            ("about", SettingsTab::About),
-            // A name it doesn't know still opens Settings, on General.
-            ("advanced", SettingsTab::General),
-        ] {
-            let parsed = parse_all(&["--settings", value]);
-            assert_eq!(parsed.settings, Some(tab), "{value}");
-            assert_eq!(parsed.command, None, "{value}");
-            assert_eq!(parsed.forwarded_command(), None, "{value}");
-        }
-        // A missing tab doesn't swallow the next flag; window flags still apply next to it.
-        let both = parse_all(&["--settings", "--toggle"]);
-        assert_eq!(both.settings, Some(SettingsTab::General));
-        assert_eq!(both.forwarded_command(), Some(Command::Toggle));
-        assert_eq!(parse_all(&["--toggle"]).settings, None);
-        assert_eq!(
-            parse_all(&["--settings", "about", "--quit"]).forwarded_command(),
-            None
-        );
-    }
-
-    #[test]
-    fn extension_takes_an_id() {
-        assert_eq!(
-            parse(&["--extension", "hello"]),
-            Some(Command::Extension("hello".into()))
-        );
-        // No id: no flag (a plain second launch shows the window).
-        assert_eq!(parse(&["--extension"]), None);
-        assert_eq!(parse(&["--extension", "--toggle"]), Some(Command::Toggle));
-        assert_eq!(
-            parse_all(&["--extension", "hello"]).forwarded_command(),
-            Some(Command::Extension("hello".into()))
-        );
-        assert_eq!(
-            parse_all(&["--extension", "hello", "--quit"]).forwarded_command(),
-            None
-        );
-    }
-
-    #[test]
-    fn quit_never_opens_the_window() {
-        let quit = parse_all(&["--quit"]);
-        assert!(quit.quit);
-        assert_eq!(quit.command, None);
-        assert_eq!(quit.forwarded_command(), None);
-        // It wins over window flags in any order; start at login still applies first.
-        for args in [
-            &["--show", "https://x.test", "--quit"][..],
-            &["--quit", "--toggle"],
-            &["--quit", "--start-at-login", "on"],
-        ] {
-            assert_eq!(parse_all(args).forwarded_command(), None, "{args:?}");
-        }
-        assert_eq!(
-            parse_all(&["--quit", "--start-at-login", "off"]).start_at_login,
-            Some(false)
-        );
-        assert!(!parse_all(&["--toggle"]).quit);
-        assert!(!parse_all(&["--quitting"]).quit);
-    }
-}
+mod tests;

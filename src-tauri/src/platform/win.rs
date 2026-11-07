@@ -46,6 +46,7 @@ use crate::smoke;
 use crate::state;
 
 /// A summoned window in front, for the smoke log (LJ19.2).
+pub mod browsers;
 mod front;
 pub use front::{foreground, front};
 /// The bar's processes failing, its rest, the page's downloads (LJ19.4).

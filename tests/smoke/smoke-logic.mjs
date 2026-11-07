@@ -195,3 +195,33 @@ export function persistTitle(cookieHeader, stored, token) {
   const bit = (value) => (value === token ? 1 : 0);
   return `LJ-PERSIST p=${bit(cookies.get("lj_p"))} s=${bit(cookies.get("lj_s"))} l=${bit(stored)}`;
 }
+
+/** The title a `?blank=1` page reports once its link is up (LJ46). */
+export const BLANK_READY_TITLE = "LJ-BLANK ready";
+/** Where the `?blank=1` page's link goes: the smoke page again, marked (relative, same origin). */
+export const BLANK_TARGET = "smoke.html?from=blank";
+
+/**
+ * `?blank=1` (LJ46's handoff run): the page is one big `target=_blank` link, so a click anywhere
+ * asks for a new window — which Little Joan hands to the main browser.
+ * @param {string} search location.search
+ */
+export function blankRequest(search) {
+  return new URLSearchParams(search).get("blank") === "1";
+}
+
+/** The title a `?flood=1` page reports once it is up (phase 21's security review). */
+export const FLOOD_READY_TITLE = "LJ-FLOOD ready";
+/** Where the flood's windows go: the smoke page again, marked and numbered. */
+export const FLOOD_TARGET = "smoke.html?from=flood";
+/** Windows asked for per click on a `?flood=1` page. */
+export const FLOOD_PER_CLICK = 5;
+
+/**
+ * `?flood=1`: every click on the page asks for FLOOD_PER_CLICK new windows at once — the handoff
+ * gate must let at most one a second through to a browser.
+ * @param {string} search location.search
+ */
+export function floodRequest(search) {
+  return new URLSearchParams(search).get("flood") === "1";
+}

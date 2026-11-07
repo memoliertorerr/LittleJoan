@@ -35,6 +35,8 @@ use keys::PortalShortcut;
 
 /// The app itself: the command bar's Quit (LJ41) `quit_app`, Settings' (LJ19.7) `quit_from_settings`.
 pub mod app;
+/// Settings → General's Browser section (LJ46): `browsers_info`, `open_default_apps_settings`.
+pub mod browsers;
 /// The toolbar's "Show in folder" for a download (LJ15): `reveal_download`.
 pub mod downloads;
 /// Little Joan's keys for Settings (LJ43): `keymap_info`.
@@ -258,6 +260,7 @@ pub fn get_settings<R: Runtime>(app: AppHandle<R>) -> SettingsView {
     });
     smoke::log("settings-loaded", "");
     settings_window::smoke_click_quit(&app);
+    settings_window::smoke_scroll(&app);
     SettingsView {
         settings,
         start_at_login: autostart::is_enabled(&app),
@@ -323,6 +326,10 @@ pub struct SettingsInput {
     /// saved one stays.
     #[serde(default)]
     glass: Option<String>,
+    /// Settings → General's "Main browser" (LJ46): a browser's id from browsers_info, or `""` for
+    /// the system default. Left out, the saved one stays.
+    #[serde(default)]
+    main_browser: Option<String>,
 }
 
 /// Validates and applies new settings: every part is checked first (settings::apply_change), the
@@ -351,6 +358,7 @@ pub async fn save_settings<R: Runtime>(
         keys: settings.keys,
         after_close: settings.after_close,
         glass: settings.glass,
+        main_browser: settings.main_browser,
     };
     // A refused part changes nothing — not even the shortcut.
     let current = state::with(&app, |s| s.settings.clone());

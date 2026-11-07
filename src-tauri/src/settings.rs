@@ -19,6 +19,7 @@ pub mod after_close;
 pub mod change;
 pub mod glass;
 pub mod keys;
+pub mod main_browser;
 pub mod site_modes;
 pub mod theme;
 
@@ -76,6 +77,9 @@ pub struct Settings {
     /// Liquid Glass for the toolbar and the command bar (LJ19.9, settings/glass.rs): `off` (the
     /// default), `clear` or `tinted`; shown only on macOS 26 and later.
     pub glass: Glass,
+    /// Where pages are handed on (LJ46, settings/main_browser.rs): a browser's id as the OS lists
+    /// it, or `None` for the system default.
+    pub main_browser: Option<String>,
 }
 
 impl Default for Settings {
@@ -97,6 +101,7 @@ impl Default for Settings {
             keys: BTreeMap::new(),
             after_close: AfterClose::default(),
             glass: Glass::default(),
+            main_browser: None,
         }
     }
 }
@@ -177,6 +182,7 @@ pub fn parse(json: &str) -> Settings {
         keys: keys::parse(map.get("keys")),
         after_close: after_close::parse(map.get("afterClose")),
         glass: glass::parse(map.get("glass")),
+        main_browser: main_browser::parse(map.get("mainBrowser")),
     }
 }
 
@@ -299,6 +305,7 @@ mod tests {
             },
             after_close: AfterClose::Ready15,
             glass: Glass::Tinted,
+            main_browser: Some("com.apple.Safari".into()),
             ..Settings::default()
         };
         save(&dir, &settings).expect("save");
@@ -308,6 +315,10 @@ mod tests {
         assert!(json.contains("\"searchEngine\": \"brave\""), "{json}");
         assert!(json.contains("\"afterClose\": \"ready15\""), "{json}");
         assert!(json.contains("\"glass\": \"tinted\""), "{json}");
+        assert!(
+            json.contains("\"mainBrowser\": \"com.apple.Safari\""),
+            "{json}"
+        );
         fs::remove_dir_all(&dir).expect("cleanup");
     }
 

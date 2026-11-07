@@ -101,7 +101,7 @@
 | LJ19.6 | *(v0.2.1; owner, 2026-10-30)* The ready window over another app's full screen: find why it sometimes lands on the desktop Space (about 1 in 20 macOS runs), fix it, prove it with a repeated over-fullscreen launch | strong | auto | ✅ done (CI: see notes) |
 | LJ19.7 | *(v0.2.1; owner, 2026-10-30)* "Quit Little Joan" in Settings → General (the tray's quit, through a Settings-only command) | standard | auto | ✅ done (CI: see notes) |
 | LJ19.8 | *(v0.2.1; owner, 2026-10-30)* Release v0.2.1: versions, CHANGELOG, README, the owner's checklist; signed and notarized on macOS when LJ58 has landed; the tag on the owner's word | standard | checkpoint | ✅ done — v0.2.1 released 2026-10-30 17:54 UTC as Latest, **unsigned on the owner's word** ("Release unsigned now" / "i will sign later"): release PR #38 (head a33f85f, run 41091192039 green) merged as f2f440a; main's run 41095737643 green (18 jobs); tag v0.2.1 on f2f440a; 7 assets; a re-downloaded DMG matched SHA256SUMS; the owner's checklist is theirs |
-| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ✅ done (CI: see notes; PR #39) — the owner's check on macOS 26.2 next |
+| LJ19.9 | *(after v0.2.1; owner, 2026-10-30)* Liquid Glass on macOS 26+: Settings → Appearance → Off / Clear / Tinted (like macOS 26.1's own setting), the toolbar and command bar in glass tinted by the theme; hidden on older Macs, Windows and Linux | strong | checkpoint | ✅ done (CI: see notes; PR #39, merged as 8409ab1) — the owner's check passed 2026-11-03 ("okay i tested, i will report later if i find a bug"): no bugs reported so far; any findings come later as fixes |
 | LJ20 | *(v0.2, round 2)* Logins survive: CI proves cookies and storage outlive close, quit and relaunch; fix what doesn't | strong | auto | ✅ done (checks first, then lj-step-20-fix — see notes) |
 | LJ21 | *(v0.2, round 2)* History: a native recorder, a local store, frecency, top sites and matching (pure, tested) | strong | auto | ✅ done |
 | LJ22 | *(v0.2, round 2)* All trusted UI moves into the bar webview; the page webview gets no IPC at all; the overlay layout mode | strong | auto | ✅ done |
@@ -127,8 +127,8 @@
 | LJ42 | *(round 3)* Quick commands in the command bar, each showing its current state | standard | auto | ✅ done |
 | LJ43 | *(round 3)* One keymap: every Little Joan key configurable (engine side; macOS menu from the keymap) | strong | auto | ✅ done |
 | LJ44 | *(round 3)* Settings → Keyboard: record keys, clashes, the OS's reserved shortcuts, "another app holds it" | standard | auto | ✅ done |
-| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ⬜ todo |
-| LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ⬜ todo |
+| LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`) |
+| LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done (CI: see notes; PR #40 ready, NOT merged — the independent security review, then the owner) |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ⬜ todo |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ⬜ todo |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ⬜ todo |
@@ -287,7 +287,15 @@ checksum verified); LJ58 runs whenever the secrets exist and goes out in a later
 **Phase 14 (LJ19.9, 2026-11-02)** is on `lj/p14-liquid-glass`: Liquid Glass on macOS 26+ (Settings →
 Appearance → Off / Clear / Tinted, the toolbar and the command bar in glass tinted by the theme), a
 checkpoint — merged by the agent once every job is green, then the owner looks at it on their Mac;
-phase 21 starts on their go.
+phase 21 starts on their go. It merged as 8409ab1 (PR #39). **The owner's check (2026-11-03):** "okay
+i tested, i will report later if i find a bug" — the checkpoint passed with no bugs reported so far;
+any findings come later as fixes. **Phase 21 (LJ45 → LJ46, 2026-11-03)** is on `lj/p21-links`: Little
+Joan as the system's browser for links (registered as a candidate per OS, links received as
+untrusted data) and the main browser for handing pages on without loops, with the default-apps
+button — security-sensitive (`review`): the PR ends ready and green, NOT merged, for an independent
+review and the owner's decision. **2026-11-03: LJ45 and LJ46 are done — PR #40 is ready and green
+(run 41730050366, 18 jobs), NOT merged:** the independent security review comes next, then the
+owner decides. Phase 22 waits for the merge (it changes the same new-window code).
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -4704,6 +4712,10 @@ the summon's speed with glass on, Reduce Transparency switching it to solid.
   through `:has()`). Windows and Linux: `glass-support available=false os=-`, nothing else.
 - Disk: 19 GB free before; `.cache/target` 1.4 GB.
 
+**The owner's check (2026-11-03):** "okay i tested, i will report later if i find a bug" — LJ19.9's
+checkpoint passed with no bugs reported so far; any findings come later as fixes (`lj-step-19.9-fix…`
+in a later branch).
+
 ---
 
 ## v0.2 round 2 steps — the Little Arc feel
@@ -8497,6 +8509,81 @@ main as a draft, and watch CI until every job is green (Ground Rule 3; two hones
 then stop).
 ```
 
+**Implementation notes (2026-11-03; disk 13–14 GB free, `.cache/target` 1.4 GB):**
+
+- **Phase 21's first commits:** `lj-plan` (the owner's LJ19.9 check, 2026-11-03: "okay i tested, i
+  will report later if i find a bug" — passed, no bugs reported so far) and the coordinator's `ci:`
+  commit: the smoke writes the machine's own Reduce Transparency only on a GitHub Actions runner
+  (`scripts/ci/smoke-runner.mts`, tested), so it can never change a developer's setting. The links
+  run's machine changes (`lsregister`, installing desktop-file-utils; LJ46's fake browsers) ask the
+  same check.
+- **cli.rs:** its tests moved to `cli/tests.rs` (the file was at 392 lines; the move is part of this
+  commit, not a separate one). `--link` is handled before every other flag: the **first** `--link`
+  takes the next argument, whatever it is (`Link::Given`), or nothing (`Link::Empty`: a plain
+  launch, as the desktop file's `%u` from the app menu); a command line with `--link` sets nothing
+  else — no command, Settings, start at login or quit, before or after it — so a link whose quotes
+  or spaces split it into more arguments only adds ignored ones. `forwarded_command` is `None` for a
+  given link (links.rs decides); `state::finish_first_run` shows no welcome for one.
+- **links.rs** (pure parts tested in `links/tests.rs`): `refusal(&Url)` / `accept(&Url)` /
+  `parse(&str)` — only http(s) with a host, ≤ 4,096 bytes (the text before parsing, and the URL as
+  it would load), never an extension URL (`is_ext_like`), the app's origin, `tauri.localhost` or
+  `ipc.localhost` (Tauri's hosts on Windows, refused on every OS), and the typed-address rules last
+  (navigation.rs); `Url::parse` straight, never `input::normalize`. `pick` for a batch (the first
+  acceptable opens, `link-ignored <n>` counts the acceptable ones after it). The log names only the
+  scheme (a fixed list, anything else `other`) and why: never the link. A link opens through
+  `joan::dispatch(Show(Some(url)), Source::Link)` — the toggle table's `show` test already covers
+  Create / Summon / Rebuild / FocusAndNavigate for a URL, so toggle.rs is unchanged; summon_timing
+  gained the `link` source.
+- **macOS's event can come before setup:** tao delivers `application:openURLs:` as soon as its
+  callback is set, and AppKit sends a launch's open-URL event between "will" and "did finish
+  launching" — before Tauri's `Ready`, which runs setup. So `links::opened` keeps the URLs (at most
+  64) until `links::ready` at setup's end. tao drops URLs it can't parse itself; Handoff's web
+  activities come through the same event, and the same checks.
+- **Packaging:** the AppImage has no `desktopTemplate` of its own in tauri-utils 2.10.2 (only deb
+  and rpm do): tauri-bundler's AppImage copies the deb's `usr/` tree (linuxdeploy.rs's
+  `debian::generate_data`), so `bundle.linux.deb.desktopTemplate` serves both. The template is
+  Tauri's own default (bundler `linux/freedesktop/main.desktop`) with the Exec, MimeType and
+  Categories the plan names (`Categories=Network;WebBrowser;`, so no longer `Utility;`). NSIS:
+  Tauri's installer.nsi includes the hooks file before its defines, and expands the macros in its
+  Install / Uninstall sections, where `MAINBINARYNAME`, `PRODUCTNAME` and `$UpdateMode` exist; the
+  removal follows Tauri's own pattern (not while updating: the new installer writes the keys
+  again, and a `UserChoice` the user made keeps pointing at the same ProgId).
+- **The smoke's Linux "default untouched" check** reads the mimeapps.list / defaults.list files
+  instead of trusting `xdg-mime query default` alone: with no default written anywhere, xdg-utils'
+  generic mode greps mimeinfo.cache too and may answer the first handler it finds there — possibly
+  Little Joan — which is no default anyone wrote. The answer is recorded in `summary.json`.
+- **Windows' "as Explorer would":** the ProgId's command with `%1` replaced is handed to
+  CreateProcess as it is (node's `windowsVerbatimArguments`, the quoted program as `argv0`), so the
+  smoke runs exactly the registered command line.
+- **CI (PR #40):** run 41648711085 (head e843750) — verify (windows-latest) red: the desktop
+  template's test rendered the file with Windows' CRLF line ends → `lj-step-45-fix` (the test reads
+  either). Run 41649304377 (head 1330cbe): verify and package green on all three (the NSIS hooks
+  compile, the template and Info.plist are bundled); **smoke (macos) green** — Launch Services listed
+  Little Joan for http and https without `lsregister` (NSWorkspace: Safari, Little Joan, Firefox,
+  Edge, Chrome for Testing, Chrome), the defaults stayed Safari, `open -a <app> <url>` → `link-opened`
+  and the smoke page, the three refusals, and `open -a` with a file URL → `link-refused file`, two
+  links at once → two `link-opened` (AppKit sent two events). Windows and the five deb jobs: the
+  registration read back right (UserChoice stayed MSEdgeHTM; `desktop-file-validate` ok, after
+  installing desktop-file-utils on the runner; `xdg-mime query default` answered `Little Joan.desktop`
+  from mimeinfo.cache with no default written anywhere — as predicted above), the OS-style launch
+  opened the page and the refusals were right — but every job failed the rule "a refused link caused
+  window-front": `window-front` is the summon's own report about a second after it brought the window
+  up, and it landed after the refusals began. Windows also failed the main run's zoom-reset check
+  once (Ctrl+0 synthetic keys: CI's known flake, before the links run). **Both AppImage jobs were
+  cancelled at 75 minutes: every forwarded flag became a refused link.** The AppImage's AppRun
+  (AppImageKit's, `AppRun.wrapped` behind the GTK / GStreamer hooks) starts the binary with the
+  root desktop entry's `Exec` arguments **in front of** the launch's own — `--link %u` minus the
+  field code made `--show` the link. → `lj-step-45-fix2`: the AppImage gets its pre-LJ45 desktop
+  entry back (`bundle.linux.appimage.files` puts `linux/little-joan-appimage.desktop` over Tauri's
+  generated one: `Exec=little-joan`, `Utility`, no web MIME types — tauri-bundler copies those files
+  after generating the deb's data), so **the AppImage is not a browser candidate**: it installs
+  nothing for the OS anyway, and a desktop-integration tool's `Exec=<image> %u` would hand a bare
+  URL that Little Joan doesn't read as a link. The links run checks that the AppImage's entry stays
+  plain and sends its link as `<image> --link <url>`; the refusal rule no longer counts
+  `window-front`, and waits 2.5 s after the link's page before the refusals. *(The owner's call,
+  later: accepting a lone bare http(s) argument as a link would let AppImage integrations work —
+  a design change, so not made here; Deferred follow-ups.)*
+
 ### LJ46 — The main browser: handing pages on without loops; the default-apps button · strong · review
 
 **Verify:** `npm run verify` green, including Rust tests for a pure `browsers.rs`:
@@ -8587,6 +8674,152 @@ On Windows (if you have one): Little Joan appears in Settings → Default apps, 
 On Linux: GNOME Settings → Default Apps lists it. Mark the PR ready once every job is green and
 STOP. Never merge it: an independent security review comes next, and the owner decides.
 ```
+
+**Implementation notes (2026-11-03; disk 12 GB free, `.cache/target` 1.4 GB):**
+
+- **browsers.rs** is the glue and the one caller of the opener (`browsers/tests.rs`'s source test
+  counts `tauri_plugin_opener::open_url`, `OpenerExt` and `.opener()` in every file: two in
+  browsers.rs — the OS default and the default-apps settings URI —, none elsewhere). `hand_off`
+  runs on a blocking thread (the callers are engine callbacks on the main thread) and reports an
+  `Outcome`; `hand_off_now` is for extensions' request handler, already on one. Callers:
+  page_actions' Open in browser (closes the window only when the page went somewhere), the page's
+  `on_new_window`, Settings' `on_new_window`, extensions' `openUrl(where: "browser")` (409
+  `no-browser` "No other browser to open this in." when there is none). Nowhere → the toolbar's
+  status (`Status::Handoff { state: "none" }`, ui/toolbar/logic.ts: "No other browser to open this
+  in", 8 s like a finished download) and nothing opens.
+- **Pure parts:** `browsers/target.rs` — `handoff_target(main, &Browsers)` as the plan's Verify
+  (an unknown default counts as "not Little Joan": the opener, as before; a main browser that is
+  Little Joan — settings.json could say so — is passed over too) and `Recent`, the loop guard's
+  memory; `browsers/parse.rs` — StartMenuInternet entries (the key's default name, else a
+  non-indirect ApplicationName), UserChoice's ProgId → the entry whose Capabilities claim it
+  (`LittleJoanURL` → Little Joan), MSVC command-line splitting and `%1`, desktop files (shown
+  applications whose MimeType has https; a hidden one masks its id), Exec per the Desktop Entry
+  spec, Little Joan's own ids (an Exec running `little-joan`, this executable or `$APPIMAGE` too),
+  `xdg-mime`'s answer. All tested on every OS.
+- **The loop guard, beyond the plan's rule:** besides `handoff_target` never choosing Little Joan,
+  every page handed on is remembered for 10 s and a link from another app that is exactly that page
+  is refused once (`link-refused http loop`, links.rs). It covers a default that couldn't be read
+  (the opener then goes to the OS default, which might be Little Joan after all) — without it a
+  page whose script calls `window.open` on load could ping-pong.
+- **Readers** (`platform/browsers.rs` → `mac/`, `win/`, `linux/browsers.rs`, read-only): macOS
+  NSWorkspace through objc2's run-time messaging (no new dependency or feature, in an autorelease
+  pool; NSWorkspace may be used off the main thread), names from NSFileManager's
+  `displayNameAtPath:`; Windows `winreg` (already a dependency); Linux the XDG data directories and
+  `xdg-mime`. Starting one: `/usr/bin/open -b`, the program with its arguments (a thread reaps it),
+  `gio launch` (5 s for it to say it launched; a failure → the file's own Exec).
+- **Settings:** `mainBrowser` (`settings/main_browser.rs`: 1–255 characters, no control characters,
+  `/` or `\`, not starting with `-`; anything else is the system default) — an id only selects from
+  the OS's list, it is never run. `Change.main_browser` (`""` = system default; "Pick a browser from
+  the list." otherwise). General's **Browser** section (`ui/settings/browser-logic.ts`, tested;
+  `browser.ts`): the default line, **Open default apps settings** (hidden where the OS has none to
+  open; the note then names `xdg-settings set default-web-browser "Little Joan.desktop"` for the user
+  to run), **Main browser** with System default first and a saved browser that is gone kept as "(not
+  installed)", the note saying where pages go with the choice shown; `browsers_info` again when the
+  window comes back to the front. Commands `browsers_info`, `open_default_apps_settings` (child
+  module `commands/browsers.rs`), granted to the settings window only
+  (`only_settings_may_read_browsers_and_open_default_apps`; the glass test now shares its
+  `only_settings_grants` helper, keeping capability_tests.rs at ~400 lines).
+- **The smoke** (`scripts/ci/smoke-handoff.mts` + test, its own launches after the links run): the
+  plan's fake browsers (a node script writing its arguments to a file, as a HKCU StartMenuInternet
+  entry or a desktop file in ~/.local/share/applications; only on a GitHub runner), the
+  `?blank=1` page (tests/smoke: one big `target=_blank` link, `LJ-BLANK ready`), Settings scrolled
+  to the Browser section by a smoke-only hook (`LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`, like
+  LJ19.7's quit click) for `settings-general-browser.png`, and Linux's loop check (`xdg-mime default`
+  run by the smoke — or the mimeapps.list written by it when xdg-mime refuses — put back after).
+- **CI (PR #40):** run 41724602261 (head 67658c7) — verify and package green on all three. Smoke
+  green on macOS (the links run as before; `browsers-listed 5 default=other`: Safari, Firefox, Edge,
+  Chrome for Testing, Chrome — Little Joan left out; the Browser section's screenshot), Windows (the
+  fake `LJFakeBrowser` as main browser got exactly `…/smoke.html?from=blank` after the
+  `target=_blank` click: `handoff browser=LJFakeBrowser`; the uninstaller removed the app and all
+  three registration keys), linux-22.04, linux-scale-2 and **linux-appimage** (fix2 works: every flag
+  reached the AppImage again; its link as `<image> --link <url>`): on Linux the fake got the page as
+  main browser, and with Little Joan made the runner's default the click went to the fake with
+  `handoff-self-refused`, no `link-opened`. **The three arm64 jobs failed the loop check:** GitHub's
+  arm64 images have no xdg-utils (`no xdg-mime`), so the app read the default as unknown
+  (`default=none`) and handed the page to the opener — which (GIO reads mimeapps.list) sent it to
+  Little Joan — where **the loop guard refused it** (`link-refused http loop`): no loop, but the page
+  went nowhere. → `lj-step-46-fix`: without an answer from `xdg-mime`, Linux reads the default from
+  the mimeapps.list files itself, in the XDG MIME Applications spec's order
+  (`$XDG_CONFIG_HOME` / `$XDG_CONFIG_DIRS`, each `<desktop>-mimeapps.list` first, then the data
+  directories' `applications/mimeapps.list` and `defaults.list`; `browsers::parse::mimeapps_default`,
+  tested). The run's screenshots (`settings-general-browser.png`, macOS / Windows / Linux / AppImage)
+  showed the Browser section as designed — except that the AppImage's told its user to choose
+  Little Joan in the desktop's settings, which it can't be (fix2 above) → `lj-step-46-fix2`:
+  `browsers_info` says `candidate: false` under an AppImage (`$APPIMAGE`), and Settings then says the
+  AppImage can't be the system's browser (the `.deb` can) and hides the button. Run 41730050366
+  (head 98307ce): **all 18 jobs green on the first try** — the arm64 jobs now read the default from
+  mimeapps.list (`default=self` with the smoke's write, the click to the fake with
+  `handoff-self-refused`, no `link-opened`); the AppImage's Settings says it can't be the system's
+  browser. Screenshots looked at on every OS (`settings-general-browser.png`), then deleted.
+
+**Security review (2026-11-04, the coordinator's independent review of PR #40 at feb996e):**
+approve with minor fixes, no Critical or High findings. Each finding, its fix (`lj-step-46-fix4`)
+and what covers it:
+
+1. **Medium — a page could flood external browser launches** (every `window.open` /
+   `target=_blank` a fresh `hand_off` with a fresh read of the OS's list; WKWebView lets scripts
+   open windows, WebView2 doesn't say whether a click asked), **and an extension's panel bypassed
+   `openUrl`'s checks** (it runs in `joan-page`, so its popups skipped `openBrowser`, the public-host
+   check and the 1-per-2 s limit). Fix: the page's and Settings' new windows go through one gate
+   (`browsers/limits.rs` `HandoffGate`, reusing `extensions::limits::RateLimit`: one under way, one
+   a second, the rest dropped with `handoff-throttled`); the OS's list is reused for 2 s; while the
+   page shows a panel, its new windows get exactly `openUrl(where: "browser")`'s checks
+   (`extensions/popups.rs`), else `handoff-refused <why>`; docs/extensions.md says so. Covered by
+   `browsers::limits` tests (one under way, one a second, 200 requests over 3 s → 3), `popups`
+   tests (permission, private hosts and extension URLs refused, the rate counted only for a window
+   that would open), and the smoke's **flood** (`?flood=1`: five windows per click, three clicks —
+   every `new-window` handed on or dropped, at most one handoff a second over the span, the fake
+   receiving no more).
+2. **Low — the loop guard recorded the page after the launch returned** (macOS's `open` can deliver
+   the link back first). Fix: recorded before the launch, forgotten if it fails (`Recent::forget`).
+   **And Windows 11's `UserChoiceLatest`:** the default's ProgId is read from it first (as a value or
+   a `ProgId` subkey's), then `UserChoice` (`parse::pick_progid`, tested); the links run records
+   both and refuses either naming `LittleJoanURL`.
+3. **Low — Tauri's hosts were refused only exactly.** On Windows wry intercepts `http://<scheme>.*`
+   by prefix (`tauri.`, `ipc.`, `ljext.`; Tauri uses http there, `useHttpsScheme` is off). Fix:
+   `navigation::intercepted_by_app` — any `http://` address whose text after the scheme starts with
+   those prefixes, also as user info (`http://tauri.@evil/`) — refused for links and for page
+   navigation (but the app's exact origin); tested in navigation.rs and links/tests.rs.
+4. **Low — the first launch could panic on a non-Unicode argument** (`std::env::args()`). Fix:
+   `cli::lossy_args(std::env::args_os())`; `cli/tests.rs` parses such an argument (as a link it is
+   refused; alone it is a plain launch).
+5. **Low — Windows launched browsers from `StartMenuInternet\<id>\shell\open\command` with the
+   URL appended.** Fix: through the ProgId its `Capabilities\URLAssociations\https` names (that
+   ProgId's command, `%1` as one argument), falling back to the entry's own; never an interpreter
+   (cmd, powershell, pwsh, wscript, cscript, mshta, rundll32, regsvr32, msiexec, wsl, bash,
+   conhost) or a non-`.exe` — such an entry isn't offered, and `open_with` refuses it again
+   (`parse::launchable_program`, tested). The smoke's Windows fake now registers a ProgId too.
+6. **Low — README:** with no https default set at all, GIO / `xdg-mime` fall back to the first
+   handler in mimeinfo.cache, so the `.deb` can become the effective default without anything
+   written (CI saw it): the README says so, and that Settings → General → Browser shows it.
+7. **Note — the uninstaller** deletes the three entries only while
+   `LittleJoanURL\shell\open\command` is this install's `"$INSTDIR\…exe" --link "%1"` (Tauri's
+   deep-link removal does the same); smoke-links-read.test.ts checks the macro; CI's uninstall step
+   stays green.
+8. **Note — the smoke's machine-change guard** also requires `RUNNER_ENVIRONMENT=github-hosted`
+   (`act` and self-hosted runners set `GITHUB_ACTIONS=true` too); the smoke logs the runner line
+   once (`runner: GITHUB_ACTIONS=… RUNNER_ENVIRONMENT=…`), and a GitHub job without
+   `RUNNER_ENVIRONMENT` fails rather than skip the runner-only checks silently; smoke-runner.test.ts.
+9. **Small:** the opener source test is strict (any `tauri_plugin_opener::` outside browsers.rs
+   fails, but the two `reveal_item_in_dir` calls); `xdg-mime query` gets gio's 5 s limit;
+   `hand_off_now` prints a fixed message (a launcher's error text can hold the URL); in a macOS batch
+   a bounced first link is refused as a loop and the next acceptable one may open
+   (`links::pick` takes the guard; tested).
+
+**CI after the review:** run 41744056220 (head 8eed728, fix4) — `verify (windows-latest)` red:
+navigation.rs's new test assumed `http://tauri.localhost` is the app's origin on Windows, but test
+builds are `dev` (the origin is the dev server's) → `lj-step-46-fix5` (the test asks `is_app_url`).
+Run 41744543104 (head 84cc182): 17 of 18 green — the flood held (Windows: 15 new windows, 2 handed
+on, 13 dropped; Linux: 15, 1, 14, the same on arm64), every job logged `runner: GITHUB_ACTIONS=true
+RUNNER_ENVIRONMENT=github-hosted` (so hosted jobs have it), windows-latest has no
+`UserChoiceLatest` (UserChoice = MSEdgeHTM) — and `smoke (macos)` failed only LJ29's race rule:
+the panel loaded 5.3 s after `extension-opened hello`, straight from the racing web page (no
+start-page detour), hello never reported, and the page's racer stopped after six refusals. Those
+are exactly the symptoms of the race flake recorded in Deferred follow-ups (runs 39226938206 and
+40920554558, before phase 21); nothing fix4 changed is on that path (the racer's `window.open`s are
+`ljext:` URLs, refused before the gate; the start-page detour is `tauri://localhost`, which the new
+prefix rule doesn't touch; feb996e's green macOS run shows the same racer). Recorded as its third
+occurrence; `lj-step-46-fix6` (this note) ran the whole CI again.
 
 ### LJ47 — Sign-in popups: which ones open inside, and the popup window · strong · auto
 
@@ -9278,6 +9511,12 @@ smoke run; nothing changed in the direct-download build.
 > Things a step noticed but were out of its own scope. Kept here so they don't get buried in
 > per-step notes. Strike through when genuinely handled; don't silently delete lines.
 
+- **Links from other apps for the AppImage** (LJ45, the owner's call): the AppImage isn't a browser
+  candidate (its AppRun prepends the desktop entry's Exec arguments to every launch — Landmines), so
+  a desktop-integration tool (AppImageLauncher, Gear Lever) that writes `Exec=<image> %u` hands a
+  bare URL, which Little Joan ignores. Accepting a lone bare http(s) argument (nothing else on the
+  command line, not starting with `-`) as a link would make that work; it widens what a command line
+  may do, so it waits for the owner.
 - ~~**First-run discoverability**~~ (surfaced by LJ3). Hibernating from the very first launch
   means a new user sees only a tray icon — and on GNOME without the AppIndicator extension,
   nothing at all. Option: when no `settings.json` exists yet, show the window once with the
@@ -9545,7 +9784,9 @@ smoke run; nothing changed in the direct-download build.
   detour didn't show, no `ljext` request was answered for the panel, and hello never reported — the
   security rules held (every racer refused). If it recurs, look at the main thread's load during
   the race (the detour's 1 s limit) first. *(Recurred once more on 2026-10-29, run 40920554558,
-  during LJ19.4-fix4's diagnostics — same symptoms.)*
+  during LJ19.4-fix4's diagnostics — same symptoms; and on 2026-11-04, run 41744543104, phase 21's
+  security fixes — the same again: 5.3 s, no detour, the racer stopped after six refusals, a
+  `window-front joan unknown` 1.8 s in. Three in a few hundred macOS smoke runs.)*
 - **macOS: "webview helper processes of the page left after hibernating: 1"** (the main run's rule
   since LJ9, Stay ready since LJ19.4): twice on 2026-10-29 in about 25 macOS smoke runs (40931268551
   before LJ19.4-fix4, 40942144444 after it), green on the others. One of the page's WebKit helpers
@@ -10070,13 +10311,31 @@ Populated from real friction, not speculation:
   screen; if that never comes, it only activates the app, as LJ19.4-fix4 did). To see the Dock's state,
   dispatch a smoke run with `LJ_DOCK_PROBE=1` in `extra_env` and read `dock-probe.jsonl` and
   `unified.log`.
+- *(LJ45, run 41649304377)* **An AppImage's AppRun puts the desktop entry's Exec arguments in
+  front of every launch's own.** Tauri's AppImage runs AppImageKit's AppRun (`AppRun.wrapped`, behind
+  the GTK and GStreamer hooks), which reads the root `.desktop`'s `Exec`, drops the field codes and
+  appends the command line: with `Exec=little-joan --link %u` every `--show`, `--hide` or `--quit`
+  became `--link --show` — a refused link — and both AppImage smoke jobs ran into their 75-minute
+  limit. The AppImage keeps a plain `Exec=little-joan` (`bundle.linux.appimage.files` overrides the
+  deb's generated entry); any argument added to the deb's Exec must stay out of the AppImage's.
+- *(LJ46, run 41724602261)* **GitHub's arm64 Ubuntu images have no xdg-utils.** No `xdg-mime`,
+  no `xdg-open`: Little Joan then reads the default for https from the mimeapps.list files itself
+  (the XDG MIME Applications spec's order), and the opener still works through GIO.
+- *(LJ45, run 41649304377)* **`xdg-mime query default` answers from mimeinfo.cache when no default
+  is written.** In xdg-utils' generic mode (no desktop session, as on CI) it greps mimeinfo.cache
+  after mimeapps.list / defaults.list, so on a runner where nothing set a default it may name any
+  handler — Little Joan, once installed. That is no default anyone wrote: the smoke's "defaults
+  untouched" rule reads the mimeapps.list / defaults.list files themselves.
 - *(LJ19.9, run 41484579569)* **GitHub's macOS 26 runner image has Reduce Transparency ON**
   (`glass-support … reduce=true` at every launch). AppKit then draws Liquid Glass opaque, and Little
   Joan rightly shows the solid theme — so a glass run that trusts the runner's settings shows no
   glass at all. The smoke's glass launches start with the stand-in file (`LITTLEJOAN_SMOKE_A11Y`)
   saying `none`, and the harness switches the runner's own setting off around them (`defaults write
   com.apple.universalaccess reduceTransparency -bool false`, put back after); `glass-system` says
-  what the system reported. Judge translucency on a real Mac with the setting off.
+  what the system reported. Judge translucency on a real Mac with the setting off. *(Phase 21's
+  `ci:` commit)* That write happens only on a GitHub Actions runner (`GITHUB_ACTIONS=true`,
+  `scripts/ci/smoke-runner.mts`): run anywhere else, the smoke logs that it skipped it — the
+  harness must never change a developer's own accessibility setting.
 - *(LJ19.1)* **CI's macOS runners are a poor stopwatch for WebKit.** A warm summon took ~2.5 s
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the

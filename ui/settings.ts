@@ -18,6 +18,7 @@ import { glassSettingFrom, glassSupportFrom } from "./settings/glass-logic.ts";
 import { extensionsTab } from "./settings/extensions.ts";
 import { sitesList } from "./settings/sites.ts";
 import { quitButton } from "./settings/quit.ts";
+import { browserSection } from "./settings/browser.ts";
 import { builtInsFrom, siteModesFrom } from "./settings/sites-logic.ts";
 import { sameTheme } from "./settings/appearance-logic.ts";
 import { BUILT_INS } from "./answers/index.ts";
@@ -107,6 +108,8 @@ const look = appearance(element<HTMLElement>("#panel-appearance"), refresh, () =
 const extensionsPanel = extensionsTab(element<HTMLElement>("#panel-extensions"), refresh, BUILT_INS);
 const sites = sitesList(element<HTMLElement>("#site-modes"), element<HTMLElement>("#site-modes-empty"), refresh);
 const keyboard = keyboardTab(refresh, () => showTab("keyboard", true));
+// General's Browser section (LJ46): the system's browsers, read again when the window comes back.
+const browser = browserSection(element<HTMLElement>("#browser-section"), (command) => invoke(command), refresh, showError);
 
 let saved: Settings | null = null;
 /** What get_settings said of Liquid Glass here (no glass until it answered). */
@@ -175,6 +178,7 @@ function input(): SettingsInput {
     keyboard.keys(),
     afterCloseFrom(afterClose.value),
     glass.draft(),
+    browser.draft(),
   );
 }
 
@@ -192,6 +196,7 @@ function shownSettings(from: Settings): Settings {
     showTrayIcon: tray.checked,
     afterClose: afterCloseFrom(afterClose.value),
     glass: glass.draft() ?? from.glass,
+    mainBrowser: browser.draft() === undefined ? from.mainBrowser : browser.draft() || null,
     theme: look.draft(),
     disabledExtensions: extensions.disabledExtensions,
     developerMode: extensions.developerMode,
@@ -353,6 +358,15 @@ window.littleJoanSettings = {
 
 showTab(tab);
 drawClearing();
+// Back from the system's default-apps settings (or anywhere): what it says now.
+window.addEventListener("focus", () => {
+  if (saved !== null) {
+    browser
+      .load(saved.mainBrowser ?? null)
+      .then(refresh)
+      .catch(() => undefined);
+  }
+});
 
 invoke<SettingsView>("get_settings")
   .then((view) => {
@@ -382,6 +396,10 @@ invoke<SettingsView>("get_settings")
     storeFolder.textContent = view.storage.folder;
     storeSite.textContent = view.storage.siteData;
     aboutVersion.textContent = `Version ${view.version}`;
+    browser
+      .load(view.settings.mainBrowser ?? null)
+      .then(refresh)
+      .catch((err: unknown) => showError(String(err)));
     const waylandNoShortcut = view.waylandNoShortcut;
     return invoke<KeymapInfo>("keymap_info").then((info) => {
       keyboard.load(info, { shortcut: view.settings.shortcut, keys: view.settings.keys }, waylandNoShortcut);

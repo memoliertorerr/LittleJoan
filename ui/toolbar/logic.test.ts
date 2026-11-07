@@ -316,3 +316,19 @@ describe("the zoom level in the status area (LJ16)", () => {
     expect(shownStatus(state, 1_000 + ZOOM_LINGER_MS)?.text).toBe("Downloading big.iso…");
   });
 });
+
+describe("a page with nowhere to go in the status area (LJ46)", () => {
+  it("is checked", () => {
+    expect(statusMessage({ kind: "handoff", state: "none" })).toEqual({ kind: "handoff", state: "none" });
+    for (const bad of [{ kind: "handoff" }, { kind: "handoff", state: "opened" }]) {
+      expect(statusMessage(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("says there is no other browser, for as long as a finished download", () => {
+    const state = withStatus(initialStatus(true, 0), { kind: "handoff", state: "none" }, 0);
+    expect(shownStatus(state, 0)?.text).toBe("No other browser to open this in");
+    expect(shownStatus(state, 0)?.action).toBeNull();
+    expect(shownStatus(state, STATUS_LINGER_MS)).toBeNull();
+  });
+});
