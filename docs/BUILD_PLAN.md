@@ -9494,6 +9494,28 @@ attempts, then stop). Look at the screenshots on every OS.
   `webview-profile <place>=<path>`, `saved-logins-cleared ok|failed <reason>`.
 - `npm run verify`: 849 TS tests, 528 Rust tests, clippy clean (macOS compiles here; the WebView2
   glue only in CI).
+- **CI (PR #43).** Run 42422695295 (head 01adbe0, LJ51): verify ×3 green — the WebView2 glue
+  compiled and passed clippy on `windows-latest` the first time — and package linux, windows,
+  linux-arm64 green, then cancelled by LJ52's push (the concurrency group; LJ52's run repeats every
+  LJ51 check). Run 42423088099 (head 80e3c0f, LJ51 + LJ52): **green on all 18 jobs, first attempt,
+  no re-runs.** The logins runs on Windows (WebView2 156.0.4314.58): the default page read back
+  `logins password-autosave=false autofill=true webview=page` (logged before `page-built`, ~120 ms
+  before the page's first title); `webview-profile page=D:\a\_temp\lj-logins-PyTytt\webview\EBWebView\Default`
+  and, after `hibernated`, `webview-profile settings=` **the same folder**; the two clicks →
+  `saved-logins-cleared ok` 5 ms after the confirm, with no page built since the hibernate. With
+  `"savePasswords": true`: `password-autosave=true autofill=true` from the page and from the sign-in
+  popup, and Settings — whose webview Little Joan never sets — read `logins-seen
+  password-autosave=true autofill=true webview=settings`: the switches are the profile's (as
+  WebView2's documentation says for `ICoreWebView2Settings4` / `ICoreWebView2Profile6`). macOS and
+  the seven Linux jobs logged no `logins` line and no removal. **Screenshots:**
+  `settings-privacy-logins.png` — Windows: the section at the top, "Offer to save passwords (kept by
+  Windows' web engine, on this computer)" unchecked, "Fill in forms (addresses and the like)"
+  checked, each with its note, the "Remove saved passwords and form data…" button and its note;
+  `settings-privacy-logins-removed.png` adds "Saved passwords and form data removed."; macOS and
+  Linux: "Saving passwords isn't available in Little Joan on this system yet." with "Apple lets only
+  browsers with a special entitlement use Passwords and passkeys." / "WebKitGTK has no password
+  manager.", no switch, and the storage list's new row ("Nowhere: Little Joan saves no passwords or
+  form data on this system.").
 
 ### LJ52 — Passkeys and saved logins: what each engine offers; docs; the review · standard · review
 
@@ -9567,6 +9589,21 @@ an independent security review comes next, and the owner decides.
   folder path only, and no smoke run types a password (the popups run's spoof page has a password
   field nobody types into).
 - `npm run verify`: 855 TS tests, 528 Rust tests, clippy clean.
+- **What each engine reported (CI run 42423088099, `summary.json`'s `loginsRun.webauthn`; every page
+  a secure context, `secure=true`):**
+
+  | OS (engine) | `api` | `platform` | `conditional` |
+  |---|---|---|---|
+  | Windows Server 2025 (WebView2 156.0.4314.58) | 1 | false — no Windows Hello set up on the runner | **true** (passkey autofill) |
+  | macOS 26 (WKWebView, ad-hoc signed, no entitlement) | 1 | **false** | **false** |
+  | Linux, all seven jobs (WebKitGTK 2.50.4 and 2.52.6, x86_64 and ARM64) | **0** | false | false |
+
+  WebView2 has WebAuthn and passkey autofill; whether Windows Hello makes a passkey is the owner's
+  check (a runner has no Hello). WKWebView exposes `PublicKeyCredential` but offers an app without
+  Apple's browser entitlement no platform authenticator and no passkey autofill — what the
+  research expects. WebKitGTK has no `PublicKeyCredential` at all.
+- **Merged into the docs:** the Later rows (macOS, Linux), README, SECURITY.md and
+  docs/architecture.md now cite these reports (`lj-step-52-fix`).
 
 ### LJ53 — More bundled extensions: Reading list and To-do · standard · auto
 
@@ -10592,15 +10629,20 @@ Populated from real friction, not speculation:
 - *(LJ51, vendored wry 0.57 / webview2-com-sys 0.39.1)* **WebView2's password autosave and general
   autofill are the profile's, and wry sets autofill on every webview it creates.** wry calls
   `SetIsGeneralAutofillEnabled(attributes.general_autofill_enabled)` (default `true`) when it builds
-  any webview (`webview2/mod.rs` 655–657), and WebView2 keeps both switches per profile
-  (`ICoreWebView2Profile6` has them too; a webview's settings and its profile's always agree). A
+  any webview (`webview2/mod.rs` 655–657), and WebView2 keeps both switches per profile (its
+  documentation for `ICoreWebView2Settings4` and `ICoreWebView2Profile6`: all webviews of a profile
+  share the value; CI run 42423088099: Settings, never set, read `password-autosave=true` after
+  the page set it). A
   builder on the page's profile that doesn't pass the saved `autofillForms` would switch autofill
   back on for the page — so all four (bar, page, popup, Settings) pass it (a test). And every
   WebView2 environment on one user data folder must use the same options — additional browser
   arguments (wry's default `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection
   --autoplay-policy=no-user-gesture-required`), the language (the user's), extensions, scroll-bar
   style (`webview2/mod.rs` 288–360) — or creating the second one fails; none of the builders sets
-  one (a test walks `src/`).
+  one (a test walks `src/`). Also the profile's: wry sets `PreferredColorScheme` on the profile
+  from each new webview's window theme (`set_theme`, 1915–1924; tauri passes Dark or Light, never
+  Auto) — harmless while no Little Joan window has a theme of its own (every one follows the
+  system), but a window given an explicit theme would change the page's `prefers-color-scheme`.
 - *(round 3 planning, vendored tauri-utils 2.10.2)* **Tauri's desktop-file template offers only
   `categories`, `comment`, `exec`, `icon` and `name`;** `MimeType=` and `%u` go into the template's
   text (LJ45).
@@ -10845,8 +10887,8 @@ or round 3 picked up point at their step and stay here for the record.
 | *(round 2)* **Extension gallery / signing** | A list of reviewed community extensions in the repository; signed bundles | Review process, a trust model |
 | *(round 2)* **Custom window chrome on Windows and Linux** | Frameless window with our own close / minimize, resize borders | Per-OS hit-testing; accessibility |
 | *(round 2)* **One user agent per signed-in site** | Remember the agent a site was signed in with and keep it across phone-mode switches | Per-host user agent at navigation time |
-| *(round 3, deferred by the owner)* **macOS saved passwords and passkeys** | **Passkeys:** WebAuthn in an app's WKWebView that isn't Safari needs Apple's managed entitlement `com.apple.developer.web-browser.public-key-credential` (macOS 13.3+): "registration and assertion requests for passkeys and security keys for any relying party identifier", for apps that can act as the user's web browser. Only the **Account Holder of an organization's** Apple Developer account can ask for it (the "macOS Browsers Passkeys" request form); Apple reviews it against fixed criteria — the http and https schemes in `Info.plist` (LJ45 has them), a field for a URL or search at launch (the command bar), navigating straight to a URL it is given — and adds it as a managed capability, so the app then needs Developer ID signing with a provisioning profile that carries it (LJ58's signing first; Little Joan is ad-hoc signed today). Without it, a WKWebView's WebAuthn requests are refused (Apple's developer forums: authorization errors until the entitlement was granted). **Saved passwords:** WKWebView's password AutoFill isn't dependable for an embedding app (round 3's research) — it isn't a browser's password manager —, and building Little Joan's own UI over the Keychain is what Ground Rule 26 rules out. LJ52 recorded what CI's `?webauthn=1` page showed on macOS (LJ52's notes) | The owner's decision; an organization account's Account Holder asks Apple for the entitlement; signing with a profile (LJ58, and LJ60's for the App Store); then WebKit's own passkey UI — never a password store of Little Joan's own (Ground Rule 26) |
-| *(LJ52)* **Linux saved passwords and passkeys** | WebKitGTK has no password manager and offers an app no WebAuthn authenticator of its own; saving passwords would need libsecret and Little Joan's own UI (Ground Rule 26 rules that out). LJ52 recorded what CI's `?webauthn=1` page showed on Linux | Upstream WebKitGTK support first |
+| *(round 3, deferred by the owner)* **macOS saved passwords and passkeys** | **Passkeys:** WebAuthn in an app's WKWebView that isn't Safari needs Apple's managed entitlement `com.apple.developer.web-browser.public-key-credential` (macOS 13.3+): "registration and assertion requests for passkeys and security keys for any relying party identifier", for apps that can act as the user's web browser. Only the **Account Holder of an organization's** Apple Developer account can ask for it (the "macOS Browsers Passkeys" request form); Apple reviews it against fixed criteria — the http and https schemes in `Info.plist` (LJ45 has them), a field for a URL or search at launch (the command bar), navigating straight to a URL it is given — and adds it as a managed capability, so the app then needs Developer ID signing with a provisioning profile that carries it (LJ58's signing first; Little Joan is ad-hoc signed today). Without it, a WKWebView's WebAuthn requests are refused (Apple's developer forums: authorization errors until the entitlement was granted). **Saved passwords:** WKWebView's password AutoFill isn't dependable for an embedding app (round 3's research) — it isn't a browser's password manager —, and building Little Joan's own UI over the Keychain is what Ground Rule 26 rules out. **CI's `?webauthn=1` on macOS 26 (run 42423088099): `api=1 platform=false conditional=false secure=true`** — WKWebView has the API, but no platform authenticator and no passkey autofill for an app without the entitlement | The owner's decision; an organization account's Account Holder asks Apple for the entitlement; signing with a profile (LJ58, and LJ60's for the App Store); then WebKit's own passkey UI — never a password store of Little Joan's own (Ground Rule 26) |
+| *(LJ52)* **Linux saved passwords and passkeys** | WebKitGTK has no password manager and no WebAuthn; saving passwords would need libsecret and Little Joan's own UI (Ground Rule 26 rules that out). **CI's `?webauthn=1` (run 42423088099), WebKitGTK 2.50.4 and 2.52.6: `api=0`** — no `PublicKeyCredential` at all | Upstream WebKitGTK support first |
 | *(round 3)* **Saved logins on Linux** | WebKitGTK has no password manager; one would be Little Joan's own (libsecret + UI) | A new dependency and a credential store to secure — big; against Ground Rule 26's spirit |
 | *(round 3, the owner's decision)* **Measuring a page's width on macOS and Linux** | Skip a phone-mode reload when the page already fits the window, as Windows does with CDP's `Page.getLayoutMetrics` (LJ40) | A script in the page (an isolated world, still app code in a web page) — against Ground Rule 10 unless the owner decides otherwise |
 | *(round 3)* **Viewport emulation** | A mobile viewport for narrow windows (Windows: CDP `Emulation.setDeviceMetricsOverride { mobile: true }`) | Windows only — macOS has only private SPI; Little Arc doesn't do it, and phase 19 reflows instead |

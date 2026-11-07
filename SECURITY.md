@@ -71,8 +71,8 @@ the engine's stores. Report anything that lets a page, a popup or an extension r
 passwords or form data through Little Joan, turn password saving on, or keep the engine's saved
 data after a removal reported success. macOS and Linux save no passwords in Little Joan yet.
 Passkeys are the engine's alone as well: on Windows WebView2 runs a site's WebAuthn requests with
-Windows Hello and Windows keeps the keys; on macOS WebKit refuses them in an app without Apple's
-browser entitlement, which Little Joan doesn't have; WebKitGTK offers none. Little Joan adds
+Windows Hello and Windows keeps the keys; on macOS WebKit offers an app without Apple's browser
+entitlement (which Little Joan doesn't have) no platform authenticator; WebKitGTK has no WebAuthn. Little Joan adds
 nothing to WebAuthn and handles no key.
 
 Extensions (experimental) have their own model — one origin each, a strict Content-Security-Policy,
