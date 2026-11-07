@@ -58,6 +58,13 @@ fn respond<R: Runtime>(
     incoming: &Incoming,
     body: &[u8],
 ) -> Response<Cow<'static, [u8]>> {
+    // A sign-in popup's requests arrive under the page's label on macOS (the shared URL-scheme
+    // handlers): while any popup exists, nothing of an extension is served (phase 22's review).
+    if bar::popup::any(app) {
+        let response = refuse(incoming, api::Refusal::Webview);
+        log_request(incoming, response.status().as_u16());
+        return response;
+    }
     let registry = registry::current(app);
     let deadline = Instant::now() + api::COMMIT_WAIT;
     let response = loop {

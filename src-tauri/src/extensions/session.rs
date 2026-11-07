@@ -144,9 +144,14 @@ pub fn page_committed<R: Runtime>(app: &AppHandle<R>, url: &Url) {
     if keys::is_app_url(&keys::app_origin(), url)
         && let Some(panel) = leaving().left()
     {
-        // Not inside the engine's load event: navigate from a thread of its own.
+        // Not inside the engine's load event: navigate from a thread of its own — once the page's
+        // sign-in popups are gone (macOS: a popup's ljext requests arrive under the page's label,
+        // so one still polling could be served the panel's SDK; phase 22's security review).
         let app = app.clone();
-        std::thread::spawn(move || go_to_panel(&app, panel));
+        std::thread::spawn(move || {
+            crate::bar::popup::close_all(&app, "opener-left");
+            go_to_panel(&app, panel)
+        });
     }
 }
 
@@ -230,6 +235,7 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, id: &str, target: Target) -> Result<
         std::thread::sleep(LEAVE_FOR);
         let late = leaving().timed_out(seq);
         if let Some(panel) = late {
+            crate::bar::popup::close_all(&app, "opener-left");
             let _ = go_to_panel(&app, panel);
         }
     });

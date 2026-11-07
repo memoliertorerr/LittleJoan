@@ -1,5 +1,6 @@
 //! The main browser (LJ46): every page Little Joan hands on goes through `hand_off` — "Open in
-//! browser" (page_actions.rs), the page's `target=_blank` and `window.open` (bar/page.rs),
+//! browser" (page_actions.rs), the page's `target=_blank` and `window.open` that don't open a
+//! sign-in popup, and a popup's own (bar/popup.rs, LJ47),
 //! Settings' links (settings_window.rs), extensions' `openUrl(where: "browser")`
 //! (extensions/protocol.rs). Since Little Joan can be the system's browser itself (LJ45), the OS
 //! default may be Little Joan, which would bring the page straight back: `handoff_target`
@@ -78,6 +79,8 @@ pub enum NewWindowFrom {
     Page,
     /// The settings window's own links.
     Settings,
+    /// A sign-in popup (LJ47): a web page that never opens another popup.
+    Popup,
 }
 
 /// The new-window gate (limits.rs): one under way, one a second.
@@ -107,6 +110,9 @@ pub fn hand_off_new_window<R: Runtime>(app: &AppHandle<R>, url: Url, from: NewWi
         smoke::log("handoff-throttled", "");
         return;
     }
+    // The gate's admission, timed here: CI's flood rule measures these (the `handoff` line comes
+    // after the browser list is read, which can bunch them up).
+    smoke::log("handoff-admitted", "");
     let turn = GateTurn;
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {

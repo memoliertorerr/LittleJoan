@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LJ-SIGNIN</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: system-ui, sans-serif;
+        background: #2e7d32;
+        color: #ffffff;
+      }
+      #status {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 0 16px;
+        font-size: 24px;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="status">Fake sign-in</div>
+    <script type="module">
+      // The smoke's fake provider (LJ47): served on a second port (another origin), opened by
+      // smoke.html?popup=… in a sized popup. Like a real provider's popup it posts to its opener and
+      // closes itself — unless ?stay=1 (the hibernate, opener-left and key runs).
+      import { SIGNED_IN, SIGNIN_DELAY_MS, signinStays } from "./popup-logic.mjs";
+
+      const status = document.getElementById("status");
+      status.textContent = window.opener ? "Signing in (fake provider)…" : "No opener";
+      setTimeout(() => {
+        window.opener?.postMessage(SIGNED_IN, "*");
+        status.textContent = "Signed in (fake provider)";
+        if (!signinStays(location.search)) {
+          window.close();
+        }
+      }, SIGNIN_DELAY_MS);
+    </script>
+  </body>
+</html>

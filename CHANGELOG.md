@@ -31,6 +31,29 @@ All notable changes to Little Joan are recorded here. The format follows
   links and extensions' "open in the browser" all go there, and never back to Little Joan: with
   Little Joan as your default, pages go to the first other browser (Settings says which), and if
   there is none they stay put and the toolbar says "No other browser to open this in".
+- **Sign-in popups work inside Little Joan.** "Sign in with Google / Apple / Microsoft / GitHub"
+  and other sign-ins that open a small window now open it in a small Little Joan window over the
+  page, instead of your browser — so the sign-in finishes, the popup closes by itself, and the site
+  is signed in (the popup shares the page's cookies, so the login stays like any other). The
+  popup's title always shows where you are signing in (`accounts.google.com`), never what the page
+  calls itself. It is a plain web page: no access to Little Joan, no downloads, no camera,
+  microphone or location, and it can't open further windows (those go to your main browser). At
+  most two are open at once. **Ctrl+W** / **Cmd+W** closes the popup (only it); it also closes when
+  the page behind goes to another site, and when you close Little Joan. Links that open a new tab
+  still go to your main browser, as before.
+
+### Security
+- **A sign-in popup's title names only a page that has loaded in it.** Until the sign-in page loads,
+  it shows the site that opened the popup — so a page can't open a popup for another site, stop it
+  and write its own form under that site's name. A very long address keeps its end
+  (`…example.com`), the part that says whose it is.
+- **A page that is being closed can't open anything** — no sign-in popup, nothing handed to your
+  browser — so nothing of a page appears after you dismiss Little Joan.
+- **macOS: a page gets no camera or microphone.** Little Joan answers a page's permission requests
+  itself now; before, the web engine would have granted them once macOS allowed it. Linux keeps
+  its engine's answers (all refused but pointer lock); Windows still asks you.
+- Little Joan's own pages refuse to be framed by a web page, extension files are never served while
+  a sign-in popup is open, and at most thirty sign-in popups open in one opening of the window.
 
 ## [0.2.1] — 2026-10-30
 

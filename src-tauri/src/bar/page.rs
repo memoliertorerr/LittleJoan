@@ -12,7 +12,8 @@
 //! it is added zero-sized and hidden, and laid out afterwards. It never takes the keyboard from the
 //! bar's field (`focused(false)`).
 //!
-//! **Closing:** the session cookies are kept first (Windows, cookies.rs), downloads under way end
+//! **Closing:** it opens no new window any more and its sign-in popups close first (bar/popup.rs),
+//! the session cookies are kept (Windows, cookies.rs), downloads under way end
 //! (bar/download.rs), on macOS the page is unloaded (`about:blank`) before it goes — WKWebView's
 //! processes otherwise outlive it, and a video's audio with them (LJ9) —, then `Webview::close`.
 
@@ -21,7 +22,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
-use tauri::webview::{NewWindowResponse, PageLoadEvent};
+use tauri::webview::{PageLoadEvent, PermissionKind, PermissionResponse};
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, Runtime, Webview, WebviewBuilder, WebviewUrl,
     Window,
@@ -136,6 +137,8 @@ fn build<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) -> tauri::Result<()
     let rect = layout(logical.width, logical.height, Mode::Toolbar)
         .page
         .unwrap_or(whole);
+    // Its new windows are taken from now on, its sign-in popups counted afresh (LJ47).
+    super::popup::page_built();
     let page = add(window, data_dir, rect)?;
     platform::install_page(&page);
     super::view::page_added(window, &page);
@@ -235,6 +238,9 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
                     {
                         summon_timing::mark(Mark::PageStarted);
                     }
+                    // A sign-in popup belongs to the page that opened it (LJ48): another origin
+                    // here closes it (before any panel can load).
+                    super::popup::page_committed(webview.app_handle(), payload.url());
                     // What the toolbar shows, and what the extension handler serves beyond a
                     // panel's document: an extension only once its panel committed here.
                     extensions::session::page_committed(webview.app_handle(), payload.url());
@@ -264,21 +270,15 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
                 history_store::page_loaded(app, url);
             }
         })
-        // target=_blank and window.open go to the main browser (web URLs only; browsers.rs): one
-        // under way and one a second at most, a panel's only with openUrl's checks.
-        .on_new_window(move |url, _features| {
+        // A web page's sign-in popup opens in a small window of its own (bar/popup.rs, LJ47);
+        // other target=_blank and window.open go to the main browser (web URLs only; browsers.rs):
+        // one under way and one a second at most, a panel's only with openUrl's checks.
+        .on_new_window(move |url, features| {
             smoke::log("new-window", "");
-            if navigation::is_external_openable(&url) {
-                crate::browsers::hand_off_new_window(
-                    &app,
-                    url,
-                    crate::browsers::NewWindowFrom::Page,
-                );
-            } else {
-                smoke::log("new-window-refused", url.as_str());
-            }
-            NewWindowResponse::Deny
-        });
+            super::popup::new_window(&app, url, features)
+        })
+        // Camera, microphone and the rest: refused where wry would grant them (the review).
+        .on_permission_request(|_, kind| page_permission(kind));
     // Downloads go to the Downloads folder, the toolbar says how they went (bar/download.rs).
     // WebKitGTK's come through platform/linux.rs instead: wry's handler there is the web
     // context's, and the first webview's decides for all of them (Landmines).
@@ -293,11 +293,38 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
     page
 }
 
+/// What the page gets when it asks for a permission wry routes to Little Joan (phase 22's security
+/// review). macOS: wry's delegate grants camera and microphone when nobody answers — only the
+/// missing usage strings and the system's privacy prompt stop it today —, so everything is refused,
+/// as in a sign-in popup. Linux: refused, as WebKitGTK refuses when nobody answers — but pointer
+/// lock, which it allows (games). Windows: WebView2's own prompt, as before — refusing would take
+/// the user's choice of a site's camera, microphone, notifications or clipboard reading away (the
+/// owner's decision; docs/BUILD_PLAN.md, Deferred follow-ups).
+fn page_permission(kind: PermissionKind) -> PermissionResponse {
+    let response = permission_on(std::env::consts::OS, kind);
+    if response == PermissionResponse::Deny {
+        smoke::log("permission-refused", &format!("page {kind}"));
+    }
+    response
+}
+
+/// `page_permission` on the OS `os` (`std::env::consts::OS`).
+pub(crate) fn permission_on(os: &str, kind: PermissionKind) -> PermissionResponse {
+    match (os, kind) {
+        ("windows", _) | ("linux", PermissionKind::PointerLock) => PermissionResponse::Default,
+        _ => PermissionResponse::Deny,
+    }
+}
+
 /// Closes the page webview, if there is one: its session cookies are kept (Windows), downloads
 /// under way end, macOS unloads it first. Nothing of it is kept: its address and trail go too.
 pub fn close_page<R: Runtime>(app: &AppHandle<R>) {
     page_summon();
+    // After a build under way (it would take new windows again), before anything else: from here
+    // the page opens no new window, and its popups close first — nothing of a page outlives the
+    // window (LJ47).
     let _building = building();
+    super::popup::page_closing(app);
     let Some(page) = app.get_webview(PAGE) else {
         return;
     };
@@ -308,6 +335,8 @@ pub fn close_page<R: Runtime>(app: &AppHandle<R>) {
     if let Err(err) = page.close() {
         eprintln!("little-joan: could not close the page webview: {err}");
     }
+    // A popup that slipped in while the page closed (none should: it opens no new window now).
+    super::popup::close_all(app, "hibernate");
     *address() = PageAddress::new();
     *back() = BackStack::new();
     tray::set_page_items_enabled(app, false);

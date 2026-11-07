@@ -1,7 +1,8 @@
-//! Ground Rule 18: the page webview (`joan-page`) has no IPC at all. Tauri treats custom-scheme
-//! pages as local, so extensions (which will run there as `ljext:` pages) would get every local
-//! capability that reaches the page webview — by its label, or through a window-level scope that
-//! covers the page window (it applies to every webview in it). These tests read every capability
+//! Ground Rules 18 and 23: the page webview (`joan-page`) and every sign-in popup (`joan-popup-<n>`,
+//! LJ47) have no IPC at all. Tauri treats custom-scheme pages as local, so extensions (which will
+//! run there as `ljext:` pages) would get every local capability that reaches the page webview — by
+//! its label, or through a window-level scope that covers the page window (it applies to every
+//! webview in it). These tests read every capability
 //! the build can see: the files under `capabilities/` (tauri-build takes `capabilities/**/*`)
 //! and inline ones in tauri.conf.json.
 
@@ -10,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::{bar, joan, settings_window};
+use crate::{bar, joan, popups, settings_window};
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -132,6 +133,65 @@ fn the_page_webview_has_no_capability() {
             );
         }
     }
+}
+
+#[test]
+fn capabilities_scope_only_the_bar_and_settings() {
+    // Ground Rules 18 and 23, absolutely (phase 22's security review): a capability may name only
+    // the bar webview (`joan-bar`, a webview scope) and the settings window (`settings`, a window
+    // scope) — exactly, no wildcard anywhere — so no label any window or webview may ever get (a
+    // sign-in popup's `joan-popup-<n>`, the page, a future one) can be reached by a pattern.
+    for (place, capability) in all_capabilities() {
+        let webviews = scopes(&capability, "webviews");
+        let windows = scopes(&capability, "windows");
+        assert!(
+            !webviews.is_empty() || !windows.is_empty(),
+            "{place}: a capability must name the bar or the settings window"
+        );
+        for pattern in webviews {
+            assert_eq!(
+                pattern,
+                bar::BAR,
+                "{place}: webviews {pattern:?} — only {} may be named",
+                bar::BAR
+            );
+        }
+        for pattern in windows {
+            assert_eq!(
+                pattern,
+                settings_window::LABEL,
+                "{place}: windows {pattern:?} — only {} may be named",
+                settings_window::LABEL
+            );
+        }
+    }
+    // So no popup is reached, whatever its number (and the matcher agrees).
+    for n in [1, 2, 3, 10, 99, u64::MAX] {
+        let label = popups::label(n);
+        assert!(popups::is_popup_label(&label), "{label}");
+        assert!(!pattern_matches(bar::BAR, &label));
+        assert!(!pattern_matches(settings_window::LABEL, &label));
+    }
+}
+
+#[test]
+fn the_apps_pages_refuse_to_be_framed() {
+    // Phase 22's security review: on Windows the navigation guard never sees frames (wry hooks only
+    // WebView2's NavigationStarting), so a web page — or a sign-in popup — could frame the app's
+    // own pages at http://tauri.localhost. Tauri sends the configured CSP as a header with every
+    // app page (protocol/tauri.rs), where `frame-ancestors` counts.
+    let config: Value = serde_json::from_str(
+        &fs::read_to_string(manifest_dir().join("tauri.conf.json")).expect("read tauri.conf.json"),
+    )
+    .expect("tauri.conf.json is JSON");
+    let csp = config
+        .pointer("/app/security/csp")
+        .and_then(Value::as_str)
+        .expect("the app's CSP");
+    assert!(
+        csp.split(';').any(|d| d.trim() == "frame-ancestors 'none'"),
+        "{csp}"
+    );
 }
 
 #[test]
@@ -399,4 +459,7 @@ fn the_pattern_matcher_matches_like_a_glob() {
     assert!(!pattern_matches("joan", "joan-page"));
     assert!(!pattern_matches("settings", "joan"));
     assert!(pattern_matches("jo*", "joan"));
+    assert!(pattern_matches("joan-*", "joan-popup-1"));
+    assert!(pattern_matches("*popup*", "joan-popup-12"));
+    assert!(!pattern_matches("joan-page", "joan-popup-1"));
 }

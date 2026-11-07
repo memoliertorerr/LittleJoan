@@ -43,7 +43,9 @@
 // the real shortcut and `--settings`: in front with the keyboard, on the same Space;
 // over-fullscreen*.png; smoke-spaces.mts), then the rest runs (LJ19.4, smoke-rest.mts: one launch per
 // "After closing" mode — what stays at rest, a pinging page stopping at the close, memory at rest,
-// keys typed right after the shortcut, the ready bar's web process killed), then check the logs
+// keys typed right after the shortcut, the ready bar's web process killed), the links and handoff
+// runs (LJ45–LJ46), then the popups run (LJ47, smoke-popups.mts: the fake provider on the server's
+// second port opened in a sized popup that posts back and closes; popup.png), then check the logs
 // (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper processes.
 // The app runs on a fresh LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it
 // starts at rest as every launch after the first does — since LJ19.4 that is "Stay ready", the
@@ -107,6 +109,8 @@ import { macKeyToken } from "./smoke-keys.mts";
 import { mayChangeThisMachine, runnerFailures, runnerLine, skippedChange } from "./smoke-runner.mts";
 import { linksFailures, linksRun, linksSummary, type ExecOptions, type ExecResult, type LinksApp, type LinksDriver } from "./smoke-links.mts";
 import { handoffFailures, handoffRun, handoffSummary } from "./smoke-handoff.mts";
+import { popupsFailures, popupsRun, popupsSummary } from "./smoke-popups.mts";
+import { HANG_PATH } from "../../tests/smoke/popup-logic.mjs";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
@@ -473,7 +477,7 @@ for code in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the keys `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40, "=": 24, "0": 29 };
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40, w: 13, "=": 24, "0": 29 };
 /** xdotool's names for the keys `pressShortcut` sends that aren't letters. */
 const XDOTOOL_KEYS: Record<string, string> = { "=": "equal" };
 /** The history view's key: Ctrl+H on Windows and Linux, Cmd+Y on macOS (LJ37). */
@@ -520,6 +524,28 @@ usleep(60000)
     run("xdotool", ["key", `ctrl+${shift ? "shift+" : ""}${XDOTOOL_KEYS[letter] ?? letter}`]);
   }
   console.log(`pressed ${os === "darwin" ? "Cmd" : "Ctrl"}+${shift ? "Shift+" : ""}${letter.toUpperCase()}`);
+}
+
+/**
+ * Ctrl+<letter> (Cmd on macOS) in the window titled `title` — a sign-in popup, titled by where it is
+ * (LJ48): Windows activates it by its title, Linux through xdotool's search, macOS activates the app
+ * (the popup is its key window; best effort, as every synthetic key there).
+ */
+function pressInPopup(letter: string, title: string, appPid: number): void {
+  if (os === "win32") {
+    powershell(`Add-Type -AssemblyName System.Windows.Forms
+$shell = New-Object -ComObject WScript.Shell
+$null = $shell.AppActivate('${title}')
+Start-Sleep -Milliseconds 500
+[System.Windows.Forms.SendKeys]::SendWait('^${letter}')`);
+    console.log(`pressed Ctrl+${letter.toUpperCase()} in ${title}`);
+  } else if (os === "linux") {
+    run("xdotool", ["search", "--name", title, "windowactivate", "--sync"]);
+    run("xdotool", ["key", `ctrl+${letter}`]);
+    console.log(`pressed Ctrl+${letter.toUpperCase()} in ${title}`);
+  } else {
+    pressShortcut(letter, appPid);
+  }
 }
 
 /** Resident memory of `pid` in MB (working set on Windows, RSS elsewhere). */
@@ -820,9 +846,12 @@ function serveSlow(res: ServerResponse): void {
   send();
 }
 
-function serve(): Promise<Server> {
+/** The smoke server; `fresh` starts the agent log anew (the first one; LJ47's second port doesn't). */
+function serve(fresh = true): Promise<Server> {
   const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".mjs": "text/javascript" };
-  rmSync(agentLogPath, { force: true });
+  if (fresh) {
+    rmSync(agentLogPath, { force: true });
+  }
   const server = createServer((req, res) => {
     const name = (req.url ?? "/").split("?")[0]?.replace(/^\//, "") ?? "";
     const header = (key: string) => {
@@ -856,6 +885,13 @@ function serve(): Promise<Server> {
     }
     if (name === SLOW_PATH) {
       serveSlow(res);
+      return;
+    }
+    // The popups run's spoof (phase 22's security review): an address that isn't answered in time,
+    // so nothing of the sign-in origin ever commits in the spoofed popup.
+    if (name === HANG_PATH) {
+      const timer = setTimeout(() => res.writeHead(204, { "cache-control": "no-store" }).end(), 30_000);
+      res.on("close", () => clearTimeout(timer));
       return;
     }
     if (name === PDF_PATH) {
@@ -1039,6 +1075,9 @@ if (startedOnly) {
 
 const server = await serve();
 const port = (server.address() as AddressInfo).port;
+// The same pages on a second port: another origin, like a sign-in provider's (LJ47's popups run).
+const signinServer = await serve(false);
+const signinOrigin = `http://127.0.0.1:${(signinServer.address() as AddressInfo).port}`;
 const child = launch();
 
 await waitFor("started + shortcut", (e) => count(e, "started") > 0 && (count(e, "shortcut-registered") > 0 || count(e, "shortcut-failed") > 0));
@@ -2048,6 +2087,19 @@ const handoffCheck = await handoffRun({
   clickCentre,
 });
 console.log(`handoff: ${JSON.stringify(handoffSummary(handoffCheck, os))}`);
+// The popups run (LJ47, smoke-popups.mts): sign-in popups in a small window of their own.
+const popupsCheck = await popupsRun({
+  os,
+  pageUrl: smokePageUrl,
+  signinOrigin,
+  launch: (name, settings) => fullscreenLaunch(name, settings),
+  clickCentre,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  helperPids,
+  pressInPopup,
+}, HISTORY_KEY);
+console.log(`popups: ${JSON.stringify(popupsSummary(popupsCheck, os, signinOrigin, smokePageUrl))}`);
 const restMd = restTable(restRuns, os);
 writeFileSync(join(out, "rest.md"), restMd);
 console.log(restMd);
@@ -2055,6 +2107,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${restMd}`);
 }
 server.close();
+signinServer.close();
 
 // First launch: an empty data folder means a first run — the window opens once with the welcome
 // and the default settings are saved; the next launch on the same folder hibernates.
@@ -2166,6 +2219,8 @@ const summary = {
   linksRun: linksSummary(linksCheck),
   // LJ46: pages handed on to the main browser.
   handoffRun: handoffSummary(handoffCheck, os),
+  // LJ47: sign-in popups.
+  popupsRun: popupsSummary(popupsCheck, os, signinOrigin, smokePageUrl),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   // LJ19.9: Liquid Glass — what the main run's launch said, and the glass runs (macOS 26+).
   glass: {
@@ -2250,6 +2305,7 @@ const failures = evaluate(
   .concat(downloadFailures(downloadCheck, os))
   .concat(linksFailures(linksCheck))
   .concat(handoffFailures(handoffCheck, os))
+  .concat(popupsFailures(popupsCheck, os, signinOrigin, smokePageUrl))
   .concat(runnerFailures(process.env))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
@@ -2280,6 +2336,7 @@ if (failures.length > 0) {
     "links",
     "handoff",
     "handoff-default",
+    "popups",
   ].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);

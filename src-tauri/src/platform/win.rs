@@ -19,6 +19,7 @@ use tauri::{AppHandle, Manager, Runtime, Webview, Window};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN,
     COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN, ICoreWebView2, ICoreWebView2_2,
+    ICoreWebView2AcceleratorKeyPressedEventArgs,
     ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, ICoreWebView2Controller,
     ICoreWebView2Settings2,
 };
@@ -49,6 +50,8 @@ use crate::state;
 pub mod browsers;
 mod front;
 pub use front::{foreground, front};
+/// Sign-in popups (LJ47).
+pub mod popups;
 /// The bar's processes failing, its rest, the page's downloads (LJ19.4).
 mod rest;
 pub use rest::{bar_at_rest, cancel_downloads};
@@ -79,25 +82,9 @@ fn install<R: Runtime>(webview: &Webview<R>, page: bool) {
             let Some(args) = args else {
                 return Ok(());
             };
-            let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
-            let mut virtual_key = 0u32;
-            // SAFETY: plain COM getters on the event args WebView2 passed to this handler.
-            unsafe {
-                args.KeyEventKind(&mut kind)?;
-                args.VirtualKey(&mut virtual_key)?;
-            }
-            if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
-                && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
-            {
+            let Some((key, mods)) = pressed(&args)? else {
                 return Ok(());
-            }
-            let mods = Mods {
-                ctrl: is_down(VK_CONTROL),
-                shift: is_down(VK_SHIFT),
-                alt: is_down(VK_MENU),
-                meta: is_down(VK_LWIN) || is_down(VK_RWIN),
             };
-            let key = Key::from_windows_vk(virtual_key);
             if let Some(action) =
                 state::with(&app, |s| s.keymap.action_for(key, mods)).map(KeyAction::page_action)
             {
@@ -168,6 +155,31 @@ fn install_fullscreen<R: Runtime>(
     if let Err(err) = unsafe { core.add_ContainsFullScreenElementChanged(&handler, &mut token) } {
         eprintln!("little-joan: could not install the fullscreen handler: {err}");
     }
+}
+
+/// The key a key-down event is for, with the modifiers held (`None` for key-ups).
+pub(super) fn pressed(
+    args: &ICoreWebView2AcceleratorKeyPressedEventArgs,
+) -> windows::core::Result<Option<(Key, Mods)>> {
+    let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
+    let mut virtual_key = 0u32;
+    // SAFETY: plain COM getters on the event args WebView2 passed to the handler.
+    unsafe {
+        args.KeyEventKind(&mut kind)?;
+        args.VirtualKey(&mut virtual_key)?;
+    }
+    if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN
+        && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN
+    {
+        return Ok(None);
+    }
+    let mods = Mods {
+        ctrl: is_down(VK_CONTROL),
+        shift: is_down(VK_SHIFT),
+        alt: is_down(VK_MENU),
+        meta: is_down(VK_LWIN) || is_down(VK_RWIN),
+    };
+    Ok(Some((Key::from_windows_vk(virtual_key), mods)))
 }
 
 fn is_down(key: VIRTUAL_KEY) -> bool {
