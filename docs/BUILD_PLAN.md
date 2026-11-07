@@ -130,8 +130,8 @@
 | LJ45 | *(v0.3)* Links from other apps: register as a browser candidate per OS, receive links safely | strong | auto | ✅ done (CI: see notes; phase 21, `lj/p21-links`; PR #40 merged as 12e5024) |
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done — PR #40 (head c05ea86, run 41821630411 green 18/18) merged as 12e5024 after the independent security review (approve with minor fixes; all nine findings fixed in `lj-step-46-fix4` → `fix6`); main's run 42385385626 green 18/18 |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (phase 22, `lj/p22-popups`; Linux's size fixed in `lj-step-47-fix` → `lj-step-48-fix`; run 42398526340 green 18/18) |
-| LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 ready, NOT merged by its agent: the coordinator merges after a clean review (Ground Rule 24) |
-| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ⬜ todo |
+| LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 (head e7d13c8, run 42401453791 green 18/18) merged as 7f0edd2 by the coordinator after the review (Ground Rule 24); main's run 42404243947 green 18/18 |
+| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | 🔄 in progress (phase 23, `lj/p23-find-pins`) |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
 | LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
 | LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ⬜ todo |
@@ -304,8 +304,11 @@ security-sensitive phase's PR after a clean independent review (Ground Rule 24);
 agent still marks it ready and stops. **Phase 22 (LJ47 → LJ48, 2026-11-07)** is on
 `lj/p22-popups`: sign-in popups in a small IPC-free window of their own — `review`. An independent
 security review found one High (a title spoof), two Medium and six Low; all fixed in
-`lj-step-48-fix` with Linux's popup size (run 42398526340 green on all 18 jobs). PR #41 is ready,
-not merged by its agent.
+`lj-step-48-fix` with Linux's popup size (run 42398526340 green on all 18 jobs). PR #41 (head
+e7d13c8, run 42401453791 green on all 18 jobs) was merged by the coordinator as 7f0edd2 on 2026-11-07;
+main's run 42404243947 green on all 18 jobs. **Phase 23 (LJ49 → LJ50, 2026-11-07)** is on
+`lj/p23-find-pins`: find in page (the engines' own find, a strip in the toolbar) and pinned sites at
+the top of the command bar — `auto`, merged by its agent once every job is green.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -9177,6 +9180,12 @@ STOP. Never merge it: an independent security review comes next, and the owner d
   on Linux the hidden page asked for none (GTK gave it no blur or visibilitychange) — the gate is
   the same code, unit-tested through `onBlurFailures`. The flood: Windows 2 handed on / 13
   throttled, Linux 1 / 14 (the rest `popup-limited rate`), admissions ≥ 1 s apart.
+
+**Merged (2026-11-07):** `lj-step-48-fix2` (e7d13c8: WebKitGTK's window properties as CI logged
+them, in the test and these notes) ran as run 42401453791, green on all 18 jobs; PR #41 merged into
+`main` by the coordinator as 7f0edd2 (a merge commit) after the independent review's findings were
+fixed (Ground Rule 24, the owner's 2026-11-07 update), and main's run 42404243947 green on all 18
+jobs. Phase 23 starts from 7f0edd2.
 
 ### LJ49 — Find in page · strong · auto
 
