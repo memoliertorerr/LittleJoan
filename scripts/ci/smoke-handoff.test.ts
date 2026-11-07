@@ -20,12 +20,14 @@ function run(over: Partial<HandoffRun> = {}): HandoffRun {
     flood: {
       afterClicks: timed([
         [1000, "new-window"],
+        [1000, "handoff-admitted"],
         [1001, `handoff browser=${FAKE_DESKTOP_ID}`],
         [1002, "new-window"],
         [1003, "handoff-throttled"],
         [1004, "new-window"],
         [1005, "handoff-throttled"],
         [2100, "new-window"],
+        [2100, "handoff-admitted"],
         [2101, `handoff browser=${FAKE_DESKTOP_ID}`],
       ]),
       received: [FLOOD_URL(1), FLOOD_URL(4)],
@@ -47,19 +49,29 @@ describe("the handoff run", () => {
 
   it("lets a flood hand on at most one page a second, and logs every one it drops", () => {
     expect(floodFailures(run().flood)).toEqual([]);
-    const tooMany = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"], [5, "new-window"], [6, "handoff browser=x"]]), received: [] };
-    expect(floodFailures(tooMany)[0]).toContain("at most 1");
-    const unaccounted = { afterClicks: timed([[0, "new-window"], [1, "new-window"], [2, "handoff browser=x"]]), received: [] };
+    const tooMany = { afterClicks: timed([[0, "new-window"], [0, "handoff-admitted"], [1, "handoff browser=x"], [5, "new-window"], [5, "handoff-admitted"], [6, "handoff browser=x"]]), received: [] };
+    expect(floodFailures(tooMany)[0]).toContain("5 ms apart");
+    const unaccounted = { afterClicks: timed([[0, "new-window"], [1, "new-window"], [1, "handoff-admitted"], [2, "handoff browser=x"]]), received: [] };
     expect(floodFailures(unaccounted)[0]).toContain("every one must be one or the other");
-    const received = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"]]), received: [FLOOD_URL(1), FLOOD_URL(2)] };
+    const received = { afterClicks: timed([[0, "new-window"], [0, "handoff-admitted"], [1, "handoff browser=x"]]), received: [FLOOD_URL(1), FLOOD_URL(2)] };
     expect(floodFailures(received)[0]).toContain("more than the 1 handed on");
     expect(floodFailures({ afterClicks: [], received: [] })[0]).toContain("no new window");
     // Linux (LJ47): a request decided at ready-to-show is handed on after the last request — still
-    // one a second: a second handoff 1.1 s after the first passes, one 0.1 s after fails.
-    const deferred = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"], [5, "new-window"], [1101, "handoff browser=x"]]), received: [] };
+    // one a second at the gate: admissions 1.1 s apart pass, 0.1 s apart fail.
+    const deferred = { afterClicks: timed([[0, "new-window"], [1, "handoff-admitted"], [2, "handoff browser=x"], [5, "new-window"], [1101, "handoff-admitted"], [1102, "handoff browser=x"]]), received: [] };
     expect(floodFailures(deferred)).toEqual([]);
-    const leaked = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"], [5, "new-window"], [101, "handoff browser=x"]]), received: [] };
-    expect(floodFailures(leaked)[0]).toContain("at most 1");
+    const leaked = { afterClicks: timed([[0, "new-window"], [1, "handoff-admitted"], [2, "handoff browser=x"], [5, "new-window"], [101, "handoff-admitted"], [102, "handoff browser=x"]]), received: [] };
+    expect(floodFailures(leaked)[0]).toContain("100 ms apart");
+    // The review's case: two admissions close together, their `handoff` lines bunched up later by
+    // the browser list — the old span rule (to the last handoff) let it pass.
+    const bunched = {
+      afterClicks: timed([[0, "new-window"], [0, "handoff-admitted"], [10, "new-window"], [400, "handoff-admitted"], [2500, "handoff browser=x"], [2501, "handoff browser=x"]]),
+      received: [],
+    };
+    expect(floodFailures(bunched)[0]).toContain("400 ms apart");
+    // A handoff the gate never admitted.
+    const unadmitted = { afterClicks: timed([[0, "new-window"], [1, "handoff browser=x"]]), received: [] };
+    expect(floodFailures(unadmitted)[0]).toContain("admitted 0");
     expect(floodFailures(null)[0]).toContain("never ran");
     expect(handoffFailures(run({ flood: null }), "linux").join("\n")).toContain("never ran");
   });

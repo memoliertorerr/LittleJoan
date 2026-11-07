@@ -268,6 +268,8 @@ pub(super) fn close<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         return Ok(());
     };
     let mode = mode(app);
+    // From here the page opens no new window (a sign-in popup on its blur as it hides, LJ47).
+    bar::popup::stop_accepting();
     // CI's "nothing of the page survives" check times the page's last ping from here (LJ19.4).
     smoke::log("closing", mode.name());
     remember_size(app, &window);
@@ -311,6 +313,7 @@ fn release_window<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, why: &str)
     *DESTROYING.lock().unwrap_or_else(PoisonError::into_inner) = Some(why.to_owned());
     REST.fetch_add(1, Ordering::SeqCst);
     bar::page_summon();
+    bar::popup::stop_accepting();
     let _ = window.hide();
     bar::page::close_page(app);
     unload_window(app);

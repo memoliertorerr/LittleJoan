@@ -8986,6 +8986,25 @@ on every OS.
   location and menu bars hidden, which any features string does and a link or a bare
   `window.open(url)` doesn't (`popups::gtk_asked`, tested; what GNOME Web uses to tell a popup
   from a tab).
+- **That fix was wrong — CI run 42393350263 (head bccc094): all seven Linux smoke jobs failed the
+  popups run** (every request `popup-pending` → `popup-settled unsized`: the sized sign-in went to
+  the browser, the blank one nowhere); Windows and macOS green. Read in WebKitGTK 2.44–2.52's
+  source (`webkitWindowPropertiesUpdateFromWebWindowFeatures`, WebCore's `Page::applyWindowFeatures`,
+  the GTK `UIClient`): the features only *set* what they name — `width=480,height=600` names no bar,
+  so the location and menu bars stay at their default (shown) —, and `setToolbarsVisible(toolbar ||
+  location)` tests whether those features were *named* (`std::optional`), so the toolbar is hidden
+  for every request. At `ready-to-show` a sized request and a link have the same bars (toolbar
+  hidden, location and menu shown) and both a geometry: the size asked for, or the popup window's
+  own default size (tao's `set_default_size`, 480 × 640 here) when WebCore sets the frame. What does
+  differ is the geometry right after `create`: WebKitGTK writes the features' `width` / `height`
+  into the new view's window properties as `create` returns, and nothing touches it again until
+  the page process — waiting on that very reply — sets the frame. → `lj-step-48-fix`: a pending
+  popup reads its geometry in a high-priority idle scheduled inside `create` (it runs before any
+  later message of the page process can be dispatched), and `ready-to-show` decides from that
+  (`popups::gtk_asked(features)`, tested with those property values); the smoke log says what
+  WebKitGTK reported at `ready-to-show` (`popup-gtk features=… toolbar=… location=… menubar=…
+  geometry=…`). A pending popup with no `ready-to-show` after 5 s (`GTK_SETTLE_WAIT`) settles as
+  unsized (the review). The handoff run's link and flood keep bccc094's aim (no popup for a link).
 
 ### LJ48 — Popups: closing with their page, keys, docs and the review · strong · review
 
@@ -9056,6 +9075,90 @@ STOP. Never merge it: an independent security review comes next, and the owner d
   history key (no `history-view`) and Ctrl+W (`popup-closed user`, no `closing`), the popup
   activated by its title — `AppActivate` on Windows, `xdotool search` on Linux; macOS best effort.
 - `npm run verify`: 791 TS tests, 480 Rust tests, clippy clean.
+
+**The independent security review of PR #41 (2026-11-07) → `lj-step-48-fix` (disk 12 GB free,
+`.cache/target` 1.4 GB).** One High, two Medium, six Low, and notes; each fixed with its test:
+1. **High — the title spoof.** The popup was built titled by its *target* and retitled on every load
+   event; wry's macOS delegate has no `didFail…`, so `w = open("https://accounts.google.com/", "x",
+   "width=480,height=640"); w.stop(); w.document.write(fakeLogin)` left a window titled
+   `accounts.google.com` showing the opener's form. **Fix:** built titled by its **opener**
+   (`popups::opener_title` — before a commit only the opener's script can run there), retitled only
+   when a page **commits** (`Started`: `didCommitNavigation`, `LOAD_COMMITTED`, WebView2's
+   `ContentLoading` — never on a request or a finish), a blank / `srcdoc` document showing the
+   opener's place (`popups::title_at`); no path uses the target for a title any more (WebKitGTK's
+   held navigation included). `popup-opened <target>` stays the target; `popup-title <title>` is
+   logged on every change. Tests: `a_popup_is_built_titled_by_its_opener_never_by_its_target`;
+   smoke `?popup=spoof` (a sized popup at the second origin's never-answered `/hang`, `stop()`,
+   `document.write` of a fake form): its first `popup-title` is the opener's, none is the second
+   origin, nothing of it loads (`spoofFailures`, tested).
+2. **Medium — a popup outlived the window.** `close_page` closed popups first, then kept the page
+   up to 2 s (cookies, downloads, unload) with no gate on new windows: a page opening a sized popup
+   on `blur` / `visibilitychange` got one after the dismiss (on Windows with Stay ready: visible,
+   owned by a hidden owner). **Fix:** the page takes new windows only while `accepting`
+   (bar/popup.rs's state, under the popups' lock): cleared before the window hides
+   (`joan/rest.rs`: `stop_accepting`) and again by `page_closing` (`close_page`, now after a build
+   under way, so a build can't set it back), set when a page is built (`page_built`); while clear
+   every new window is `new-window-dropped closing` (no popup, no handoff). `build` checks it under
+   the lock as it registers the popup, and a popup whose close came while it was built is
+   destroyed once built; `close_page` sweeps again after `page.close()`. Smoke `?popup=onblur`: the
+   page focused, then `--hide` — no `popup-opened` / `popup-pending`, nothing handed on
+   (`onBlurFailures`, tested).
+3. **Medium — long hosts cut off.** Windows and GTK cut a long title at its end — where the host
+   says whose it is. **Fix:** a host over 30 characters keeps its end, whole labels, at least the
+   last two (`…evil.example`; `popups::short_host`). **No public-suffix crate:** the registrable
+   domain is always the end of the host, so keeping the end keeps it, with no new dependency (a
+   stop condition) or list to update; whole labels because a cut inside one can show a label that
+   isn't there. Test: `a_long_host_keeps_its_end`
+   (`accounts.google.com.verify-session-0123.evil.example` → `…evil.example`).
+4. **Low (macOS) — a popup could be served extension files.** Its `ljext` requests arrive under the
+   page's label; opener-left closed popups asynchronously while the panel loaded. **Fix:**
+   `close_all(app, "opener-left")` synchronously before `go_to_panel` (both of
+   `extensions/session.rs`'s threads), and `extensions/protocol.rs` refuses every `ljext` request
+   (`ljext-refused webview`) while any popup is open, being built, or closing with its window still
+   there (`bar::popup::any`). Covered by the extension runs (a panel still opens after a page).
+5. **Low — the flood rule could hide a burst.** It measured to the last `handoff` line, written
+   after the browser list is read. **Fix:** the gate logs its admission (`handoff-admitted`,
+   browsers.rs); the rule wants consecutive admissions ≥ 950 ms apart and no handoff the gate didn't
+   admit; "handed + throttled = windows" stays (`smoke-handoff.test.ts`: the bunched case fails).
+6. **Low — element fullscreen in a popup hides its title.** **Linux:** always off on popup views
+   (their WebKitSettings are their own). **macOS: left as it is** — WebKit's configuration copy
+   shares its `WKPreferences` (`API::PageConfiguration::copy` copies the page's data, preferences by
+   reference), so switching it off for the popup switches it off for the page's videos; recorded
+   in Deferred follow-ups. Windows: an element fills only the popup's own window (its title stays).
+7. **Low, pre-existing — the page's camera and microphone on macOS.** No `on_permission_request`
+   on the page, so wry's delegate granted (only the missing usage strings and TCC stopped it).
+   **Fix:** the page answers every request wry routes (`page_permission`): macOS refuses all (media
+   capture is the only kind routed there); Linux refuses what WebKitGTK refuses itself and keeps
+   its default for pointer lock (WebKitGTK allows it; games) — no change there; **Windows keeps
+   WebView2's own prompt** — refusing would take the user's choice of a site's camera, microphone,
+   notifications or clipboard reading away, a site feature only the owner can drop (Deferred
+   follow-ups). Nothing the page relies on breaks: on macOS wry routes only media capture
+   (clipboard writes and element fullscreen are no permission requests there), and on Linux
+   notifications, location and media were already refused by WebKitGTK's own default. Test:
+   `the_pages_builder_answers_permission_requests` (source + per-OS policy).
+8. **Low — the capability test tried sample labels.** **Fix:** absolute —
+   `capabilities_scope_only_the_bar_and_settings`: every capability names only `joan-bar`
+   (webviews) and `settings` (windows), exactly, no wildcard, at least one.
+9. **Low (macOS) — every popup adds Tauri's scripts to the page's shared WKUserContentController.**
+   **Fix:** at most 30 in-app popups in a page's life (`popups::LIFETIME_MAX`; `popup-limited
+   lifetime`, then where it would have gone before), counted afresh when a page is built (every
+   summon builds one). Landmines has it, with the shared `ipc` message handler a dropped popup
+   removes (harmless: the page has no IPC). Test: `at_most_thirty_popups_in_a_pages_life`.
+10. **Notes, done:** a closing popup gives the keyboard back only if it had it when it started
+    closing (Windows: the foreground window — tao's focus goes false while a webview has the
+    keyboard; `bar::popup::focused` uses the same, so the shortcut and macOS's menu see a popup in
+    front on every OS); a WebKitGTK popup with no `ready-to-show` after 5 s settles as unsized; a
+    popup whose window frame can't be read is centred on the screen, never where the page asked; a
+    closing popup loads nothing but its `about:blank`. **Docs:** SECURITY.md and architecture.md
+    now say plainly that on Windows the navigation guard never sees frames (wry hooks only
+    WebView2's `NavigationStarting`), in the page or in a popup. **CSP:** Tauri sends the configured
+    CSP as a header with every app page (`protocol/tauri.rs`), so `frame-ancestors 'none'` joined
+    it (`the_apps_pages_refuse_to_be_framed`) — a web page on Windows can't frame
+    `http://tauri.localhost`; not watched in CI (macOS and Linux refuse such frames in the guard
+    first; a Windows probe is a Deferred follow-up).
+- The split: bar/popup.rs (opening, titles, navigation), bar/popup/window.rs (place, owner,
+  WebKitGTK's settle, keys, the keyboard), bar/popup/closing.rs (the gate and every close),
+  popups/title.rs. `npm run verify`: 795 TS tests, 486 Rust tests, clippy clean.
 
 ### LJ49 — Find in page · strong · auto
 
@@ -10029,15 +10132,28 @@ smoke run; nothing changed in the direct-download build.
 - **The glass's corner radius is a constant** (LJ19.9): 16 pt matched CI's macOS 26 window corners
   (no un-blurred rim in the zoomed screenshots); macOS 26 has no public API for a window's radius, so
   a future macOS changing it would need the constant changed.
-- **The page webview has no permission handler** (surfaced by LJ47, read in vendored wry 0.57):
-  without one, wry's macOS UI delegate *grants* a page's camera / microphone request
-  (`WKPermissionDecision::Grant`; macOS's own per-app prompt still comes), WebView2 and WebKitGTK
-  use their defaults. Popups deny every permission (LJ47). The owner may want the page to ask, or to
-  deny as popups do — a small `on_permission_request` on the page's builder.
-- **A sign-in popup in WebKit's own fullscreen on macOS** (surfaced by LJ47): element fullscreen
-  stays on in popups (macOS shares the page's WKPreferences, so it can't be switched off for the
-  popup alone); a summon then is LJ19.5's case for a window that isn't the page. Sign-in pages don't
-  go fullscreen; if one does, the shortcut focuses the Little Joan window.
+- **The page's permissions on Windows — the owner's decision** (phase 22's review, item 7): since
+  `lj-step-48-fix` the page answers every permission request (`bar/page.rs`'s `page_permission`):
+  macOS refuses all (wry's delegate used to grant camera and microphone), Linux refuses what
+  WebKitGTK refuses itself and keeps pointer lock. **Windows keeps WebView2's own prompt** for
+  camera, microphone, location, notifications, clipboard reading and the rest — the user can allow
+  a video call there today. Refusing them all, as popups do, is one line (`permission_on`); it
+  would end video calls and clipboard paste buttons in Little Joan on Windows.
+- **A sign-in popup in WebKit's own fullscreen on macOS** (surfaced by LJ47; the review's item 6):
+  element fullscreen stays on in popups — WebKit's configuration copy shares the page's
+  `WKPreferences` (`API::PageConfiguration::copy` copies its data, the preferences by reference), so
+  switching it off for the popup would switch it off for the page's videos. Fullscreen covers the
+  popup's title (its host) until Esc; sign-in pages don't go fullscreen. A summon then is LJ19.5's
+  case for a window that isn't the page; the shortcut focuses the Little Joan window. (Linux: off in
+  popups; Windows: an element fills only the popup's own window.)
+- **Frames on Windows aren't guarded** (the review's notes; LJ29's Landmine): wry hooks only
+  WebView2's `NavigationStarting`, so `on_navigation` never sees a frame's navigation — in the page
+  or in a popup. App pages now refuse to be framed (`frame-ancestors 'none'` in the CSP header Tauri
+  sends), extension files are refused by the `ljext` handler's checks; anything else a frame loads
+  is the web's. Closing it fully needs a `FrameNavigationStarting` hook (in wry, or a handler of our
+  own on each controller). **A Windows smoke probe** (a web page framing
+  `http://tauri.localhost/index.html` must report it blocked) would watch the CSP header there; not
+  built yet.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -10432,13 +10548,18 @@ Populated from real friction, not speculation:
   became `--link --show` — a refused link — and both AppImage smoke jobs ran into their 75-minute
   limit. The AppImage keeps a plain `Exec=little-joan` (`bundle.linux.appimage.files` overrides the
   deb's generated entry); any argument added to the deb's Exec must stay out of the AppImage's.
-- *(LJ47, read in vendored wry 0.57 / tauri 2.12.4)* **A new window's size isn't known on
-  WebKitGTK when it is asked for.** wry's `create` handler passes `size: None` always; the engine
-  sets the new view's window properties after the handler returns. Decide such a window at its
-  `ready-to-show` (`popups::settle`) — and hold its navigations until then. **Its geometry is never
-  empty** (WebCore sets the new window's rect from the opener's when the page asked for none, CI run
-  42390685720): whether a popup window was asked for is in the bars — a features string hides the
-  toolbar, location and menu bars (`popups::gtk_asked`).
+- *(LJ47, read in vendored wry 0.57 / tauri 2.12.4 and WebKitGTK 2.44–2.52)* **A new window's
+  size isn't known on WebKitGTK when it is asked for.** wry's `create` handler passes `size: None`
+  always; the engine writes the features' `width` / `height` into the new view's window properties
+  as `create` returns. Decide such a window at its `ready-to-show` (`popups::settle`) — and hold its
+  navigations until then — **from the geometry read right after `create`** (a high-priority idle
+  scheduled inside it: `platform/linux/popups.rs`). At `ready-to-show` nothing tells them apart any
+  more: **every request has a geometry** (WebCore sets the frame — from the popup window's own
+  default size when the page asked for none; CI run 42390685720: a link opened inside), and **the
+  bars don't say** (the features set only the bars they name; `setToolbarsVisible` tests whether
+  they were named, so the toolbar is hidden for every request and the location and menu bars stay
+  shown — CI run 42393350263: every sized request settled as unsized). Upstream's `is-popup`
+  property (after 2.52) would answer it directly.
 - *(LJ47, read in vendored wry 0.57)* **wry's `window.close()` handling closes only the webview.**
   WebView2's `WindowCloseRequested` destroys the webview's container HWND, WebKitGTK's `close`
   destroys the view, and WKWebView's delegate has no `-webViewDidClose:` at all — a webview window
@@ -10446,10 +10567,15 @@ Populated from real friction, not speculation:
   on macOS add the method before the web view's delegate is set: WebKit reads which methods a
   delegate has at `setUIDelegate:`.
 - *(LJ47)* **On macOS a popup built from the opener's configuration shares its
-  WKUserContentController and URL scheme handlers.** wry skips handlers already registered, so the
-  popup's `tauri:` / `ipc:` / `ljext:` requests reach the page's handlers under the page's label,
-  and Tauri's own scripts are added to the shared controller once more per popup. Anything that
-  checks a webview's label for these must treat a popup like the page.
+  WKUserContentController, URL scheme handlers and WKPreferences.** wry skips handlers already
+  registered, so the popup's `tauri:` / `ipc:` / `ljext:` requests reach the page's handlers under
+  the page's label — anything that checks a webview's label for these must treat a popup like the
+  page (the `ljext` handler refuses everything while a popup exists, phase 22's review). Tauri's own
+  scripts are added to the shared controller once more per popup and never removed — hence at most
+  30 in-app popups in a page's life (`popups::LIFETIME_MAX`; a page is built for every summon) —,
+  and **dropping a popup removes the shared `ipc` script message handler** (wry's `Drop`) from the
+  page's controller too: harmless, since the page has no IPC (Ground Rule 18) — never give the page
+  any. A preference set on the popup (element fullscreen) is set on the page.
 - *(LJ46, run 41724602261)* **GitHub's arm64 Ubuntu images have no xdg-utils.** No `xdg-mime`,
   no `xdg-open`: Little Joan then reads the default for https from the mimeapps.list files itself
   (the XDG MIME Applications spec's order), and the opener still works through GIO.

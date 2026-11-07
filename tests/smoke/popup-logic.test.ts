@@ -2,17 +2,24 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  HANG_PATH,
+  ONBLUR_ARMED_TITLE,
   POPUP_FEATURES,
+  POPUP_MODES,
   POPUP_NAME,
   POPUP_READY_TITLE,
   SIGNED_IN,
   SIGNIN_DELAY_MS,
+  SPOOF_HOLD_MS,
+  SPOOF_HTML,
+  hangUrl,
   isSignedIn,
   openedTitle,
   popupRequest,
   popupTitle,
   signinStays,
   signinUrl,
+  spoofTitle,
 } from "./popup-logic.mjs";
 
 const AT = "http://127.0.0.1:8124";
@@ -21,6 +28,23 @@ describe("the popup opener (LJ47)", () => {
   it("reads its mode, the sign-in origin and whether the sign-in page stays", () => {
     expect(popupRequest(`?popup=oauth&at=${encodeURIComponent(AT)}`)).toEqual({ mode: "oauth", at: AT, stay: false });
     expect(popupRequest(`?popup=blank&at=${AT}&stay=1`)).toEqual({ mode: "blank", at: AT, stay: true });
+  });
+
+  it("knows the review's spoof and blur modes", () => {
+    expect(POPUP_MODES).toEqual(["oauth", "blank", "spoof", "onblur"]);
+    expect(popupRequest(`?popup=spoof&at=${AT}`)).toEqual({ mode: "spoof", at: AT, stay: false });
+    expect(popupRequest(`?popup=onblur&at=${AT}&stay=1`)).toEqual({ mode: "onblur", at: AT, stay: true });
+  });
+
+  it("spoofs with the sign-in origin's never-answered address and an inert form", () => {
+    expect(hangUrl(AT)).toBe(`${AT}/${HANG_PATH}`);
+    expect(HANG_PATH).toMatch(/^[\w.-]+$/);
+    expect(SPOOF_HTML).toContain("type=password");
+    expect(SPOOF_HTML).not.toMatch(/action=|fetch\(|XMLHttpRequest/);
+    expect(spoofTitle(true, true)).toBe("LJ-POPUP spoofed opened=1 written=1");
+    expect(spoofTitle(true, false)).toBe("LJ-POPUP spoofed opened=1 written=0");
+    expect(SPOOF_HOLD_MS).toBeGreaterThanOrEqual(1000);
+    expect(ONBLUR_ARMED_TITLE).toBe("LJ-POPUP armed");
   });
 
   it("refuses any other mode or sign-in origin", () => {
@@ -80,5 +104,10 @@ describe("the fake sign-in page (LJ47)", () => {
     expect(html).toContain('from "./popup-logic.mjs"');
     expect(html).toContain("popupRequest(location.search)");
     expect(html).toContain("window.open(\"about:blank\", POPUP_NAME, POPUP_FEATURES)");
+    // The review's spoof and blur popup.
+    expect(html).toContain("window.open(hangUrl(at), POPUP_NAME, POPUP_FEATURES)");
+    expect(html).toContain("opened.stop()");
+    expect(html).toContain("opened.document.write(SPOOF_HTML)");
+    expect(html).toContain('window.addEventListener("blur", open)');
   });
 });

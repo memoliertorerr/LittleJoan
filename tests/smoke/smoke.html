@@ -192,14 +192,19 @@
       } from "./smoke-logic.mjs";
       import { probeApi, probeFile, probeRequest, probeTitle, raceRequest, RACE } from "./ext-probe.mjs";
       import {
+        ONBLUR_ARMED_TITLE,
         POPUP_FEATURES,
         POPUP_NAME,
         POPUP_READY_TITLE,
+        SPOOF_HOLD_MS,
+        SPOOF_HTML,
+        hangUrl,
         isSignedIn,
         openedTitle,
         popupRequest,
         popupTitle,
         signinUrl,
+        spoofTitle,
       } from "./popup-logic.mjs";
       import {
         BEGIN_WAIT_MS,
@@ -232,7 +237,8 @@
       const probe = probeRequest(location.search);
       // ?ext=race&base=<origin>: iframes and window.open at the panel while the app opens it.
       const race = raceRequest(location.search);
-      // ?popup=oauth|blank&at=<sign-in origin>: a sign-in popup (LJ47).
+      // ?popup=oauth|blank|spoof|onblur&at=<sign-in origin>: a sign-in popup (LJ47; spoof and
+      // onblur: phase 22's security review).
       const popup = popupRequest(location.search);
       // ?ping=<id>: a ping to the smoke server every 250 ms while the page runs (LJ19.4: after a
       // close they must stop — nothing of the page survives it). With ?fs=both too (LJ19.5) the
@@ -268,6 +274,8 @@
         stage.hidden = true;
         document.body.append(link);
         show(BLANK_READY_TITLE);
+      } else if (popup?.mode === "onblur") {
+        runOnBlur(popup);
       } else if (popup) {
         runPopup(popup);
       } else if (ping && !fsRequest(location.search)) {
@@ -308,6 +316,10 @@
         button.textContent = mode === "blank" ? "Sign in (blank popup)" : "Sign in";
         button.style.cssText = "position:fixed;inset:0;border:0;background:#f7c948;color:#1f2a44;font-size:28px;font-weight:600;cursor:pointer";
         button.addEventListener("click", () => {
+          if (mode === "spoof") {
+            spoof();
+            return;
+          }
           const opened =
             mode === "blank"
               ? window.open("about:blank", POPUP_NAME, POPUP_FEATURES)
@@ -324,9 +336,56 @@
             }
           }, 200);
         });
+        // The review's spoof: a sized popup asked for the other origin, stopped before anything
+        // of it loads, a fake form written into its blank page — its title must stay this page's
+        // place. The popup is closed after a moment.
+        function spoof() {
+          const opened = window.open(hangUrl(at), POPUP_NAME, POPUP_FEATURES);
+          let written = false;
+          if (opened) {
+            try {
+              opened.stop();
+              opened.document.write(SPOOF_HTML);
+              opened.document.close();
+              written = true;
+            } catch {
+              written = false;
+            }
+          }
+          show(spoofTitle(Boolean(opened), written));
+          setTimeout(() => opened?.close(), SPOOF_HOLD_MS);
+          const timer = setInterval(() => {
+            if (!opened || opened.closed) {
+              clearInterval(timer);
+              closed = true;
+              report();
+            }
+          }, 200);
+        }
         stage.hidden = true;
         document.body.append(button);
         show(POPUP_READY_TITLE);
+      }
+
+      // ?popup=onblur (phase 22's review): a sized popup as soon as the page loses focus or is
+      // hidden — the window closing. Nothing may open: the page takes no new window once its
+      // window starts closing.
+      function runOnBlur({ at }) {
+        let tried = 0;
+        const open = () => {
+          tried += 1;
+          const opened = window.open(signinUrl(at, true), POPUP_NAME, POPUP_FEATURES);
+          show(`${ONBLUR_ARMED_TITLE} tried=${tried} opened=${opened ? 1 : 0}`);
+        };
+        stage.hidden = true;
+        window.addEventListener("blur", open);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "hidden") {
+            open();
+          }
+        });
+        window.addEventListener("pagehide", open);
+        show(ONBLUR_ARMED_TITLE);
       }
 
       function runRace(base) {

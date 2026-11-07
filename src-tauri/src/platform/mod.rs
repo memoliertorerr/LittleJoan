@@ -61,8 +61,8 @@ pub fn install_page<R: Runtime>(page: &Webview<R>) {
 }
 
 /// A sign-in popup was built (LJ47): its `window.close()` closes it — wry only destroys the
-/// webview —, and on WebKitGTK its size is decided at `ready-to-show` (`pending`), its fullscreen is
-/// off where it aborts, and its downloads are refused.
+/// webview —, and on WebKitGTK its size is decided at `ready-to-show` (`pending`), its element
+/// fullscreen is off, and its downloads are refused.
 #[cfg(windows)]
 pub fn install_popup<R: Runtime>(app: &AppHandle<R>, popup: &WebviewWindow<R>, _pending: bool) {
     win::popups::install(app, popup);

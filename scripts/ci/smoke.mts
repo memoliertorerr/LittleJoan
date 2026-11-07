@@ -110,6 +110,7 @@ import { mayChangeThisMachine, runnerFailures, runnerLine, skippedChange } from 
 import { linksFailures, linksRun, linksSummary, type ExecOptions, type ExecResult, type LinksApp, type LinksDriver } from "./smoke-links.mts";
 import { handoffFailures, handoffRun, handoffSummary } from "./smoke-handoff.mts";
 import { popupsFailures, popupsRun, popupsSummary } from "./smoke-popups.mts";
+import { HANG_PATH } from "../../tests/smoke/popup-logic.mjs";
 import {
   BROKEN_EXTENSION,
   DEV_EXTENSION,
@@ -884,6 +885,13 @@ function serve(fresh = true): Promise<Server> {
     }
     if (name === SLOW_PATH) {
       serveSlow(res);
+      return;
+    }
+    // The popups run's spoof (phase 22's security review): an address that isn't answered in time,
+    // so nothing of the sign-in origin ever commits in the spoofed popup.
+    if (name === HANG_PATH) {
+      const timer = setTimeout(() => res.writeHead(204, { "cache-control": "no-store" }).end(), 30_000);
+      res.on("close", () => clearTimeout(timer));
       return;
     }
     if (name === PDF_PATH) {
@@ -2091,7 +2099,7 @@ const popupsCheck = await popupsRun({
   helperPids,
   pressInPopup,
 }, HISTORY_KEY);
-console.log(`popups: ${JSON.stringify(popupsSummary(popupsCheck, os, signinOrigin))}`);
+console.log(`popups: ${JSON.stringify(popupsSummary(popupsCheck, os, signinOrigin, smokePageUrl))}`);
 const restMd = restTable(restRuns, os);
 writeFileSync(join(out, "rest.md"), restMd);
 console.log(restMd);
@@ -2212,7 +2220,7 @@ const summary = {
   // LJ46: pages handed on to the main browser.
   handoffRun: handoffSummary(handoffCheck, os),
   // LJ47: sign-in popups.
-  popupsRun: popupsSummary(popupsCheck, os, signinOrigin),
+  popupsRun: popupsSummary(popupsCheck, os, signinOrigin, smokePageUrl),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   // LJ19.9: Liquid Glass — what the main run's launch said, and the glass runs (macOS 26+).
   glass: {
@@ -2297,7 +2305,7 @@ const failures = evaluate(
   .concat(downloadFailures(downloadCheck, os))
   .concat(linksFailures(linksCheck))
   .concat(handoffFailures(handoffCheck, os))
-  .concat(popupsFailures(popupsCheck, os, signinOrigin))
+  .concat(popupsFailures(popupsCheck, os, signinOrigin, smokePageUrl))
   .concat(runnerFailures(process.env))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));

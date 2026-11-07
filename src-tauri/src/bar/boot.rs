@@ -254,6 +254,51 @@ mod tests {
     }
 
     #[test]
+    fn the_pages_builder_answers_permission_requests() {
+        // Phase 22's security review: with no handler, wry's macOS delegate grants a page camera
+        // and microphone. The page's builder answers every request it routes (page_permission).
+        let page = include_str!("page.rs");
+        let code = page.split("#[cfg(test)]").next().unwrap_or(page);
+        let builder = code
+            .find("WebviewBuilder::new(PAGE")
+            .expect("the page's builder");
+        let handler = code
+            .find(".on_permission_request(|_, kind| page_permission(kind))")
+            .expect("the page's builder answers permission requests");
+        assert!(
+            builder < handler,
+            "the handler belongs to the page's builder"
+        );
+        let end = code[builder..]
+            .find("\n}\n")
+            .map_or(code.len(), |at| builder + at);
+        assert!(handler < end, "inside page_builder");
+        // macOS refuses everything wry routes (camera, microphone, screen); Linux what WebKitGTK
+        // refuses itself, keeping its pointer lock; Windows keeps WebView2's own prompt.
+        use crate::bar::page::permission_on;
+        use tauri::webview::{PermissionKind as Kind, PermissionResponse as Answer};
+        for kind in [
+            Kind::Camera,
+            Kind::Microphone,
+            Kind::DisplayCapture,
+            Kind::Other,
+        ] {
+            assert_eq!(permission_on("macos", kind), Answer::Deny, "{kind}");
+        }
+        for kind in [
+            Kind::Camera,
+            Kind::Microphone,
+            Kind::Geolocation,
+            Kind::Notifications,
+            Kind::Other,
+        ] {
+            assert_eq!(permission_on("linux", kind), Answer::Deny, "{kind}");
+        }
+        assert_eq!(permission_on("linux", Kind::PointerLock), Answer::Default);
+        assert_eq!(permission_on("windows", Kind::Camera), Answer::Default);
+    }
+
+    #[test]
     fn ready_wakes_a_waiter_and_times_out_without() {
         let ready = Ready::new();
         let started = Instant::now();

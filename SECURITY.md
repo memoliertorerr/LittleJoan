@@ -38,15 +38,28 @@ arguments a page chose.
 Sign-in popups (since v0.3) are web pages with exactly the page's trust and less: a page's
 sign-in window — one that asks for a size, or a known sign-in flow — opens in a small window of
 Little Joan's own that shares the page's store, so the provider can post back and close it. It
-gets no IPC at all (no capability may match a popup's `joan-popup-<n>` label), loads only http,
-https and `about:blank` (never an extension's or the app's own pages, `file:`, `data:` or
-`javascript:`), opens no further popups (its new windows go to the main browser), can't download,
-gets no permission, and closes with its page (another origin), with Little Joan's window, or on
-Ctrl/Cmd+W. **Its title is always where it is** (the host, punycode for international names),
-never the page's own title, so a page can't dress a popup up as another site. At most two are open
-at once, and three opened in any ten seconds. Report anything that gives a popup more than that —
-IPC, an extension or app URL, a download, a permission, a title that isn't its host, or a popup
-that outlives its window.
+gets no IPC at all (capabilities name only Little Joan's own bar and Settings window, never a
+popup's `joan-popup-<n>` label), its own pages are only http, https and `about:blank` (never an
+extension's or the app's own pages, `file:`, `data:` or `javascript:`), it opens no further popups
+(its new windows go to the main browser), can't download, gets no permission, and closes with its
+page (another origin), with Little Joan's window, or on Ctrl/Cmd+W. **Its title is always where it
+is — and only what has loaded there:** the page that opened it until a page loads in it, then that
+page's host (punycode for international names; a very long host keeps its end, the part that says
+whose it is) — never the address it was merely asked to open, never the page's own title. So a
+page can't dress a popup up as another site, and you should check the title before you type a
+password. At most two are open at once, three opened in any ten seconds and thirty in one opening
+of Little Joan's window; while the window is closing, a page opens nothing at all.
+
+**Frames on Windows:** WebView2 asks Little Joan only about a window's top-level navigations, so on
+Windows a frame inside the page or a popup is not checked by Little Joan's navigation rules (on
+macOS and Linux it is). Little Joan's own pages refuse to be framed, and an extension's files are
+refused by its own handler's checks; anything else a frame loads is ordinary web content.
+
+The page's permissions: on macOS and Linux a page gets no camera, microphone, location or
+notifications (on Linux pointer lock stays, as WebKitGTK allows it); on Windows WebView2 asks you,
+as before. Report anything that gives a popup more than the above — IPC, an extension or app URL,
+a download, a permission, a title that names a place that hasn't loaded, or a popup that outlives
+its window — or a page a permission it shouldn't get.
 
 Extensions (experimental) have their own model — one origin each, a strict Content-Security-Policy,
 no IPC, and a small API that checks every request (see `docs/architecture.md`, "Extensions"). Also

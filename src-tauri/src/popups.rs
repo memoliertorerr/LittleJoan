@@ -13,19 +13,24 @@
 //! a target a popup may load (`may_navigate`) that either asks for a size (`window.open(url, name,
 //! "width=…,height=…")`, as sign-in libraries do) or is a known sign-in flow (`known_sign_in`). A
 //! sized `about:blank` opens inside too (libraries open a blank popup, then set its location); an
-//! unsized one is refused. At most `MAX_OPEN` popups at once and `OPEN_MAX` openings in any
-//! `OPEN_WINDOW`; beyond either a request goes where it would have gone before (the browser, or
-//! nowhere for `about:blank`). WebKitGTK says nothing about the size when it asks (wry passes none):
-//! there a request that isn't a known sign-in flow is `Pending` — its window is built hidden, and
-//! `settle` decides once the engine has set the popup's window properties (`ready-to-show`).
+//! unsized one is refused. At most `MAX_OPEN` popups at once, `OPEN_MAX` openings in any
+//! `OPEN_WINDOW` and `LIFETIME_MAX` in one page's life (the security review: every in-app popup
+//! leaves Tauri's scripts in the page's shared WebKit content controller on macOS, Landmines);
+//! beyond any of them a request goes where it would have gone before (the browser, or nowhere for
+//! `about:blank`). WebKitGTK says nothing about the size when it asks (wry passes none): there a
+//! request that isn't a known sign-in flow is `Pending` — its window is built hidden, and `settle`
+//! decides once the engine has said whether the request asked for a size (`gtk_asked`).
 //!
 //! **LJ48:** a popup belongs to the page that opened it — when the page webview commits a page of
 //! another origin, its popups close (`opener_left`) —, and of Little Joan's keys only Close acts in
-//! a popup, closing it (`route_key`).
+//! a popup, closing it (`route_key`). Its title is where it is (popups/title.rs).
 
 use std::time::Duration;
 
 use url::{Origin, Url};
+
+mod title;
+pub use title::{HOST_MAX, opener_title, short_host, title_at, title_for};
 
 use crate::extensions::urls::is_ext_like;
 use crate::keymap::KeyAction;
@@ -42,6 +47,8 @@ pub const MAX_OPEN: usize = 2;
 /// loop).
 pub const OPEN_MAX: usize = 3;
 pub const OPEN_WINDOW: Duration = Duration::from_secs(10);
+/// In-app popups in one page's life, at most (a page is built for every summon).
+pub const LIFETIME_MAX: usize = 30;
 /// A popup's inner size, logical px: what it asked for, within these bounds.
 pub const MIN_SIZE: (f64, f64) = (320.0, 300.0);
 pub const MAX_SIZE: (f64, f64) = (1200.0, 900.0);
@@ -118,6 +125,8 @@ pub enum Limit {
     Cap,
     /// `OPEN_MAX` opened in the last `OPEN_WINDOW`.
     Rate,
+    /// `LIFETIME_MAX` opened since the page was built.
+    Lifetime,
 }
 
 impl Limit {
@@ -125,8 +134,18 @@ impl Limit {
         match self {
             Limit::Cap => "cap",
             Limit::Rate => "rate",
+            Limit::Lifetime => "lifetime",
         }
     }
+}
+
+/// The popups a request is decided against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Counts {
+    /// Open now (not closing).
+    pub open: usize,
+    /// Opened since the page was built.
+    pub opened: usize,
 }
 
 /// `decide`'s answer, and the limit that turned a popup away (for the smoke log).
@@ -168,13 +187,14 @@ fn wanted(target: &Url, size: Size) -> Decision {
     }
 }
 
-/// Where a new-window request goes (the module's docs). `open`: popups open now; `rate_ok` is
-/// asked last, only for a request that would get a popup (it counts the opening).
+/// Where a new-window request goes (the module's docs). `counts`: popups open now and opened in
+/// the page's life; `rate_ok` is asked last, only for a request that would get a popup (it counts
+/// the opening).
 pub fn decide(
     opener: &Opener,
     target: &Url,
     size: Size,
-    open: usize,
+    counts: Counts,
     rate_ok: impl FnOnce() -> bool,
 ) -> Verdict {
     if *opener == Opener::Other || !may_navigate(target) {
@@ -184,8 +204,10 @@ pub fn decide(
     if !matches!(decision, Decision::InApp | Decision::Pending) {
         return Verdict::plain(decision);
     }
-    let limit = if open >= MAX_OPEN {
+    let limit = if counts.open >= MAX_OPEN {
         Some(Limit::Cap)
+    } else if counts.opened >= LIFETIME_MAX {
+        Some(Limit::Lifetime)
     } else if !rate_ok() {
         Some(Limit::Rate)
     } else {
@@ -211,22 +233,32 @@ pub fn settle(target: &Url, sized: bool) -> Decision {
     wanted(target, size)
 }
 
-/// WebKitGTK at `ready-to-show`: whether the request asked for a popup window, and its size. The
-/// engine always sets the window properties' geometry — from the opener's window when the page asked
-/// for none (WebCore's `createWindow`) —, so the size counts only when the request asked for a popup
-/// window: a features string (`width=…,height=…`) hides the toolbar, location and menu bars, a link
-/// or a bare `window.open(url)` shows them (CI's first run: a `target=_blank` link came with a
-/// geometry).
-pub fn gtk_asked(bars_shown: [bool; 3], width: i32, height: i32) -> Option<(f64, f64)> {
-    if bars_shown.into_iter().any(|shown| shown) {
-        return None;
+/// WebKitGTK: the size the request asked for, from the new view's window-properties geometry as
+/// the request's features left it (`features`: width × height, read right after the engine's
+/// `create`, before WebCore sets the window's frame) — `None` when it asked for none.
+///
+/// WebKitGTK 2.44–2.52 (`webkitWindowPropertiesUpdateFromWebWindowFeatures`, then WebCore's
+/// `Page::applyWindowFeatures`): the features' `width` / `height` go into the geometry when the
+/// view is created; nothing else does until WebCore sets the window frame — for a request with no
+/// size, from the popup window's own default size (or the opener's) — and then shows the page
+/// (`ready-to-show`). So at `ready-to-show` every request has a geometry (CI run 42390685720: a
+/// link opened inside), and the bars say nothing either: the toolbar is hidden for every request
+/// (`setToolbarsVisible(toolbar || location)` tests whether the features *named* them) and the
+/// location and menu bars stay at their default (shown) unless the features name them (CI run
+/// 42393350263: every sized request settled as unsized). Only the geometry the features left says.
+pub fn gtk_asked(features: Option<(i32, i32)>) -> Option<(f64, f64)> {
+    match features {
+        Some((width, height)) if width > 0 && height > 0 => {
+            Some((f64::from(width), f64::from(height)))
+        }
+        _ => None,
     }
-    Some(if width > 0 && height > 0 {
-        (f64::from(width), f64::from(height))
-    } else {
-        DEFAULT_SIZE
-    })
 }
+
+/// How long a WebKitGTK popup may wait for `ready-to-show` before it is settled as a request that
+/// asked for no size (the security review: no hidden popup lingers; CI shows ready-to-show within
+/// ~20 ms).
+pub const GTK_SETTLE_WAIT: Duration = Duration::from_secs(5);
 
 fn is_blank(url: &Url) -> bool {
     url.scheme() == "about" && url.path() == "blank"
@@ -290,21 +322,6 @@ fn is_api_version(segment: &str) -> bool {
     segment.strip_prefix('v').is_some_and(|rest| {
         !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit() || b == b'.')
     })
-}
-
-/// The popup's title: where it is — the host of `https` pages (with a port that isn't 443), the
-/// scheme too for anything else (`http://127.0.0.1:8123`), never the page's own title.
-pub fn title_for(url: &Url) -> String {
-    let host = url.host_str().map(|host| match url.port() {
-        Some(port) => format!("{host}:{port}"),
-        None => host.to_owned(),
-    });
-    match (url.scheme(), host) {
-        ("https", Some(host)) => host,
-        (scheme, Some(host)) => format!("{scheme}://{host}"),
-        ("about", None) => format!("about:{}", url.path()),
-        (scheme, None) => format!("{scheme}:"),
-    }
 }
 
 /// The popup's inner size: what it asked for, within `MIN_SIZE`–`MAX_SIZE`; `DEFAULT_SIZE` when

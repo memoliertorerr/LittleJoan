@@ -110,6 +110,9 @@ pub fn hand_off_new_window<R: Runtime>(app: &AppHandle<R>, url: Url, from: NewWi
         smoke::log("handoff-throttled", "");
         return;
     }
+    // The gate's admission, timed here: CI's flood rule measures these (the `handoff` line comes
+    // after the browser list is read, which can bunch them up).
+    smoke::log("handoff-admitted", "");
     let turn = GateTurn;
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {

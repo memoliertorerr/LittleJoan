@@ -10,8 +10,8 @@
 //   `link-opened` may follow — nor a `popup-opened` (LJ47: a link asks for no size, so no sign-in
 //   popup; on Linux WebKitGTK says so only at `ready-to-show`, after which it is handed on). Then the **flood** (phase 21's security review): `?flood=1` asks for
 //   five new windows per click, clicked three times — every `new-window` must be handed on or
-//   dropped (`handoff-throttled`), at most one handoff a second over the flood's span, and the fake
-//   may receive no more than were handed on.
+//   dropped (`handoff-throttled`), the gate's admissions (`handoff-admitted`) at least
+//   `ADMIT_GAP_MS` apart, and the fake may receive no more than were handed on.
 // - Every OS: Settings → General scrolled to its Browser section (a smoke-only scroll,
 //   `LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`) for `settings-general-browser.png`; the app must log
 //   `browsers-listed <n> default=<self|other|none>`.
@@ -236,6 +236,9 @@ function clickFailures(click: Click | null, fake: string, what: string): string[
 }
 
 /** The flood's rule: every new window handed on or dropped, at most one a second, no more received. */
+/** The least time between two of the gate's admissions (one a second, with the log's slack). */
+export const ADMIT_GAP_MS = 950;
+
 export function floodFailures(flood: Flood | null): string[] {
   if (!flood) {
     return ["handoff: the flood never ran"];
@@ -251,14 +254,19 @@ export function floodFailures(flood: Flood | null): string[] {
   if (handed + throttled !== windows.length) {
     failures.push(`handoff: of ${windows.length} new windows ${handed} were handed on and ${throttled} dropped — every one must be one or the other`);
   }
-  // The rate over the time the flood's requests and handoffs took: on Linux a request can be
-  // handed on after the last one came (WebKitGTK says it asked for no size only at ready-to-show,
-  // LJ47), so the span runs to the last handoff when that is later.
-  const lastHandoff = flood.afterClicks.filter((e) => e.event === "handoff").at(-1)?.millis ?? 0;
-  const span = Math.max(windows.at(-1)?.millis ?? 0, lastHandoff) - (windows[0]?.millis ?? 0);
-  const allowed = Math.floor(span / 1000) + 1;
-  if (handed > allowed) {
-    failures.push(`handoff: ${handed} handoffs over a ${span} ms flood (at most ${allowed}: one a second)`);
+  // One a second, measured where the gate admits (`handoff-admitted`, phase 22's security review):
+  // the `handoff` line comes after the browser list is read, which can bunch handoffs up (or spread
+  // them) — and on Linux a request can be handed on after the last one came (LJ47's ready-to-show).
+  const admitted = flood.afterClicks.filter((e) => e.event === "handoff-admitted");
+  if (admitted.length < handed) {
+    failures.push(`handoff: ${handed} handed on but the gate admitted ${admitted.length} (handoff-admitted)`);
+  }
+  for (let i = 1; i < admitted.length; i += 1) {
+    const gap = (admitted[i]?.millis ?? 0) - (admitted[i - 1]?.millis ?? 0);
+    if (gap < ADMIT_GAP_MS) {
+      failures.push(`handoff: the gate admitted two handoffs ${gap} ms apart (at least ${ADMIT_GAP_MS}: one a second)`);
+      break;
+    }
   }
   const floods = flood.received.filter((url) => url.includes(FLOOD_TARGET));
   if (floods.length > handed) {

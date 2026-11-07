@@ -4,51 +4,61 @@
 //! `window_features` —, so it shares the page's store and `window.opener` works (the page can be
 //! posted to, and it can close itself). It is page trust and less: no capability names it
 //! (capability_tests.rs), no script of ours, no extension or app URL (`popups::may_navigate`), no
-//! further popups (its new windows go to the main browser), no downloads, no permissions. Its title
-//! is where it is (`popups::title_for`), set here on every load, never the page's own.
+//! further popups (its new windows go to the main browser), no downloads, no permissions.
+//!
+//! **Its title** is where it is, never the page's own (popups/title.rs): built titled by its opener
+//! — the only script that can run there before a page commits —, changed only when a page commits
+//! in it (`Started`: the engines' commit), never to a host it was only asked to open (the security
+//! review's spoof: `open(target)`, `stop()`, `document.write`).
 //!
 //! **The window:** the size it asked for within bounds, centred over the Little Joan window and
-//! kept on its screen (never where the page asked), owned by it (Windows' owner, macOS' child
-//! window, GTK's transient parent) so it stays above it; resizable, not always on top.
+//! kept on its screen (never where the page asked; centred on the screen when the window's frame
+//! can't be read), owned by it (Windows' owner, macOS' child window, GTK's transient parent) so it
+//! stays above it; resizable, not always on top.
 //!
-//! **Its end:** every close of the Little Joan window closes its popups first (`close_all`,
-//! `popup-closed hibernate`); the popup page's `window.close()` closes it (`popup-closed by-page`:
-//! WebView2's `WindowCloseRequested`, WebKit's `webViewDidClose:`, WebKitGTK's `close` — wired in
-//! platform/, as wry only destroys the webview); its close button too (`popup-closed user`). A popup
-//! that closes gives the keyboard back to the page. Nothing of a popup outlives the window. A popup
-//! belongs to the page that opened it: when the page commits another origin it closes
-//! (`popup-closed opener-left`, LJ48). Of Little Joan's keys only Close acts in a popup — it
-//! closes the popup (`popup-closed user`), never the window behind it.
+//! **Its end** (bar/popup/closing.rs): every close of the Little Joan window closes its popups
+//! first, and from then on until a new page is built no new window of the page opens at all (the
+//! review: a page that opens one on `blur` while it closes); the popup page's `window.close()`
+//! closes it, its close button too, its opener leaving its origin too (LJ48). A popup that closes
+//! with the keyboard gives it back to the page. Of Little Joan's keys only Close acts in a popup —
+//! it closes the popup, never the window behind it.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use tauri::webview::{NewWindowFeatures, NewWindowResponse, PageLoadEvent, PermissionResponse};
-use tauri::{
-    AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window,
-    WindowEvent,
-};
+use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use url::{Origin, Url};
 
 use crate::browsers::{self, NewWindowFrom};
 use crate::extensions;
 use crate::extensions::limits::RateLimit;
 use crate::joan;
-use crate::keymap::KeyAction;
-use crate::layout::Rect;
 use crate::navigation;
 use crate::platform;
-use crate::popups::{self, Decision, KeyRoute, Opener, Size};
+use crate::popups::{self, Counts, Decision, Opener, Size};
 use crate::smoke;
 use crate::state;
+
+mod closing;
+mod window;
+use closing::destroy_later;
+#[cfg(target_os = "linux")]
+pub use closing::view_gone;
+pub use closing::{any, close_all, closed_by_page, page_closing, page_committed, stop_accepting};
+pub use window::{focused, key_pressed, on_window_event};
+use window::{frames, owned_by};
+#[cfg(target_os = "linux")]
+pub use window::{settle, settle_late};
 
 /// An open popup (or one being built, or closing).
 struct Popup {
     label: String,
     /// The origin of the page that opened it (it closes when the page leaves it, LJ48).
     opener: Origin,
-    /// What it was opened for.
+    /// What it was opened for (WebKitGTK decides on it once it settles).
+    #[cfg(target_os = "linux")]
     target: Url,
     /// WebKitGTK: built hidden until `settle`.
     pending: bool,
@@ -56,27 +66,48 @@ struct Popup {
     early: Option<Url>,
     /// Why it is closing (set once; `None` while open).
     closing: Option<&'static str>,
+    /// Whether it had the keyboard when it started closing (it gives it back to the page then).
+    had_keyboard: bool,
     /// macOS: its `about:blank` loaded (the unload before it goes).
     unloaded: bool,
 }
 
-static POPUPS: Mutex<Vec<Popup>> = Mutex::new(Vec::new());
+/// The popups, and whether the page takes new windows at all.
+struct Popups {
+    list: Vec<Popup>,
+    /// A page is up: cleared as it starts closing (`stop_accepting`), set when one is built.
+    accepting: bool,
+    /// In-app popups opened since the page was built (`popups::LIFETIME_MAX`).
+    opened: usize,
+}
+
+static POPUPS: Mutex<Popups> = Mutex::new(Popups {
+    list: Vec::new(),
+    accepting: false,
+    opened: 0,
+});
 static NUMBER: AtomicU64 = AtomicU64::new(0);
 /// Openings in the last `popups::OPEN_WINDOW`.
 static OPENINGS: Mutex<Option<RateLimit>> = Mutex::new(None);
 
-/// How long a closing waits for a popup's `about:blank` (macOS), and for its window to go.
-#[cfg(target_os = "macos")]
-const UNLOAD_WAIT: Duration = Duration::from_millis(400);
-const GONE_WAIT: Duration = Duration::from_secs(2);
-
-fn popups() -> MutexGuard<'static, Vec<Popup>> {
+fn tracked() -> MutexGuard<'static, Popups> {
     POPUPS.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Popups open now (not closing).
-fn open_count() -> usize {
-    popups().iter().filter(|p| p.closing.is_none()).count()
+/// A page was built (bar/page.rs): its new windows are taken, and its popups counted afresh.
+pub fn page_built() {
+    let mut state = tracked();
+    state.accepting = true;
+    state.opened = 0;
+}
+
+/// Popups open now (not closing) and opened in the page's life.
+fn counts() -> Counts {
+    let state = tracked();
+    Counts {
+        open: state.list.iter().filter(|p| p.closing.is_none()).count(),
+        opened: state.opened,
+    }
 }
 
 fn rate_ok() -> bool {
@@ -109,15 +140,20 @@ fn size_of(features: &NewWindowFeatures) -> Size {
 }
 
 /// The page webview's new-window request (`target=_blank`, `window.open`): a popup inside Little
-/// Joan, the main browser through LJ46's gate and checks, or nowhere (popups.rs decides).
+/// Joan, the main browser through LJ46's gate and checks, or nowhere (popups.rs decides). While the
+/// page is closing, nowhere at all.
 pub fn new_window<R: Runtime>(
     app: &AppHandle<R>,
     url: Url,
     features: NewWindowFeatures,
 ) -> NewWindowResponse<R> {
+    if !tracked().accepting {
+        smoke::log("new-window-dropped", "closing");
+        return NewWindowResponse::Deny;
+    }
     let opener = opener(app);
     let size = size_of(&features);
-    let verdict = popups::decide(&opener, &url, size, open_count(), rate_ok);
+    let verdict = popups::decide(&opener, &url, size, counts(), rate_ok);
     if let Some(limit) = verdict.limit {
         smoke::log("popup-limited", limit.name());
     }
@@ -125,7 +161,8 @@ pub fn new_window<R: Runtime>(
         (Decision::InApp | Decision::Pending, Opener::WebPage(origin)) => {
             let pending = verdict.decision == Decision::Pending;
             match build(app, &url, size, features, origin, pending) {
-                Ok(window) => NewWindowResponse::Create { window },
+                Ok(Some(window)) => NewWindowResponse::Create { window },
+                Ok(None) => NewWindowResponse::Deny,
                 Err(err) => {
                     eprintln!("little-joan: could not open the popup: {err}");
                     smoke::log("popup-failed", "");
@@ -155,31 +192,15 @@ fn elsewhere<R: Runtime>(app: &AppHandle<R>, url: Url) {
     }
 }
 
-/// The Little Joan window's frame and its screen's work area, in logical px.
-fn frames<R: Runtime>(window: &Window<R>) -> Option<(Rect, Option<Rect>)> {
-    let scale = window.scale_factor().ok()?;
-    let position = window.outer_position().ok()?;
-    let size = window.outer_size().ok()?;
-    let over = Rect {
-        x: f64::from(position.x) / scale,
-        y: f64::from(position.y) / scale,
-        width: f64::from(size.width) / scale,
-        height: f64::from(size.height) / scale,
-    };
-    let screen = window.current_monitor().ok().flatten().map(|monitor| {
-        let work = monitor.work_area();
-        Rect {
-            x: f64::from(work.position.x) / scale,
-            y: f64::from(work.position.y) / scale,
-            width: f64::from(work.size.width) / scale,
-            height: f64::from(work.size.height) / scale,
-        }
-    });
-    Some((over, screen))
+/// Sets a popup's title (and says so in the smoke log).
+fn set_title<R: Runtime>(window: &WebviewWindow<R>, title: &str) {
+    let _ = window.set_title(title);
+    smoke::log("popup-title", title);
 }
 
 /// Builds the popup window (inside the engine's new-window callback, on the main thread — as
 /// tauri's own example does; WebView2 runs it after its event, so building there can't deadlock).
+/// `None`: the page started closing meanwhile, so nothing opens.
 fn build<R: Runtime>(
     app: &AppHandle<R>,
     target: &Url,
@@ -187,7 +208,7 @@ fn build<R: Runtime>(
     features: NewWindowFeatures,
     opener: Origin,
     pending: bool,
-) -> tauri::Result<WebviewWindow<R>> {
+) -> tauri::Result<Option<WebviewWindow<R>>> {
     let joan = app
         .get_window(joan::LABEL)
         .ok_or(tauri::Error::WindowNotFound)?;
@@ -197,7 +218,8 @@ fn build<R: Runtime>(
         _ => None,
     };
     let (width, height) = popups::clamp_size(asked);
-    let title = popups::title_for(target);
+    // Its opener's place until a page commits in it (never the target's: it may never load).
+    let title = popups::opener_title(&opener);
     // macOS: `window.close()` reaches Little Joan only through the delegate's webViewDidClose:,
     // which WebKit looks for when the popup's delegate is set (platform/mac/popups.rs).
     platform::prepare_popups(app, &features);
@@ -240,10 +262,14 @@ fn build<R: Runtime>(
             smoke::log("permission-refused", &format!("popup {kind}"));
             PermissionResponse::Deny
         });
-    if let Some((over, screen)) = frames(&joan) {
-        let (x, y) = popups::place(over, (width, height), screen);
-        builder = builder.position(x, y);
-    }
+    builder = match frames(&joan) {
+        Some((over, screen)) => {
+            let (x, y) = popups::place(over, (width, height), screen);
+            builder.position(x, y)
+        }
+        // Never where the page asked.
+        None => builder.center(),
+    };
     // WebKitGTK's downloads are decided in platform/linux/downloads.rs, which refuses a popup's.
     #[cfg(not(target_os = "linux"))]
     {
@@ -259,68 +285,75 @@ fn build<R: Runtime>(
         builder = builder.data_directory(dir);
     }
     builder = owned_by(builder, &joan)?;
-    popups().push(Popup {
-        label: label.clone(),
-        opener,
-        target: target.clone(),
-        pending,
-        early: None,
-        closing: None,
-        unloaded: false,
-    });
+    {
+        // Under the lock `stop_accepting` takes: a page that started closing gets nothing, and
+        // one that starts closing from here on finds this popup in the list.
+        let mut state = tracked();
+        if !state.accepting {
+            smoke::log("new-window-dropped", "closing");
+            return Ok(None);
+        }
+        state.opened += 1;
+        state.list.push(Popup {
+            label: label.clone(),
+            opener,
+            #[cfg(target_os = "linux")]
+            target: target.clone(),
+            pending,
+            early: None,
+            closing: None,
+            had_keyboard: false,
+            unloaded: false,
+        });
+    }
     let window = match builder.build() {
         Ok(window) => window,
         Err(err) => {
-            popups().retain(|p| p.label != label);
+            tracked().list.retain(|p| p.label != label);
             return Err(err);
         }
     };
+    // The page started closing while it was built (its close found no window yet): it goes now.
+    if tracked()
+        .list
+        .iter()
+        .any(|p| p.label == label && p.closing.is_some())
+    {
+        destroy_later(app, &label);
+        return Ok(None);
+    }
     // Keys, `window.close()`, and (WebKitGTK) the size it asked for and its downloads.
     platform::install_popup(app, &window, pending);
+    smoke::log("popup-title", &title);
     if pending {
         smoke::log("popup-pending", "");
     } else {
-        smoke::log("popup-opened", &title);
+        // What it was opened for (its title is its opener's until a page commits).
+        smoke::log("popup-opened", &popups::title_for(target));
     }
-    Ok(window)
-}
-
-/// The popup stays above the Little Joan window: its owner (Windows), its child (macOS), transient
-/// for it (GTK).
-#[cfg(windows)]
-fn owned_by<'a, R: Runtime>(
-    builder: WebviewWindowBuilder<'a, R, AppHandle<R>>,
-    joan: &Window<R>,
-) -> tauri::Result<WebviewWindowBuilder<'a, R, AppHandle<R>>> {
-    Ok(builder.owner_raw(joan.hwnd()?))
-}
-
-#[cfg(target_os = "macos")]
-fn owned_by<'a, R: Runtime>(
-    builder: WebviewWindowBuilder<'a, R, AppHandle<R>>,
-    joan: &Window<R>,
-) -> tauri::Result<WebviewWindowBuilder<'a, R, AppHandle<R>>> {
-    Ok(builder.parent_raw(joan.ns_window()?))
-}
-
-#[cfg(target_os = "linux")]
-fn owned_by<'a, R: Runtime>(
-    builder: WebviewWindowBuilder<'a, R, AppHandle<R>>,
-    joan: &Window<R>,
-) -> tauri::Result<WebviewWindowBuilder<'a, R, AppHandle<R>>> {
-    Ok(builder.transient_for_raw(&joan.gtk_window()?))
+    Ok(Some(window))
 }
 
 /// The popup's navigation guard: what a popup may load (popups.rs). WebKitGTK: a popup not settled
-/// yet loads nothing but `about:blank` — the navigation is made once it shows.
+/// yet loads nothing but `about:blank` — the navigation is made once it shows. A closing popup
+/// loads nothing but `about:blank` (its unload).
 fn may_navigate(label: &str, url: &Url) -> bool {
     if !popups::may_navigate(url) {
         smoke::log("popup-navigation-refused", url.as_str());
         return false;
     }
-    if url.scheme() != "about"
-        && let Some(popup) = popups().iter_mut().find(|p| p.label == label && p.pending)
-    {
+    if url.scheme() == "about" {
+        return true;
+    }
+    let mut state = tracked();
+    let Some(popup) = state.list.iter_mut().find(|p| p.label == label) else {
+        return true;
+    };
+    if popup.closing.is_some() {
+        smoke::log("popup-navigation-refused", "closing");
+        return false;
+    }
+    if popup.pending {
         popup.early = Some(url.clone());
         smoke::log("popup-early", "");
         return false;
@@ -328,275 +361,30 @@ fn may_navigate(label: &str, url: &Url) -> bool {
     true
 }
 
-/// A popup's load events: its title is where it is, set on every one.
+/// A popup's load events: a page committed (`Started`) sets its title — the opener's place for a
+/// blank document —; a finished one (macOS) may be its unload.
 fn loaded<R: Runtime>(window: &WebviewWindow<R>, event: PageLoadEvent, url: &Url) {
-    let title = popups::title_for(url);
-    let _ = window.set_title(&title);
-    if event == PageLoadEvent::Finished {
-        if url.scheme() == "about"
-            && let Some(popup) = popups()
-                .iter_mut()
-                .find(|p| p.label == window.label() && p.closing.is_some())
-        {
-            popup.unloaded = true;
-        }
-        smoke::log("popup-loaded", &title);
-    }
-}
-
-/// WebKitGTK's `ready-to-show` (main thread): the engine has set the popup's window properties —
-/// `asked`, the size it asked for, if any —, so it shows, goes to the browser, or goes nowhere.
-pub fn settle<R: Runtime>(app: &AppHandle<R>, label: &str, asked: Option<(f64, f64)>) {
-    let Some((target, early)) = popups()
-        .iter_mut()
-        .find(|p| p.label == label && p.pending && p.closing.is_none())
-        .map(|p| {
-            p.pending = false;
-            (p.target.clone(), p.early.take())
-        })
-    else {
-        return;
-    };
-    let Some(window) = app.get_webview_window(label) else {
-        return;
-    };
-    match popups::settle(&target, asked.is_some()) {
-        Decision::InApp | Decision::Pending => {
-            let (width, height) = popups::clamp_size(asked);
-            let _ = window.set_size(tauri::LogicalSize::new(width, height));
-            if let Some(joan) = app.get_window(joan::LABEL)
-                && let Some((over, screen)) = frames(&joan)
-            {
-                let (x, y) = popups::place(over, (width, height), screen);
-                let _ = window.set_position(tauri::LogicalPosition::new(x, y));
-            }
-            let _ = window.show();
-            let _ = window.set_focus();
-            smoke::log("popup-opened", &popups::title_for(&target));
-            if let Some(url) = early {
-                let _ = window.navigate(url);
-            }
-        }
-        decision => {
-            smoke::log("popup-settled", "unsized");
-            mark_closing(label, "unshown");
-            destroy_later(app, label);
-            match decision {
-                Decision::Browser => elsewhere(app, target),
-                _ => smoke::log("new-window-refused", target.as_str()),
-            }
-        }
-    }
-}
-
-/// Marks a popup closing for `why` (once) and logs `popup-closed <why>` (but for one never shown).
-/// Returns whether this call marked it.
-fn mark_closing(label: &str, why: &'static str) -> bool {
-    let mut all = popups();
-    let Some(popup) = all
-        .iter_mut()
-        .find(|p| p.label == label && p.closing.is_none())
-    else {
-        return false;
-    };
-    popup.closing = Some(why);
-    if why != "unshown" {
-        smoke::log("popup-closed", why);
-    }
-    true
-}
-
-/// Closes a popup: the page called `window.close()` (`by-page`), the user's key (`user`), its
-/// opener left (`opener-left`). Never inside the engine's callback: the window goes from a thread
-/// of its own.
-pub fn close<R: Runtime>(app: &AppHandle<R>, label: &str, why: &'static str) {
-    if mark_closing(label, why) {
-        destroy_later(app, label);
-    }
-}
-
-fn destroy_later<R: Runtime>(app: &AppHandle<R>, label: &str) {
-    let app = app.clone();
-    let label = label.to_owned();
-    let spawned = std::thread::Builder::new()
-        .name("little-joan-popup-close".into())
-        .spawn(move || {
-            if let Some(window) = app.get_webview_window(&label) {
-                unload(std::slice::from_ref(&window));
-                let _ = window.destroy();
-            }
-        });
-    if let Err(err) = spawned {
-        eprintln!("little-joan: could not close the popup: {err}");
-    }
-}
-
-/// macOS: popups go to `about:blank` first, as the page does — WebKit's processes and a page's
-/// audio otherwise outlive the web view (LJ9) — at most `UNLOAD_WAIT`.
-#[cfg(target_os = "macos")]
-fn unload<R: Runtime>(windows: &[WebviewWindow<R>]) {
-    let Ok(blank) = Url::parse("about:blank") else {
-        return;
-    };
-    for window in windows {
-        let _ = window.navigate(blank.clone());
-    }
-    let labels: Vec<&str> = windows.iter().map(WebviewWindow::label).collect();
-    let deadline = Instant::now() + UNLOAD_WAIT;
-    while Instant::now() < deadline {
-        let unloaded = popups()
-            .iter()
-            .filter(|p| labels.contains(&p.label.as_str()))
-            .all(|p| p.unloaded);
-        if unloaded {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    smoke::log("popup-unload", "timeout");
-}
-
-/// WebView2 and WebKitGTK end a popup's page with its webview (as the page's, measured in CI).
-#[cfg(not(target_os = "macos"))]
-fn unload<R: Runtime>(_windows: &[WebviewWindow<R>]) {}
-
-/// Every popup closes (`why`: `hibernate` — the Little Joan window is closing; bar/page.rs calls
-/// this before the page is released). Off the main thread; returns once they are gone (at most
-/// `GONE_WAIT`), so nothing of them outlives the window.
-pub fn close_all<R: Runtime>(app: &AppHandle<R>, why: &'static str) {
-    let labels: Vec<String> = popups()
-        .iter()
-        .filter(|p| p.closing.is_none())
-        .map(|p| p.label.clone())
-        .collect();
-    let labels: Vec<String> = labels
-        .into_iter()
-        .filter(|label| mark_closing(label, why))
-        .collect();
-    let all: Vec<String> = popups().iter().map(|p| p.label.clone()).collect();
-    let windows: Vec<WebviewWindow<R>> = all
-        .iter()
-        .filter_map(|label| app.get_webview_window(label))
-        .collect();
-    if windows.is_empty() {
-        return;
-    }
-    unload(&windows);
-    for window in &windows {
-        let _ = window.destroy();
-    }
-    let deadline = Instant::now() + GONE_WAIT;
-    while Instant::now() < deadline
-        && windows
-            .iter()
-            .any(|w| app.get_webview_window(w.label()).is_some())
-    {
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    if !labels.is_empty() {
-        smoke::log("popups-closed", &labels.len().to_string());
-    }
-}
-
-/// The page webview committed `url` (bar/page.rs's `Started`, LJ48): popups whose opener's origin
-/// it left close (`popup-closed opener-left`); a reload or a same-origin page keeps them.
-pub fn page_committed<R: Runtime>(app: &AppHandle<R>, url: &Url) {
-    let left: Vec<String> = popups()
-        .iter()
-        .filter(|p| p.closing.is_none() && popups::opener_left(&p.opener, url))
-        .map(|p| p.label.clone())
-        .collect();
-    for label in left {
-        close(app, &label, "opener-left");
-    }
-}
-
-/// One of Little Joan's keys in the popup `label` (LJ48; platform/: WebView2's
-/// `AcceleratorKeyPressed`, the popup's GTK key hook): Close closes the popup, nothing else acts.
-/// Returns whether the key was Little Joan's to take (the page doesn't see it then).
-pub fn key_pressed<R: Runtime>(app: &AppHandle<R>, label: &str, action: KeyAction) -> bool {
-    match popups::route_key(true, action) {
-        KeyRoute::ClosePopup => {
-            close(app, label, "user");
-            true
-        }
-        KeyRoute::Nothing | KeyRoute::Page(_) => false,
-    }
-}
-
-/// The popup that has the keyboard, if one does (macOS's menu: its Close Window closes the key
-/// window, LJ48).
-pub fn focused<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
-    let labels: Vec<String> = popups()
-        .iter()
-        .filter(|p| p.closing.is_none() && !p.pending)
-        .map(|p| p.label.clone())
-        .collect();
-    labels.into_iter().find(|label| {
-        app.get_webview_window(label)
-            .is_some_and(|window| window.is_focused().unwrap_or(false))
-    })
-}
-
-/// The popup page called `window.close()` (platform/: WebView2's `WindowCloseRequested`,
-/// WebKit's `webViewDidClose:`, the WebKitGTK view's end).
-pub fn closed_by_page<R: Runtime>(app: &AppHandle<R>, label: &str) {
-    close(app, label, "by-page");
-}
-
-/// WebKitGTK: the popup's web view went. wry destroys it when the page calls `window.close()`,
-/// leaving its window; a view that goes while its popup isn't closing went so.
-#[cfg(target_os = "linux")]
-pub fn view_gone<R: Runtime>(app: &AppHandle<R>, label: &str) {
-    closed_by_page(app, label);
-}
-
-/// Window events of popups (lib.rs): the close button marks it the user's; once it is gone it
-/// leaves the list, and the keyboard goes back to the page.
-pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
-    let label = window.label();
-    if !popups::is_popup_label(label) {
-        return;
-    }
     match event {
-        WindowEvent::CloseRequested { .. } => {
-            mark_closing(label, "user");
-        }
-        WindowEvent::Destroyed => {
-            platform::forget_popup(label);
-            let gone = {
-                let mut all = popups();
-                let at = all.iter().position(|p| p.label == label);
-                at.map(|at| all.remove(at))
-            };
-            let why = match gone {
-                Some(Popup {
-                    closing: Some(why), ..
-                }) => why,
-                Some(_) => {
-                    smoke::log("popup-closed", "user");
-                    "user"
-                }
-                None => return,
-            };
-            if matches!(why, "user" | "by-page") {
-                give_back_keyboard(window.app_handle());
+        PageLoadEvent::Started => {
+            let opener = tracked()
+                .list
+                .iter()
+                .find(|p| p.label == window.label())
+                .map(|p| p.opener.clone());
+            if let Some(opener) = opener {
+                set_title(window, &popups::title_at(url, &opener));
             }
         }
-        _ => {}
+        PageLoadEvent::Finished => {
+            if url.scheme() == "about"
+                && let Some(popup) = tracked()
+                    .list
+                    .iter_mut()
+                    .find(|p| p.label == window.label() && p.closing.is_some())
+            {
+                popup.unloaded = true;
+            }
+            smoke::log("popup-loaded", &popups::title_for(url));
+        }
     }
-}
-
-/// A popup closed while the Little Joan window is open: the page gets the keyboard again.
-fn give_back_keyboard<R: Runtime>(app: &AppHandle<R>) {
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        if !joan::is_open(&app) {
-            return;
-        }
-        if let Some(window) = app.get_window(joan::LABEL) {
-            let _ = window.set_focus();
-        }
-        super::focus_page(&app);
-    });
 }

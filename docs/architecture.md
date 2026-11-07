@@ -267,8 +267,10 @@ src-tauri/src/bar/page.rs          the page webview (LJ19.4): built after the ba
                                    never flashes, closed with every close (its popups first,
                                    session cookies kept, downloads ended, macOS unloads it first)
 src-tauri/src/bar/popup.rs         sign-in popups at run time (LJ47): the page's new-window
-                                   request decided, the popup window built from the opener's
-                                   webview, its guard, title, close paths and `close_all`
+                                   request decided (none while the page closes), the popup window
+                                   built from the opener's webview, its guard and title;
+                                   bar/popup/window.rs its place, owner, WebKitGTK's settle, keys
+                                   and the keyboard; bar/popup/closing.rs the gate and every close
 src-tauri/src/bar/view.rs          the view state: toolbar / overlay / element fullscreen,
                                    applied to the webviews — only what changed since the last
                                    layout; macOS autoresizing masks per mode
@@ -315,12 +317,14 @@ src-tauri/src/layout.rs            where the bar and the page go per mode (Toolb
                                    Fullscreen), from physical size + scale (pure)
 src-tauri/src/layout/diff.rs       what a new layout changes (bounds, visibility) and macOS's
                                    autoresizing masks per mode (pure, tested)
-src-tauri/src/capability_tests.rs  tests: no capability reaches the page webview, its window, a
-                                   sign-in popup (`joan-popup-<n>`), or remote URLs (Ground Rules
-                                   18 and 23)
+src-tauri/src/capability_tests.rs  tests: capabilities name only `joan-bar` (webviews) and
+                                   `settings` (windows), exactly — never the page webview, its
+                                   window, a sign-in popup (`joan-popup-<n>`) or remote URLs
+                                   (Ground Rules 18 and 23); the app's CSP refuses framing
 src-tauri/src/popups.rs            sign-in popups (LJ47): `decide` (in-app / browser / nowhere /
-                                   pending), where a popup may go, its title, size and place (pure,
-                                   tests in popups/tests.rs)
+                                   pending), where a popup may go, WebKitGTK's size, its size and
+                                   place; popups/title.rs its title (opener's place until a commit,
+                                   long hosts keep their end) (pure, tests in popups/tests.rs)
 src-tauri/src/phone.rs             phone mode decisions: below 600 px / from 640 px, user agents,
                                    debounce (pure, tested)
 src-tauri/src/phone/sites.rs       per site: a site's mode (siteModes + the WebKit built-in list),
@@ -485,8 +489,9 @@ src-tauri/src/extensions/popups.rs a panel's new windows: openUrl's checks (open
                                    those are popups.rs)
 src-tauri/src/platform/*/popups.rs a sign-in popup's engine glue (LJ47): `window.close()` closes it
                                    (WebView2's WindowCloseRequested; macOS adds -webViewDidClose: to
-                                   wry's delegate; WebKitGTK the view's end), WebKitGTK's
-                                   `ready-to-show` size and fullscreen-off
+                                   wry's delegate; WebKitGTK the view's end), WebKitGTK's size
+                                   (read right after `create`, decided at `ready-to-show`) and
+                                   fullscreen-off
 src-tauri/src/browsers/parse.rs    the readers' pure parts: StartMenuInternet entries, UserChoice,
                                    MSVC command lines, desktop files and their Exec, xdg-mime's
                                    answer, Little Joan's own ids (tests in browsers/tests.rs)
@@ -519,8 +524,9 @@ scripts/ci/smoke-handoff.mts       CI: the handoff run (LJ46) — a fake browser
                                    check with Little Joan the default (unit-tested)
 scripts/ci/smoke-popups.mts        CI: the popups run (LJ47) — the fake provider on the server's
                                    second port in a sized popup (and a sized about:blank one) that
-                                   posts back and closes; a popup open when the window closes
-                                   (unit-tested)
+                                   posts back and closes; a popup open when the window closes; the
+                                   review's spoof (title never a host that didn't commit) and
+                                   blur popup (nothing opens while the window closes) (unit-tested)
 scripts/ci/smoke-links.mts         CI: the links run (LJ45) — the registration read back, the OS's
                                    defaults untouched, a link launched as the OS would, refusals;
                                    smoke-links-read.mts parses each OS's tools (both unit-tested)
@@ -589,8 +595,8 @@ tests/smoke/ext-probe.mjs          the smoke page's ?ext=probe: a web page tryin
 tests/smoke/signin.html            the popups run's fake provider (served on a second port): posts
                                    `lj-signed-in` to its opener, then `window.close()` (not with
                                    ?stay=1)
-tests/smoke/popup-logic.mjs        the smoke page's ?popup=oauth|blank and signin.html's logic
-                                   (plain JS, unit-tested)
+tests/smoke/popup-logic.mjs        the smoke page's ?popup=oauth|blank|spoof|onblur and
+                                   signin.html's logic (plain JS, unit-tested)
 .github/workflows/ci.yml           verify on ubuntu-24.04, windows-latest, macos-latest; package; smoke
 .github/ISSUE_TEMPLATE/            issue forms: bug report, feature request; config.yml turns blank
                                    issues off and links private vulnerability reporting
@@ -1398,7 +1404,7 @@ window closes. The authors' guide is LJ30's `docs/extensions.md`.
 | Check | Where | Tests |
 |---|---|---|
 | The page webview has no IPC; no capability names `joan-page`, its window, or remote URLs | `capabilities/*.json` | `capability_tests.rs` |
-| A sign-in popup (`joan-popup-<n>`, LJ47) has no IPC and never loads an extension or app URL: no capability's webview or window scope matches a popup's label; its guard refuses extension URLs in every form, the app's origin and anything the page's guard refuses | `capabilities/*.json`, `popups::may_navigate` | `capability_tests::no_capability_reaches_a_popup`, `popups::tests::a_popup_loads_web_pages_and_blank_only` |
+| A sign-in popup (`joan-popup-<n>`, LJ47) has no IPC and never loads an extension or app URL: capabilities name only `joan-bar` and `settings`, exactly; its guard refuses extension URLs in every form, the app's origin and anything the page's guard refuses (top level everywhere, frames on macOS / Linux — on Windows frames never reach the guard; app pages refuse to be framed, `frame-ancestors 'none'`); while a popup exists the `ljext` handler serves nothing (macOS gives it the page's label) | `capabilities/*.json`, `popups::may_navigate`, `bar::popup::any`, `tauri.conf.json`'s CSP | `capability_tests::capabilities_scope_only_the_bar_and_settings`, `the_apps_pages_refuse_to_be_framed`, `popups::tests::a_popup_loads_web_pages_and_blank_only` |
 | Extension code never runs in the bar or Settings: their navigation guards refuse extension URLs in every form; the handler refuses every webview but `joan-page` | `navigation::is_allowed_bar_navigation`, `settings_window::may_navigate`, `api::route` | `navigation::tests::the_bar_stays_on_the_app_and_never_opens_an_extension`, `settings_window::tests::settings_stays_on_the_app_and_never_opens_an_extension`, `api::tests::only_the_page_webview_may_ask` |
 | One origin per extension: `ljext://<id>.localhost` (macOS, Linux), `http://ljext.<id>.localhost` (Windows — wry serves every `http://ljext.*` request from the handler; `.localhost` keeps it off the network and HSTS upgrades) | `urls.rs` | `urls::tests::*` |
 | `ljext:` and every `http(s)://ljext.*` URL are never plain web: not allowed by the web rules, not recorded in history, not counted by back, not handed to the default browser, not translated | `urls::is_ext_like`, `navigation.rs`, `history.rs`, `back_stack.rs`, `page_actions.rs` | `navigation::tests::extension_urls_are_never_web_pages`, `history::tests::only_web_pages_are_recorded`, `back_stack::tests::extension_panels_are_not_pages_to_go_back_to`, `page_actions::tests::translate_target_skips_extension_panels` |
@@ -1681,19 +1687,24 @@ page and close. A popup is a **web page with the page's trust and less** (Ground
   login.microsoftonline.com, login.live.com, github.com/login/oauth/…, (www.)facebook.com/[vN/]
   dialog/oauth, discord.com/oauth2/…, x.com and twitter.com /i/oauth2/…, slack.com/oauth/… . A
   sized `about:blank` opens too (libraries open a blank popup, then set its location); an unsized
-  one goes nowhere. **At most 2 at once and 3 opened in any 10 s:** beyond either the request goes
-  where it went before (the main browser through LJ46's gate, or nowhere for `about:blank`;
-  `popup-limited cap|rate`). Everything else — a plain `target=_blank` link, an unsized
+  one goes nowhere. **At most 2 at once, 3 opened in any 10 s and 30 in a page's life** (a page is
+  built for every summon; on macOS each popup leaves Tauri's scripts in the page's shared content
+  controller — Landmines): beyond any of them the request goes where it went before (the main
+  browser through LJ46's gate, or nowhere for `about:blank`; `popup-limited cap|rate|lifetime`).
+  **While the page is closing** — from the moment the window starts closing until a page is built
+  again — no new window of the page opens at all, popup or handoff (`new-window-dropped closing`;
+  phase 22's security review: a page opening one on `blur` as the window hid). Everything else — a plain `target=_blank` link, an unsized
   `window.open` — goes to the main browser as before (`bar/popup.rs` → `browsers::hand_off_new_window`).
   **WebKitGTK** asks for the new window before it knows the size (wry passes none): a request
   that isn't a known sign-in flow is built **hidden** (`popup-pending`), its own navigations held
-  (`popup-early`), and decided at its `ready-to-show` from the engine's window properties
-  (`popups::settle`): it shows (and makes the held navigation), or closes unseen and goes to the
-  browser / nowhere (`popup-settled unsized`). There "asked for a size" is "asked for a popup
-  window" (`popups::gtk_asked`): the geometry is always set — from the opener's window when the
-  page asked for none —, but a features string (`width=…,height=…`) hides the toolbar, location and
-  menu bars and a link or a bare `window.open(url)` doesn't (so `window.open(url, n, "popup")` opens
-  inside on Linux, and a sized request that keeps `toolbar=yes` goes to the browser).
+  (`popup-early`), and decided at its `ready-to-show` (`popups::settle`): it shows (and makes the
+  held navigation), or closes unseen and goes to the browser / nowhere (`popup-settled unsized`;
+  `popup-settled timeout` when no `ready-to-show` came within 5 s). "Asked for a size" is the
+  geometry the request's features left in the new view's window properties, read right after
+  `create` in a high-priority idle (`popups::gtk_asked`, `platform/linux/popups.rs`): WebKitGTK
+  writes the features' width and height there as `create` returns, and by `ready-to-show` WebCore
+  has set every request's frame and the bars say nothing (Landmines; `popup-gtk …` in the smoke log
+  is what the engine reported).
 - **The window** (`bar/popup.rs`): `WebviewWindowBuilder` with `window_features(features)` — the
   opener's WKWebViewConfiguration (macOS), WebView2 environment (Windows) or related view (Linux) —
   is what gives the popup `window.opener` and the page's own store (cookies, storage: a sign-in
@@ -1703,16 +1714,29 @@ page and close. A popup is a **web page with the page's trust and less** (Ground
   as asked within 320–1200 × 300–900 (480 × 640 for a known flow that asked for none), **centred
   over the Little Joan window** and kept on its screen's work area (`popups::place`; never where
   the page asked), owned by it (Windows' owner, macOS's child window, GTK's transient parent) so it
-  stays above it; resizable, not minimizable or maximizable, not always on top. **Its title is
-  where it is** — `popups::title_for`: the host of an `https` page (`accounts.google.com`), the
-  scheme too for anything else (`http://127.0.0.1:8124`), punycode as the engine resolves it — set
-  on every load, never the page's own title.
-- **Where a popup may go** (`popups::may_navigate`, its `on_navigation`, top level and — on macOS
-  and Linux, where the engines ask for frames too — frames): `http` / `https` pages and
+  stays above it (centred on the screen when the window's frame can't be read); resizable, not
+  minimizable or maximizable, not always on top. **Its title is where it is, and only what
+  committed** (popups/title.rs): built titled by its **opener's place** — before a page commits in
+  it, the only script that can run there is the opener's (`stop()` and `document.write` into the
+  blank page) —, retitled only when a page **commits** there (`Started`: `didCommitNavigation`,
+  `LOAD_COMMITTED`, WebView2's `ContentLoading` — never on a request or a finished load), a blank
+  or `srcdoc` document showing the opener's place (`popups::title_at`); never the host it was only
+  asked to open, never the page's own title. A place is the host of an `https` page
+  (`accounts.google.com`), the scheme too for anything else (`http://127.0.0.1:8124`), punycode as
+  the engine resolves it; **a host over 30 characters keeps its end** — whole labels, at least the
+  last two, after `…` (`…evil.example`; `popups::short_host`) — since a narrow window's title is
+  cut at its end, where the host says whose it is.
+- **Where a popup may go** (`popups::may_navigate`, its `on_navigation`): `http` / `https` pages and
   `about:blank` / `about:srcdoc`; never anything the page's guard refuses, an address Windows hands
   to the app's protocols (`http://tauri.*`, `ipc.*`, `ljext.*`), an extension URL in any form, the
   app's own origin, `data:`, `blob:`, `file:`, `javascript:` or another scheme
-  (`popup-navigation-refused <url>`).
+  (`popup-navigation-refused <url>`); a closing popup loads nothing but its `about:blank`. **This
+  guards a popup's top-level navigations on every OS, and its frames on macOS and Linux only:**
+  WebView2 asks the guard only about top-level navigations (wry hooks `NavigationStarting`, not
+  `FrameNavigationStarting`), so **on Windows a frame inside the page or a popup is never checked**
+  — what it loads is the web's; the app's pages refuse to be framed (`frame-ancestors 'none'` in
+  the CSP header Tauri sends with them), and extension files are refused by the `ljext` handler's
+  own checks.
 - **Nothing else:** no capability may match a popup's label (`capability_tests.rs`), no
   initialization script of ours (the bar's source test walks every file), no further popups (its
   new windows go to the main browser through the gate, `NewWindowFrom::Popup`), no downloads
@@ -1720,15 +1744,23 @@ page and close. A popup is a **web page with the page's trust and less** (Ground
   every permission request denied (`permission-refused popup <kind>`), no toolbar, no bar, no
   extensions. Engine details: on macOS WebKit gives the popup a copy of the opener's configuration,
   so its custom-scheme requests reach the page's handlers under the page's label — exactly what the
-  page itself gets, which is nothing — and Tauri's own scripts are added to the shared
-  WKUserContentController once more per popup (harmless; Tauri's, not ours); on Windows the popup's
-  scheme filters were added before `put_NewWindow`, so it may not reach the app's protocols at all.
-  On WebKitGTK the popup has settings of its own, so element fullscreen is switched off there too
-  where the engine aborts on it (LJ14.1).
-- **Its end — nothing of a popup outlives the window:** every close of the Little Joan window
-  closes its popups first (`close_all` at the top of `bar::page::close_page`: `popup-closed
-  hibernate`, then `popups-closed <n>`; on macOS each goes to `about:blank` first, as the page does,
-  at most 400 ms; it waits until they are gone, at most 2 s). The popup page's `window.close()`
+  page itself gets, which is nothing; **while any popup exists the `ljext` handler refuses every
+  request** (`ljext-refused webview`), and opening an extension's panel closes the page's popups
+  first, synchronously (`close_all(…, "opener-left")`), so a popup can never be served a panel's
+  files or SDK. Tauri's own scripts are added to the shared WKUserContentController once more per
+  popup (Tauri's, not ours; hence the 30 per page), and the preferences are shared too — so element
+  fullscreen stays on in a macOS popup (switching it off there would switch it off for the page;
+  Deferred follow-ups). On Windows the popup's scheme filters were added before `put_NewWindow`, so
+  it may not reach the app's protocols at all. On WebKitGTK the popup has settings of its own, and
+  its element fullscreen is always off (a fullscreen element would cover its title).
+- **Its end — nothing of a popup outlives the window** (`bar/popup/closing.rs`): as the window
+  starts closing the page stops taking new windows (`stop_accepting`, before the window hides), and
+  `bar::page::close_page` — after any page build under way — closes the popups first
+  (`page_closing`: `popup-closed hibernate`, then `popups-closed <n>`; on macOS each goes to
+  `about:blank` first, as the page does, at most 400 ms; it waits until they are gone, at most 2 s)
+  and sweeps once more after the page is closed. A popup registers itself under the same lock that
+  stops the page taking new windows, and one whose close came while it was being built is destroyed
+  as soon as it exists. The popup page's `window.close()`
   closes it (`popup-closed by-page`): wry only destroys the webview, so WebView2's
   `WindowCloseRequested` (Windows), WebKit's `-webViewDidClose:` — added once to wry's delegate
   class, before the first popup's delegate is set, because WebKit reads which methods a delegate
@@ -1738,9 +1770,10 @@ page and close. A popup is a **web page with the page's trust and less** (Ground
   opener (`bar/page.rs`'s `Started` — the engines' commit), the popup closes (`popup-closed
   opener-left`, `popups::opener_left`); a reload or a same-origin navigation keeps it (sign-in
   flows reload the opener) — and since opening an extension's panel first takes the page to the
-  app's start page, no popup lives on beside a panel. A popup that closes gives the keyboard back to
-  the page (the window focused, then the page webview). Windows are destroyed from a thread of
-  their own, never inside the engine's callback.
+  app's start page, no popup lives on beside a panel. A popup that had the keyboard when it started
+  closing gives it back to the page (the window focused, then the page webview; Windows: "had the
+  keyboard" is "was the foreground window", as tao's focus goes false while a webview has it).
+  Windows are destroyed from a thread of their own, never inside the engine's callback.
 - **Keys (LJ48):** of Little Joan's keys only **Close** acts in a popup, and it closes the popup —
   never the window behind (`popups::route_key`, `popup-closed user`); every other key is the popup
   page's own (no command bar to open, no history to show). Windows: `AcceleratorKeyPressed` on the
@@ -1750,11 +1783,18 @@ page and close. A popup is a **web page with the page's trust and less** (Ground
   (LJ43), so a rebound Close works in popups too. **The global shortcut** with a popup that has the
   keyboard counts as Little Joan having it (`joan::window_state`): one press dismisses the window,
   and the popup with it.
-- **Smoke log:** `popup-opened <title>`, `popup-pending` / `popup-early` / `popup-settled unsized`
-  (WebKitGTK), `popup-loaded <title>`, `popup-closed <by-page|user|opener-left|hibernate>`, `popups-closed
-  <n>`, `popup-limited <cap|rate>`, `popup-failed`, `popup-new-window`, `popup-navigation-refused
-  <url>`, `popup-unload timeout` (macOS), `permission-refused popup <kind>`, `download-refused
-  popup`.
+- **Smoke log:** `popup-opened <its target's place>`, `popup-title <title>` (every title it gets,
+  from its build on), `popup-pending` / `popup-early` / `popup-settled <unsized|timeout>` /
+  `popup-gtk features=… toolbar=… location=… menubar=… geometry=…` (WebKitGTK), `popup-loaded
+  <place>`, `popup-closed <by-page|user|opener-left|hibernate>`, `popups-closed <n>`,
+  `popup-limited <cap|rate|lifetime>`, `popup-failed`, `popup-new-window`,
+  `popup-navigation-refused <url|closing>`, `popup-unload timeout` (macOS), `new-window-dropped
+  closing`, `permission-refused popup <kind>`, `download-refused popup`.
+- **The page's own permissions** (phase 22's review): the page answers every permission request wry
+  routes (`bar/page.rs`'s `page_permission`, `permission-refused page <kind>`) — macOS refuses all
+  (wry's delegate used to grant a page's camera and microphone); Linux refuses what WebKitGTK
+  refuses itself and keeps pointer lock; Windows keeps WebView2's own prompt (the owner's call;
+  docs/BUILD_PLAN.md's Deferred follow-ups).
 
 ## Translate and open in browser
 
@@ -1846,9 +1886,10 @@ download, LJ15) / `download-decide other|no-url` (Linux: a download that isn't t
 default=<self|other|none>` / `handoff os-default | browser=<id>` / `handoff-none` /
 `handoff-self-refused` / `default-apps-settings <what>` / `settings-scrolled browser` (LJ46: the
 OS's browsers read, where a page was handed, the default-apps button, the smoke-only scroll to
-Settings' Browser section), `new-window` / `handoff-throttled` / `handoff-refused <why>` (a page's
-new-window request reached the app; dropped by the gate; an extension panel's refused —
-the security review), `link-opened` / `link-refused
+Settings' Browser section), `new-window` / `handoff-admitted` / `handoff-throttled` /
+`handoff-refused <why>` (a page's new-window request reached the app; the gate let it through
+— phase 22's review times the flood rule from it —; dropped by the gate; an extension panel's
+refused — the security review), `link-opened` / `link-refused
 <scheme>[ <why>]` / `link-ignored <n>` (a link from another app opened, was refused, or came after
 the first in a batch; never the URL — LJ45), `fullscreen-off <version>`
 (Linux: element fullscreen switched off for a new page window, the runtime WebKitGTK being older than 2.52, LJ14.1),
@@ -2320,8 +2361,9 @@ and pushes to `main`:
   `?blank=1` (one big `target=_blank` link) is clicked at the screen's centre, and the app must log
   `handoff browser=<fake>`, the fake must get `…smoke.html?from=blank`, and no `link-opened` may
   follow; then the flood (`?flood=1`: five new windows per click, three clicks): every
-  `new-window` handed on or dropped (`handoff-throttled`), at most one handoff a second over the
-  flood's span, the fake receiving no more than were handed on (Windows' fake launches through
+  `new-window` handed on or dropped (`handoff-throttled`), the gate's admissions
+  (`handoff-admitted`) at least 950 ms apart and none handed on unadmitted, the fake receiving no
+  more than were handed on (Windows' fake launches through
   its ProgId, `LJFakeBrowserURL`); on every OS Settings → General is scrolled to its Browser section (smoke only,
   `LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`) for `settings-general-browser.png`, with a
   `browsers-listed` line; on Linux the smoke itself then makes Little Joan the runner's default
@@ -2330,8 +2372,8 @@ and pushes to `main`:
   `handoff-self-refused` and no `link-opened` (no loop); mimeapps.list is put back and the fakes
   removed. macOS and Windows never get a default changed; macOS's handoff is unit tests and the
   owner's check (logs `smoke-handoff*.log`, `summary.json`'s `handoffRun`); the `?blank=1` click
-  must open no popup (LJ47), and the flood's rate is measured up to its last handoff (on Linux a
-  request decided at `ready-to-show` is handed on after the last one came). Then the **popups run**
+  must open no popup (LJ47) (on Linux a request decided at `ready-to-show` is handed on after the
+  last one came, so the rate is measured at the gate, not at the `handoff` line). Then the **popups run**
   (`smoke-popups.mts`, LJ47; its own launch): the smoke server also serves `tests/smoke/` on a
   second port — another origin, the fake provider; the smoke page's `?popup=oauth&at=<it>` is one
   big "Sign in" button, clicked at the screen's centre, that opens `signin.html` with
@@ -2339,15 +2381,21 @@ and pushes to `main`:
   http://127.0.0.1:<port2>` and `popup-loaded` there (`popup.png` while it shows), the sign-in page
   posts `lj-signed-in` to its opener and calls `window.close()` (`popup-closed by-page`), the
   opener must report `LJ-POPUP received=1 closed=1`, and nothing may be handed on or refused;
-  `?popup=blank` (a sized `about:blank` popup whose location the opener sets) the same; then with
+  `?popup=blank` (a sized `about:blank` popup whose location the opener sets) the same;
+  `?popup=spoof` (phase 22's review: a sized popup at the second port's `/hang`, which the server
+  never answers in time, `stop()`ped and a fake form `document.write`n into it) must be built
+  titled by its opener (`popup-title http://127.0.0.1:<port1>`) and never titled by the second
+  origin, with nothing of it loaded; then with
   a popup left open (`&stay=1`) `--hide` must log `popup-closed hibernate` before `page-closed`, and
   none of the webview helpers that came with the page and its popup may be left 10–30 s later;
   with a popup open the opener loads a page of its own origin (the popup must stay), then one of
   the second port's (`popup-closed opener-left`); and in a new popup the history key must do
   nothing (no `history-view`) and Ctrl+W must close the popup only (`popup-closed user`, no
   `closing`) — the popup activated by its title (`AppActivate` on Windows, `xdotool search` on
-  Linux; best effort with Cmd on macOS). macOS runners may not deliver the click: a flow whose
-  click asked for no new window is reported there, not failed (logs `smoke-popups.log`,
+  Linux; best effort with Cmd on macOS); last `?popup=onblur` (the review: the page opens a sized
+  popup on `blur`, `visibilitychange` or `pagehide`), focused by a click, then `--hide`: nothing may
+  open or be handed on (`new-window-dropped closing`). macOS runners may not deliver the click: a
+  flow whose click asked for no new window is reported there, not failed (logs `smoke-popups.log`,
   `summary.json`'s `popupsRun`). Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch

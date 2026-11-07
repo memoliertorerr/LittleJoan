@@ -297,12 +297,15 @@ that open a small window open it **inside Little Joan**, in a small window over 
 sign-in finishes, the window closes by itself and the site is signed in. It shares the page's
 cookies, so the login lasts like any other.
 
-- **Its title shows where you are signing in** — the site's address, `accounts.google.com` — never
-  what the page says about itself. Check it before you type a password.
+- **Its title shows where you are signing in** — the address of the page that has loaded in it,
+  `accounts.google.com` — never what the page says about itself, and never an address that hasn't
+  loaded: until the sign-in page loads, it shows the site that opened it. A very long address keeps
+  its end (`…example.com`), the part that says whose it is. Check it before you type a password.
 - It opens for a page's sign-in window (one that asks for a window size, or a known sign-in page);
   a link that opens a new tab still goes to your main browser.
 - It is a plain web page: no access to Little Joan, no downloads, no camera, microphone or
-  location, and its own new windows go to your main browser. At most two are open at once.
+  location, and its own new windows go to your main browser. At most two are open at once (and
+  thirty each time you open Little Joan); a page that is being closed opens none.
 - **Ctrl+W** (Windows, Linux) or **Cmd+W** (macOS) closes it — only it, not the page behind;
   Little Joan's other keys do nothing there. It also closes when the page behind goes to another
   site, and when you close Little Joan (the shortcut dismisses both, even while the popup has the

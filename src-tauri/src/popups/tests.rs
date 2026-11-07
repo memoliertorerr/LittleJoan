@@ -11,8 +11,12 @@ fn web(s: &str) -> Opener {
 const SIGNIN: &str = "http://127.0.0.1:8124/signin.html";
 const SIZED: Size = Size::Given(480.0, 600.0);
 
-fn decided(opener: &Opener, target: &str, size: Size, open: usize) -> Decision {
-    decide(opener, &url(target), size, open, || true).decision
+fn open(open: usize) -> Counts {
+    Counts { open, opened: 0 }
+}
+
+fn decided(opener: &Opener, target: &str, size: Size, now: usize) -> Decision {
+    decide(opener, &url(target), size, open(now), || true).decision
 }
 
 #[test]
@@ -158,20 +162,48 @@ fn webkitgtk_requests_wait_for_the_size() {
 }
 
 #[test]
-fn webkitgtk_asked_for_a_popup_window_only_when_its_bars_are_hidden() {
-    // A link or a bare window.open shows the bars: no size asked, whatever the geometry says.
-    assert_eq!(gtk_asked([true, true, true], 800, 640), None);
-    assert_eq!(gtk_asked([false, true, false], 480, 600), None);
-    // A features string hides them: the geometry is the size asked for.
+fn webkitgtk_asked_for_a_size_only_when_its_features_gave_one() {
+    // WebKitGTK 2.44–2.52, read from its source (popups.rs's gtk_asked): what the new view's window
+    // properties hold for `window.open(url, name, "width=480,height=600")` and for a target=_blank
+    // link (or a bare window.open(url)). The features' geometry, right after `create`:
+    let sized_features = Some((480, 600));
+    let link_features = Some((0, 0));
+    // At ready-to-show both have a geometry (WebCore set the frame: the request's size, or the
+    // popup window's default size for a link) and the same bars — toolbar hidden, location and
+    // menu bars shown —, so neither can say (CI runs 42390685720 and 42393350263).
+    let at_ready_to_show = |features: Option<(i32, i32)>| {
+        let (width, height) = match features {
+            Some((w, h)) if w > 0 && h > 0 => (w, h),
+            _ => (480, 640),
+        };
+        ([false, true, true], width, height)
+    };
     assert_eq!(
-        gtk_asked([false, false, false], 480, 640),
-        Some((480.0, 640.0))
+        at_ready_to_show(sized_features).0,
+        at_ready_to_show(link_features).0
     );
-    assert_eq!(gtk_asked([false, false, false], 0, 0), Some(DEFAULT_SIZE));
-    let sized = gtk_asked([false, false, false], 480, 640);
-    assert_eq!(settle(&url(SIGNIN), sized.is_some()), Decision::InApp);
-    let link = gtk_asked([true, true, true], 800, 640);
-    assert_eq!(settle(&url(SIGNIN), link.is_some()), Decision::Browser);
+    assert!(at_ready_to_show(link_features).1 > 0);
+    // The features' geometry does.
+    assert_eq!(gtk_asked(sized_features), Some((480.0, 600.0)));
+    assert_eq!(gtk_asked(link_features), None);
+    // Only one of the two (or none read at all): no size asked.
+    assert_eq!(gtk_asked(Some((480, 0))), None);
+    assert_eq!(gtk_asked(Some((0, 600))), None);
+    assert_eq!(gtk_asked(None), None);
+    assert_eq!(
+        settle(&url(SIGNIN), gtk_asked(sized_features).is_some()),
+        Decision::InApp
+    );
+    assert_eq!(
+        settle(&url(SIGNIN), gtk_asked(link_features).is_some()),
+        Decision::Browser
+    );
+    assert_eq!(
+        settle(&url("about:blank"), gtk_asked(sized_features).is_some()),
+        Decision::InApp
+    );
+    // The wait before an undecided popup settles as unsized is far longer than ready-to-show takes.
+    assert!(GTK_SETTLE_WAIT >= Duration::from_secs(5));
 }
 
 #[test]
@@ -222,7 +254,7 @@ fn a_popup_never_opens_on_what_it_may_not_load() {
     }
     let app = keys::app_origin().join("index.html").expect("joins");
     assert_ne!(
-        decide(&page, &app, SIZED, 0, || true).decision,
+        decide(&page, &app, SIZED, open(0), || true).decision,
         Decision::InApp
     );
 }
@@ -231,22 +263,50 @@ fn a_popup_never_opens_on_what_it_may_not_load() {
 fn at_most_two_popups_at_once() {
     let page = web("https://shop.example/");
     assert_eq!(decided(&page, SIGNIN, SIZED, MAX_OPEN - 1), Decision::InApp);
-    let full = decide(&page, &url(SIGNIN), SIZED, MAX_OPEN, || true);
+    let full = decide(&page, &url(SIGNIN), SIZED, open(MAX_OPEN), || true);
     assert_eq!(full.decision, Decision::Browser);
     assert_eq!(full.limit, Some(Limit::Cap));
-    let blank = decide(&page, &url("about:blank"), SIZED, MAX_OPEN, || true);
+    let blank = decide(&page, &url("about:blank"), SIZED, open(MAX_OPEN), || true);
     assert_eq!(blank.decision, Decision::Refuse);
     assert_eq!(blank.limit, Some(Limit::Cap));
 }
 
 #[test]
+fn at_most_thirty_popups_in_a_pages_life() {
+    let page = web("https://shop.example/");
+    let used = |opened| Counts { open: 0, opened };
+    assert_eq!(
+        decide(&page, &url(SIGNIN), SIZED, used(LIFETIME_MAX - 1), || true).decision,
+        Decision::InApp
+    );
+    let spent = decide(&page, &url(SIGNIN), SIZED, used(LIFETIME_MAX), || true);
+    assert_eq!(spent.decision, Decision::Browser);
+    assert_eq!(spent.limit, Some(Limit::Lifetime));
+    assert_eq!(spent.limit.map(Limit::name), Some("lifetime"));
+    // A known sign-in flow goes to the browser too; the rate isn't counted.
+    let mut asked = false;
+    let google = decide(
+        &page,
+        &url("https://accounts.google.com/o/oauth2/auth"),
+        Size::None,
+        used(LIFETIME_MAX),
+        || {
+            asked = true;
+            true
+        },
+    );
+    assert_eq!(google.decision, Decision::Browser);
+    assert!(!asked);
+}
+
+#[test]
 fn openings_are_rate_limited_and_counted_only_for_a_popup() {
     let page = web("https://shop.example/");
-    let limited = decide(&page, &url(SIGNIN), SIZED, 0, || false);
+    let limited = decide(&page, &url(SIGNIN), SIZED, open(0), || false);
     assert_eq!(limited.decision, Decision::Browser);
     assert_eq!(limited.limit, Some(Limit::Rate));
     let mut asked = 0;
-    for (opener, target, size, open) in [
+    for (opener, target, size, now) in [
         (web("https://shop.example/"), SIGNIN, Size::None, 0),
         (Opener::Other, SIGNIN, SIZED, 0),
         (web("https://shop.example/"), "about:blank", Size::None, 0),
@@ -258,13 +318,13 @@ fn openings_are_rate_limited_and_counted_only_for_a_popup() {
             0,
         ),
     ] {
-        let _ = decide(&opener, &url(target), size, open, || {
+        let _ = decide(&opener, &url(target), size, open(now), || {
             asked += 1;
             true
         });
     }
     assert_eq!(asked, 0, "only a request that would get a popup counts");
-    let _ = decide(&page, &url(SIGNIN), SIZED, 0, || {
+    let _ = decide(&page, &url(SIGNIN), SIZED, open(0), || {
         asked += 1;
         true
     });
@@ -328,6 +388,80 @@ fn the_title_is_where_the_popup_is() {
         "xn--80ak6aa92e.com"
     );
     assert_eq!(title_for(&url("https://[::1]:9000/")), "[::1]:9000");
+}
+
+#[test]
+fn a_popup_is_built_titled_by_its_opener_never_by_its_target() {
+    // The review's spoof: window.open(target), stop(), document.write(a fake form) — nothing of
+    // the target ever commits, so its host must never be the title.
+    let opener = url("https://evil.example/start").origin();
+    for target in [
+        "https://accounts.google.com/",
+        "https://appleid.apple.com/auth/authorize",
+        "http://127.0.0.1:8124/signin.html",
+    ] {
+        let host = url(target).host_str().expect("a host").to_owned();
+        let built = opener_title(&opener);
+        assert_eq!(built, "evil.example");
+        assert!(!built.contains(&host), "{target}");
+    }
+    assert_eq!(
+        opener_title(&url("http://127.0.0.1:8123/smoke.html").origin()),
+        "http://127.0.0.1:8123"
+    );
+    // A blank or srcdoc document is the opener's (it inherits its origin); a committed page is
+    // its own.
+    assert_eq!(title_at(&url("about:blank"), &opener), "evil.example");
+    assert_eq!(title_at(&url("about:srcdoc"), &opener), "evil.example");
+    assert_eq!(
+        title_at(&url("https://accounts.google.com/signin"), &opener),
+        "accounts.google.com"
+    );
+}
+
+#[test]
+fn a_long_host_keeps_its_end() {
+    let long = "accounts.google.com.verify-session-0123.evil.example";
+    let title = title_for(&url(&format!("https://{long}/login")));
+    assert_eq!(title, "…evil.example");
+    assert!(title.ends_with("evil.example"));
+    assert!(!title.contains("google"));
+    assert!(title.chars().count() <= HOST_MAX);
+    // As many whole labels as fit, the registrable domain last.
+    assert_eq!(
+        short_host("accounts.google.com.verify.evil.example"),
+        "…com.verify.evil.example"
+    );
+    // Short hosts stay whole (the known providers among them).
+    for host in [
+        "accounts.google.com",
+        "login.microsoftonline.com",
+        "appleid.apple.com",
+        "a-thirty-character-host.example",
+    ] {
+        if host.chars().count() <= HOST_MAX {
+            assert_eq!(short_host(host), host);
+        }
+    }
+    // The last two labels stay even when they are long; one label longer than the room keeps its
+    // own end.
+    let two = format!("www.{}.example", "a".repeat(40));
+    let shown = short_host(&two);
+    assert!(
+        shown.starts_with('…') && shown.ends_with("aaaa.example"),
+        "{shown}"
+    );
+    assert_eq!(shown.chars().count(), HOST_MAX);
+    // With a port, and over http: the scheme and the port stay.
+    assert_eq!(
+        title_for(&url(&format!("http://{long}:8080/"))),
+        "http://…evil.example:8080"
+    );
+    // IP addresses are never cut.
+    assert_eq!(
+        title_for(&url("http://127.0.0.1:8124/")),
+        "http://127.0.0.1:8124"
+    );
 }
 
 #[test]
