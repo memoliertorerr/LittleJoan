@@ -237,6 +237,8 @@ fn build<R: Runtime>(
         .maximizable(false)
         .minimizable(false)
         .always_on_top(false)
+        // The saved autofill, which WebView2 shares across the profile (logins.rs, LJ51).
+        .general_autofill_enabled(crate::logins::autofill_forms(app))
         .visible(!pending)
         .focused(!pending)
         .on_navigation({
@@ -324,6 +326,8 @@ fn build<R: Runtime>(
     }
     // Keys, `window.close()`, and (WebKitGTK) the size it asked for and its downloads.
     platform::install_popup(app, &window, pending);
+    // Windows' own password saving and autofill, as saved, read back (LJ51).
+    crate::logins::apply(app, window.as_ref(), crate::logins::Place::Popup);
     smoke::log("popup-title", &title);
     if pending {
         smoke::log("popup-pending", "");

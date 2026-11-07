@@ -46,6 +46,10 @@ pub struct Change {
     pub main_browser: Option<String>,
     /// A site pinned or unpinned (LJ50: the command bar's quick commands, Shift+Delete).
     pub pin: Option<Pin>,
+    /// Windows' web engine's password saving and form autofill (LJ51; Settings → Privacy only —
+    /// no quick command carries them).
+    pub save_passwords: Option<bool>,
+    pub autofill_forms: Option<bool>,
 }
 
 /// Pinning (LJ50), done on the settings of the moment (settings/pinned.rs).
@@ -71,6 +75,11 @@ impl Change {
     /// It switches extensions or Developer mode.
     pub fn touches_extensions(&self) -> bool {
         self.disabled_extensions.is_some() || self.developer_mode.is_some()
+    }
+
+    /// It switches the engine's password saving or form autofill (LJ51).
+    pub fn touches_logins(&self) -> bool {
+        self.save_passwords.is_some() || self.autofill_forms.is_some()
     }
 }
 
@@ -119,6 +128,12 @@ pub fn apply_change(current: &Settings, change: &Change) -> Result<Settings, Str
     }
     if let Some(on) = change.show_tray_icon {
         next.show_tray_icon = on;
+    }
+    if let Some(on) = change.save_passwords {
+        next.save_passwords = on;
+    }
+    if let Some(on) = change.autofill_forms {
+        next.autofill_forms = on;
     }
     if let Some(mode) = &change.after_close {
         next.after_close = AfterClose::from_name(mode)

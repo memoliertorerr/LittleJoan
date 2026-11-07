@@ -278,6 +278,37 @@
             </span>
           </div>
           <p id="clear-status" class="setting-note" role="status" hidden></p>
+          <h2 id="logins-label">Saved passwords and forms</h2>
+          <div id="logins-section" class="logins-section" aria-labelledby="logins-label">
+            <div id="logins-windows" hidden>
+              <label class="setting" for="save-passwords">
+                <span class="setting-label" id="save-passwords-label"></span>
+                <input id="save-passwords" type="checkbox" aria-describedby="save-passwords-note" />
+              </label>
+              <p class="setting-note" id="save-passwords-note"></p>
+              <label class="setting" for="autofill-forms">
+                <span class="setting-label" id="autofill-forms-label"></span>
+                <input id="autofill-forms" type="checkbox" aria-describedby="autofill-forms-note" />
+              </label>
+              <p class="setting-note" id="autofill-forms-note"></p>
+              <div class="setting">
+                <button id="logins-remove" type="button" aria-describedby="logins-remove-note"></button>
+              </div>
+              <p class="setting-note" id="logins-remove-note"></p>
+              <div id="logins-confirm" class="confirm" role="group" aria-labelledby="logins-question" hidden>
+                <span id="logins-question"></span>
+                <span class="setting-controls">
+                  <button id="logins-cancel" type="button">Cancel</button>
+                  <button id="logins-go" class="danger" type="button">Remove</button>
+                </span>
+              </div>
+              <p id="logins-status" class="setting-note" role="status" hidden></p>
+            </div>
+            <div id="logins-unavailable" hidden>
+              <p class="setting-note" id="logins-unavailable-title"></p>
+              <p class="setting-note" id="logins-unavailable-why"></p>
+            </div>
+          </div>
           <h2>What is stored where</h2>
           <dl class="storage">
             <dt>Settings and history</dt>
@@ -286,6 +317,8 @@
             <dd id="store-site">…</dd>
             <dt>Session cookies</dt>
             <dd>In memory while Little Joan runs, never on disk.</dd>
+            <dt>Saved passwords and form data</dt>
+            <dd id="store-logins">…</dd>
           </dl>
           <p class="setting-note">History never leaves this computer: nothing is synced or sent anywhere.</p>
         </section>

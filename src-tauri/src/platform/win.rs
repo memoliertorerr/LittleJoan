@@ -52,6 +52,8 @@ pub mod browsers;
 pub(super) mod find;
 mod front;
 pub use front::{foreground, front};
+/// The engine's password saving and form autofill (LJ51).
+pub(super) mod logins;
 /// Sign-in popups (LJ47).
 pub mod popups;
 /// The bar's processes failing, its rest, the page's downloads (LJ19.4).

@@ -53,6 +53,13 @@ All notable changes to Little Joan are recorded here. The format follows
   most two are open at once. **Ctrl+W** / **Cmd+W** closes the popup (only it); it also closes when
   the page behind goes to another site, and when you close Little Joan. Links that open a new tab
   still go to your main browser, as before.
+- **Saved passwords and form data on Windows.** Settings → Privacy now has Windows' web engine's own
+  switches: **Offer to save passwords** (off by default) and **Fill in forms** — addresses and the
+  like (on by default, as it has always been) — and **Remove saved passwords and form data…**,
+  which, after a question, has the engine delete everything it saved, even while Little Joan's
+  window is closed (cookies, site data and history stay). What the engine saves stays in its own
+  store on your computer; Little Joan never reads, exports or syncs it. On macOS and Linux Settings
+  says why Little Joan can't save passwords there yet.
 
 ### Security
 - **A sign-in popup's title names only a page that has loaded in it.** Until the sign-in page loads,

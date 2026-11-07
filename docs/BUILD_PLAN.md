@@ -133,7 +133,7 @@
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 (head e7d13c8, run 42401453791 green 18/18) merged as 7f0edd2 by the coordinator after the review (Ground Rule 24); main's run 42404243947 green 18/18 |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; Linux's highlights fixed in `lj-step-49-fix`; PR #42 (head 0964ee6, run 42414060894 green 18/18 after one re-run of Windows smoke's lost-keys flake) merged as f335e62; main's run 42418522861 green 18/18) |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes; PR #42 merged as f335e62) |
-| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | 🔄 in progress (phase 24, `lj/p24-saved-logins`) |
+| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ✅ done (phase 24, `lj/p24-saved-logins`; CI: see notes) |
 | LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | 🔄 in progress (phase 24, `lj/p24-saved-logins`) |
 | LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
@@ -9455,6 +9455,46 @@ into main as a draft, and watch CI until every job is green (Ground Rule 3; two 
 attempts, then stop). Look at the screenshots on every OS.
 ```
 
+**Implementation notes (2026-11-07; disk 11 GB free before and after, `.cache/target` 1.5 GB):**
+- **As designed**, in the files the prompt names plus the split the 400-line guideline asks for:
+  `settings/logins.rs` (the two fields, tolerant; tests), `settings/change.rs` (`save_passwords`,
+  `autofill_forms`, `touches_logins`; no quick command carries them), `logins.rs` (when: the page
+  and each popup right after they are built, every webview of the profile after a Save that changed
+  them), `platform/logins.rs` → `platform/win/logins.rs` (WebView2: `ICoreWebView2Settings4` set and
+  read back, `ICoreWebView2_13::Profile` → `ProfilePath`, `ICoreWebView2Profile2::ClearBrowsingData(
+  PASSWORD_AUTOSAVE | GENERAL_AUTOFILL)` waiting up to 15 s off the main thread), `commands/logins.rs`
+  (`clear_saved_logins`, through the settings window's own webview), `ui/settings/logins-logic.ts`
+  (+ test) and `logins.ts`, `scripts/ci/smoke-logins.mts` (+ test). The settings capability gained
+  only `allow-clear-saved-logins` (`only_settings_may_remove_saved_logins`); `joan-page` and popups
+  still have none; nothing is injected into a page.
+- **The settings window's data folder:** `builder_input` takes `AppState::webview_data_dir` (the
+  page's) and the saved `autofillForms`; a test on that input, and that `open()` hands the folder to
+  the builder. Installed builds are unchanged (both `None` → Tauri's `app_local_data_dir`); dev
+  builds and CI now match them — on Linux the settings window joins the page's WebKitGTK web context
+  as it already did in installed builds.
+- **The environment-options landmine, checked in the vendored sources:** wry gives every WebView2
+  environment the same options unless a builder sets them (browser arguments, the user's language,
+  extensions off, default scroll bars), and none of Little Joan's builders does — a test now walks
+  `src/` for `.additional_browser_args(`, `.browser_extensions_enabled(`, `.scroll_bar_style(`,
+  `.proxy_url(`, `.incognito(` and `.data_store_identifier(`. (Installed builds have given the
+  window and Settings one folder since v0.1: both took Tauri's default.)
+- **Beyond the prompt, for safety:** wry sets general autofill on every webview it creates (on by
+  default) and WebView2 keeps it per profile, so a settings window or popup built with wry's
+  default would switch autofill back on for the page: every builder on the profile passes the saved
+  value (`general_autofill_enabled`; a test checks the four). A Save also sets the switches on the
+  settings window's own webview, so they take effect at once while hibernating.
+- **Honest texts:** "Offer to save passwords" off stops new saving only — WebView2 still fills in
+  what it saved earlier — and the note says so; "Remove…" says cookies, site data and history stay
+  and that Little Joan never reads, exports or syncs what it removes. "What is stored where" gets a
+  row for saved passwords and form data.
+- **Smoke hooks:** `LITTLEJOAN_SMOKE_SETTINGS_SCROLL` now takes `browser` or `logins` (a fixed table
+  of element ids); with `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=remove` the section's button and the
+  question's Remove are clicked from Rust (as `smoke_click_quit` does), so the page's own handler
+  calls `clear_saved_logins`. Smoke log: `logins …` / `logins-seen …` (booleans only),
+  `webview-profile <place>=<path>`, `saved-logins-cleared ok|failed <reason>`.
+- `npm run verify`: 849 TS tests, 528 Rust tests, clippy clean (macOS compiles here; the WebView2
+  glue only in CI).
+
 ### LJ52 — Passkeys and saved logins: what each engine offers; docs; the review · standard · review
 
 **Verify:** `npm run verify` green, including vitest tests for `tests/smoke/webauthn-logic.mjs`
@@ -10515,11 +10555,24 @@ Populated from real friction, not speculation:
 - *(round 3 planning, vendored tauri 2.12.4)* **`RunEvent::Opened` exists only on macOS** (and
   iOS / Android): on Windows and Linux a link from another app arrives as a command-line argument,
   through single-instance. LJ45.
-- *(round 3 planning, read in the code)* **The settings window doesn't use the page's webview data
-  folder.** `settings_window.rs` sets no `data_directory`, so Tauri forces `app_local_data_dir`;
+- *(round 3 planning, read in the code)* **The settings window didn't use the page's webview data
+  folder.** `settings_window.rs` set no `data_directory`, so Tauri forced `app_local_data_dir`;
   the page uses `AppState::webview_data_dir` — the same folder in installed builds, but
   `<LITTLEJOAN_DATA_DIR>/webview` in dev builds and CI. Anything that acts on the page's profile
-  through the settings window (LJ51) must give it the same folder first.
+  through the settings window (LJ51) must give it the same folder first. *(Fixed by LJ51: the
+  settings window takes `AppState::webview_data_dir` too, and CI compares the two profiles' paths.)*
+- *(LJ51, vendored wry 0.57 / webview2-com-sys 0.39.1)* **WebView2's password autosave and general
+  autofill are the profile's, and wry sets autofill on every webview it creates.** wry calls
+  `SetIsGeneralAutofillEnabled(attributes.general_autofill_enabled)` (default `true`) when it builds
+  any webview (`webview2/mod.rs` 655–657), and WebView2 keeps both switches per profile
+  (`ICoreWebView2Profile6` has them too; a webview's settings and its profile's always agree). A
+  builder on the page's profile that doesn't pass the saved `autofillForms` would switch autofill
+  back on for the page — so all four (bar, page, popup, Settings) pass it (a test). And every
+  WebView2 environment on one user data folder must use the same options — additional browser
+  arguments (wry's default `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection
+  --autoplay-policy=no-user-gesture-required`), the language (the user's), extensions, scroll-bar
+  style (`webview2/mod.rs` 288–360) — or creating the second one fails; none of the builders sets
+  one (a test walks `src/`).
 - *(round 3 planning, vendored tauri-utils 2.10.2)* **Tauri's desktop-file template offers only
   `categories`, `comment`, `exec`, `icon` and `name`;** `MimeType=` and `%u` go into the template's
   text (LJ45).

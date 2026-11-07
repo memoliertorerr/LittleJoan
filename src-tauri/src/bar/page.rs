@@ -143,6 +143,9 @@ fn build<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) -> tauri::Result<()
     super::find::forget();
     let page = add(window, data_dir, rect)?;
     platform::install_page(&page);
+    // Windows' own password saving and autofill, as saved (LJ51), before any web page loads.
+    crate::logins::apply(app, &page, crate::logins::Place::Page);
+    crate::logins::report(&page, crate::logins::Place::Page);
     super::view::page_added(window, &page);
     summon_timing::mark(Mark::PageBuilt);
     smoke::log("page-built", "");
@@ -211,6 +214,8 @@ fn page_builder<R: Runtime>(app: AppHandle<R>, data_dir: Option<PathBuf>) -> Web
     let mut page = WebviewBuilder::new(PAGE, WebviewUrl::App("index.html".into()))
         // Never the keyboard: the bar's field has it (keys typed right after a summon land there).
         .focused(false)
+        // The saved autofill, which WebView2 shares across the profile (logins.rs, LJ51).
+        .general_autofill_enabled(crate::logins::autofill_forms(&app))
         // Web pages only: no file:, javascript:, or app-launching schemes (navigation.rs); an
         // extension's panel only when the app opened it (extensions/session.rs).
         .on_navigation(extensions::session::allow_page_navigation)

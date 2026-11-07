@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-saved-logins"
+description = "Enables the clear_saved_logins command without any pre-configured scope."
+commands.allow = ["clear_saved_logins"]
+
+[[permission]]
+identifier = "deny-clear-saved-logins"
+description = "Denies the clear_saved_logins command without any pre-configured scope."
+commands.deny = ["clear_saved_logins"]

@@ -24,6 +24,7 @@ pub mod keymap;
 pub mod keys;
 pub mod layout;
 pub mod links;
+pub mod logins;
 pub mod navigation;
 pub mod page_actions;
 pub mod page_address;
@@ -117,6 +118,7 @@ pub fn run() {
             commands::browsers::open_default_apps_settings,
             commands::downloads::reveal_download,
             commands::find::find,
+            commands::logins::clear_saved_logins,
             commands::quick::quick_state,
             commands::quick::quick_command,
             commands::keys::keymap_info,

@@ -22,9 +22,12 @@ mod find;
 mod glass;
 /// A summon leaving the page's element fullscreen (LJ19.5).
 mod leave;
+/// Windows' own password saving and form autofill, switched and removed (LJ51).
+mod logins;
 pub use find::find;
 pub use glass::{glass_os, glass_support, set_glass, watch_accessibility};
 pub use leave::{close_media_presentations, fullscreen_now, has_keyboard, webkit_fullscreen_exit};
+pub use logins::{apply_logins, clear_saved_logins, report_logins};
 
 use std::path::PathBuf;
 use std::sync::OnceLock;

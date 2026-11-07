@@ -122,6 +122,8 @@ pub fn add_bar<R: Runtime>(
         // bar painted one; the page keeps the engine's white) — clear over glass (LJ19.9).
         .initialization_script(theme_script(&look))
         .background_color(crate::glass::background(base, look.glass))
+        // The saved autofill, which WebView2 shares across the profile (logins.rs, LJ51).
+        .general_autofill_enabled(crate::logins::autofill_forms(window.app_handle()))
         // The bar is ours and never leaves the app's origin (about:blank only to unload it when
         // the window is destroyed on macOS, see joan::release_window).
         .on_navigation(|url| navigation::is_allowed_bar_navigation(url, &keys::app_origin()))

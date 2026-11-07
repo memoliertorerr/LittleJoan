@@ -388,7 +388,8 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
   trust), **Open extensions folder** and **Reload extensions**. See below.
 - **Privacy** — **Remember history** (on by default; off, nothing new is recorded), **Clear
   history** (the last hour, 24 hours, 7 days, or everything — at once, after a question; it isn't
-  undone by Cancel), and what Little Joan keeps where on your computer.
+  undone by Cancel), **saved passwords and forms** (Windows; see Privacy below), and what Little
+  Joan keeps where on your computer.
 - **About** — the version, the license and the project's page.
 
 The default shortcut, Cmd/Ctrl+Shift+Space, can clash with app shortcuts (VS Code's parameter
@@ -451,6 +452,17 @@ You can write your own with plain HTML, CSS and JavaScript — see
 - Session cookies (the "until you close the browser" kind) last while Little Joan runs, across
   closing and reopening the window. On Windows, Little Joan holds them in memory meanwhile —
   never on disk — and quitting forgets them, as quitting a browser does.
+- **Saved passwords and form data (Windows).** Windows' web engine (WebView2) can save the
+  passwords you sign in with and offer them again, and fill in forms (addresses and the like) from
+  what you typed before. Settings → Privacy switches both: **Offer to save passwords** is **off**
+  by default, **Fill in forms** is **on** (the engine's own defaults). What it saves stays in the
+  engine's own store inside the site-data folder above, on this computer; Little Joan never reads,
+  exports, logs or syncs it. Turning saving off stops new passwords being saved — ones saved earlier
+  still fill in until you remove them: **Remove saved passwords and form data…** (after a
+  question) has the engine delete them all, even while the window is closed; cookies, site data
+  and history stay. macOS and Linux: Little Joan saves no passwords there yet — Apple lets only
+  browsers with a special entitlement use Passwords and passkeys, and WebKitGTK has no password
+  manager; Settings → Privacy says so.
 - **Downloads** land in your Downloads folder; Little Joan keeps no list of them (only the last
   one's place, for **Show in folder**, until the window closes).
 - **Site icons in the command bar** are loaded straight from each suggested site
