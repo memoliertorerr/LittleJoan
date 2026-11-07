@@ -9,6 +9,11 @@ import {
   FLOOD_READY_TITLE,
   FLOOD_TARGET,
   floodRequest,
+  FIND_NEEDLE,
+  FIND_NEEDLES,
+  FIND_READY_TITLE,
+  findParagraphs,
+  findRequest,
   CODECS,
   codecSupport,
   fullscreenTitle,
@@ -203,5 +208,22 @@ describe("the flood page (phase 21's security review)", () => {
     expect(FLOOD_PER_CLICK).toBeGreaterThan(1);
     expect(FLOOD_TARGET).toBe("smoke.html?from=flood");
     expect(FLOOD_READY_TITLE).toMatch(/^LJ-FLOOD /);
+  });
+});
+
+describe("the find page (LJ49)", () => {
+  it("is asked for with ?find=1 only", () => {
+    expect(findRequest("?find=1")).toBe(true);
+    for (const other of ["", "?find=0", "?find=", "?blank=1", "?find=yes"]) {
+      expect(findRequest(other), other).toBe(false);
+    }
+    expect(FIND_READY_TITLE).toMatch(/^LJ-FIND /);
+  });
+
+  it("shows the needle exactly three times, and nothing else contains it", () => {
+    const text = findParagraphs().join("\n");
+    expect(FIND_NEEDLES).toBe(3);
+    expect(text.split(FIND_NEEDLE)).toHaveLength(FIND_NEEDLES + 1);
+    expect(FIND_READY_TITLE.toLowerCase()).not.toContain(FIND_NEEDLE);
   });
 });

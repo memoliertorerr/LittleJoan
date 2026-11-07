@@ -13,6 +13,7 @@ pub mod commands;
 pub mod cookies;
 pub mod downloads;
 pub mod extensions;
+pub mod find;
 pub mod fullscreen;
 pub mod glass;
 pub mod history;
@@ -115,6 +116,7 @@ pub fn run() {
             commands::browsers::browsers_info,
             commands::browsers::open_default_apps_settings,
             commands::downloads::reveal_download,
+            commands::find::find,
             commands::quick::quick_state,
             commands::quick::quick_command,
             commands::keys::keymap_info,

@@ -7,6 +7,13 @@ All notable changes to Little Joan are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Find in page.** **Ctrl+F** / **Cmd+F** opens a find field in the toolbar, in the site's place.
+  The page's own web engine finds what you type as you type (case doesn't matter) and highlights
+  it: **Enter** for the next match, **Shift+Enter** for the previous (or ↓ ↑), **Esc** or × to
+  close it and get back to the page. Windows and Linux show where you are ("3 of 12"); on macOS the
+  engine says only whether it found something ("Found" / "No matches"). Nothing is added to the
+  page to do it. Loading another page or opening the command bar closes the field. The key can be
+  changed in Settings → Keyboard (it is also **View → Find…** on macOS).
 - **Liquid Glass on macOS 26 Tahoe and later.** Settings → Appearance → **Liquid Glass**: Off (the
   default), **Clear** (more transparent) or **Tinted** (more opaque, with more contrast) — the same
   choices as macOS 26.1's own setting. The toolbar and the command bar become glass, tinted by your

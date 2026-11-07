@@ -401,6 +401,13 @@ fn only_the_bar_may_reveal_downloads() {
 }
 
 #[test]
+fn only_the_bar_may_find_in_the_page() {
+    // The toolbar's find strip (LJ49): the trusted bar only — never the page (it gets no script
+    // and no IPC for find), never Settings.
+    only_the_bar_grants(&["allow-find"]);
+}
+
+#[test]
 fn only_the_bar_may_report_timing() {
     // report_timing (LJ19.1): the bar's first frame and rows, for the smoke log — never the page,
     // whose scripts must not write to it.

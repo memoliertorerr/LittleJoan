@@ -1,7 +1,7 @@
-// The bar's view classes ("overlay", "toolbar", "history") live on <body> and switch the whole
-// page; reusing one on an element inside it, or styling it without the body's class, hides or
-// shows the wrong thing (LJ24 shipped a `.toolbar { display: none }` that hid the whole toolbar
-// view).
+// The bar's view classes ("overlay", "toolbar", "history", and "finding" — the find strip, LJ49)
+// live on <body> and switch the whole page; reusing one on an element inside it, or styling it
+// without the body's class, hides or shows the wrong thing (LJ24 shipped a
+// `.toolbar { display: none }` that hid the whole toolbar view).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -14,11 +14,11 @@ const css = sheets
   .map((sheet) => readFileSync(resolve(ui, sheet), "utf8"))
   .join("\n")
   .replace(/\/\*[\s\S]*?\*\//g, "");
-const VIEWS = ["overlay", "toolbar", "history"];
+const VIEWS = ["overlay", "toolbar", "history", "finding"];
 
 describe("the bar's view classes", () => {
   it("are checked in every stylesheet the bar links", () => {
-    expect(sheets).toEqual(["style.css", "history/history.css"]);
+    expect(sheets).toEqual(["style.css", "history/history.css", "toolbar/find.css"]);
   });
 
   it("are only on <body>", () => {

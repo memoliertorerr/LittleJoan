@@ -26,6 +26,8 @@ use crate::smoke;
 /// The page's WKDownloads, cancelled when the window closes (LJ15).
 pub mod browsers;
 mod downloads;
+/// Find in page through WKWebView's own find (LJ49).
+pub(super) mod find;
 pub use downloads::{cancel as cancel_downloads, follow as follow_downloads};
 /// App Nap and a summon (LJ19.1).
 mod activity;

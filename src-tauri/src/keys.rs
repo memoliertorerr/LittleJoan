@@ -29,6 +29,8 @@ pub enum PageAction {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    /// Open the toolbar's find strip (LJ49, find.rs).
+    Find,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

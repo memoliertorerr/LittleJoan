@@ -148,6 +148,12 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   the toolbar, and you can drag the window by its empty parts; double-click them to zoom the
   window (and again to bring it back) — on Windows and Linux too, like the title bar. The toolbar
   hides while a video is fullscreen.
+- **Find in page:** press **Ctrl+F** (Windows, Linux) or **Cmd+F** (macOS) on a page and a find
+  field takes the site's place in the toolbar. Type, and the page's own web engine finds it as you
+  go (case doesn't matter): **Enter** goes to the next match, **Shift+Enter** to the previous (or
+  the ↓ ↑ buttons), **Esc** or × closes it and you are back in the page. Windows and Linux say
+  where you are ("3 of 12"); on macOS the engine only says whether it found something ("Found",
+  "No matches"). Loading another page, or opening the command bar, closes it.
 - **Themes:** the toolbar, the command bar, the history view and Settings wear one theme — one
   to three colors turned into a soft, muted gradient with a little grain, in light, dark, or
   following your system. Whatever colors you pick, Little Joan keeps them pale in light mode and
@@ -200,6 +206,7 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   | Back / Forward | Alt+Left / Alt+Right | Cmd+[ / Cmd+] |
   | Translate the page | Ctrl+Shift+T | Cmd+Shift+T |
   | History | Ctrl+H | Cmd+Y |
+  | Find in page | Ctrl+F | Cmd+F |
   | Zoom in / out | Ctrl+= (or Ctrl++, keypad +) / Ctrl+- (keypad −) | Cmd+= / Cmd+- |
   | Actual size (100 %) | Ctrl+0 (keypad 0) | Cmd+0 |
   | Open the page in your browser | toolbar, tray menu | toolbar, Cmd+Shift+O |

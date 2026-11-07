@@ -1,0 +1,66 @@
+/* The toolbar's find strip (LJ49): while it is open (the body's "finding" class) it takes the
+   site's place in the toolbar's middle — the field, what was found, ↑ ↓ and × —, and the site, the
+   phone pill and the status area make way; back and "open in browser" stay. */
+.find-strip {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+  height: 28px;
+}
+
+.find-strip[hidden] {
+  display: none;
+}
+
+.bar-body.finding #site,
+.bar-body.finding .toolbar-gap,
+.bar-body.finding #site-pill,
+.bar-body.finding #toolbar-status {
+  display: none;
+}
+
+.find-field {
+  flex: 1;
+  min-width: 60px;
+  height: 26px;
+  padding: 0 9px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--lj-fg);
+  background: var(--lj-field);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  outline: none;
+}
+
+.find-field:focus {
+  border-color: var(--lj-accent);
+}
+
+.find-field::placeholder {
+  color: var(--lj-fg-muted);
+}
+
+/* "3 of 12", "Found", "No matches": short, never pushing the buttons out. */
+.find-count {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  padding: 0 6px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--lj-fg-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.find-count:empty {
+  display: none;
+}
+
+/* No matches: in the text's own color (the theme's), stronger than a count. */
+.find-count.find-none {
+  color: var(--lj-fg);
+}

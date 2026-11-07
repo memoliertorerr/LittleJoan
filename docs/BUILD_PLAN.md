@@ -131,7 +131,7 @@
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done — PR #40 (head c05ea86, run 41821630411 green 18/18) merged as 12e5024 after the independent security review (approve with minor fixes; all nine findings fixed in `lj-step-46-fix4` → `fix6`); main's run 42385385626 green 18/18 |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (phase 22, `lj/p22-popups`; Linux's size fixed in `lj-step-47-fix` → `lj-step-48-fix`; run 42398526340 green 18/18) |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 (head e7d13c8, run 42401453791 green 18/18) merged as 7f0edd2 by the coordinator after the review (Ground Rule 24); main's run 42404243947 green 18/18 |
-| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | 🔄 in progress (phase 23, `lj/p23-find-pins`) |
+| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; CI: see notes) |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ⬜ todo |
 | LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
 | LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ⬜ todo |
@@ -9263,6 +9263,42 @@ draft, and watch CI until every job is green (Ground Rule 3; two honest fix atte
 Look at find.png on every OS.
 ```
 
+**Implementation notes (2026-11-07; disk 11 GB free before and after, `.cache/target` 1.4 → 1.5 GB):**
+- **As designed**, in the files the prompt names plus the split the 400-line guideline asks for:
+  `find.rs` (pure; tests in `find/tests.rs`), `bar/find.rs` (run time), `commands/find.rs`,
+  `platform/find.rs` dispatching to `platform/{win,mac,linux}/find.rs`, `keymap/find_tests.rs`,
+  `ui/toolbar/find-logic.ts` (+ test), `find.ts`, `find.css`, `scripts/ci/smoke-find.mts` (+ test),
+  `?find=1` in the smoke page (`findRequest`, `findParagraphs` in `smoke-logic.mjs`, tested). The
+  bar's capability gained only `allow-find` (`only_the_bar_may_find_in_the_page`); `joan-page` and
+  popups still have none, and nothing is injected into the page.
+- **The keymap's `find` is the last action** (Settings lists it last): a press matches the first
+  action that has it, so a key someone gave an older action before Find existed (Ctrl+F on
+  Translate, say) stays theirs (`keymap/find_tests.rs`). macOS: View → Find… (⌘F).
+- **`FindAction`'s `next` / `previous` / `stop` are empty structs**, not unit variants: serde's
+  internally tagged unit variants ignore extra fields despite `deny_unknown_fields` (a test sends
+  `{ kind: "next", wholeWord: true }`; commands/quick.rs found the same).
+- **What the bar sends only counts while the strip is open** (Rust's `FindState`): a query typed just
+  before a page load closed it finds nothing. An empty field clears the find (the engine stops) and
+  keeps the strip; the strip opened again finds its last text again, as browsers do.
+- **Windows:** the find object's `MatchCountChanged` / `ActiveMatchIndexChanged` are connected once
+  per page in `install_page` (the find object is the core webview's own; nothing of it is kept in
+  Rust — a cached COM reference would keep a closed page's object alive), and both values are read
+  again when `Start` completes. The options also set `ShouldMatchWord(false)`. A runtime without
+  `ICoreWebView2_28` (or `ICoreWebView2Environment15`) reports `unavailable`.
+- **macOS:** `msg_send` with a `block2::RcBlock` (as wry calls WebKit), not objc2-web-kit — the
+  call is one message; `block2 = "0.6"` is the only new line in Cargo.toml (0.6.2 was in the lock).
+  The block carries its find's number: an answer for an older query is dropped.
+- **Linux:** `search` + `count_matches` (at most 1,000; `counted-matches` says `u32::MAX` beyond: the
+  strip says "Found"), the signals connected once per page view in `install_page`. Their reports
+  can't say which query they are for; with typing debounced 120 ms an older one's late count is
+  possible but unlikely (a Deferred follow-up if CI ever shows it).
+- **The find ends** on the page's `Started` (from a task of its own, off the engine's callback),
+  when the command bar opens (`view::change_overlay`), and with the page (`close_page`, a new
+  page's build); the bar's `rest()` empties the strip. Smoke log: `find-open`, `find-action`
+  (never the query), `find-result`, `find-closed <user|page|overlay>`, `find-engine` once.
+- `npm run verify`: 823 TS tests, 506 Rust tests, clippy clean (macOS compiles here; the Windows
+  and Linux glue only in CI).
+
 ### LJ50 — Pinned sites at the top of the command bar · standard · auto
 
 **Verify:** `npm run verify` green, including Rust tests: settings `pinnedSites` (at most 8 `{ url,
@@ -10639,7 +10675,7 @@ or round 3 picked up point at their step and stay here for the record.
 | **Start at login** → *v0.2, LJ11* | Settings checkbox → tauri-plugin-autostart (LaunchAgent / registry Run key / XDG autostart) | New dependency, settings field, per-OS human check |
 | **Keep the page after close** | Settings "Keep page for N minutes": hide instead of destroy, destroy on a timer | Still Later: since LJ19.4 Little Joan may keep its hidden window and trusted bar after a close ("Stay ready"), but the page is destroyed on every close (Ground Rule 9) — keeping it would be a new decision of the owner's, with a measured memory budget |
 | **Downloads** → *v0.2, LJ15 (status in the URL bar, no notifications)* | `on_download` → save to the OS Downloads folder, tray notification | Handler + notification permission per OS |
-| **Find in page** (zoom → *v0.2, LJ16: done*) → *v0.3, LJ49* | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
+| **Find in page** (zoom → *v0.2, LJ16: done*) → *v0.3, LJ49: done* | Native keys (Ctrl/Cmd+F) → engine APIs where they exist (WebView2 Find, WKWebView find, WebKitGTK find controller); the box lives in the URL bar | Per-engine glue |
 | **Popups inside the app (OAuth)** → *v0.3, LJ47–LJ48* | `NewWindowResponse::Create` with a second small window for `window.open` with features | Lifecycle for child windows; hibernation must close them too. Some "Sign in with …" flows break today because the popup opens in the default browser |
 | **Code signing / notarization / SmartScreen reputation** → *macOS: v0.2, LJ18* | Apple Developer ID + notarytool in CI; Windows Authenticode certificate | Windows: SignPath Foundation if the user's application is approved (Deferred follow-ups) |
 | **Auto-update and GitHub Releases** → *round 4, LJ59 (owner, 2026-10-29)* | tauri-plugin-updater with a signed `latest.json` on Releases | Signing keys (the owner's, as a GitHub secret), release workflow |

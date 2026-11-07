@@ -100,6 +100,8 @@ pub fn create<R: Runtime>(app: &AppHandle<R>, keymap: &Keymap) -> tauri::Result<
             &item(KeyAction::ZoomReset)?,
             &PredefinedMenuItem::separator(app)?,
             &item(KeyAction::History)?,
+            // Find in page (LJ49): ⌘F unless changed.
+            &item(KeyAction::Find)?,
         ],
     )?;
     let menu = Menu::with_items(app, &[&app_menu, &file, &edit, &view])?;

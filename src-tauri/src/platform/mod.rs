@@ -16,10 +16,13 @@ mod win;
 
 /// The OS's browsers for web links, read-only, and starting one (LJ46).
 pub mod browsers;
+/// Find in page through each engine's own find (LJ49).
+mod find;
 /// Liquid Glass behind the bar, macOS 26+ only (LJ19.9).
 mod glass;
 /// A summon leaving the page's element fullscreen (LJ19.5).
 mod leave;
+pub use find::find;
 pub use glass::{glass_os, glass_support, set_glass, watch_accessibility};
 pub use leave::{close_media_presentations, fullscreen_now, has_keyboard, webkit_fullscreen_exit};
 

@@ -39,6 +39,8 @@ pub mod app;
 pub mod browsers;
 /// The toolbar's "Show in folder" for a download (LJ15): `reveal_download`.
 pub mod downloads;
+/// The toolbar's find strip (LJ49): `find`.
+pub mod find;
 /// Little Joan's keys for Settings (LJ43): `keymap_info`.
 pub mod keys;
 /// Quick commands in the command bar (LJ42): `quick_state`, `quick_command`.

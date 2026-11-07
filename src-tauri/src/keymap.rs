@@ -32,11 +32,14 @@ pub enum KeyAction {
     ZoomReset,
     OpenInBrowser,
     Close,
+    /// Find in page (LJ49): the toolbar's find strip.
+    Find,
 }
 
 impl KeyAction {
-    /// In the order Settings lists them.
-    pub const ALL: [KeyAction; 11] = [
+    /// In the order Settings lists them. Find (LJ49) is last: a press matches the first action
+    /// that has it, so a key someone gave an older action before Find existed stays theirs.
+    pub const ALL: [KeyAction; 12] = [
         KeyAction::OpenLocation,
         KeyAction::History,
         KeyAction::Translate,
@@ -48,6 +51,7 @@ impl KeyAction {
         KeyAction::ZoomReset,
         KeyAction::OpenInBrowser,
         KeyAction::Close,
+        KeyAction::Find,
     ];
 
     pub fn id(self) -> &'static str {
@@ -63,6 +67,7 @@ impl KeyAction {
             KeyAction::ZoomReset => "zoom-reset",
             KeyAction::OpenInBrowser => "open-in-browser",
             KeyAction::Close => "close",
+            KeyAction::Find => "find",
         }
     }
 
@@ -84,6 +89,7 @@ impl KeyAction {
             KeyAction::ZoomReset => "Actual Size",
             KeyAction::OpenInBrowser => "Open Page in Browser",
             KeyAction::Close => "Close Window",
+            KeyAction::Find => "Find…",
         }
     }
 
@@ -101,6 +107,7 @@ impl KeyAction {
             KeyAction::ZoomReset => PageAction::ZoomReset,
             KeyAction::OpenInBrowser => PageAction::OpenInBrowser,
             KeyAction::Close => PageAction::Close,
+            KeyAction::Find => PageAction::Find,
         }
     }
 }
@@ -266,7 +273,8 @@ impl Binding {
 /// fixed aliases. Windows leaves Reload, Back and Forward to WebView2's own keys, and Open in
 /// browser has no key on Windows and Linux (the toolbar and the tray have it). Zoom (LJ16): Ctrl+=
 /// (also Ctrl+Shift+=, i.e. Ctrl++, and the keypad's +), Ctrl+- (and the keypad's −), Ctrl+0 (and
-/// the keypad's 0); on macOS ⌘=, ⌘-, ⌘0 — one each, as the View menu's key equivalents.
+/// the keypad's 0); on macOS ⌘=, ⌘-, ⌘0 — one each, as the View menu's key equivalents. Find
+/// (LJ49): Ctrl+F, ⌘F — on Windows caught before WebView2, so its own find bar never opens.
 pub fn defaults(platform: Platform, action: KeyAction) -> Vec<Binding> {
     let p = |shift: bool, key: Key| Binding::primary(shift, key);
     let alt = |key: Key| Binding {
@@ -290,6 +298,7 @@ pub fn defaults(platform: Platform, action: KeyAction) -> Vec<Binding> {
     match action {
         KeyAction::Close => vec![p(false, Key::Letter('w'))],
         KeyAction::OpenLocation => vec![p(false, Key::Letter('l'))],
+        KeyAction::Find => vec![p(false, Key::Letter('f'))],
         KeyAction::Translate => vec![p(true, Key::Letter('t'))],
         KeyAction::History if mac => vec![p(false, Key::Letter('y'))],
         KeyAction::History => vec![p(false, Key::Letter('h'))],
@@ -543,6 +552,8 @@ impl Keymap {
     }
 }
 
+#[cfg(test)]
+mod find_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

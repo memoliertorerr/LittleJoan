@@ -28,7 +28,9 @@
 // quick-commands run (its own launch: "mobile" and "dark" in the command bar change and save those
 // settings, the theme rows, Copy link over the smoke page; smoke-quick.mts), then the keymap run
 // (its own launch with History on Ctrl/Cmd+Shift+K: the new key works, the old one doesn't, the
-// macOS menu shows it; smoke-keymap.mts), then the downloads run (its own launch: a download named
+// macOS menu shows it; smoke-keymap.mts), then the find run (its own launch over `?find=1`: Ctrl/Cmd+F,
+// "lj-needle" found three times by the page's engine, Enter, Esc; find.png; smoke-find.mts), then
+// the downloads run (its own launch: a download named
 // by its Content-Disposition lands in the OS's Downloads folder with its exact bytes, the same one
 // again as "lj-smoke (1).bin", none while an extension's panel shows; download.png;
 // smoke-downloads.mts), then the tray
@@ -131,6 +133,7 @@ import { trayFailures, trayRun, traySummary, type TrayDriver } from "./smoke-tra
 import { findApp, listProcs } from "./smoke-linux.mts";
 import { fullscreenOffFailures, fullscreenOffVersions } from "./smoke-fullscreen-off.mts";
 import { quickFailures, quickRun, quickSummary, type QuickDriver } from "./smoke-quick.mts";
+import { findFailures, findRun, findSummary } from "./smoke-find.mts";
 import { summonTimings, timingFailures, timingRun, timingSummary, timingTable, type TimingDriver } from "./smoke-timing.mts";
 import { repeatLaunch, repeatSummary, spacesFailures, spacesRepeat, spacesRun, spacesSummary, type SpacesDriver, type SpacesRun } from "./smoke-spaces.mts";
 import { restFailures, restRun, restSummary, restTable, type EngineProc, type RestRun } from "./smoke-rest.mts";
@@ -477,7 +480,7 @@ for code in CommandLine.arguments.dropFirst(2) {
 }
 
 /** macOS virtual key codes (kVK_ANSI_*) of the keys `pressShortcut` sends. */
-const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40, w: 13, "=": 24, "0": 29 };
+const MAC_KEYS: Record<string, number> = { y: 16, l: 37, h: 4, k: 40, w: 13, f: 3, "=": 24, "0": 29 };
 /** xdotool's names for the keys `pressShortcut` sends that aren't letters. */
 const XDOTOOL_KEYS: Record<string, string> = { "=": "equal" };
 /** The history view's key: Ctrl+H on Windows and Linux, Cmd+Y on macOS (LJ37). */
@@ -1802,6 +1805,18 @@ const keymapDriver: KeymapDriver = {
 };
 const keymapCheck = await keymapRun(keymapDriver);
 console.log(`keymap: ${JSON.stringify(keymapSummary(keymapCheck, os))}`);
+// The find run (LJ49, smoke-find.mts): its own launch over `?find=1`, typing like the quick run.
+const findCheck = await findRun({
+  os,
+  pageUrl: smokePageUrl,
+  launch: fullscreenLaunch,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+  typeText,
+  pressKeys,
+  pressShortcut,
+});
+console.log(`find: ${JSON.stringify(findSummary(findCheck, os))}`);
 // Settings → Keyboard with a saved shortcut that can't be used (LJ44): the problem line.
 const keyboardProblem = await keyboardProblemRun({ launch: fullscreenLaunch, screenshot, sleep: (ms) => sleep(ms).then(() => undefined) });
 if (os === "darwin") {
@@ -2200,6 +2215,8 @@ const summary = {
   siteModeRun: siteModeSummary(siteModeCheck, os),
   quickRun: quickSummary(quickCheck, os),
   keymapRun: keymapSummary(keymapCheck, os),
+  // LJ49: find in page.
+  findRun: findSummary(findCheck, os),
   keyboardProblem: {
     events: keyboardProblem.map((e) => `${e.event} ${e.detail}`.trim()).filter((line) => /^(shortcut|settings|system-shortcuts)/.test(line)),
     rules: keyboardProblemFailures(keyboardProblem).concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os)),
@@ -2295,6 +2312,7 @@ const failures = evaluate(
   .concat(siteModeFailures(siteModeCheck, os))
   .concat(quickFailures(quickCheck, os))
   .concat(keymapFailures(keymapCheck, os))
+  .concat(findFailures(findCheck, os))
   .concat(keyboardProblemFailures(keyboardProblem))
   .concat(systemShortcutFailures(keyboardProblem, symbolicHotkeys, os))
   .concat(trayFailures(trayCheck, os))
@@ -2318,6 +2336,7 @@ if (failures.length > 0) {
   const trayLogs = [
     "quick",
     "keymap",
+    "find",
     "keyboard-problem",
     "downloads",
     "tray",
