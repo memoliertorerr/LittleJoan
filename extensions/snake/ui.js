@@ -272,6 +272,13 @@ async function start() {
     // The fallback colors in style.css stay.
   }
   readColors();
+  // The theme changing while the panel is open (Settings, a quick command): the board redrawn in
+  // its new colors.
+  littleJoan.theme.onChange(async () => {
+    await littleJoan.theme.apply();
+    readColors();
+    draw();
+  });
   try {
     savedBest = bestScore(await littleJoan.storage.get("best"), 0);
     best = savedBest;

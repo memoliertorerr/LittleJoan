@@ -73,6 +73,16 @@ function paint(tile, value) {
   tile.style.color = color;
 }
 
+/** Paints every tile on the board again (new theme colors). */
+function repaint() {
+  for (const cell of game.cells) {
+    const tile = cell ? tiles.get(cell.id) : undefined;
+    if (cell && tile) {
+      paint(tile, cell.value);
+    }
+  }
+}
+
 /**
  * Restarts a CSS animation class on a tile.
  * @param {HTMLElement} tile
@@ -257,6 +267,13 @@ async function start() {
   } catch {
     // The fallback colors in style.css stay.
   }
+  // The theme changing while the panel is open (Settings, a quick command): the tiles repainted
+  // in its new colors.
+  littleJoan.theme.onChange(async () => {
+    const theme = await littleJoan.theme.apply();
+    colors = palette(theme.scheme, theme.vars);
+    repaint();
+  });
   try {
     const [saved, stored] = await Promise.all([littleJoan.storage.get("game"), littleJoan.storage.get("best")]);
     savedBest = bestScore(stored, 0);

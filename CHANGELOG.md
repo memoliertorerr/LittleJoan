@@ -63,6 +63,13 @@ All notable changes to Little Joan are recorded here. The format follows
   and Linux Settings says why Little Joan can't save passwords there yet. *Going back to v0.2.x
   after turning saving on:* the engine may remember the switch in its own data, and v0.2.x has no
   switch to turn it off — turn **Offer to save passwords** off first.
+- **Extension panels follow the theme.** Change the theme while a panel is open — in Settings, or
+  with "dark", "light" or a preset in the command bar — and the panel takes the new colors at once
+  (every bundled extension does; Snake and 2048 repaint their boards). For extension authors:
+  `littleJoan.theme.onChange(callback)` (still API version 1, see docs/extensions.md).
+- **`little-joan --extension <id>` opens a page action** for the web page you have open — so you
+  can bind, say, `little-joan --extension qr` to a key in your system's keyboard settings. With no
+  web page open it does nothing (an extension with commands still opens its first command).
 
 ### Security
 - **A sign-in popup's title names only a page that has loaded in it.** Until the sign-in page loads,

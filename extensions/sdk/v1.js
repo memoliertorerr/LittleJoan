@@ -57,6 +57,51 @@
 
   /** @typedef {{ scheme: "light" | "dark", vars: Record<string, string> }} Theme */
 
+  /** What Little Joan dispatches on this window when its colors change (no data in it). */
+  const THEME_CHANGE = "littlejoan:themechange";
+
+  /**
+   * Calls `callback` with the colors, asked again, after each theme change: one `theme` call at a
+   * time, and once more if a change came while it ran. Returns what stops it.
+   * @param {(theme: Theme) => unknown} callback
+   * @returns {() => void}
+   */
+  function onThemeChange(callback) {
+    let running = false;
+    let again = false;
+    const follow = async () => {
+      if (running) {
+        again = true;
+        return;
+      }
+      running = true;
+      do {
+        again = false;
+        /** @type {Theme} */
+        let theme;
+        try {
+          theme = /** @type {Theme} */ (await call("theme"));
+        } catch {
+          continue; // The panel keeps its colors; the next change asks again.
+        }
+        try {
+          await callback(theme);
+        } catch (error) {
+          // Reported like an error in an event listener, and the panel keeps following.
+          setTimeout(() => {
+            throw error;
+          });
+        }
+      } while (again);
+      running = false;
+    };
+    const listener = () => {
+      void follow();
+    };
+    window.addEventListener(THEME_CHANGE, listener);
+    return () => window.removeEventListener(THEME_CHANGE, listener);
+  }
+
   const littleJoan = Object.freeze({
     apiVersion: 1,
     LittleJoanError,
@@ -90,6 +135,12 @@
         root.style.setProperty("color-scheme", theme.scheme);
         return theme;
       },
+      /**
+       * Calls `callback` with the new colors whenever Little Joan's theme changes while the panel
+       * is open (Settings, a quick command, the system's light / dark). Returns what stops it.
+       * @param {(theme: Theme) => unknown} callback
+       */
+      onChange: (callback) => onThemeChange(callback),
     }),
     /** The web page a page action was opened for (`pageInfo` permission), or null. */
     pageInfo: async () => /** @type {{ url: string, title: string } | null} */ (await call("pageInfo")),

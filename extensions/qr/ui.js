@@ -80,6 +80,8 @@ async function start() {
   } catch {
     // The fallback colors in style.css stay.
   }
+  // The theme changing while the panel is open (Settings, a quick command): its new colors.
+  littleJoan.theme.onChange(() => littleJoan.theme.apply());
   try {
     const page = await littleJoan.pageInfo();
     if (page) {

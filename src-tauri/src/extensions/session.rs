@@ -42,6 +42,10 @@
 //! `BAR_WAIT` — until the bar's first call (`start_info`, bar/boot.rs), then goes on as above.
 //! Openings in a window whose bar already runs (the command bar, `--extension` with the window
 //! open) don't wait.
+//!
+//! LJ56: a theme change is told to a committed panel only (theme_change.rs), and `--extension`
+//! of an extension with page actions only opens the first one for the open web page
+//! (command_line.rs).
 
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -58,6 +62,8 @@ use crate::bar;
 use crate::keys::{self, Platform};
 use crate::navigation;
 use crate::smoke;
+pub use command_line::{NoTarget, target as command_line_target};
+pub use theme_change::theme_changed;
 
 /// The page a page action was opened for (`pageInfo`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -178,7 +184,8 @@ pub fn page_info() -> Option<PageInfo> {
 /// What to open of an extension.
 #[derive(Debug, Clone)]
 pub enum Target {
-    /// Its first command (`--extension <id>`).
+    /// Its first command (`--extension <id>`; one without commands opens its first page action
+    /// instead, command_line.rs).
     First,
     /// One of its commands (the command bar).
     Command(String),
@@ -375,6 +382,9 @@ pub fn publish_label<R: Runtime>(app: &AppHandle<R>, force: bool) {
         "window.littleJoan && window.littleJoan.setExtension && window.littleJoan.setExtension({json})"
     ));
 }
+
+mod command_line;
+mod theme_change;
 
 #[cfg(test)]
 mod tests;

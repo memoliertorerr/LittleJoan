@@ -130,7 +130,19 @@ import {
   parseStore,
   settingsExtensionsFailures,
 } from "./smoke-extensions.mts";
-import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
+import {
+  BUNDLED_PANELS,
+  CLI_PAGE_ACTION,
+  PAGE_ACTIONS,
+  THEME_FOLLOW,
+  bundledFailures,
+  cliPageActionFailures,
+  keysReached,
+  pageActionFailures,
+  panelUp,
+  seedFile,
+  themeFollowFailures,
+} from "./smoke-bundled.mts";
 import { fullscreenFailures, fullscreenRun, fullscreenSummary, type FsDriver } from "./smoke-fullscreen.mts";
 import { fsSummonFailures, summonDuringFullscreenFailures } from "./smoke-fullscreen-summon.mts";
 import { RESIZE_STEPS, resizeFailures, resizeRun, resizeSummary } from "./smoke-resize.mts";
@@ -1564,12 +1576,23 @@ async function extensionRun(): Promise<{ events: LogEvent[]; store: string | und
 const extensionCheck = await extensionRun();
 console.log(`extensions: hello ${lastTitle(extensionCheck.events, "LJ-EXT hello") ?? "no report"}; probe ${lastTitle(extensionCheck.events, "LJ-EXTPROBE") ?? "no report"}`);
 
+/** What the bundled run saw: its log up to LJ56's checks, and each check's own stretch of it. */
+interface BundledCheck {
+  events: LogEvent[];
+  keys: Record<string, boolean>;
+  /** LJ56: a theme change with Snake open (from Snake's opening on), and whether "dark" was typed. */
+  follow: { events: LogEvent[]; typed: boolean };
+  /** LJ56: `--extension qr` over the smoke page (from that command on). */
+  cli: LogEvent[];
+}
+
 /**
  * The bundled extensions run (LJ32–LJ34): its own launch on a fresh data folder. Each bundled
  * panel in BUNDLED_PANELS opens with `--extension <id>` and is screenshotted once it is up (some
- * get a few keys first — whether they reached the panel is recorded, informational).
+ * get a few keys first — whether they reached the panel is recorded, informational). Then LJ56's
+ * two checks (smoke-bundled.mts), after the screenshots so the panels keep the default theme.
  */
-async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, boolean> }> {
+async function bundledRun(): Promise<BundledCheck> {
   const logFile = join(out, "smoke-bundled.log");
   rmSync(logFile, { force: true });
   const dir = dataDir("bundled", true);
@@ -1628,15 +1651,63 @@ async function bundledRun(): Promise<{ events: LogEvent[]; keys: Record<string, 
     await sleep(1500);
     screenshot(action.shot);
   }
+  // LJ56, 1: with Snake open, the command bar's "dark" quick command must reach the panel — the
+  // app tells it (`panel-theme-changed`), it asks for the theme again (Windows, Linux; best effort
+  // on macOS).
+  const followFrom = events(logFile).length;
+  await forward(["--extension", THEME_FOLLOW.id], runEnv);
+  await waitFor(`theme follow: ${THEME_FOLLOW.id} is up`, (e) => panelUp(e.slice(followFrom), THEME_FOLLOW.id), 30_000, logFile);
+  await sleep(1500);
+  const followBar = events(logFile).length;
+  pressShortcut("l", runPid);
+  await waitFor("theme follow: the command bar", (e) => count(e.slice(followBar), "overlay", "true") > 0, 10_000, logFile);
+  await sleep(500);
+  typeText(THEME_FOLLOW.typed, runPid, false);
+  const followTyped = await waitFor(
+    "theme follow: typed",
+    (e) => e.slice(followBar).some((x) => x.event === "suggestions" && x.detail.endsWith(`typed=${THEME_FOLLOW.typed.length}`)),
+    15_000,
+    logFile,
+  );
+  if (followTyped) {
+    await sleep(800);
+    pressKeys(["Down", "Down", "Return"], runPid, false);
+    await waitFor(
+      "theme follow: the panel asked again",
+      (e) => themeFollowFailures(e.slice(followFrom), { driven: true, typed: true }).length === 0,
+      15_000,
+      logFile,
+    );
+  }
+  await sleep(1000);
+  // LJ56, 2: `--extension qr` (page actions only) over the smoke page opens QR code for it.
+  const cliFrom = events(logFile).length;
+  await forward(["--show", smokePageUrl], runEnv);
+  await waitFor("--extension qr: the smoke page", (e) => e.slice(cliFrom).some((x) => x.event === "title" && x.detail.startsWith("LJ-SMOKE ready")), 30_000, logFile);
+  await sleep(1000);
+  const cliOpen = events(logFile).length;
+  await forward(["--extension", CLI_PAGE_ACTION], runEnv);
+  await waitFor(`--extension ${CLI_PAGE_ACTION}: up`, (e) => panelUp(e.slice(cliOpen), CLI_PAGE_ACTION), 30_000, logFile);
+  await sleep(1500);
+  screenshot("extension-page-action.png");
   await forward(["--quit"], runEnv);
   if (!(await exited(runPid, 15_000))) {
     await quit(runChild, runPid);
   }
-  return { events: events(logFile), keys };
+  const all = events(logFile);
+  return {
+    events: all.slice(0, followFrom),
+    keys,
+    follow: { events: all.slice(followFrom, cliFrom), typed: followTyped },
+    cli: all.slice(cliOpen),
+  };
 }
 
 const bundledCheck = await bundledRun();
 console.log(`bundled: keys reached ${JSON.stringify(bundledCheck.keys)}`);
+console.log(
+  `bundled: theme follow ${JSON.stringify(bundledCheck.follow.events.filter((e) => e.event === "panel-theme-changed" || e.event === "quick-command").map((e) => `${e.event} ${e.detail}`))}; --extension ${CLI_PAGE_ACTION} ${JSON.stringify(bundledCheck.cli.filter((e) => e.event === "extension-opened" || e.event === "extension-missing" || (e.event === "ext-api" && e.detail.startsWith(`${CLI_PAGE_ACTION} `))).map((e) => `${e.event} ${e.detail}`))}`,
+);
 
 mkdirSync(join(out, "theme"), { recursive: true });
 const themeRuns: { run: ThemeRun; events: LogEvent[] }[] = [];
@@ -2237,6 +2308,13 @@ const summary = {
     count: bundledCount,
     up: [...BUNDLED_PANELS, ...PAGE_ACTIONS].filter((panel) => panelUp(bundledCheck.events, panel.id)).map((panel) => panel.id),
     keysReached: bundledCheck.keys,
+    // LJ56: a theme change reaching Snake, and `--extension qr` over the smoke page.
+    themeFollow: {
+      typed: bundledCheck.follow.typed,
+      told: bundledCheck.follow.events.filter((e) => e.event === "panel-theme-changed").map((e) => e.detail),
+      rules: themeFollowFailures(bundledCheck.follow.events, { driven: typingDriven, typed: bundledCheck.follow.typed }),
+    },
+    extensionPageAction: { up: panelUp(bundledCheck.cli, CLI_PAGE_ACTION), rules: cliPageActionFailures(bundledCheck.cli) },
   },
   fullscreenRun: fullscreenSummary(fullscreenCheck, os, fullscreenOff),
   // LJ14.1: element fullscreen switched off (expected on WebKitGTK older than 2.52 only).
@@ -2333,6 +2411,8 @@ const failures = evaluate(
   .concat(settingsExtensionsFailures(historyOffEvents, bundledCount))
   .concat(bundledFailures(bundledCheck.events, BUNDLED_PANELS))
   .concat(pageActionFailures(bundledCheck.events, PAGE_ACTIONS, { driven: typingDriven }))
+  .concat(themeFollowFailures(bundledCheck.follow.events, { driven: typingDriven, typed: bundledCheck.follow.typed }))
+  .concat(cliPageActionFailures(bundledCheck.cli))
   .concat(themeRuns.flatMap(({ run, events: runEvents }) => themeFailures(run, runEvents)))
   .concat(glassOffFailures(log, os))
   .concat(glassRuns.flatMap(({ run, events: runEvents }) => glassRunFailures(run, runEvents)))

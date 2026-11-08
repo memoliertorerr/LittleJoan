@@ -129,21 +129,28 @@ fn run<R: Runtime>(app: &AppHandle<R>, command: Command, request: Option<Request
 
 /// `--extension <id>` while nothing is on screen: the window comes up (`show`), then the panel
 /// opens once the bar's script runs (LJ38; a ready bar's ran long ago). An unknown extension
-/// opens nothing.
+/// opens nothing, and nor does one with page actions only (LJ56): no web page is open at rest.
 fn extension_window<R: Runtime>(
     app: &AppHandle<R>,
     id: &str,
     show: impl FnOnce(&AppHandle<R>) -> tauri::Result<()>,
 ) -> tauri::Result<()> {
-    if extensions::registry::current(app).get(id).is_some() {
-        show(app).map(|()| {
-            extensions::session::open_when_bar_ready(app, id, extensions::session::Target::First);
-        })
-    } else {
-        // Nothing is kept of the registry it read (a window reads it again when it opens).
-        extensions::registry::forget();
-        missing_extension(id);
-        Ok(())
+    let target = extensions::registry::current(app)
+        .get(id)
+        .map(|extension| extensions::session::command_line_target(&extension.manifest, || None));
+    match target {
+        Some(Ok(target)) => show(app).map(|()| {
+            extensions::session::open_when_bar_ready(app, id, target);
+        }),
+        found => {
+            // Nothing is kept of the registry it read (a window reads it again when it opens).
+            extensions::registry::forget();
+            match found {
+                Some(Err(why)) => no_target(id, why),
+                _ => missing_extension(id),
+            }
+            Ok(())
+        }
     }
 }
 
@@ -197,17 +204,39 @@ fn quitting() -> bool {
     QUITTING.load(Ordering::SeqCst)
 }
 
-/// Opens the extension `id`'s first command in the open window (`--extension`).
+/// Opens the extension `id`'s first command in the open window (`--extension`) — or, for an
+/// extension with page actions only, its first page action for the web page that is open, as the
+/// command bar opens it (LJ56).
 fn open_extension<R: Runtime>(app: &AppHandle<R>, id: &str) -> tauri::Result<()> {
-    if let Err(err) = extensions::session::open(app, id, extensions::session::Target::First) {
-        eprintln!("little-joan: could not open the extension: {err}");
-        missing_extension(id);
+    let target = extensions::registry::current(app).get(id).map_or(
+        // Unknown or switched off: the opening says so, as before.
+        Ok(extensions::session::Target::First),
+        |extension| {
+            extensions::session::command_line_target(&extension.manifest, || {
+                crate::commands::web_page(app)
+            })
+        },
+    );
+    match target {
+        Ok(target) => {
+            if let Err(err) = extensions::session::open(app, id, target) {
+                eprintln!("little-joan: could not open the extension: {err}");
+                missing_extension(id);
+            }
+        }
+        Err(why) => no_target(id, why),
     }
     Ok(())
 }
 
 fn missing_extension(id: &str) {
     smoke::log("extension-missing", id);
+}
+
+/// `--extension <id>` found nothing to open: a page action with no web page open (LJ56).
+fn no_target(id: &str, why: extensions::session::NoTarget) {
+    eprintln!("little-joan: `{id}` acts on a web page: open one first");
+    smoke::log("extension-missing", &why.log_detail(id));
 }
 
 /// Whether the window is open (on screen, or minimized) — not resting, not hibernating.
