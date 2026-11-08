@@ -38,6 +38,13 @@ affiliated with or endorsed by The Browser Company.
 > issues). Every build is smoke-tested in CI on all three systems (Linux: the `.deb` on Ubuntu
 > 24.04 and 22.04 and the AppImage on 24.04, on x86_64 and ARM64); none is code-signed yet. See
 > the known issue under Fullscreen video.
+>
+> **Coming in v0.3** (on `main`, not released yet): Little Joan as your browser for links from
+> other apps, with a main browser for the pages it hands on; sign-in popups inside Little Joan;
+> find in page; pinned sites; saved passwords and form autofill on Windows; Liquid Glass on macOS
+> 26; and extension panels that follow theme changes, with `--extension` opening page actions. No
+> new bundled extensions in v0.3 — the nine planned ones come after it.
+>
 > The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
@@ -158,7 +165,14 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   go (case doesn't matter): **Enter** goes to the next match, **Shift+Enter** to the previous (or
   the ↓ ↑ buttons), **Esc** or × closes it and you are back in the page. Windows and Linux say
   where you are ("3 of 12"); on macOS the engine only says whether it found something ("Found",
-  "No matches"). Loading another page, or opening the command bar, closes it.
+  "No matches"). Loading another page, or opening the command bar, closes it. It works on an
+  extension's panel too; on the start page Ctrl/Cmd+F does nothing, and over the command bar it
+  closes the bar and opens the find field.
+
+  <p>
+    <img src="docs/images/find.png" width="300" alt="Find in page on macOS: the find field in the toolbar says Found, and the first match is highlighted on the page">
+    <img src="docs/images/pinned.png" width="300" alt="The command bar with nothing typed: a pinned site leads the list, marked with a pin, above Settings &amp; extensions">
+  </p>
 - **Themes:** the toolbar, the command bar, the history view and Settings wear one theme — one
   to three colors turned into a soft, muted gradient with a little grain, in light, dark, or
   following your system. Whatever colors you pick, Little Joan keeps them pale in light mode and
@@ -171,7 +185,9 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   Twelve come with Little Joan — games, Notes, a focus timer, a world clock, tools for JSON, text
   and colors, and page actions (QR code, Clean link, Wayback Machine, Copy as Markdown link) that
   appear while a web page is open. The toolbar shows the extension's name with an "Extension"
-  badge; Esc closes it, back to the page or the command bar. See
+  badge; Esc closes it, back to the page or the command bar. An open panel takes a new theme at
+  once (change it in Settings, or type "dark" in the command bar), and `little-joan --extension qr`
+  over a page opens QR code for that page — bind it to a key in your system's settings. See
   [Extensions](#extensions-experimental) below.
 - **Phone mode:** pages always fit the window and reflow live as you resize it, as in Little Arc
   (no zooming to fit). When the window is narrower than 600 px, Little Joan also tells websites
@@ -230,7 +246,21 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   whenever a page goes fullscreen — reproduced in testing without Little Joan, and even when an app
   declines the page's request — so on it a video's fullscreen button does nothing. Ubuntu 24.04's
   (2.52) works, and the AppImage brings its own 2.52 (it needs Ubuntu 24.04 or newer, though).
-- **Links that open a new window** (`target=_blank`) open in your main browser.
+- **Links that open a new window** (`target=_blank`) open in your main browser (Settings → General
+  → Browser). A site's **sign-in window** — "Sign in with Google / Apple / GitHub" — opens inside
+  Little Joan instead, in a small window whose title names the site that has loaded in it, and
+  closes itself when you're signed in; Ctrl/Cmd+W closes only it. See
+  [Sign-in popups](#sign-in-popups).
+- **Links from other apps:** choose Little Joan as your system's default browser (it never makes
+  itself the default) and a link you click in Mail, Notes, a chat or a document opens in the Little
+  Joan window; "Open in browser" then goes to your **main browser**, never back to Little Joan. See
+  [Little Joan as your browser for links](#little-joan-as-your-browser-for-links).
+- **Saved passwords (Windows):** turn on **Offer to save passwords** in Settings → Privacy (off by
+  default) and Windows' web engine offers to save the password when you sign in, and fills it in
+  next time; **Fill in forms** (on) fills addresses and the like; **Remove saved passwords and form
+  data…** forgets them. A site's passkeys go through Windows Hello, handled by the engine. On macOS
+  and Linux Little Joan saves no passwords yet, and Settings → Privacy says why. See
+  [Privacy](#privacy).
 - **Downloads** go to your Downloads folder, under the name the site gives the file — tidied into a
   safe file name, and never overwriting one: a second `report.pdf` becomes `report (1).pdf`. The
   toolbar says "Downloading report.pdf…", then "report.pdf saved" with **Show in folder** (or
@@ -292,6 +322,10 @@ Settings → General → **Browser** says whether Little Joan is your default an
 apps settings**, which opens those settings (that is all it does). Only http and https links open
 from other apps — never files, scripts or other kinds of address.
 
+<p align="center">
+  <img src="docs/images/settings-browser.png" width="420" alt="Settings, General, Browser: Little Joan isn't your default browser (Safari is), an Open default apps settings button, and Main browser set to System default, which sends pages to Safari">
+</p>
+
 **The main browser.** "Open in browser", links that open a new window and extensions that open a
 page in the browser hand the page on to your **main browser** (Settings → General → Browser →
 Main browser): **System default**, or one of the browsers your system lists. Little Joan never
@@ -324,6 +358,10 @@ cookies, so the login lasts like any other.
   site, and when you close Little Joan (the shortcut dismisses both, even while the popup has the
   keyboard).
 
+<p align="center">
+  <img src="docs/images/popup.png" width="300" alt="A sign-in popup over the Little Joan window, from CI's test: its title shows the address that has loaded in it, over a stand-in sign-in page saying Signing in (fake provider)">
+</p>
+
 ## Translate
 
 **Translate Page** (tray menu, or Ctrl/Cmd+Shift+T) shows the current page through Google
@@ -346,27 +384,33 @@ tabs are in a sidebar on the left; **Save** and **Cancel** at the bottom cover a
   - **Phone or desktop per site** — the sites with a mode of their own, each with Remove (or
     Reset, which brings back YouTube's built-in desktop site on macOS and Linux once you changed
     it).
+  - **After closing** — Stay ready (the default), Stay ready for 15 minutes, or Hibernate (see
+    Dismiss above).
+  - **Browser** — whether Little Joan is your system's default browser, **Open default apps
+    settings**, and the **Main browser** that "Open in browser" and new-window links go to (see
+    [Little Joan as your browser for links](#little-joan-as-your-browser-for-links)).
   - **Start Little Joan at login** — adds Little Joan to your system's login items: a
     LaunchAgent on macOS (`~/Library/LaunchAgents/Little Joan.plist`), the startup apps on
     Windows (the registry's Run key), `~/.config/autostart/Little Joan.desktop` on Linux. Little
     Joan keeps no copy of this setting, so if you remove it in your system's settings, it shows
     as off here too.
+  - **Quit Little Joan** — quits at once (changes you haven't saved are dropped).
 - **Keyboard** — **Summon Little Joan**: click it, then press the new combination. It needs a
   modifier (Ctrl, Alt, Cmd, or Super; Shift alone doesn't count). If another app already owns it,
   Little Joan says so and keeps the old one; if the saved one couldn't be registered when Little
   Joan started, both Keyboard and General say which one it uses instead. On Linux under Wayland,
   when the desktop holds the shortcut through its portal, this row (and General's line) shows the
   desktop's key instead — change it in your desktop's keyboard settings. Then **Little Joan's
-  keys** — Open Location, History, Translate, Reload, Back, Forward, Open in browser, Close —, each
-  with its key: click it and press the new one (Backspace for no key, Esc to cancel), **Reset**
-  brings the default back, **Reset all** every one. Little Joan refuses keys that would type text,
-  a key two actions share, the summon shortcut, and the editing keys pages need (Ctrl/Cmd + C, V,
-  X, A, Z); it warns — without refusing — about keys the system uses ("macOS uses ⌘Space for
-  Spotlight"; on macOS it also reads your own changes in System Settings → Keyboard → Keyboard
-  Shortcuts, read-only, so a system shortcut you turned off isn't warned about) and about Ctrl+Alt
-  on Windows and Linux (AltGr). On Windows, WebView2's own Ctrl+R,
-  F5 and Alt+← / Alt+→ keep working beside your keys. They're stored in `settings.json` as
-  `"keys"`.
+  keys** — Open Location, History, Translate Page, Reload, Back, Forward, Zoom In, Zoom Out, Actual
+  Size, Open Page in Browser, Close Window, Find —, each with its key: click it and press the new
+  one (Backspace for no key, Esc to cancel), **Reset** brings the default back, **Reset all** every
+  one. Little Joan refuses keys that would type text, a key two actions share, the summon shortcut,
+  and the editing keys pages need (Ctrl/Cmd + C, V, X, A, Z); it warns — without refusing — about
+  keys the system uses ("macOS uses ⌘Space for Spotlight"; on macOS it also reads your own changes
+  in System Settings → Keyboard → Keyboard Shortcuts, read-only, so a system shortcut you turned
+  off isn't warned about) and about Ctrl+Alt on Windows and Linux (AltGr). On Windows, WebView2's
+  own Ctrl+R, F5 and Alt+← / Alt+→ keep working beside your keys. They're stored in
+  `settings.json` as `"keys"`.
 - **Appearance** — the theme editor. **System / Light / Dark** at the top; a live preview of the
   toolbar and the command bar; **presets** (Mist, Sand, Sage, Lagoon, Dusk, Ember, Orchid,
   Glacier, Meadow, Berry, Graphite) that apply in one click; up to three **color pads** — hue
@@ -433,6 +477,10 @@ system's keyboard settings):
 | **Clean link** (`clean-link`) | Copies the address without tracking parameters (`utm_…`, `fbclid`, share ids…) and out of redirect wrappers, keeping what makes the link work; Enter copies. |
 | **Wayback Machine** (`wayback`) | Opens the Internet Archive's snapshots of the page — every copy, or the newest — in the window. |
 | **Copy as Markdown link** (`markdown-link`) | Copies `[Title](address)` — or HTML, plain text, Org mode — with the title yours to edit. |
+
+<p>
+  <img src="docs/images/page-action.png" width="300" alt="QR code, opened with little-joan --extension qr over a page, in a dark theme: the page's title and address, its QR code, and the address it encodes">
+</p>
 
 None of the bundled extensions reaches the network: everything happens on your computer (the
 Wayback Machine only opens web.archive.org when you pick it). An open panel follows a theme

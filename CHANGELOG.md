@@ -6,27 +6,15 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
+What v0.3 brings — on `main`, not released yet. Little Joan can be your browser for links from
+other apps, with a main browser for the pages it hands on; sign-in popups finish inside Little
+Joan; find in page; pinned sites; saved passwords and form autofill on Windows; Liquid Glass on
+macOS 26; and extension panels that follow the theme. **No new bundled extensions in v0.3:** the
+nine planned ones (Reading list, To-do, Stopwatch & countdown, Breathing timer, Minesweeper,
+Password generator, Regex tester, Hash & Base64, Emoji picker) come after it; v0.3's extension
+changes are the last two items under Added.
+
 ### Added
-- **Find in page.** **Ctrl+F** / **Cmd+F** opens a find field in the toolbar, in the site's place.
-  The page's own web engine finds what you type as you type (case doesn't matter) and highlights
-  it: **Enter** for the next match, **Shift+Enter** for the previous (or ↓ ↑), **Esc** or × to
-  close it and get back to the page. Windows and Linux show where you are ("3 of 12"); on macOS the
-  engine says only whether it found something ("Found" / "No matches"). Nothing is added to the
-  page to do it. Loading another page or opening the command bar closes the field. The key can be
-  changed in Settings → Keyboard (it is also **View → Find…** on macOS).
-- **Pinned sites.** Pin the page you are on — type "pin" in the command bar and choose **Pin this
-  site** — and it leads the command bar whenever nothing is typed, with a small pin, before the
-  sites you open most (up to eight, in the order you pinned them). **Unpin this site** in the same
-  place, or Shift+Delete on a pinned row, unpins it. They are kept in `settings.json`
-  (`pinnedSites`).
-- **Liquid Glass on macOS 26 Tahoe and later.** Settings → Appearance → **Liquid Glass**: Off (the
-  default), **Clear** (more transparent) or **Tinted** (more opaque, with more contrast) — the same
-  choices as macOS 26.1's own setting. The toolbar and the command bar become glass, tinted by your
-  theme's color; pages stay as they are, and the grain doesn't show on glass. It is there from the
-  first frame of a summon (no flash of the solid theme) and costs no time when Little Joan opens.
-  With Reduce Transparency or Increase Contrast on (System Settings → Accessibility → Display),
-  Little Joan shows the solid theme, and switches as soon as you change them. The option appears
-  only on macOS 26 and later; nothing changes on older Macs, Windows or Linux.
 - **Little Joan can be your browser for links.** Installing it now lists it among your system's
   web browsers — Windows' Default apps, macOS's Default web browser (System Settings → Desktop &
   Dock), the desktop's default applications on Linux (the `.deb`; the AppImage installs nothing) —
@@ -53,6 +41,18 @@ All notable changes to Little Joan are recorded here. The format follows
   most two are open at once. **Ctrl+W** / **Cmd+W** closes the popup (only it); it also closes when
   the page behind goes to another site, and when you close Little Joan. Links that open a new tab
   still go to your main browser, as before.
+- **Find in page.** **Ctrl+F** / **Cmd+F** opens a find field in the toolbar, in the site's place.
+  The page's own web engine finds what you type as you type (case doesn't matter) and highlights
+  it: **Enter** for the next match, **Shift+Enter** for the previous (or ↓ ↑), **Esc** or × to
+  close it and get back to the page. Windows and Linux show where you are ("3 of 12"); on macOS the
+  engine says only whether it found something ("Found" / "No matches"). Nothing is added to the
+  page to do it. Loading another page or opening the command bar closes the field. The key can be
+  changed in Settings → Keyboard (it is also **View → Find…** on macOS).
+- **Pinned sites.** Pin the page you are on — type "pin" in the command bar and choose **Pin this
+  site** — and it leads the command bar whenever nothing is typed, with a small pin, before the
+  sites you open most (up to eight, in the order you pinned them). **Unpin this site** in the same
+  place, or Shift+Delete on a pinned row, unpins it. They are kept in `settings.json`
+  (`pinnedSites`).
 - **Saved passwords and form data on Windows.** Settings → Privacy now has Windows' web engine's own
   switches: **Offer to save passwords** (off by default) and **Fill in forms** — addresses and the
   like (on by default, as it has always been) — and **Remove saved passwords and form data…**,
@@ -63,6 +63,14 @@ All notable changes to Little Joan are recorded here. The format follows
   and Linux Settings says why Little Joan can't save passwords there yet. *Going back to v0.2.x
   after turning saving on:* the engine may remember the switch in its own data, and v0.2.x has no
   switch to turn it off — turn **Offer to save passwords** off first.
+- **Liquid Glass on macOS 26 Tahoe and later.** Settings → Appearance → **Liquid Glass**: Off (the
+  default), **Clear** (more transparent) or **Tinted** (more opaque, with more contrast) — the same
+  choices as macOS 26.1's own setting. The toolbar and the command bar become glass, tinted by your
+  theme's color; pages stay as they are, and the grain doesn't show on glass. It is there from the
+  first frame of a summon (no flash of the solid theme) and costs no time when Little Joan opens.
+  With Reduce Transparency or Increase Contrast on (System Settings → Accessibility → Display),
+  Little Joan shows the solid theme, and switches as soon as you change them. The option appears
+  only on macOS 26 and later; nothing changes on older Macs, Windows or Linux.
 - **Extension panels follow the theme.** Change the theme while a panel is open — in Settings, or
   with "dark", "light" or a preset in the command bar — and the panel takes the new colors at once
   (every bundled extension does; Snake and 2048 repaint their boards). For extension authors:
@@ -70,6 +78,18 @@ All notable changes to Little Joan are recorded here. The format follows
 - **`little-joan --extension <id>` opens a page action** for the web page you have open — so you
   can bind, say, `little-joan --extension qr` to a key in your system's keyboard settings. With no
   web page open it does nothing (an extension with commands still opens its first command).
+
+### Changed
+- **An extension's panel hands new windows to your browser only the way `openUrl` does.** A link
+  with `target=_blank` or a `window.open` in a panel now needs the extension's `openBrowser`
+  permission, opens only public web addresses, and at most one every 2 seconds (see
+  docs/extensions.md); before, a panel's new windows went to the default browser unchecked. No
+  bundled extension opens new windows, so none is affected.
+
+### Fixed
+- **Little Joan no longer crashes when it is started with a command-line argument that isn't valid
+  Unicode** (a file name in another encoding, say). Such an argument is read as best it can be; as
+  a link it is refused.
 
 ### Security
 - **A sign-in popup's title names only a page that has loaded in it.** Until the sign-in page loads,
@@ -81,8 +101,54 @@ All notable changes to Little Joan are recorded here. The format follows
 - **macOS: a page gets no camera or microphone.** Little Joan answers a page's permission requests
   itself now; before, the web engine would have granted them once macOS allowed it. Linux keeps
   its engine's answers (all refused but pointer lock); Windows still asks you.
+- **A page can't flood your browser with windows.** The new windows a page hands to your main
+  browser go one at a time, at most one a second; the rest are dropped.
+- **Windows: another browser is started only through the program it registered for web links,**
+  with the address as one argument — never through a command interpreter or script host (cmd,
+  PowerShell, Windows Script Host, mshta and the like); a browser whose entry would need one isn't
+  offered.
+- **Addresses that begin like Little Joan's own internal ones** (`http://tauri.…`, `http://ipc.…`,
+  `http://ljext.…`), which Windows' web engine would hand to Little Joan rather than the web, are
+  refused on every system — as links from other apps and as page navigations.
 - Little Joan's own pages refuse to be framed by a web page, extension files are never served while
   a sign-in popup is open, and at most thirty sign-in popups open in one opening of the window.
+
+### Known issues
+- **macOS and Linux: Little Joan saves no passwords and offers no passkeys yet.** On macOS an app's
+  web view gets passkeys only with an entitlement Apple grants to browsers, and its password
+  AutoFill isn't dependable there; WebKitGTK has neither. Settings → Privacy says so.
+- **The AppImage can't be chosen as your system's browser** (it installs nothing); the `.deb` can.
+- **Linux: with no default browser set at all, the system may use Little Joan once the `.deb` is
+  installed** — GIO and `xdg-mime` fall back to the first browser they find. Settings → General →
+  Browser shows what your system uses.
+- **Windows: frames inside a page or a sign-in popup aren't checked by Little Joan's navigation
+  rules** (WebView2 tells the app only about a window's own navigations); Little Joan's own pages
+  refuse to be framed, and extension files check every request themselves.
+- **Windows: Ctrl+F in a sign-in popup opens the web engine's own find bar** in the popup (the
+  Little Joan window has its own find).
+- **macOS: a page in a sign-in popup could go full screen and cover the popup's title** until Esc
+  (sign-in pages don't do this).
+- Still open from 0.2.1:
+  - **Stay ready keeps some memory while Little Joan is closed** — in CI about 30 MB more than
+    Hibernate on macOS, 110 MB on Windows, 200 MB on Linux. Choose **Hibernate** under Settings →
+    General → After closing to keep nothing.
+  - **The builds aren't code-signed yet**, so macOS blocks the first launch of the DMG and Windows
+    SmartScreen warns about the installer (the README's Install section has the steps).
+  - **Videos can't go fullscreen with a WebKitGTK older than 2.52** (Ubuntu 22.04's `.deb`, x86_64
+    and ARM64): Little Joan turns fullscreen off there rather than crash.
+  - **Desktop site changes nothing on sites that send every device the same page.**
+  - **macOS shows a file it can display — a PDF, an image — in the page instead of saving it,**
+    unless the link is marked as a download.
+  - **Linux under Wayland without the GlobalShortcuts portal** (GNOME 46 on Ubuntu 24.04) can't
+    hear the shortcut: bind `little-joan --toggle` in your desktop's keyboard settings.
+  - **Windows:** a sign-in kept "until you close the browser" with a cookie for a whole domain may
+    ask again on a subdomain after the window was closed.
+  - **"Copy as Markdown link" shows twice when you type "copy".**
+  - **A double click on the toolbar always zooms the window,** whatever macOS's title-bar setting.
+  - **Windows: a fast drag can show a white strip for a frame at the edge of a dark page.**
+  - **After an extension opens a page in the window**, the toolbar's Back may do nothing.
+  - **History can list a page twice** after a link on it was refused or turned into a download.
+  - **The AppImage's start-at-login entry breaks if the AppImage's path has a space in it.**
 
 ## [0.2.1] — 2026-10-30
 

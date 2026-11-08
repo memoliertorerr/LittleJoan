@@ -30,9 +30,22 @@ one and drives the installed app (`scripts/ci/smoke.mts`). A pull request needs 
 
 - **Web pages never get IPC.** Only Little Joan's own screens may call app commands — the bar
   webview (`joan-bar`) and the settings window — each through a capability that lists exactly
-  what it needs (`src-tauri/capabilities/`). The page webview (`joan-page`) gets no capability at
-  all, not even for local pages (`capability_tests.rs` enforces it). Don't add `remote` URLs to a
-  capability or inject scripts into web pages.
+  what it needs (`src-tauri/capabilities/`). The page webview (`joan-page`) and every sign-in
+  popup (`joan-popup-<n>`) get no capability at all, not even for local pages
+  (`capability_tests.rs` enforces it). Don't add `remote` URLs to a capability or inject scripts
+  into web pages.
+- **Links from other apps are untrusted input.** They arrive only as `--link <url>` (exactly the
+  next argument) or macOS's open-URL event, and open only http and https pages through the same
+  rules as typed addresses — never a flag, a setting or a command. Pages handed on to the user's
+  main browser go through `browsers.rs` alone, never back to Little Joan.
+- **Little Joan never changes system defaults or settings by itself.** It may register as a browser
+  candidate and open the system's own settings when the user clicks; it never writes the default
+  browser or any other system setting, and uninstalling removes what installing registered.
+- **Saved credentials stay in the web engine.** Passwords, passkeys and form data live only in the
+  engine's own store; Little Joan only switches the engine's features and asks it to remove them —
+  it never reads, exports, logs or syncs them.
+- **One keymap.** Every key of Little Joan's own comes from `src-tauri/src/keymap.rs` and the
+  user's overrides; don't hard-code a key anywhere else.
 - **Nothing of a page survives a close.** Closing always destroys the page webview — no web page's
   scripts, media, network or process outlive it, in every "After closing" mode. At rest only the
   owner's setting decides what stays: "Stay ready" (the default) keeps the hidden window and the
