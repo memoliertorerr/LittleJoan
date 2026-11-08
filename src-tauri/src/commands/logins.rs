@@ -13,13 +13,19 @@ use crate::settings_window;
 use crate::smoke;
 
 /// Asks Windows' web engine to remove the passwords and form data it saved, and waits for its
-/// answer. Smoke log `saved-logins-cleared ok`, or `saved-logins-cleared failed <reason>`.
+/// answer — on a blocking thread of the async runtime, never one of its workers or the main thread
+/// (phase 24's security review). Smoke log `saved-logins-cleared ok`, or `saved-logins-cleared
+/// failed <reason>`.
 #[tauri::command]
 pub async fn clear_saved_logins<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let Some(settings) = app.get_webview_window(settings_window::LABEL) else {
         return Err("Open Settings to remove saved passwords.".to_owned());
     };
-    let result = platform::clear_saved_logins(settings.as_ref());
+    let webview: tauri::Webview<R> = settings.as_ref().clone();
+    let result =
+        tauri::async_runtime::spawn_blocking(move || platform::clear_saved_logins(&webview))
+            .await
+            .unwrap_or_else(|err| Err(format!("the removal stopped: {err}")));
     match &result {
         Ok(()) => smoke::log("saved-logins-cleared", "ok"),
         Err(reason) => {

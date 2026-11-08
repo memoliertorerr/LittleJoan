@@ -400,6 +400,9 @@ src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on 
                                    (`SettingsTab`, tested), open on a tab or switch an open one,
                                    links to the main browser (browsers.rs); the page's webview data
                                    folder and saved autofill (`builder_input`, tested; LJ51)
+src-tauri/src/settings_window/logins_smoke.rs  smoke only: what the harness may have Privacy's
+                                   saved-passwords section do (remove, toggle-save) — only on a
+                                   throwaway data folder on a GitHub-hosted runner (pure, tested)
 src-tauri/src/logins.rs            Windows' own password saving and form autofill (LJ51): the saved
                                    switches to the page and each popup after they are built, to
                                    every webview of the profile after a Save; the smoke log's line;
@@ -959,14 +962,19 @@ the store.
 `IsPasswordAutosaveEnabled` (off by default) and `IsGeneralAutofillEnabled` (on by default) per
 profile — every webview of it shares them — and wry sets general autofill on each webview it
 creates (on, unless told otherwise). So every builder on the profile passes the saved
-`autofillForms` (`general_autofill_enabled`; a test checks the four), and `logins.rs` sets both
-switches through `ICoreWebView2Settings4` on the page right after it is built and on each sign-in
-popup, reading them back into the smoke log (`logins password-autosave=<b> autofill=<b>
+`autofillForms` (`general_autofill_enabled`; a test finds every webview constructor in `src/` and
+wants exactly the four, each passing it), and `logins.rs` sets both switches through
+`ICoreWebView2Settings4` on the page right after it is built and on each sign-in popup, reading
+them back into the smoke log (`logins password-autosave=<b> autofill=<b>
 webview=<page|popup|settings>`); a Save that changes them sets them on every webview of the profile
-there is, the settings window's included, so they take effect at once even while hibernating.
-`clear_saved_logins` (Settings only) calls `ICoreWebView2Profile2::ClearBrowsingData(PASSWORD_AUTOSAVE
-| GENERAL_AUTOFILL)` on the settings window's own profile and waits for the engine's answer
-(`saved-logins-cleared ok`). Nothing in Little Joan reads, exports, logs or syncs a saved password
+there is, the settings window's included, so they take effect at once even while hibernating. The
+saved values are read when the main thread reaches the engine, not when the apply is queued, so a
+build's apply and a Save's can't leave a webview with the old ones. `clear_saved_logins` (Settings
+only) calls `ICoreWebView2Profile2::ClearBrowsingData(PASSWORD_AUTOSAVE | GENERAL_AUTOFILL)` on the
+settings window's own profile and waits for the engine's answer on a blocking thread of the async
+runtime (`saved-logins-cleared ok`); passkeys (Windows Hello's) are not touched. Uninstalling keeps
+the engine's data unless the uninstaller's **Delete the application data** box is ticked (Tauri
+2.12's NSIS template removes `%APPDATA%\<id>` and `%LOCALAPPDATA%\<id>` only then). Nothing in Little Joan reads, exports, logs or syncs a saved password
 or form entry. macOS and Linux: Settings → Privacy says it isn't available, and why.
 
 **Logins across close and quit** (proved per OS by the CI smoke test, LJ20):
@@ -2556,9 +2564,14 @@ and pushes to `main`:
   macOS and Linux), and on Windows the smoke hooks click **Remove saved passwords and form data…**
   and the question's Remove: `saved-logins-cleared ok`, with no page built since the window
   hibernated (`settings-privacy-logins-removed.png`); one with `"savePasswords": true` — the page,
-  and a sign-in popup (`?popup=oauth`, clicked), must read back `password-autosave=true`, and
-  Settings opened after reports what its engine says unset (`logins-seen …`, informational). macOS
-  and Linux must log no `logins` line and no removal. The smoke types no password (logs
+  and a sign-in popup (`?popup=oauth`, clicked), must read back `password-autosave=true`; then, the
+  page still open, `--settings privacy` with `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=toggle-save`:
+  Settings reports what its engine says unset (`logins-seen …`, informational), and on Windows "Offer
+  to save passwords" is clicked off and Save clicked — the page and the settings window must read
+  back `password-autosave=false` and settings.json keep `"savePasswords": false`. The two drives
+  (`remove`, `toggle-save`) run only on a throwaway data folder on a GitHub-hosted runner
+  (`settings_window/logins_smoke.rs`); a refused one (`settings-logins-click refused …`) fails the
+  run. macOS and Linux must log no `logins` line and no removal. The smoke types no password (logs
   `smoke-logins.log`, `smoke-logins-on.log`, `summary.json`'s `loginsRun`). Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch

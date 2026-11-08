@@ -30,13 +30,13 @@ export const AUTOFILL_LABEL = "Fill in forms (addresses and the like)";
 export const AUTOFILL_NOTE = "Windows' web engine suggests what you typed in forms before. Off: no suggestions, and nothing new is kept.";
 export const REMOVE_LABEL = "Remove saved passwords and form data…";
 export const REMOVE_NOTE =
-  "Removes every password and form entry Windows' web engine saved for Little Joan. Cookies, site data and history stay. Little Joan itself never reads, exports or syncs them.";
+  "Removes every password and form entry Windows' web engine saved for Little Joan. Passkeys (Windows Hello keeps them), cookies, site data and history stay. Little Joan itself never reads, exports or syncs them.";
 
 /** Why there is nothing to switch on `platform`: the first line, then one line why. */
 export function unavailableNote(platform: string): { title: string; why: string } {
   const title = "Saving passwords isn't available in Little Joan on this system yet.";
   if (platform === "macos") {
-    return { title, why: "Apple lets only browsers with a special entitlement use Passwords and passkeys." };
+    return { title, why: "Passkeys need an entitlement Apple grants to browsers, and password AutoFill isn't dependable in an app's web view." };
   }
   if (platform === "linux") {
     return { title, why: "WebKitGTK has no password manager." };

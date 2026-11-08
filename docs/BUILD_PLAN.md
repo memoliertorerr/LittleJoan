@@ -9458,7 +9458,7 @@ attempts, then stop). Look at the screenshots on every OS.
 **Implementation notes (2026-11-07; disk 11 GB free before and after, `.cache/target` 1.5 GB):**
 - **As designed**, in the files the prompt names plus the split the 400-line guideline asks for:
   `settings/logins.rs` (the two fields, tolerant; tests), `settings/change.rs` (`save_passwords`,
-  `autofill_forms`, `touches_logins`; no quick command carries them), `logins.rs` (when: the page
+  `autofill_forms`; no quick command carries them), `logins.rs` (when: the page
   and each popup right after they are built, every webview of the profile after a Save that changed
   them), `platform/logins.rs` → `platform/win/logins.rs` (WebView2: `ICoreWebView2Settings4` set and
   read back, `ICoreWebView2_13::Profile` → `ProfilePath`, `ICoreWebView2Profile2::ClearBrowsingData(
@@ -9513,8 +9513,9 @@ attempts, then stop). Look at the screenshots on every OS.
   checked, each with its note, the "Remove saved passwords and form data…" button and its note;
   `settings-privacy-logins-removed.png` adds "Saved passwords and form data removed."; macOS and
   Linux: "Saving passwords isn't available in Little Joan on this system yet." with "Apple lets only
-  browsers with a special entitlement use Passwords and passkeys." / "WebKitGTK has no password
-  manager.", no switch, and the storage list's new row ("Nowhere: Little Joan saves no passwords or
+  browsers with a special entitlement use Passwords and passkeys." (reworded after the security
+  review: "Passkeys need an entitlement Apple grants to browsers, and password AutoFill isn't
+  dependable in an app's web view.") / "WebKitGTK has no password manager.", no switch, and the storage list's new row ("Nowhere: Little Joan saves no passwords or
   form data on this system.").
 
 ### LJ52 — Passkeys and saved logins: what each engine offers; docs; the review · standard · review
@@ -9588,7 +9589,7 @@ an independent security review comes next, and the owner decides.
   answer's password generator, or URL credential stripping. The smoke log carries booleans and a
   folder path only, and no smoke run types a password (the popups run's spoof page has a password
   field nobody types into).
-- `npm run verify`: 855 TS tests, 528 Rust tests, clippy clean.
+- `npm run verify`: 855 TS tests, 528 Rust tests, clippy clean (after the review's fixes: 857 and 530).
 - **What each engine reported (CI run 42423088099, `summary.json`'s `loginsRun.webauthn`; every page
   a secure context, `secure=true`):**
 
@@ -9604,6 +9605,33 @@ an independent security review comes next, and the owner decides.
   research expects. WebKitGTK has no `PublicKeyCredential` at all.
 - **Merged into the docs:** the Later rows (macOS, Linux), README, SECURITY.md and
   docs/architecture.md now cite these reports (`lj-step-52-fix`).
+- **The independent security review of PR #43 (2026-11-08): approve with minor fixes** — no
+  Critical, High or Medium; four Low and four notes, all handled in `lj-step-52-fix2`:
+  - **LOW-1** — the smoke hook that clicks Remove ran on the environment variables alone, so they
+    would wipe a real profile's saved passwords with no question. Now `remove` (and the new
+    `toggle-save`) needs a throwaway data folder (`LITTLEJOAN_DATA_DIR`) **and** a GitHub-hosted
+    runner (`GITHUB_ACTIONS=true`, `RUNNER_ENVIRONMENT=github-hosted`), else it logs
+    `settings-logins-click refused <why>` and clicks nothing (`settings_window/logins_smoke.rs`; test
+    `it_drives_the_section_only_on_a_throwaway_folder_on_a_github_hosted_runner`; a refusal in CI
+    fails the smoke).
+  - **LOW-2** — `clear_saved_logins` waited on a tokio worker: now on `spawn_blocking` (the
+    never-on-the-main-thread check stays). The same pattern in `win.rs`'s `devtools()` /
+    `set_mobile` is in Deferred follow-ups (not small).
+  - **LOW-3** — the autofill test knew four builders by name: it now finds every webview
+    constructor in `src/` and wants exactly those four, each passing the saved value.
+  - **LOW-4** — CI never drove a Save with a page open: the `logins-on` run now opens Settings over
+    the page and clicks "Offer to save passwords" off and Save; the page and the settings window
+    must read back `password-autosave=false`, settings.json must say `false`.
+  - **Notes** — the apply-vs-Save race closed (the switches are read when the main thread reaches
+    the engine) and `ensure_page`'s pre-existing fast path recorded (Deferred follow-ups); the
+    password switch possibly outliving a downgrade (Landmines, CHANGELOG); the Remove note and
+    README say passkeys stay (Windows Hello keeps them), and README / architecture.md that
+    uninstalling keeps the engine's data unless **Delete the application data** is ticked
+    (confirmed in Tauri CLI 2.12.3's NSIS template: it removes `$APPDATA\<id>` and
+    `$LOCALAPPDATA\<id>` only then, never while updating); the macOS line now reads "Passkeys need
+    an entitlement Apple grants to browsers, and password AutoFill isn't dependable in an app's web
+    view."; the colour-scheme Landmine says the profile is pinned to the system theme of the last
+    webview built; the unused `Change::touches_logins` dropped.
 
 ### LJ53 — More bundled extensions: Reading list and To-do · standard · auto
 
@@ -10386,6 +10414,22 @@ smoke run; nothing changed in the direct-download build.
   no tag, so a late count for an earlier query (typing debounced 120 ms) would be taken for the new
   one. Not seen in CI (each run's results were the needle's own); WKWebView's carry their find's
   number.
+- **Blocking waits for WebView2's DevTools answers** (phase 24's security review, LOW-2): `win.rs`'s
+  `devtools()` (`Page.getLayoutMetrics`) and `set_mobile` wait up to 2 s with `recv_timeout`, and
+  `phone_mode::apply` calls them from async commands (Save, the quick commands, the site-mode
+  pill) — a tokio worker held meanwhile. Moving them to `spawn_blocking` means making
+  `phone_mode::apply` (and its many callers) async or detaching its reload decision; not small,
+  so left as it is (it has run this way since LJ40). `clear_saved_logins` (LJ51) waits on a
+  blocking thread instead.
+- **A page navigation can reach a new page before its first settings** (phase 24's review,
+  NOTE-1; pre-existing): `bar::page::ensure_page` returns at once when the page webview exists, so
+  a navigation asked for while another thread is still in `build()` — after `add()`, before the
+  saved cookies, the agent and (LJ51) the logins switches are set — may be queued ahead of them.
+  For logins it changes nothing: wry sets general autofill while it builds the webview, and the
+  password switch lands on the main thread's next step, before a page could offer to save. The
+  apply-vs-Save race the review also noted is closed: `logins::apply` reads the saved switches when
+  the main thread reaches the engine, so whichever of a build's apply and a Save's runs last sets
+  what is saved by then.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -10643,6 +10687,9 @@ Populated from real friction, not speculation:
   from each new webview's window theme (`set_theme`, 1915–1924; tauri passes Dark or Light, never
   Auto) — harmless while no Little Joan window has a theme of its own (every one follows the
   system), but a window given an explicit theme would change the page's `prefers-color-scheme`.
+  And because it is Dark or Light, never Auto, the profile is pinned to the system theme as it was
+  when the last webview was built: a page doesn't follow a later system switch until the next one
+  is built (true before LJ51 too; phase 24's security review).
 - *(round 3 planning, vendored tauri-utils 2.10.2)* **Tauri's desktop-file template offers only
   `categories`, `comment`, `exec`, `icon` and `name`;** `MimeType=` and `%u` go into the template's
   text (LJ45).
@@ -10858,6 +10905,18 @@ Populated from real friction, not speculation:
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the
   owner's Mac by `LITTLEJOAN_SMOKE_LOG=<file>` and its `summon-timing` lines.
+- *(LJ51, phase 24's security review)* **WebView2's password-saving switch may outlive Little Joan's
+  setting.** Chromium keeps it as a profile preference, so a profile where saving was switched on
+  may keep it on for a build that never sets it — v0.2.x, say, which has no switch: someone who
+  turns saving on and goes back to v0.2.x keeps saving with no way to turn it off there (the
+  CHANGELOG says to turn it off first). Every v0.3 build sets both switches on every page and popup
+  it builds, so within v0.3 the setting always wins.
+- *(LJ51, phase 24's security review)* **Smoke hooks that act for a person must not run on a real
+  profile.** `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=remove` deletes every saved password without a
+  question: it (and `toggle-save`) runs only on a throwaway data folder (`LITTLEJOAN_DATA_DIR`) on a
+  GitHub-hosted runner (`GITHUB_ACTIONS=true`, `RUNNER_ENVIRONMENT=github-hosted`;
+  `settings_window/logins_smoke.rs`), never from the environment alone. New hooks like it get the
+  same gate.
 
 ---
 

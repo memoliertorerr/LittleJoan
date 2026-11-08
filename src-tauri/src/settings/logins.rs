@@ -102,13 +102,5 @@ mod tests {
         )
         .expect("valid");
         assert!(other.save_passwords && !other.autofill_forms);
-        assert!(!Change::default().touches_logins());
-        assert!(
-            Change {
-                autofill_forms: Some(true),
-                ..Change::default()
-            }
-            .touches_logins()
-        );
     }
 }

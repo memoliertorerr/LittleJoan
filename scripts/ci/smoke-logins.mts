@@ -14,9 +14,13 @@
 //   Remove are clicked (smoke hooks in settings_window.rs): `saved-logins-cleared ok`, while
 //   hibernating; `settings-privacy-logins-removed.png` shows the status line.
 // - "logins-on" (`"savePasswords": true`): the page reads back `password-autosave=true`, and so
-//   does a sign-in popup (`?popup=oauth`, its "Sign in" clicked); Settings, opened after, reports what
-//   its engine says without setting anything (`logins-seen …`, evidence that WebView2 shares the
-//   switches across the profile; informational).
+//   does a sign-in popup (`?popup=oauth`, its "Sign in" clicked); then, with the page still open,
+//   `--settings privacy` with LITTLEJOAN_SMOKE_SETTINGS_LOGINS=toggle-save: Settings reports what its
+//   engine says without setting anything (`logins-seen …`, evidence that WebView2 shares the
+//   switches across the profile; informational), and on Windows "Offer to save passwords" is
+//   clicked off and Save clicked — a Save while a page is open (phase 24's security review): the page
+//   and the settings window must read back `password-autosave=false`, and settings.json must keep
+//   `"savePasswords": false`.
 // The rules are Windows'; macOS and Linux must log no switch and no removal. The smoke never types a
 // password and nothing reads the engine's stores (Ground Rule 26). smoke.mts supplies the driver;
 // the rules are pure and unit-tested (smoke-logins.test.ts).
@@ -25,6 +29,7 @@ import type { LinksApp } from "./smoke-links.mts";
 import { openerUrl } from "./smoke-popups.mts";
 import { POPUP_READY_TITLE } from "../../tests/smoke/popup-logic.mjs";
 import { WEBAUTHN_PREFIX, parseWebauthnTitle } from "../../tests/smoke/webauthn-logic.mjs";
+import { settingsOf } from "./smoke-quick.mts";
 
 /** What the runs need from smoke.mts. */
 export interface LoginsDriver {
@@ -48,6 +53,8 @@ export interface LoginsRun {
   popupOpened: boolean;
   /** The smoke page's `?webauthn=1` report (LJ52), as its title said it. */
   webauthn?: string;
+  /** The "logins-on" launch's settings.json after its Save. */
+  onSettings?: Record<string, unknown> | null;
 }
 
 /** `webview-profile <place>=<path>` lines: the last path per place. */
@@ -67,6 +74,12 @@ export function switches(events: LogEvent[], event: "logins" | "logins-seen" = "
   return events.filter((e) => e.event === event).map((e) => e.detail);
 }
 
+/** The switches read back after Settings' Save was clicked, or `undefined` if it never was. */
+export function afterSave(events: LogEvent[]): string[] | undefined {
+  const saved = events.findIndex((e) => e.event === "settings-logins-click" && e.detail === "save");
+  return saved < 0 ? undefined : switches(events.slice(saved));
+}
+
 const line = (save: boolean, autofill: boolean, place: string) => `password-autosave=${save} autofill=${autofill} webview=${place}`;
 
 /**
@@ -79,6 +92,10 @@ export function loginsFailures(run: LoginsRun, os: string): string[] {
   const failures: string[] = [];
   if (count(run.first, "settings-scrolled", "logins") === 0) {
     failures.push("logins: Settings → Privacy never scrolled to its saved passwords for the screenshot");
+  }
+  const refused = [...run.first, ...run.on].filter((e) => e.event === "settings-logins-click" && e.detail.startsWith("refused"));
+  if (refused.length > 0) {
+    failures.push(`logins: the smoke's clicks were refused on this runner (${refused.map((e) => e.detail).join(", ")})`);
   }
   if (os !== "win32") {
     for (const [name, events] of [["logins", run.first], ["logins-on", run.on]] as const) {
@@ -122,6 +139,25 @@ export function loginsFailures(run: LoginsRun, os: string): string[] {
   } else if (!switches(run.on).includes(line(true, true, "popup"))) {
     failures.push(`logins-on: the popup read back [${switches(run.on).join(", ")}], not "${line(true, true, "popup")}"`);
   }
+  // A Save while the page is open (the security review): every webview of the profile there is.
+  const saved = run.on.findIndex((e) => e.event === "settings-logins-click" && e.detail === "save");
+  const readBack = afterSave(run.on) ?? [];
+  const pageBuilt = run.on.findIndex((e) => e.event === "page-built");
+  const pageClosed = run.on.findIndex((e, i) => i > pageBuilt && (e.event === "page-closed" || e.event === "hibernated"));
+  if (saved < 0) {
+    failures.push("logins-on: Settings' Save was never clicked");
+  } else if (pageBuilt < 0 || (pageClosed >= 0 && pageClosed < saved)) {
+    failures.push("logins-on: the page wasn't open when Settings saved");
+  } else {
+    for (const place of ["page", "settings"]) {
+      if (!readBack.includes(line(false, true, place))) {
+        failures.push(`logins-on: after Save the ${place} read back [${readBack.join(", ")}], not "${line(false, true, place)}"`);
+      }
+    }
+  }
+  if (run.onSettings !== undefined && run.onSettings?.savePasswords !== false) {
+    failures.push(`logins-on: settings.json has savePasswords ${JSON.stringify(run.onSettings?.savePasswords)} after Save, not false`);
+  }
   return failures;
 }
 
@@ -162,9 +198,9 @@ export function webauthnOf(events: LogEvent[]): string | undefined {
 }
 
 /** `savePasswords: true`: the page, a sign-in popup, then Settings (what its engine says). */
-async function onRun(d: LoginsDriver): Promise<{ events: LogEvent[]; popupOpened: boolean }> {
+async function onRun(d: LoginsDriver): Promise<{ events: LogEvent[]; popupOpened: boolean; settings: Record<string, unknown> | null }> {
   const windows = d.os === "win32";
-  const app = await d.launch("logins-on", { savePasswords: true });
+  const app = await d.launch("logins-on", { savePasswords: true }, { LITTLEJOAN_SMOKE_SETTINGS_SCROLL: "logins", LITTLEJOAN_SMOKE_SETTINGS_LOGINS: "toggle-save" });
   await app.waitFor("logins-on: started", (e) => e.some((x) => x.event === "started"), 30_000);
   await d.sleep(1000);
   const from = app.events().length;
@@ -178,18 +214,18 @@ async function onRun(d: LoginsDriver): Promise<{ events: LogEvent[]; popupOpened
     await app.waitFor("logins-on: the popup's switches", (e) => e.slice(click).some((x) => x.event === "logins" && x.detail.endsWith("webview=popup")), 10_000);
   }
   await d.sleep(2000);
-  const hide = app.events().length;
-  await app.forward(["--hide"]);
-  await app.waitFor("logins-on: closed", (e) => count(e.slice(hide), "hibernated") > 0, 20_000);
+  // Settings over the open page; on Windows "Offer to save passwords" off, then Save.
   const open = app.events().length;
   await app.forward(["--settings", "privacy"]);
-  await app.waitFor("logins-on: Settings", (e) => count(e.slice(open), "settings-loaded") > 0, 30_000);
+  await app.waitFor("logins-on: Settings", (e) => count(e.slice(open), "settings-scrolled", "logins") > 0, 30_000);
   if (windows) {
-    await app.waitFor("logins-on: what Settings' engine says", (e) => count(e.slice(open), "logins-seen") > 0, 10_000);
+    const off = line(false, true, "page");
+    await app.waitFor("logins-on: saved with saving off", (e) => e.slice(open).some((x) => x.event === "logins" && x.detail === off), 20_000);
   }
-  await d.sleep(1000);
+  await d.sleep(1500);
+  const settings = settingsOf(app.settings());
   await app.quit();
-  return { events: app.events(), popupOpened };
+  return { events: app.events(), popupOpened, settings };
 }
 
 /** Runs both launches. */
@@ -197,7 +233,7 @@ export async function loginsRun(d: LoginsDriver): Promise<LoginsRun> {
   const first = await firstRun(d);
   const on = await onRun(d);
   const webauthn = webauthnOf(first);
-  return { first, on: on.events, popupOpened: on.popupOpened, ...(webauthn ? { webauthn } : {}) };
+  return { first, on: on.events, popupOpened: on.popupOpened, ...(d.os === "win32" ? { onSettings: on.settings } : {}), ...(webauthn ? { webauthn } : {}) };
 }
 
 /** What summary.json records of the runs. */
@@ -211,6 +247,9 @@ export function loginsSummary(run: LoginsRun, os: string) {
     sameProfile: paths.page !== undefined && paths.page === paths.settings,
     cleared: run.first.find((e) => e.event === "saved-logins-cleared")?.detail ?? null,
     popupOpened: run.popupOpened,
+    // The security review: what a Save with the page open set (Windows).
+    afterSave: afterSave(run.on) ?? [],
+    savePasswordsAfterSave: run.onSettings?.savePasswords ?? null,
     // LJ52: what the page's engine offers for passkeys (evidence, not a rule).
     webauthn: { title: run.webauthn ?? null, report: parseWebauthnTitle(run.webauthn) },
     rules: loginsFailures(run, os),

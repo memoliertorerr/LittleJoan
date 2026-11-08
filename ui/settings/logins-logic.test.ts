@@ -43,7 +43,7 @@ describe("Settings → Privacy's saved passwords and form data (LJ51)", () => {
     expect(SAVE_PASSWORDS_NOTE).toContain("passwords saved earlier still fill in until you remove them");
     expect(AUTOFILL_NOTE).toContain("nothing new is kept");
     expect(REMOVE_NOTE).toContain("Little Joan itself never reads, exports or syncs them");
-    expect(REMOVE_NOTE).toContain("Cookies, site data and history stay");
+    expect(REMOVE_NOTE).toContain("Passkeys (Windows Hello keeps them), cookies, site data and history stay");
     expect(storedWhere("windows")).toContain("Windows' web engine's own store");
     expect(storedWhere("windows")).toContain("Little Joan never reads them");
     expect(storedWhere("macos")).toContain("saves no passwords or form data");
@@ -52,7 +52,8 @@ describe("Settings → Privacy's saved passwords and form data (LJ51)", () => {
 
   it("says why there is nothing to switch on macOS and Linux", () => {
     const title = "Saving passwords isn't available in Little Joan on this system yet.";
-    expect(unavailableNote("macos")).toEqual({ title, why: "Apple lets only browsers with a special entitlement use Passwords and passkeys." });
+    // The entitlement is about passkeys; password AutoFill just isn't dependable for an embedding app.
+    expect(unavailableNote("macos")).toEqual({ title, why: "Passkeys need an entitlement Apple grants to browsers, and password AutoFill isn't dependable in an app's web view." });
     expect(unavailableNote("linux")).toEqual({ title, why: "WebKitGTK has no password manager." });
     expect(unavailableNote("freebsd").title).toBe(title);
   });

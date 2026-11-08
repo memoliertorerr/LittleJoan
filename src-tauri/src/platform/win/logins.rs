@@ -87,10 +87,16 @@ fn one_line(err: &windows::core::Error) -> String {
         .join(" ")
 }
 
-/// Sets the switches on `webview` (queued on the main thread, never waited for): `logins
-/// password-autosave=<bool> autofill=<bool> webview=<place>` as read back, or `logins failed …`.
-pub fn apply<R: Runtime>(webview: &Webview<R>, save: bool, autofill: bool, place: Place) {
+/// Sets the switches on `webview` to what `switches` says when the UI thread gets there (queued,
+/// never waited for): `logins password-autosave=<bool> autofill=<bool> webview=<place>` as read
+/// back, or `logins failed …`.
+pub fn apply<R, F>(webview: &Webview<R>, place: Place, switches: F)
+where
+    R: Runtime,
+    F: FnOnce() -> (bool, bool) + Send + 'static,
+{
     let reached = webview.with_webview(move |platform| {
+        let (save, autofill) = switches();
         // SAFETY: with_webview runs on the UI thread while the webview (and its controller) lives.
         match unsafe { set_and_read(&platform.controller(), save, autofill) } {
             Ok((save, autofill)) => smoke::log("logins", &line(save, autofill, place)),

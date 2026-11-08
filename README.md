@@ -459,10 +459,12 @@ You can write your own with plain HTML, CSS and JavaScript — see
   engine's own store inside the site-data folder above, on this computer; Little Joan never reads,
   exports, logs or syncs it. Turning saving off stops new passwords being saved — ones saved earlier
   still fill in until you remove them: **Remove saved passwords and form data…** (after a
-  question) has the engine delete them all, even while the window is closed; cookies, site data
-  and history stay. macOS and Linux: Little Joan saves no passwords there yet — Apple lets only
-  browsers with a special entitlement use Passwords and passkeys, and WebKitGTK has no password
-  manager; Settings → Privacy says so.
+  question) has the engine delete them all, even while the window is closed; passkeys (Windows
+  Hello keeps them), cookies, site data and history stay. Uninstalling keeps the web engine's data —
+  saved passwords and form data included — unless you tick **Delete the application data** in the
+  uninstaller. macOS and Linux: Little Joan saves no passwords there yet — passkeys in an app's web
+  view need an entitlement Apple grants to browsers, and its password AutoFill isn't dependable
+  there; WebKitGTK has no password manager. Settings → Privacy says so.
 - **Passkeys** are the web engine's too, where it offers them. On Windows, WebView2 — the engine
   Edge is built on — handles a site's passkeys and security keys itself, with Windows Hello;
   Windows keeps them, not Little Joan. On macOS an app other than Safari may use passkeys in its

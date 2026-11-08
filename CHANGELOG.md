@@ -57,9 +57,12 @@ All notable changes to Little Joan are recorded here. The format follows
   switches: **Offer to save passwords** (off by default) and **Fill in forms** — addresses and the
   like (on by default, as it has always been) — and **Remove saved passwords and form data…**,
   which, after a question, has the engine delete everything it saved, even while Little Joan's
-  window is closed (cookies, site data and history stay). What the engine saves stays in its own
-  store on your computer; Little Joan never reads, exports or syncs it. On macOS and Linux Settings
-  says why Little Joan can't save passwords there yet.
+  window is closed (passkeys — Windows Hello keeps them —, cookies, site data and history stay).
+  What the engine saves stays in its own store on your computer; Little Joan never reads, exports
+  or syncs it, and uninstalling keeps it unless you tick **Delete the application data**. On macOS
+  and Linux Settings says why Little Joan can't save passwords there yet. *Going back to v0.2.x
+  after turning saving on:* the engine may remember the switch in its own data, and v0.2.x has no
+  switch to turn it off — turn **Offer to save passwords** off first.
 
 ### Security
 - **A sign-in popup's title names only a page that has loaded in it.** Until the sign-in page loads,

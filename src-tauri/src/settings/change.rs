@@ -76,11 +76,6 @@ impl Change {
     pub fn touches_extensions(&self) -> bool {
         self.disabled_extensions.is_some() || self.developer_mode.is_some()
     }
-
-    /// It switches the engine's password saving or form autofill (LJ51).
-    pub fn touches_logins(&self) -> bool {
-        self.save_passwords.is_some() || self.autofill_forms.is_some()
-    }
 }
 
 /// The settings `change` makes of `current`, or why it is refused (then nothing changes).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { loginsFailures, loginsSummary, profiles, switches, webauthnOf, type LoginsRun } from "./smoke-logins.mts";
+import { afterSave, loginsFailures, loginsSummary, profiles, switches, webauthnOf, type LoginsRun } from "./smoke-logins.mts";
 
 const log = (rows: string[]) => parseLog(rows.map((row, i) => `${1000 + i} ${row}`).join("\n") + "\n");
 const PROFILE = "C:\\Users\\runner\\AppData\\Local\\Temp\\lj\\logins\\webview\\EBWebView\\Default";
@@ -29,13 +29,24 @@ const ON = [
   "logins password-autosave=true autofill=true webview=page",
   "popup-opened http://127.0.0.1:5001",
   "logins password-autosave=true autofill=true webview=popup",
-  "hibernated ready",
-  "settings-loaded",
+  "popup-closed by-page",
   "logins-seen password-autosave=true autofill=true webview=settings",
+  "settings-window privacy",
+  "settings-loaded",
+  "settings-scrolled logins",
+  "settings-logins-click toggle",
+  "settings-logins-click save",
+  "logins password-autosave=false autofill=true webview=page",
+  "logins password-autosave=false autofill=true webview=settings",
 ];
 
-function run(over: Partial<{ first: string[]; on: string[]; popupOpened: boolean }> = {}): LoginsRun {
-  return { first: log(over.first ?? FIRST), on: log(over.on ?? ON), popupOpened: over.popupOpened ?? true };
+function run(over: Partial<{ first: string[]; on: string[]; popupOpened: boolean; onSettings: Record<string, unknown> | null }> = {}): LoginsRun {
+  return {
+    first: log(over.first ?? FIRST),
+    on: log(over.on ?? ON),
+    popupOpened: over.popupOpened ?? true,
+    onSettings: "onSettings" in over ? (over.onSettings ?? null) : { savePasswords: false },
+  };
 }
 
 /** macOS and Linux: the same runs without anything of the engine's switches. */
@@ -94,7 +105,7 @@ describe("the logins runs' rules (LJ51)", () => {
   it("reads the profile lines and the switches, and sums them up", () => {
     expect(profiles(log(FIRST))).toEqual({ page: PROFILE, settings: PROFILE });
     expect(profiles(log(["webview-profile page=a=b", "webview-profile nonsense"]))).toEqual({ page: "a=b" });
-    expect(switches(log(ON))).toEqual(["password-autosave=true autofill=true webview=page", "password-autosave=true autofill=true webview=popup"]);
+    expect(switches(log(ON)).slice(0, 2)).toEqual(["password-autosave=true autofill=true webview=page", "password-autosave=true autofill=true webview=popup"]);
     expect(switches(log(ON), "logins-seen")).toEqual(["password-autosave=true autofill=true webview=settings"]);
     const summary = loginsSummary(run(), "win32");
     expect(summary).toMatchObject({ sameProfile: true, cleared: "ok", popupOpened: true, rules: [] });
@@ -112,5 +123,28 @@ describe("the logins runs' rules (LJ51)", () => {
     });
     // No report changes no rule.
     expect(loginsSummary(run(), "win32")).toMatchObject({ webauthn: { title: null, report: null }, rules: [] });
+  });
+
+  it("wants a Save with the page open to reach the page and the settings window (the security review)", () => {
+    expect(afterSave(log(ON))).toEqual(["password-autosave=false autofill=true webview=page", "password-autosave=false autofill=true webview=settings"]);
+    expect(afterSave(log(ON.filter((row) => row !== "settings-logins-click save")))).toBeUndefined();
+    const noSave = run({ on: ON.filter((row) => row !== "settings-logins-click save") });
+    expect(loginsFailures(noSave, "win32").join()).toContain("Save was never clicked");
+    const pageStale = run({ on: ON.filter((row, i) => !(row.endsWith("webview=page") && i > ON.indexOf("settings-logins-click save"))) });
+    expect(loginsFailures(pageStale, "win32").join()).toContain("after Save the page read back");
+    const settingsStale = run({ on: ON.filter((row) => row !== "logins password-autosave=false autofill=true webview=settings") });
+    expect(loginsFailures(settingsStale, "win32").join()).toContain("after Save the settings read back");
+    const closed = run({ on: ON.flatMap((row) => (row === "settings-window privacy" ? ["hibernated ready", row] : [row])) });
+    expect(loginsFailures(closed, "win32").join()).toContain("the page wasn't open when Settings saved");
+    expect(loginsFailures(run({ onSettings: { savePasswords: true } }), "win32").join()).toContain("savePasswords true after Save");
+    expect(loginsFailures(run({ onSettings: null }), "win32").join()).toContain("after Save, not false");
+    expect(loginsSummary(run(), "win32")).toMatchObject({ savePasswordsAfterSave: false, rules: [] });
+  });
+
+  it("fails when the smoke's clicks were refused — the runner gate kept them from running", () => {
+    const refused = run({ first: FIRST.map((row) => (row === "settings-logins-click remove" ? "settings-logins-click refused not-a-github-hosted-runner" : row)) });
+    expect(loginsFailures(refused, "win32").join()).toContain("refused on this runner (refused not-a-github-hosted-runner)");
+    const macRefused = run({ first: [...MAC_FIRST, "settings-logins-click refused no-temporary-data-folder"], on: ["started"], popupOpened: false });
+    expect(loginsFailures(macRefused, "darwin").join()).toContain("refused on this runner");
   });
 });

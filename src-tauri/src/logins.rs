@@ -57,13 +57,18 @@ pub fn autofill_forms<R: Runtime>(app: &AppHandle<R>) -> bool {
     state::with(app, |s| s.settings.autofill_forms)
 }
 
-/// A page webview or a sign-in popup was built: the saved switches go to its engine (Windows),
-/// read back into the smoke log.
+/// A page webview or a sign-in popup was built (or a Save changed the switches): the saved
+/// switches go to its engine (Windows), read back into the smoke log. They are read when the engine
+/// is reached, on the main thread — not when this is called —, so a Save in between can't leave a
+/// webview with the old ones: whichever of the two runs last sets what is saved by then (phase 24's
+/// security review).
 pub fn apply<R: Runtime>(app: &AppHandle<R>, webview: &Webview<R>, place: Place) {
-    let (save, autofill) = state::with(app, |s| {
-        (s.settings.save_passwords, s.settings.autofill_forms)
+    let app = app.clone();
+    platform::apply_logins(webview, place, move || {
+        state::with(&app, |s| {
+            (s.settings.save_passwords, s.settings.autofill_forms)
+        })
     });
-    platform::apply_logins(webview, save, autofill, place);
 }
 
 /// A Save changed the switches: the page, its popups and the settings window — every webview of the
@@ -157,31 +162,53 @@ mod tests {
     #[test]
     fn every_builder_on_the_profile_passes_the_saved_autofill() {
         // wry sets general autofill on every webview it creates (default on), and the engine shares
-        // it across the profile: a builder without the saved value would switch it back on.
-        let builders = [
-            ("bar.rs", "WebviewBuilder::new(BAR"),
-            ("bar/page.rs", "WebviewBuilder::new(PAGE"),
-            ("bar/popup.rs", "WebviewWindowBuilder::new(app, &label"),
-            (
-                "settings_window.rs",
-                "WebviewWindowBuilder::new(&app, LABEL",
-            ),
+        // it across the profile: a builder without the saved value would switch it back on. Every
+        // webview constructor in src/ is found (phase 24's security review: a fifth one can't slip
+        // by), it must be one of the four known, and each passes the saved value.
+        let constructors = [
+            "WebviewBuilder::new(",
+            "WebviewWindowBuilder::new(",
+            "WebviewBuilder::from_config(",
+            "WebviewWindowBuilder::from_config(",
+            "WebviewWindow::builder(",
+            "Webview::builder(",
         ];
-        let all = sources();
-        for (file, builder) in builders {
-            let (path, code) = all
-                .iter()
-                .find(|(path, _)| path.replace('\\', "/").ends_with(&format!("src/{file}")))
-                .expect("the builder's file");
-            let at = code
-                .find(builder)
-                .unwrap_or_else(|| panic!("{path}: {builder}"));
-            let rest = &code[at..];
-            let end = rest.find("\n}\n").unwrap_or(rest.len());
-            assert!(
-                rest[..end].contains(".general_autofill_enabled("),
-                "{path}: {builder} passes the saved autofillForms"
-            );
+        let mut found = Vec::new();
+        for (path, code) in sources() {
+            let file = path.replace('\\', "/");
+            let file = file
+                .rsplit_once("/src/")
+                .map_or(file.as_str(), |(_, f)| f)
+                .to_owned();
+            for constructor in constructors {
+                for (at, _) in code.match_indices(constructor) {
+                    // Its arguments' start names it: `(BAR`, `(&app, LABEL`, …
+                    let args = &code[at + constructor.len()..];
+                    let name: String = args
+                        .chars()
+                        .take_while(|c| *c != ',')
+                        .filter(|c| !c.is_whitespace())
+                        .collect();
+                    let rest = &code[at..];
+                    let end = rest.find("\n}\n").unwrap_or(rest.len());
+                    assert!(
+                        rest[..end].contains(".general_autofill_enabled("),
+                        "{file}: {constructor}{name} must pass the saved autofillForms"
+                    );
+                    found.push(format!("{file} {constructor}{name}"));
+                }
+            }
         }
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                "bar.rs WebviewBuilder::new(BAR",
+                "bar/page.rs WebviewBuilder::new(PAGE",
+                "bar/popup.rs WebviewWindowBuilder::new(app",
+                "settings_window.rs WebviewWindowBuilder::new(&app",
+            ],
+            "a new webview builder: pass the saved autofillForms (logins.rs) and add it here"
+        );
     }
 }

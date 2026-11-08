@@ -20,6 +20,9 @@ use crate::state::{self, AppState};
 
 pub const LABEL: &str = "settings";
 
+/// What the smoke harness may have Privacy's saved-passwords section do, and when (LJ51).
+mod logins_smoke;
+
 /// What the window's builder takes from the state (LJ51): the page window's webview data folder
 /// (`AppState::webview_data_dir`; `None` in installed builds, where Tauri gives every webview the
 /// app's local data folder) — one WebView2 profile with the page, whose environment options all
@@ -236,9 +239,11 @@ const SMOKE_QUIT_AFTER: std::time::Duration = std::time::Duration::from_secs(4);
 /// after the settings page asked for its settings, the open tab scrolls to one of its sections below
 /// the fold for the screenshot — General's Browser (`browser`, LJ46) or Privacy's saved passwords
 /// (`logins`, LJ51) — and logs `settings-scrolled <section>`. With `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=
-/// remove` too (Windows), 4 s later Privacy's "Remove saved passwords and form data…" is clicked and
-/// then its question's Remove — the page's own handlers run and call `clear_saved_logins` as clicks
-/// would (`settings-logins-click`). CI has no driver for the window's controls.
+/// remove|toggle-save` too (Windows), 4 s later Privacy's "Remove saved passwords and form data…"
+/// and the question's Remove — or "Offer to save passwords" and Save — are clicked: the page's own
+/// handlers run, as clicks would (`settings-logins-click <step>`). Only on a throwaway data folder
+/// on a GitHub-hosted runner (settings_window/logins_smoke.rs; otherwise `settings-logins-click
+/// refused <why>`). CI has no driver for the window's controls.
 pub fn smoke_scroll<R: Runtime>(app: &AppHandle<R>) {
     if !smoke::enabled() {
         return;
@@ -250,11 +255,23 @@ pub fn smoke_scroll<R: Runtime>(app: &AppHandle<R>) {
     else {
         return;
     };
-    let remove = section == "logins"
-        && std::env::var("LITTLEJOAN_SMOKE_SETTINGS_LOGINS")
-            .ok()
-            .as_deref()
-            == Some("remove");
+    let drive = if section == "logins" {
+        let env = |name: &str| std::env::var(name).ok();
+        let temp_data = state::with(app, |s| s.webview_data_dir.is_some());
+        let wanted = logins_smoke::wanted(
+            env("LITTLEJOAN_SMOKE_SETTINGS_LOGINS").as_deref(),
+            temp_data,
+            env("GITHUB_ACTIONS").as_deref(),
+            env("RUNNER_ENVIRONMENT").as_deref(),
+            crate::logins::AVAILABLE,
+        );
+        wanted.unwrap_or_else(|why| {
+            smoke::log("settings-logins-click", &format!("refused {why}"));
+            None
+        })
+    } else {
+        None
+    };
     let app = app.clone();
     let _ = std::thread::Builder::new()
         .name("little-joan-smoke-scroll".into())
@@ -268,15 +285,15 @@ pub fn smoke_scroll<R: Runtime>(app: &AppHandle<R>) {
                 "document.getElementById(\"{anchor}\")?.scrollIntoView({{ block: \"start\" }})"
             ));
             smoke::log("settings-scrolled", section);
-            if !remove {
+            let Some(drive) = drive else {
                 return;
-            }
+            };
             std::thread::sleep(std::time::Duration::from_secs(4));
-            smoke::log("settings-logins-click", "remove");
-            let _ = window.eval("document.getElementById(\"logins-remove\")?.click()");
-            std::thread::sleep(std::time::Duration::from_millis(600));
-            smoke::log("settings-logins-click", "confirm");
-            let _ = window.eval("document.getElementById(\"logins-go\")?.click()");
+            for (step, script) in drive.steps() {
+                smoke::log("settings-logins-click", step);
+                let _ = window.eval(*script);
+                std::thread::sleep(std::time::Duration::from_millis(600));
+            }
         });
 }
 
