@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-Little Joan is young: only the latest release (currently 0.2.x) and the `main` branch — which
-becomes 0.3, with links from other apps, sign-in popups and saved logins on Windows — get fixes.
+Little Joan is young: only the latest release (currently 0.2.x), the v0.3 pre-release
+(0.3.0-beta.1) and the `main` branch — which becomes 0.3, with links from other apps, sign-in
+popups and saved logins on Windows — get fixes.
 
 ## Reporting a vulnerability
 

@@ -39,11 +39,13 @@ affiliated with or endorsed by The Browser Company.
 > 24.04 and 22.04 and the AppImage on 24.04, on x86_64 and ARM64); none is code-signed yet. See
 > the known issue under Fullscreen video.
 >
-> **Coming in v0.3** (on `main`, not released yet): Little Joan as your browser for links from
-> other apps, with a main browser for the pages it hands on; sign-in popups inside Little Joan;
-> find in page; pinned sites; saved passwords and form autofill on Windows; Liquid Glass on macOS
-> 26; and extension panels that follow theme changes, with `--extension` opening page actions. No
-> new bundled extensions in v0.3 — the nine planned ones come after it.
+> **Try v0.3 early:** the
+> [v0.3.0-beta.1 pre-release](https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.3.0-beta.1)
+> brings Little Joan as your browser for links from other apps, with a main browser for the pages
+> it hands on; sign-in popups inside Little Joan; find in page; pinned sites; saved passwords and
+> form autofill on Windows; Liquid Glass on macOS 26; and extension panels that follow theme
+> changes, with `--extension` opening page actions. No new bundled extensions in v0.3 — the nine
+> planned ones come after it.
 >
 > The build plan and progress tracker live in
 > [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
@@ -52,7 +54,8 @@ affiliated with or endorsed by The Browser Company.
 
 Download the installer for your system from the
 **[latest release](https://github.com/memoliertorerr/LittleJoan/releases/latest)** — v0.2.1, with
-the file names below. The builds aren't code-signed yet, so the first launch shows a warning; the
+the file names below (the v0.3.0-beta.1 pre-release's files have its version in their names, the
+steps are the same). The builds aren't code-signed yet, so the first launch shows a warning; the
 steps below get past it.
 (Development builds of every change are also kept as artifacts of the
 [CI workflow](https://github.com/memoliertorerr/LittleJoan/actions/workflows/ci.yml).)

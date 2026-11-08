@@ -140,7 +140,7 @@
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ✅ done — phase 25, `lj/p25-more-extensions`: PR #44 (head 09939be, run 42437874330 green 18/18 on the first attempt) merged as c6f40c5; main's run 42440225060 green 18/18 |
-| LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ✅ done — waiting for the owner's checklist (phase 26, `lj/p26-v0.3-docs`; the checklist is in its PR) |
+| LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ✅ done (phase 26, `lj/p26-v0.3-docs`; the checklist is in its PR) — on the owner's word (2026-11-08) the `v0.3.0-beta.1` pre-release, `lj/release-0.3.0-beta.1` |
 | LJ58 | *(moved into v0.2.1 by the owner, 2026-10-30; was round 4)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step; the owner has the Developer account since 2026-10-30) | strong | auto | ⬜ todo — needs the owner's Apple secrets; v0.2.1 went out unsigned on the owner's word (2026-10-30), so signing lands in a later release |
 | LJ59 | *(round 4, after v0.3; owner, 2026-10-29)* Auto-update: tauri-plugin-updater, signed update manifests published with the GitHub releases | strong | review | ⬜ todo — needs the owner's updater signing key as a GitHub secret |
 | LJ60 | *(after round 4; owner, 2026-10-30)* A Mac App Store build: the App Sandbox and its entitlements, login through SMAppService, single-instance inside the container, no updater, Apple Distribution signing; App Review's questions answered before submitting | strong | review | ⬜ todo — needs the owner's App Store certificates, profile and app record |
@@ -202,8 +202,8 @@ Arc and phone mode per site, designed from the resize research), phase 20 (LJ41�
 commands, a Keyboard tab for every key), then round 1's phases 7–11 (LJ13–LJ19, their prompts
 adjusted to round 2's ground: the toolbar, the keymap, merging into `main`) — and plans **v0.3**:
 phases 21–26 (LJ45–LJ57: Little Joan as the system's browser for links, sign-in popups, find in page
-and pinned sites, saved logins on Windows, nine more bundled extensions, the docs and the owner's
-checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Phase 10 (LJ18) ⏭ skipped: `gh secret list --repo memoliertorerr/LittleJoan` shows no Apple signing secrets (checked 2026-10-19), so the macOS build stays ad-hoc signed and LJ19's checklist keeps the README's Gatekeeper step; LJ18 runs as written once the owner adds the secrets (its pre-step). On the owner's decision (2026-10-19) phase 10 instead carries **LJ18.1, Linux ARM64 builds** (added mid-plan: the owner tests Ubuntu 22.04 ARM in Parallels on an Apple silicon Mac at LJ19's checkpoint): an `arm64` `.deb` built on ubuntu-22.04-arm and an `aarch64` AppImage built on ubuntu-24.04-arm, both smoke-tested on ARM runners like their x86_64 twins (branch `lj/p10-arm64`). Phase 11 (LJ19): the release PR on `lj/release-0.2.0` — version 0.2.0, the CHANGELOG's `[0.2.0] — 2026-10-19` with its Known issues, the README pointing at v0.2.0 — merged by the agent once green (the owner allowed it for this PR); the owner's checklist is in the PR. Next: the owner's checklist; then, on their word, the v0.2.0 release (tag and `gh release create`); phase 21 starts only on the owner's go.** **2026-10-23: on the owner's word v0.2.0 was released (the Latest release) from 67379a4; the owner tests it afterwards and a v0.2.1 follows if needed. LJ19.1 (faster first summon) and LJ19.3 (open-source polish) are merged; LJ19.2 (show over full-screen apps, on the current Space; PR #33 on `lj/p11-fullscreen-spaces`) is done; next: v0.3 on the owner's go.****
+and pinned sites, saved logins on Windows, more bundled extensions — moved after v0.3 on
+2026-10-29, so LJ56's two touch-ups only —, the docs and the owner's checklist). **Execution order: 18 → 19 → 20 → 7 → 8 → 9 → 10 → 11 → 21 → 22 → 23 → 24 → 25 → 26. **2026-10-18: phases 18 and 19 are merged (PRs #21, #22); the owner's checkpoint passed, and on their word `v0.2.0-beta.3` was released (pre-release). 2026-10-19: phase 20 (PR #24) merged. Phase 7 (PR #25): LJ13 done; LJ14 stopped at its own experiment; on the owner's call LJ14.1 (fullscreen off on WebKitGTK < 2.52) was added and done. Phase 8 (PR #26: downloads and page zoom) merged. Phase 9 (PR #27: the Wayland shortcut through the XDG GlobalShortcuts portal) merged. Phase 10 (LJ18) ⏭ skipped: `gh secret list --repo memoliertorerr/LittleJoan` shows no Apple signing secrets (checked 2026-10-19), so the macOS build stays ad-hoc signed and LJ19's checklist keeps the README's Gatekeeper step; LJ18 runs as written once the owner adds the secrets (its pre-step). On the owner's decision (2026-10-19) phase 10 instead carries **LJ18.1, Linux ARM64 builds** (added mid-plan: the owner tests Ubuntu 22.04 ARM in Parallels on an Apple silicon Mac at LJ19's checkpoint): an `arm64` `.deb` built on ubuntu-22.04-arm and an `aarch64` AppImage built on ubuntu-24.04-arm, both smoke-tested on ARM runners like their x86_64 twins (branch `lj/p10-arm64`). Phase 11 (LJ19): the release PR on `lj/release-0.2.0` — version 0.2.0, the CHANGELOG's `[0.2.0] — 2026-10-19` with its Known issues, the README pointing at v0.2.0 — merged by the agent once green (the owner allowed it for this PR); the owner's checklist is in the PR. Next: the owner's checklist; then, on their word, the v0.2.0 release (tag and `gh release create`); phase 21 starts only on the owner's go.** **2026-10-23: on the owner's word v0.2.0 was released (the Latest release) from 67379a4; the owner tests it afterwards and a v0.2.1 follows if needed. LJ19.1 (faster first summon) and LJ19.3 (open-source polish) are merged; LJ19.2 (show over full-screen apps, on the current Space; PR #33 on `lj/p11-fullscreen-spaces`) is done; next: v0.3 on the owner's go.****
 **The owner's update (2026-10-18): checkpoints stop for the owner's own testing and review** — the
 end of phase 19 (LJ40: the resizing feel), LJ19 (v0.2.0 release prep) and v0.3's last step (LJ57)
 are `checkpoint` gates: the step fills the PR with a precise checklist, the agent may merge the
@@ -327,7 +327,10 @@ main's run 42440225060 green on all 18 jobs. **Phase 26 (LJ57, 2026-11-08)** is 
 `lj/p26-v0.3-docs`: v0.3's docs, screenshots from CI's macOS smoke and the owner's checklist — a
 `checkpoint`: merged by its agent once every job is green (docs only), then it STOPS for the owner's
 checklist; a `v0.3.0-beta.1` only on the owner's word. **LJ57 is done — waiting for the owner's
-checklist** (in the phase-26 PR; LJ57's notes). Nothing starts until the owner says go.
+checklist** (in the phase-26 PR; LJ57's notes). **The owner's word (2026-11-08): "Publish the
+beta"** — the coordinator publishes the **pre-release `v0.3.0-beta.1`**, built from the merge
+commit of the release PR on `lj/release-0.3.0-beta.1` (v0.2.1 stays the Latest release until v0.3);
+the owner tests it in their batch. Nothing else starts until the owner says go.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -9920,7 +9923,7 @@ merge commit (Ground Rule 24), then stop and report.
 **Verify:** `npm run verify` green. README's "Using it" covers Little Joan as the browser for
 links, the main browser, sign-in popups, find in page, pinned sites, saved logins on Windows and
 the new extensions, with screenshots in `docs/images/` from CI's macOS run (the smoke page and
-sample data only). CHANGELOG `[Unreleased]` lists everything since v0.2.0. `docs/architecture.md`,
+sample data only). CHANGELOG `[Unreleased]` lists everything since v0.2.1, the latest release. `docs/architecture.md`,
 `docs/extensions.md`, `SECURITY.md` and `CONTRIBUTING.md` are current. CI green. **Checkpoint:** the
 owner ticks the checklist.
 **Human check:** the checklist below, copied into the PR.
@@ -9950,7 +9953,7 @@ the checklist (Ground Rule 24). Do not start any further work until the owner sa
 `v0.3.0-beta.1` pre-release happens only on the owner's word, the way beta.2 was made: bump the
 three versions through a PR, merge it, let main's CI build the installers, rename them
 (LittleJoan-0.3.0-beta.1-windows-x64-setup.exe, -macos-universal.dmg, -linux-amd64.deb,
--linux-x86_64.AppImage), write SHA256SUMS.txt, then
+-linux-x86_64.AppImage, -linux-arm64.deb, -linux-aarch64.AppImage), write SHA256SUMS.txt, then
 `gh release create v0.3.0-beta.1 --repo memoliertorerr/LittleJoan --prerelease --latest=false
 --target <that main commit>` with notes from the CHANGELOG, and check the release, its tag and one
 asset's checksum.
@@ -9994,8 +9997,9 @@ and where, then stop.
   folder (`/Users/runner/work/_temp/…`), which would mislead readers about where their data lives;
   the README says what macOS shows in words. `test-results/ci` deleted afterwards.
 - **CHANGELOG `[Unreleased]`** lists everything since **v0.2.1**, the latest release (the
-  coordinator's scope; this step's prompt says v0.2.0, whose and 0.2.1's own sections already hold
-  the rest): an intro (what v0.3 brings, no new bundled extensions), Added (reordered: links, main
+  coordinator's scope; v0.2.0's and 0.2.1's own sections already hold the rest; this step's
+  Verify said v0.2.0 until the release PR corrected it): an intro (what v0.3 brings, no new bundled
+  extensions), Added (reordered: links, main
   browser, popups, find, pins, saved logins, Liquid Glass, the two extension touch-ups), **Changed**
   (an extension panel's new windows need `openBrowser` and pass `openUrl`'s checks — phase 21's
   review), **Fixed** (a non-Unicode argument no longer panics the launch — phase 21's review),
@@ -10012,6 +10016,12 @@ and where, then stop.
   says nothing is served while a sign-in popup is open; `docs/architecture.md` — the process model
   names popups and links, the file map's `docs/images/` names the new screenshots.
 - `npm run verify`: 879 TS tests, 537 Rust tests, clippy clean (docs only; no code changed).
+- **The pre-release (2026-11-08, the owner's "Publish the beta"):** the coordinator bumps the three
+  versions to 0.3.0-beta.1 on `lj/release-0.3.0-beta.1` (CHANGELOG `[0.3.0-beta.1] — 2026-11-08`,
+  the README's status and Install lines, SECURITY.md's supported versions), merges it once every
+  job is green, and publishes `v0.3.0-beta.1` from the merge commit's main build: six installers
+  and `SHA256SUMS.txt`, `--prerelease --latest=false` (v0.2.1 stays Latest), notes from the
+  CHANGELOG.
 
 ---
 
