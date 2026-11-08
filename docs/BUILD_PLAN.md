@@ -133,12 +133,12 @@
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 (head e7d13c8, run 42401453791 green 18/18) merged as 7f0edd2 by the coordinator after the review (Ground Rule 24); main's run 42404243947 green 18/18 |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; Linux's highlights fixed in `lj-step-49-fix`; PR #42 (head 0964ee6, run 42414060894 green 18/18 after one re-run of Windows smoke's lost-keys flake) merged as f335e62; main's run 42418522861 green 18/18) |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes; PR #42 merged as f335e62) |
-| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ✅ done (phase 24, `lj/p24-saved-logins`; CI: see notes) |
-| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ✅ done (phase 24; CI: see notes) — PR #43 ready, NOT merged by its agent: the independent security review comes next (Ground Rule 24) |
+| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ✅ done (phase 24, `lj/p24-saved-logins`; CI: see notes; PR #43 merged as e7a0a24) |
+| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ✅ done — the independent security review (approve with minor fixes; no Critical, High or Medium) and every finding fixed in `lj-step-52-fix2` (dbaf153); PR #43 (head dbaf153, run 42430047090 green 18/18 after one re-run of Windows smoke's lost-keys flake) merged as e7a0a24 by the coordinator after the review (Ground Rule 24); main's run 42434305132 green 18/18 |
 | LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
-| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ⬜ todo |
+| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ✅ done (phase 25, `lj/p25-more-extensions`; CI: see notes) |
 | LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ⬜ todo |
 | LJ58 | *(moved into v0.2.1 by the owner, 2026-10-30; was round 4)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step; the owner has the Developer account since 2026-10-30) | strong | auto | ⬜ todo — needs the owner's Apple secrets; v0.2.1 went out unsigned on the owner's word (2026-10-30), so signing lands in a later release |
 | LJ59 | *(round 4, after v0.3; owner, 2026-10-29)* Auto-update: tauri-plugin-updater, signed update manifests published with the GitHub releases | strong | review | ⬜ todo — needs the owner's updater signing key as a GitHub secret |
@@ -313,7 +313,14 @@ the top of the command bar — `auto`, merged by its agent once every job is gre
 known lost-keys flake, the re-run passed) merged as f335e62; main's run 42418522861 green on all 18
 jobs. **Phase 24 (LJ51 → LJ52, 2026-11-07)** is on `lj/p24-saved-logins`: Windows' own password
 saving and autofill as Privacy settings, removing them, and what each engine offers for passkeys —
-security-sensitive (`review`): the PR ends ready and green, NOT merged by its agent.
+security-sensitive (`review`): the PR ends ready and green, NOT merged by its agent. **Done:** the
+independent security review approved with minor fixes (no Critical, High or Medium; four Low and four
+notes, every one fixed in `lj-step-52-fix2`, dbaf153); PR #43 (head dbaf153, run 42430047090 green on
+all 18 jobs — its first attempt failed only Windows smoke's zoom keys, the known lost synthetic keys,
+and the re-run passed) merged by the coordinator as e7a0a24 on 2026-11-08; main's run 42434305132
+green on all 18 jobs, first attempt. **Phase 25 (LJ56, 2026-11-08)** is on `lj/p25-more-extensions`:
+a theme change reaches an open panel (`littleJoan.theme.onChange`) and `--extension <id>` opens a
+page action — `auto`, merged by its agent once every job is green.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -9632,6 +9639,13 @@ an independent security review comes next, and the owner decides.
     an entitlement Apple grants to browsers, and password AutoFill isn't dependable in an app's web
     view."; the colour-scheme Landmine says the profile is pinned to the system theme of the last
     webview built; the unused `Change::touches_logins` dropped.
+- **CI for `lj-step-52-fix` (head c692537, run 42425925778): green on all 18 jobs, first attempt.**
+- **CI for `lj-step-52-fix2` (head dbaf153, run 42430047090): green on all 18 jobs.** Its first
+  attempt failed only Windows smoke's zoom keys — the known lost synthetic keys (a key step timed
+  out while later key steps passed); the failed job's re-run passed. **Merged (2026-11-08):** PR #43
+  merged into `main` as e7a0a24 by the coordinator after the independent review (a merge commit;
+  Ground Rule 24, the owner's update of 2026-11-07); main's run 42434305132 green on all 18 jobs,
+  first attempt. Phase 25 starts from e7a0a24.
 
 ### LJ53 — More bundled extensions: Reading list and To-do · standard · auto
 
@@ -9829,6 +9843,59 @@ qr` to a key in your OS and open it over a page (2026-10-29: the nine new extens
 moved after v0.3, so their checks moved with them). Once every job is green, merge the PR into main with a
 merge commit (Ground Rule 24), then stop and report.
 ```
+
+**Implementation notes (2026-11-08; disk 12 GB free before and after, `.cache/target` 1.5 GB):**
+- **The theme event** (`extensions/session/theme_change.rs`): `set_theme_tokens` keeps the bar's
+  checked report as before; `theme::store` now says whether the colors differ from the ones kept
+  (`theme::changes` — the bar reports the same colors again now and then), and only then
+  `session::theme_changed` reads `NavGate::committed` and, for a committed panel only, evals the
+  fixed `window.dispatchEvent(new Event("littlejoan:themechange"))` into `joan-page` and logs
+  `panel-theme-changed <id>`. The pure part, `tell(committed, eval)`, is tested with a real
+  `NavGate` driven through a web page, an admitted-but-uncommitted panel, a committed one (both URL
+  forms), and leaving it: `eval` runs only for the committed panel, with exactly that script; the
+  test also checks that the SDK served to panels listens for the same name. The lock isn't held
+  across the eval: Tauri's eval only queues the script for the main thread, so the check can't
+  close the race with a navigation anyway — the event carries no data, so a web page that gets it
+  (or dispatches it on itself) gains nothing (the plan's reasoning; extensions.md's security model
+  says so). No capability, IPC or initialization script was added to `joan-page`;
+  `capability_tests.rs` unchanged and green.
+- **The SDK:** `littleJoan.theme.onChange(callback)` listens for the event, asks `theme` again
+  through the checked API (the event's own data, if a page put any, is never read), and calls back
+  with the fresh colors; one `theme` call at a time, plus one more for changes that came meanwhile
+  (Settings' preview reports up to once a frame; the API allows 8 calls in flight), waiting for
+  the callback's promise; a refused call skips that change, a callback's throw is reported like an
+  event listener's and the panel keeps following; it returns what stops it. `extensions/sdk/
+  v1.test.ts` runs the real `v1.js` in a `node:vm` context with a stand-in `fetch` and window
+  (no new dependency). Still apiVersion 1 (an addition).
+- **Bundled extensions:** each panel adds `littleJoan.theme.onChange(…)` right after its first
+  `apply()` — CSS-only ones apply again; Snake re-reads its canvas colors and redraws, 2048
+  repaints every tile (`repaint`), Color tools redraws its theme chips; hello follows too.
+  `extensions/bundled.test.ts` checks every bundled extension applies the theme and follows it
+  once, with `apply()` first in the callback. (The callback's `apply()` is a second `theme` call
+  per change — simpler than another SDK function, and a theme change is the user's action.)
+- **`--extension` and page actions** (`extensions/session/command_line.rs`): `target(manifest,
+  page)` — the first command if there is one (the page isn't asked); else the first page action
+  for `page()`, which `joan.rs` answers with `commands::web_page` (what the command bar's
+  `open_extension` uses), then `session::open` as there (`pageInfo` only with the permission);
+  with no web page, `NoTarget::NoPage` → nothing opens, stderr says so, the smoke log
+  `extension-missing <id> no-page`. While hibernating or ready there is never a page (Ground Rule
+  9), so a page-action-only extension doesn't bring the window up then. An extension with neither
+  fails as before. Tests: the order, no page, neither, and the four bundled page actions.
+- **Smoke** (`smoke-bundled.mts` + test, driven in `smoke.mts`'s bundled run after `qr.png`):
+  `--extension snake`, Ctrl/Cmd+L, `dark`, ↓ ↓ Enter → `themeFollowFailures`: `quick-command
+  setThemeMode dark`, `panel-theme-changed snake` and after it Snake's own `ext-api snake theme ok`,
+  no other page told, no failed call (Windows, Linux; macOS once the typing showed); then `--show`
+  the smoke page and `--extension qr` → `cliPageActionFailures`: up like any panel, named, `pageInfo`
+  answered, no `extension-missing` (`extension-page-action.png`). The bundled run's earlier rules
+  read the log up to these checks only (Snake's second opening and QR code's would otherwise be
+  "the last" opening they look at). `summary.json`: `bundled.themeFollow`,
+  `bundled.extensionPageAction`.
+- Docs: extensions.md (onChange, `--extension` with page actions, the smoke log's two events, the
+  security model's line), README (the CLI, page actions, panels follow the theme), architecture.md
+  (file map, `set_theme_tokens`, the layer table's new row, the API's `theme`, the smoke run),
+  CHANGELOG ([Unreleased] → Added), the two Deferred follow-ups struck.
+- `npm run verify`: 879 TS tests, 537 Rust tests, clippy clean (macOS compiles here; the Windows and
+  Linux paths only in CI).
 
 ### LJ57 — v0.3: docs, screenshots, the owner's checklist · standard · checkpoint
 
@@ -10090,10 +10157,12 @@ smoke run; nothing changed in the direct-download build.
   `http://tauri.localhost/…`), so a page or panel can navigate it to `bar.html`. Harmless today
   (`joan-page` has no capability at all), but the page webview only needs `index.html`. Option:
   admit only the start page there.
-- **A theme change doesn't reach an open panel** (surfaced by LJ29): `littleJoan.theme.get()` is
+- ~~**A theme change doesn't reach an open panel**~~ (surfaced by LJ29): `littleJoan.theme.get()` is
   a snapshot; a panel learns of a new theme (Save, a preview, the system switching) only when it
   asks again. Option: the bar's report also evals a `littleJoan` event into the open panel (Rust,
-  not the panel, decides when). → *Planned as LJ56 (v0.3).*
+  not the panel, decides when). → *Planned as LJ56 (v0.3). Done in LJ56: new colors from the bar
+  dispatch `littlejoan:themechange` (no data) into a panel the page committed, never a web page;
+  the SDK's `littleJoan.theme.onChange` asks again, and every bundled extension follows it.*
 - **A cancelled navigation counts as a second visit on Windows** (surfaced by LJ29's probe):
   WebView2 raises one more `Finished` load event for the page that stays when `NavigationStarting`
   cancels a navigation, so history records that page twice. *(LJ15)* A navigation that becomes a
@@ -10134,12 +10203,14 @@ smoke run; nothing changed in the direct-download build.
   `WebsiteDataManager` needs `webkit2gtk` — new crates — and Tauri's `clear_all_browsing_data`
   would wipe the user's cookies and sites too. Options: those calls behind a small platform
   module once a step allows the crates.
-- **`--extension <id>` can't open a page action** (surfaced by LJ34): it opens an extension's
+- ~~**`--extension <id>` can't open a page action**~~ (surfaced by LJ34): it opens an extension's
   first *command*, and the four bundled page actions have none, so `little-joan --extension qr`
   only logs `extension-missing` (a key binding for "QR code of this page" isn't possible yet).
   Options: fall back to the first page action for the open web page (as the command bar's
   `open_extension` builds its `pageInfo`), or a `--page-action <id>` flag. → *Planned as LJ56
-  (v0.3): the first option.*
+  (v0.3): the first option. Done in LJ56: an extension without commands opens its first page
+  action for the open web page (`Target::PageAction`, `commands::web_page`); with none open,
+  `extension-missing <id> no-page` and nothing opens.*
 - **Back after a panel opens a page meets the panel's own history entry** (surfaced by LJ34, from
   reading the code — not seen in CI). A panel's `openUrl(…, { where: "page" })` (Wayback Machine,
   Clean link's "Open it here") and a link followed from a panel navigate the page webview from

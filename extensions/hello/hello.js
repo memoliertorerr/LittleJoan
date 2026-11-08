@@ -4,7 +4,8 @@
 // Little Joan's own commands (the page webview has no IPC), reach the network (its manifest
 // declares no hosts, so the Content-Security-Policy blocks every fetch), or install a service
 // worker. The results go into the page and into its title,
-// `LJ-EXT hello storage=… theme=… ipc=… net=… sw=…`, which CI reads.
+// `LJ-EXT hello storage=… theme=… ipc=… net=… sw=…`, which CI reads. It follows the theme while
+// open (littleJoan.theme.onChange).
 
 /** @param {number} ms */
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -139,4 +140,6 @@ async function main() {
 document.getElementById("close")?.addEventListener("click", () => {
   void littleJoan.close();
 });
+// The theme changing while the panel is open (Settings, a quick command): its new colors.
+littleJoan.theme.onChange(() => littleJoan.theme.apply());
 void main();

@@ -102,6 +102,8 @@ async function start() {
   } catch {
     // The fallback colors in style.css stay.
   }
+  // The theme changing while the panel is open (Settings, a quick command): its new colors.
+  littleJoan.theme.onChange(() => littleJoan.theme.apply());
   const page = await littleJoan.pageInfo().catch(() => null);
   if (!page) {
     status.textContent = "Open Copy as Markdown link on a web page.";

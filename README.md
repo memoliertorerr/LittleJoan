@@ -242,7 +242,8 @@ Downloads runs from a temporary copy, so Little Joan won't add a login item for 
   `little-joan --size 390x844` (resize the open window, in logical pixels),
   `little-joan --start-at-login on|off`, `little-joan --settings [general|keyboard|appearance|extensions|privacy|about]`
   (open Settings on a tab), `little-joan --extension <id>` (open an extension's first command,
-  e.g. `snake` — page actions open from the command bar, on a page; experimental), and `little-joan --quit` talk to the running app.
+  e.g. `snake`; for a page action such as `qr`, the page you have open — with no web page open it
+  does nothing; experimental), and `little-joan --quit` talk to the running app.
   `little-joan --link <https://…>` is how your system hands Little Joan a link once you choose it
   as your browser: only http and https addresses open, and nothing else on that command line
   counts — `--link` takes exactly the next argument as the link, even one that looks like a flag.
@@ -422,7 +423,9 @@ Bundled with Little Joan (type the name in the command bar, or use `little-joan 
   <img src="docs/images/focus.png" width="300" alt="Focus timer: a ring two-thirds full around 17:13, Ends at 11:41 AM, round 2 of 4, Pause">
 </p>
 
-Page actions — in the command bar only while a web page is open, for that page:
+Page actions — in the command bar only while a web page is open, for that page (or with
+`little-joan --extension <id>` over a page, so you can bind "QR code of this page" to a key in your
+system's keyboard settings):
 
 | Page action | What it does |
 |---|---|
@@ -432,7 +435,8 @@ Page actions — in the command bar only while a web page is open, for that page
 | **Copy as Markdown link** (`markdown-link`) | Copies `[Title](address)` — or HTML, plain text, Org mode — with the title yours to edit. |
 
 None of the bundled extensions reaches the network: everything happens on your computer (the
-Wayback Machine only opens web.archive.org when you pick it).
+Wayback Machine only opens web.archive.org when you pick it). An open panel follows a theme
+change — in Settings or from the command bar — in its colors at once.
 
 You can write your own with plain HTML, CSS and JavaScript — see
 **[docs/extensions.md](docs/extensions.md)** (experimental: the API may still change). Turn on

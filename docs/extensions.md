@@ -7,7 +7,9 @@
 
 An extension is a small web app — an `extension.json` and plain HTML, CSS and JavaScript — that
 opens as a **panel** in the Little Joan window: from the command bar (type its name), or with
-`little-joan --extension <id>`. Little Joan ships a few (**bundled** extensions); with
+`little-joan --extension <id>` (its first command; for an extension with page actions only, its
+first page action for the web page that is open — with none open, nothing opens). Little Joan
+ships a few (**bundled** extensions); with
 **Developer mode** on, it also loads your own from a folder on your computer.
 
 ## What an extension is — and isn't
@@ -89,7 +91,9 @@ U+FEFF). **Unknown fields are
 refused** (a misspelled `permisions` fails loudly instead of being ignored), and so is a manifest
 over 64 KB. The command bar matches what you type against the title, the keywords and the
 extension's name: every typed word must start one of their words. Page actions show only while a
-web page is open, marked "for this page".
+web page is open, marked "for this page". `little-joan --extension <id>` opens an extension's first
+command, or — for an extension with page actions only — its first page action for the web page
+that is open (with nothing open, it logs `extension-missing <id> no-page` and opens nothing).
 
 ## Permissions
 
@@ -127,6 +131,8 @@ const keys = await littleJoan.storage.keys();
 // Little Joan's colors: { scheme: "light" | "dark", vars: { "--lj-bg-0": "#…", … } }.
 await littleJoan.theme.apply(); // sets the --lj-* variables and color-scheme on <html>
 const { scheme, vars } = await littleJoan.theme.get();
+// …and again whenever the theme changes while the panel is open; returns what stops it.
+const stop = littleJoan.theme.onChange(() => littleJoan.theme.apply());
 
 // The page a page action was opened on (permission "pageInfo"), or null.
 const page = await littleJoan.pageInfo(); // { url, title }
@@ -148,8 +154,20 @@ The variables `theme` hands out are the ones Little Joan's own screens use: `--l
 `--lj-fg`, `--lj-fg-muted` (text), `--lj-accent`, `--lj-panel`, `--lj-surface`, `--lj-field`,
 `--lj-row-hover`, `--lj-row-selected`, `--lj-on-selected`, `--lj-tile`, `--lj-hairline`,
 `--lj-shadow`. Text in `--lj-fg` stays readable (4.5:1) on every background. `get()` is a
-snapshot: ask again to follow a theme change. Until Little Joan's own toolbar has loaded, it
-answers with the default theme's light colors (it never makes a panel wait).
+snapshot. Until Little Joan's own toolbar has loaded, it answers with the default theme's light
+colors (it never makes a panel wait).
+
+**Following a theme change:** `littleJoan.theme.onChange(callback)` calls `callback` with the new
+colors (asked again with `theme`) whenever the theme changes while the panel is open — the user
+saves or previews one in Settings, picks one in the command bar, or the system switches between
+light and dark under a "System" theme. Little Joan tells the panel by dispatching a
+`littlejoan:themechange` event on its window; the event carries no data (the SDK asks for the
+colors through the API, like any call), and it goes only to a panel that has loaded. The SDK makes
+one `theme` call at a time — changes that come meanwhile lead to one more — and waits for the
+callback's promise, if it returns one, before asking again. Repaint anything you drew from the
+colors (a canvas, inline styles) in the callback; CSS that uses the variables follows `apply()` by
+itself. `onChange` returns a function that stops it. Every bundled extension follows the theme
+this way.
 
 Under the hood each call is a `POST` to the panel's own origin, `/__lj/api/v1/<method>`, with a
 JSON body and the header `X-LJ-Api: <token>` — a secret Little Joan puts into the SDK it serves to
@@ -238,7 +256,9 @@ are atomic. Each extension sees only its own store.
   loaded and why (a manifest error names the field).
 - **See what Little Joan decided:** start it with the environment variable
   `LITTLEJOAN_SMOKE_LOG=<file>` and it writes events there — `extension-opened <id>`,
-  `ext-api <id> <method> ok|<error>`, `ljext-refused <reason> …` and `navigation-refused <url>`.
+  `ext-api <id> <method> ok|<error>`, `panel-theme-changed <id>` (the panel was told of a theme
+  change), `extension-missing <id> [no-page]`, `ljext-refused <reason> …` and
+  `navigation-refused <url>`.
 - The bundled extensions are worked examples of the rest: `extensions/qr/` is a page action
   (`pageInfo`), `extensions/clean-link/` a page action that copies (`clipboard`),
   `extensions/notes/` a command that keeps data (`storage`) and saves as you type, and
@@ -286,7 +306,9 @@ the panel's load (after a second the panel opens anyway); what keeps web pages o
 the nonce and the commit rule above, not this detour. Windows'
 `http://ljext.…` form is never treated as a web address. The toolbar names an extension only after
 that extension's panel loaded, so a refused or cancelled attempt can't put an extension's name
-over a web page. Paths can't leave the
+over a web page. The one thing Little Joan runs in the page web view itself for extensions is the
+theme-change event — a fixed `dispatchEvent` with no data, sent only while the page shows a panel
+that has loaded; a web page that dispatched it on itself would learn nothing. Paths can't leave the
 extension's folder (no `..`, absolute paths, percent-encoding or symlinks out). The details, and
 the test for each check, are in [architecture.md](architecture.md#extensions-experimental).
 

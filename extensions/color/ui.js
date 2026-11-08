@@ -191,6 +191,12 @@ async function start() {
   } catch {
     themeChips.hidden = true;
   }
+  // The theme changing while the panel is open (Settings, a quick command): its new colors, and
+  // its chips.
+  littleJoan.theme.onChange(async () => {
+    const theme = await littleJoan.theme.apply();
+    showTheme(theme.vars);
+  });
   try {
     const saved = /** @type {{ color?: unknown, against?: unknown } | undefined} */ (await littleJoan.storage.get("colors"));
     const first = typeof saved?.color === "string" ? parse(saved.color) : null;

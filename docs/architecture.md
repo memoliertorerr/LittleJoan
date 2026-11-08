@@ -90,9 +90,10 @@ extensions/json/, text-tools/, color/  the bundled tools: a JSON parser with lin
                                    hsl(), oklch(), names), conversions and WCAG contrast
 extensions/bundled.test.ts         every bundled extension: folder = id, the SDK first and no inline
                                    script, no network API and no `network:` host, text drawn as text,
-                                   a pure logic.js with tests
+                                   a pure logic.js with tests, the theme applied and followed
+                                   (`theme.onChange`, LJ56)
 extensions/sdk/v1.js, v1.d.ts      the extension SDK (served to panels at /__lj/sdk/v1.js) and its
-                                   types
+                                   types; v1.test.ts runs it in a context of its own (theme.onChange)
 ui/bar.html, ui/bar.ts             the bar (its own webview): the toolbar above the page, or the
                                    command bar over the whole window; DOM glue only
 ui/bar-boot.ts                     the bar's first paint: the theme of its initialization script,
@@ -330,7 +331,9 @@ src-tauri/src/extensions/          extensions (experimental; below): mod.rs (the
                                    clipboard.rs, gate.rs (the navigation gate, the commit rule,
                                    the wait to leave a web page; pure), session.rs (the open
                                    panel, opening and closing, the toolbar label; tests in
-                                   session/tests.rs) — pure parts unit-tested
+                                   session/tests.rs; session/theme_change.rs: a theme change told
+                                   to a committed panel, session/command_line.rs: what
+                                   `--extension` opens — LJ56) — pure parts unit-tested
 src-tauri/src/page_address.rs      the page's address from its load events; when the engine may
                                    be asked for it (pure, tested)
 src-tauri/src/back_stack.rs        whether the toolbar's back button has somewhere to go: this
@@ -584,7 +587,8 @@ scripts/ci/smoke-keys.mts          CI: typing on macOS runners — characters as
                                    layout), a Unicode string only for the rest (unit-tested)
 scripts/ci/smoke-bundled.mts       CI: the bundled extensions run — which panels open, and when a
                                    panel counts as up (its URL with the nonce, its own theme call,
-                                   the toolbar's label, none of its requests refused); unit-tested
+                                   the toolbar's label, none of its requests refused); LJ56's theme
+                                   follow and `--extension` page action; unit-tested
 scripts/ci/smoke-extensions.mts    CI: the extension run's rules (hello's report, the probe),
                                    unit-tested
 scripts/ci/smoke-fullscreen.mts    CI: the fullscreen run (the smoke page's ?fs=both buttons,
@@ -886,7 +890,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `history_remove(url)` | the command bar (Shift+Delete on a history row), the history view (× or Shift+Delete) | forget that record and rewrite `history.json` at once; returns whether there was one |
 | `history_clear(range)` | the history view's "Clear history…"; Settings → Privacy | `range` = `hour` \| `day` \| `week` \| `all`: forget the visits of the last hour, 24 hours, 7 days (rolling windows), or everything; a page left without visits goes. Rewrites `history.json` at once — with no window open, the file itself (`all` always writes an empty one). Returns how many pages went |
 | `preview_theme(theme?, glass?)` | settings window, the Appearance tab, as you edit (at most once a frame) | show `theme` — and the Liquid Glass choice `glass` (LJ19.9) — (checked like saved ones, never saved) in the open page window's bar, and in a page window summoned meanwhile (`AppState::theme_preview`, which `start_info` prefers); `null` = the saved theme again. Closing Settings without saving (Cancel, the close button) puts the saved theme back the same way. Logs `theme-preview <mode> colors=<n>` (or `ended`) |
-| `set_theme_tokens(tokens, early?, surface?)` | the bar, each time it paints a theme (`apply-theme.ts`'s `onPaint`) | keep `{ scheme, vars }` — the `--lj-*` variables it computed — in memory for extension panels (`littleJoan.theme`); checked first (names `--lj-*`, short CSS values without `;{}<>\`), a bad report is dropped; forgotten when the window closes. The bar's own background follows (bar/background.rs), and with Liquid Glass the glass's tint; `surface` (only with glass): what the bar draws under itself, for the smoke log's `bar-surface` only |
+| `set_theme_tokens(tokens, early?, surface?)` | the bar, each time it paints a theme (`apply-theme.ts`'s `onPaint`) | keep `{ scheme, vars }` — the `--lj-*` variables it computed — in memory for extension panels (`littleJoan.theme`); checked first (names `--lj-*`, short CSS values without `;{}<>\`), a bad report is dropped; forgotten when the window closes. Colors that differ from the ones kept are told to a panel the page committed (`littlejoan:themechange`, no data; `panel-theme-changed <id>`; LJ56). The bar's own background follows (bar/background.rs), and with Liquid Glass the glass's tint; `surface` (only with glass): what the bar draws under itself, for the smoke log's `bar-surface` only |
 | `extensions_list()` | the command bar, each time it opens; Settings → Extensions | `{ developerMode, folder, extensions: [{ id, name, version, description, author, kind: bundled \| developer, enabled, icon (data: URI), permissions, commands, pageActions }], skipped: [{ name, reason }], disabledBuiltIns }` (`extensions/list.rs`; the last: the quick answers switched off); logs `extensions-list <n> skipped=<m>` |
 | `open_extension(id, command, pageAction)` | the command bar, an extension's row | opens that command's panel — or, for a page action, its panel for the open web page (refused without one), handing it the page's address and title only when its manifest asks for `pageInfo`; never a switched-off extension (`session::open`) |
 | `reload_extensions()` | Settings → Extensions → Reload extensions | read the registry again; returns the new list |
@@ -1499,7 +1503,10 @@ open as **panels** in the page window. Bundled ones live in the repository's `ex
 and are embedded into the binary at build time (`build.rs` → `$OUT_DIR/bundled_extensions.rs`,
 `include_bytes!`); with **Developer mode** on (`developerMode` in settings.json, off by default)
 unpacked folders in `<config dir>/extensions/<id>/` load too. `little-joan --extension <id>`
-opens one (its first command); while hibernating, the window is built first and the panel opens
+opens one (its first command; for an extension with page actions only, its first page action for
+the open web page — `Target::PageAction` with `commands::web_page`, as the command bar's
+`open_extension` builds it —, and with no web page open nothing: `extension-missing <id> no-page`,
+also at rest, where no page is ever kept; LJ56); while hibernating, the window is built first and the panel opens
 once the bar's script runs (its first call, `start_info`, logs `bar-ready`) — on a thread of its
 own, at most 5 s, then anyway (`bar-ready timeout`) — so the toolbar is there to name it (LJ38;
 on macOS a panel that committed first left the toolbar an empty field). Openings in a window whose
@@ -1549,6 +1556,7 @@ window closes. The authors' guide is LJ30's `docs/extensions.md`.
 | `openUrl` opens only public http(s) addresses — never an extension URL, this computer or the local network (127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, 0/8, `::1`, `::`, fc00::/7, fe80::/10, IPv4-mapped, `localhost`, `*.localhost`, `*.local`); to the default browser only with `openBrowser` | `api::openable`, `api::is_private_host`, `protocol::call` | `api::tests::extensions_open_web_addresses_only`, `manifest::tests::open_browser_is_a_permission_of_its_own` |
 | Manifests: strict (unknown fields refused), `id` `^[a-z0-9][a-z0-9-]{1,31}$` and not a Windows device name, `apiVersion` 1, permissions from `storage`, `clipboard`, `pageInfo`, `openBrowser`, `network:<host>` (lower-case DNS names, optional `*.`, at least two labels, no IPs or ports), texts without control or format (Cf: bidi, zero-width) characters, a name that doesn't read as a web address, panels `.html` inside the folder, an icon `.svg` / `.png` | `manifest.rs` | `manifest::tests::*` (incl. `ids_are_never_windows_device_names`, `texts_refuse_invisible_and_bidi_characters`, `names_never_read_as_web_addresses`), `registry::tests::the_shipped_extensions_are_all_valid` |
 | What extensions supply is drawn as text: the toolbar's name through `textContent`, next to an "Extension" badge (so a name never passes for a domain), the icon only as a checked `data:image/(svg+xml|png);base64` URI in an `<img>` | `ui/toolbar/`, `session::publish_label`, `ui/command/extensions.ts` + `view.ts`, `ui/settings/extensions.ts` | `ui/toolbar/logic.test.ts`, `ui/command/extensions.test.ts` (a title with markup renders as text; only image data: URIs) |
+| A theme change reaches only a committed panel (LJ56): when the bar reports colors that differ from the ones kept, Rust reads `NavGate::committed` and, only for a panel that committed, evals one fixed script in the page — `window.dispatchEvent(new Event("littlejoan:themechange"))`, no data — and logs `panel-theme-changed <id>`; never a web page or a panel still loading (it asks as it starts); the SDK then asks `theme` through the checked API. The eval runs later on the main thread, so a web page could get the event in a race — it carries nothing, and a page that dispatches it on itself gains nothing. No IPC, capability or initialization script is added to `joan-page` | `session/theme_change.rs`, `theme::store`, `commands::set_theme_tokens` | `session::theme_change::tests::only_a_committed_panel_is_told_and_the_event_carries_nothing`, `theme::tests::only_new_colors_are_a_change`, `extensions/sdk/v1.test.ts`; smoke: `themeFollowFailures` |
 | Switched-off extensions can't be opened, served or called; only Settings lists them | `registry::Registry::get` / `find` | `registry::tests::switched_off_extensions_are_listed_but_never_found`, `api::tests::switched_off_extensions_are_unknown`, `ui/command/extensions.test.ts` |
 
 **The API** (SDK: `extensions/sdk/v1.js`, a global `littleJoan`). Every call is a same-origin
@@ -1558,7 +1566,7 @@ window closes. The authors' guide is LJ30's `docs/extensions.md`.
 | Method | Permission | Does |
 |---|---|---|
 | `storage.get {key}` / `storage.set {key, value}` / `storage.remove {key}` / `storage.keys` | `storage` | the extension's own store, `<config dir>/extension-data/<id>.json`, read per call, written atomically; 1 MB, keys 1–128 characters |
-| `theme` | — | `{ scheme, vars }`: the `--lj-*` variables the bar painted last (`set_theme_tokens`); the default theme's light ones at once until the bar has reported |
+| `theme` | — | `{ scheme, vars }`: the `--lj-*` variables the bar painted last (`set_theme_tokens`); the default theme's light ones at once until the bar has reported. The SDK's `theme.onChange` calls it again after Little Joan's `littlejoan:themechange` event (LJ56; one call at a time) |
 | `pageInfo` | `pageInfo` | the URL and title the panel was opened for (page actions, LJ30), or null — checked again inside the call against the opening's extension |
 | `openUrl {url, where}` | — for `page`; `openBrowser` for `browser` | a public http(s) URL (never an extension URL, this computer or the local network) in the page (`page`, the default; the panel goes away — the page's address changes when the new page's own events arrive) or the default browser (`browser`, one every 2 s) |
 | `clipboard.writeText {text}` | `clipboard` | the system clipboard, natively (NSPasteboard, GTK, Win32), at most 1 MB |
@@ -2278,8 +2286,14 @@ and pushes to `main`:
   page (it must come up like any panel and have `pageInfo` answered; required on Windows and Linux,
   best effort on macOS) → `qr.png`; the focus timer must show the session running from its
   stored end time (its title counts down, `1x:xx · Focus`); 2048 gets four arrow keys first
-  (whether they reached it — its own save — goes into `summary.json`, informational) (log
-  `smoke-bundled.log`). Then the **theme runs**
+  (whether they reached it — its own save — goes into `summary.json`, informational); then, after
+  those screenshots (so they keep the default theme), LJ56's two checks: with Snake open again,
+  Ctrl/Cmd+L, typing `dark`, ↓ ↓ Enter (the quick command) must log `panel-theme-changed snake`
+  and then Snake's own `ext-api snake theme ok` (Windows, Linux; best effort on macOS), and no
+  other page may be told; `--extension qr` over the smoke page must open QR code for it — up like
+  any panel, `pageInfo` answered, no `extension-missing` (`extension-page-action.png`) (log
+  `smoke-bundled.log`; `summary.json`'s `bundled.themeFollow`, `bundled.extensionPageAction`).
+  Then the **theme runs**
   (`smoke-theme.mts`), each its own launch on a
   fresh data folder whose `settings.json` carries a theme (so the main run's memory numbers
   don't move): a two-color theme with grain 0.4 in light (`theme/page.png`,

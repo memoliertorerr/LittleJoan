@@ -3,7 +3,9 @@
 // `--extension <id>` and screenshots its panel. A panel counts as up when the app opened it, its
 // URL (with the app's nonce) started loading, its own script asked for the theme (`ext-api <id>
 // theme ok` — so its scripts ran), the toolbar named it, and none of its own requests were
-// refused (the engine's favicon request aside).
+// refused (the engine's favicon request aside). After the screenshots (so they keep the default
+// theme), LJ56's two checks: a theme change reaches an open panel, and `--extension` opens a page
+// action for the open web page.
 import type { LogEvent } from "./smoke-log.mts";
 
 /** A bundled extension the run opens, and the screenshot of its panel. */
@@ -178,4 +180,68 @@ export function keysReached(events: LogEvent[], id: string): boolean {
   const own = stretch(events, id) ?? [];
   const up = own.findIndex((e) => e.event === "ext-api" && e.detail === `${id} theme ok`);
   return up >= 0 && own.slice(up).some((e) => e.event === "ext-api" && e.detail === `${id} storage.set ok`);
+}
+
+/**
+ * LJ56's theme check: with this panel open, the command bar's quick command (Ctrl/Cmd+L, typing
+ * `typed`, ↓ ↓ Enter) switches the theme to dark.
+ */
+export const THEME_FOLLOW = { id: "snake", typed: "dark", command: "setThemeMode dark" } as const;
+
+/** LJ56's `--extension` check: a page action only extension, opened over the smoke page. */
+export const CLI_PAGE_ACTION = "qr";
+
+/**
+ * What went wrong with the theme check (`events` from Snake's opening on): Snake came up; after
+ * the quick command the app told the panel (`panel-theme-changed snake`) and the panel then asked
+ * for the theme again (its own `ext-api snake theme ok`); no other page was told. Required where
+ * keys are driven (Windows, Linux); on macOS only once the typing showed up.
+ */
+export function themeFollowFailures(events: LogEvent[], options: { driven: boolean; typed: boolean }): string[] {
+  const { id, typed, command } = THEME_FOLLOW;
+  const failures: string[] = [];
+  if (!panelUp(events, id)) {
+    failures.push(`theme follow: ${id} never came up`);
+  }
+  for (const told of events.filter((e) => e.event === "panel-theme-changed" && e.detail !== id)) {
+    failures.push(`theme follow: the app told ${told.detail}, not ${id}`);
+  }
+  if (!options.typed) {
+    if (options.driven) {
+      failures.push(`theme follow: the command bar never showed the typed "${typed}"`);
+    }
+    return failures;
+  }
+  if (!events.some((e) => e.event === "quick-command" && e.detail === command)) {
+    failures.push(`theme follow: "${typed}" never ran quick-command ${command}`);
+  }
+  const told = events.findIndex((e) => e.event === "panel-theme-changed" && e.detail === id);
+  if (told < 0) {
+    failures.push(`theme follow: the app never told ${id} the theme changed (panel-theme-changed)`);
+  } else if (!events.slice(told).some((e) => e.event === "ext-api" && e.detail === `${id} theme ok`)) {
+    failures.push(`theme follow: ${id} never asked for the theme again after it was told`);
+  }
+  for (const call of events.filter((e) => e.event === "ext-api" && e.detail.startsWith(`${id} `) && !e.detail.endsWith(" ok"))) {
+    failures.push(`theme follow: ${id}'s API call failed: ${call.detail}`);
+  }
+  return failures;
+}
+
+/**
+ * What went wrong with `--extension qr` over the smoke page (`events` from that command on): it
+ * must open QR code's page action for the page — up like any panel, named in the toolbar, handed
+ * the page (`ext-api qr pageInfo ok`) — and never log `extension-missing`.
+ */
+export function cliPageActionFailures(events: LogEvent[]): string[] {
+  const id = CLI_PAGE_ACTION;
+  const failures = events.filter((e) => e.event === "extension-missing").map((e) => `--extension ${id}: extension-missing ${e.detail}`);
+  const own = stretch(events, id);
+  if (!own) {
+    return failures.concat(`--extension ${id} over the smoke page never opened it`);
+  }
+  failures.push(...panelFailures(events, id).map((failure) => `--extension ${id}: ${failure}`));
+  if (!own.some((e) => e.event === "ext-api" && e.detail === `${id} pageInfo ok`)) {
+    failures.push(`--extension ${id}: the panel wasn't handed the page (no pageInfo call answered)`);
+  }
+  return failures;
 }

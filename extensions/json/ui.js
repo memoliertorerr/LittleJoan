@@ -142,6 +142,8 @@ async function start() {
   } catch {
     // The fallback colors in style.css stay.
   }
+  // The theme changing while the panel is open (Settings, a quick command): its new colors.
+  littleJoan.theme.onChange(() => littleJoan.theme.apply());
   try {
     const [draft, style] = await Promise.all([littleJoan.storage.get("draft"), littleJoan.storage.get("style")]);
     if (typeof draft === "string") {

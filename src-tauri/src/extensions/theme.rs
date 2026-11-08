@@ -91,9 +91,18 @@ pub fn defaults() -> Tokens {
 
 static TOKENS: Mutex<Option<Tokens>> = Mutex::new(None);
 
-/// The bar applied a theme.
-pub fn store(tokens: Tokens) {
-    *TOKENS.lock().unwrap_or_else(PoisonError::into_inner) = Some(tokens);
+/// Whether `next` changes what is kept (`kept`): an open panel is told only then (LJ56) — the
+/// bar reports the same colors again now and then (a summon, a repaint).
+pub fn changes(kept: Option<&Tokens>, next: &Tokens) -> bool {
+    kept != Some(next)
+}
+
+/// The bar applied a theme. Returns whether the colors changed.
+pub fn store(tokens: Tokens) -> bool {
+    let mut kept = TOKENS.lock().unwrap_or_else(PoisonError::into_inner);
+    let changed = changes(kept.as_ref(), &tokens);
+    *kept = Some(tokens);
+    changed
 }
 
 /// The bar's colors, or the default theme's while the bar hasn't reported (a panel opened with
@@ -145,6 +154,21 @@ mod tests {
             .map(|i| (format!("--lj-v{i}"), json!("red")))
             .collect();
         assert_eq!(parse(&json!({ "scheme": "light", "vars": many })), None);
+    }
+
+    #[test]
+    fn only_new_colors_are_a_change() {
+        let light = defaults();
+        let mut dark = light.clone();
+        dark.scheme = "dark".to_owned();
+        assert!(changes(None, &light), "the bar's first report");
+        assert!(!changes(Some(&light), &light), "the same colors again");
+        assert!(changes(Some(&light), &dark));
+        let mut accent = light.clone();
+        accent
+            .vars
+            .insert("--lj-accent".to_owned(), "#123456".to_owned());
+        assert!(changes(Some(&light), &accent), "one variable is enough");
     }
 
     #[test]

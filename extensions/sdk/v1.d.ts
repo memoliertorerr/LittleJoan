@@ -37,6 +37,13 @@ declare namespace LittleJoan {
       get(): Promise<Theme>;
       /** Puts the colors on `root` (default: <html>) as CSS variables and sets `color-scheme`. */
       apply(root?: HTMLElement): Promise<Theme>;
+      /**
+       * Calls `callback` with the new colors (asked again) whenever Little Joan's theme changes
+       * while the panel is open — Settings, a quick command, the system switching light / dark.
+       * One call at a time; the callback's promise, if it returns one, is waited for. Returns a
+       * function that stops it. Typically: `littleJoan.theme.onChange(() => littleJoan.theme.apply())`.
+       */
+      onChange(callback: (theme: Theme) => unknown): () => void;
     };
     /** Permission `pageInfo`: the page a page action was opened for, or null. */
     pageInfo(): Promise<PageInfo | null>;

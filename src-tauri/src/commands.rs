@@ -428,10 +428,12 @@ pub async fn preview_theme<R: Runtime>(
 
 /// The bar applied a theme: `{ scheme, vars }`, the `--lj-*` variables it computed
 /// (ui/lib/theme.ts). Kept in memory for extension panels (littleJoan.theme); a report that
-/// fails the checks is dropped (extensions/theme.rs). `early`: the bar painted the theme of its
-/// initialization script, before start_info (LJ38) — the smoke log gets `theme-early`. `surface`:
-/// with Liquid Glass, what the bar's page draws under it (`html=<css colour> body=<…> image=<none|
-/// set>`), for the smoke log's `bar-surface` (LJ19.9) — never used otherwise.
+/// fails the checks is dropped (extensions/theme.rs). New colors are told to a committed panel
+/// (`littlejoan:themechange`, extensions/session/theme_change.rs, LJ56). `early`: the bar
+/// painted the theme of its initialization script, before start_info (LJ38) — the smoke log gets
+/// `theme-early`. `surface`: with Liquid Glass, what the bar's page draws under it (`html=<css
+/// colour> body=<…> image=<none|set>`), for the smoke log's `bar-surface` (LJ19.9) — never used
+/// otherwise.
 #[tauri::command]
 pub async fn set_theme_tokens<R: Runtime>(
     app: AppHandle<R>,
@@ -449,7 +451,10 @@ pub async fn set_theme_tokens<R: Runtime>(
         Some(tokens) => {
             // The bar webview's own background follows (bar/background.rs, LJ39).
             bar::painted(&app, &tokens);
-            crate::extensions::theme::store(tokens);
+            // New colors reach a panel the page committed, never a web page (LJ56).
+            if crate::extensions::theme::store(tokens) {
+                session::theme_changed(&app);
+            }
             if early == Some(true)
                 && let Some(theme) = bar::early_theme()
             {

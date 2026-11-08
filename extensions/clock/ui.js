@@ -245,6 +245,8 @@ async function start() {
   } catch {
     // The fallback colors in style.css stay.
   }
+  // The theme changing while the panel is open (Settings, a quick command): its new colors.
+  littleJoan.theme.onChange(() => littleJoan.theme.apply());
   let saved;
   try {
     saved = await littleJoan.storage.get("cities");

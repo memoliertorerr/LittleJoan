@@ -82,6 +82,16 @@ describe("bundled extensions", () => {
         }
       });
 
+      it("takes Little Joan's colors and takes them again when the theme changes", () => {
+        // LJ56: every bundled panel applies the theme as it starts and follows a change with
+        // littleJoan.theme.onChange, whose callback applies the new colors.
+        const scripts = sources.filter((p) => p.endsWith(".js")).map((p) => readFileSync(join(dir, p), "utf8"));
+        expect(scripts.some((text) => text.includes("littleJoan.theme.apply(")), "applies the theme").toBe(true);
+        const follows = scripts.flatMap((text) => text.split("littleJoan.theme.onChange(").slice(1).map((after) => after.slice(0, 120)));
+        expect(follows.length, "follows the theme once").toBe(1);
+        expect(follows[0], "applies the new colors").toMatch(/^(async )?\(\) => (\{\s*(const theme = )?await )?littleJoan\.theme\.apply\(\)/);
+      });
+
       it("keeps its logic pure and tested", () => {
         if (id === "hello") {
           return; // The example has nothing to test but what CI checks in the app.

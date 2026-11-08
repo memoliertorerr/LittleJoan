@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { parseLog } from "./smoke-log.mts";
-import { BUNDLED_PANELS, PAGE_ACTIONS, bundledFailures, isPanelOf, keysReached, pageActionFailures, panelUp, seedFile } from "./smoke-bundled.mts";
+import {
+  BUNDLED_PANELS,
+  CLI_PAGE_ACTION,
+  PAGE_ACTIONS,
+  THEME_FOLLOW,
+  bundledFailures,
+  cliPageActionFailures,
+  isPanelOf,
+  keysReached,
+  pageActionFailures,
+  panelUp,
+  seedFile,
+  themeFollowFailures,
+} from "./smoke-bundled.mts";
 
 const NONCE = "0123456789abcdef0123456789abcdef";
 
@@ -97,5 +110,49 @@ describe("the bundled extensions run", () => {
     const log = parseLog(`${opened("2048", 20)}\n30 ext-api 2048 storage.set ok`);
     expect(keysReached(log, "2048")).toBe(true);
     expect(keysReached(parseLog(opened("2048", 20)), "2048")).toBe(false);
+  });
+
+  it("wants a theme change to reach the open panel, which then asks again (LJ56)", () => {
+    const told = [
+      opened("snake", 10),
+      "20 overlay true",
+      "21 suggestions rows=3 typed=4",
+      "22 quick-command setThemeMode dark",
+      "23 theme dark colors=3",
+      "24 panel-theme-changed snake",
+      "25 ext-api snake theme ok",
+    ].join("\n");
+    const driven = { driven: true, typed: true };
+    expect(themeFollowFailures(parseLog(told), driven)).toEqual([]);
+    // The bar's report can land before the command's own log line: the order of those two is free.
+    const early = told.replace("22 quick-command setThemeMode dark", "26 quick-command setThemeMode dark");
+    expect(themeFollowFailures(parseLog(early), driven)).toEqual([]);
+    // Not told, or told but never asked again (the panel's own call before the event doesn't count).
+    expect(themeFollowFailures(parseLog(told.replace("panel-theme-changed snake", "theme-preview x")), driven).join()).toMatch(/never told snake/);
+    expect(themeFollowFailures(parseLog(told.replace("25 ext-api snake theme ok", "")), driven).join()).toMatch(/never asked for the theme again/);
+    expect(themeFollowFailures(parseLog(told.replace("25 ext-api snake theme ok", "25 ext-api snake theme busy")), driven).join()).toMatch(/API call failed: snake theme busy/);
+    // Never anyone else.
+    expect(themeFollowFailures(parseLog(`${told}\n26 panel-theme-changed qr`), driven).join()).toMatch(/told qr, not snake/);
+    // The quick command itself must have run.
+    expect(themeFollowFailures(parseLog(told.replace("quick-command setThemeMode dark", "quick-command setThemeMode light")), driven).join()).toMatch(/never ran quick-command setThemeMode dark/);
+    // Where the typing never showed: a failure where keys are driven, nothing on macOS (best effort).
+    const untyped = parseLog(opened("snake", 10));
+    expect(themeFollowFailures(untyped, { driven: true, typed: false }).join()).toMatch(/never showed the typed "dark"/);
+    expect(themeFollowFailures(untyped, { driven: false, typed: false })).toEqual([]);
+    expect(themeFollowFailures(parseLog("1 started"), { driven: false, typed: false }).join()).toMatch(/snake never came up/);
+    expect(THEME_FOLLOW).toEqual({ id: "snake", typed: "dark", command: "setThemeMode dark" });
+  });
+
+  it("wants --extension qr over a web page to open its page action with the page (LJ56)", () => {
+    expect(CLI_PAGE_ACTION).toBe("qr");
+    const qr = opened("qr", 10).replace("ext-api qr storage.get ok", "ext-api qr pageInfo ok");
+    for (const windows of [false, true]) {
+      const log = opened("qr", 10, windows).replace("ext-api qr storage.get ok", "ext-api qr pageInfo ok");
+      expect(cliPageActionFailures(parseLog(log))).toEqual([]);
+    }
+    expect(cliPageActionFailures(parseLog("1 extension-missing qr no-page")).join()).toMatch(/extension-missing qr no-page.*never opened it/);
+    expect(cliPageActionFailures(parseLog(qr.replace("pageInfo ok", "storage.get ok"))).join()).toMatch(/wasn't handed the page/);
+    expect(cliPageActionFailures(parseLog(qr.replace("toolbar-label qr", "toolbar-label none"))).join()).toMatch(/never named qr/);
+    expect(cliPageActionFailures(parseLog(qr.replace("ext-api qr theme ok", ""))).join()).toMatch(/qr's panel never came up/);
   });
 });
