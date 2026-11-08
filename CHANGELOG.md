@@ -6,13 +6,14 @@ All notable changes to Little Joan are recorded here. The format follows
 
 ## [Unreleased]
 
-What v0.3 brings — on `main`, not released yet. Little Joan can be your browser for links from
-other apps, with a main browser for the pages it hands on; sign-in popups finish inside Little
-Joan; find in page; pinned sites; saved passwords and form autofill on Windows; Liquid Glass on
-macOS 26; and extension panels that follow the theme. **No new bundled extensions in v0.3:** the
-nine planned ones (Reading list, To-do, Stopwatch & countdown, Breathing timer, Minesweeper,
-Password generator, Regex tester, Hash & Base64, Emoji picker) come after it; v0.3's extension
-changes are the last two items under Added.
+## [0.3.0-beta.1] — 2026-11-08
+
+A pre-release of v0.3: Little Joan can be your browser for links from other apps, with a main
+browser for the pages it hands on; sign-in popups finish inside Little Joan; find in page; pinned
+sites; saved passwords and form autofill on Windows; Liquid Glass on macOS 26; and extension panels
+that follow the theme. **No new bundled extensions in v0.3:** the nine planned ones (Reading list,
+To-do, Stopwatch & countdown, Breathing timer, Minesweeper, Password generator, Regex tester, Hash
+& Base64, Emoji picker) come after it; v0.3's extension changes are the last two items under Added.
 
 ### Added
 - **Little Joan can be your browser for links.** Installing it now lists it among your system's
@@ -633,7 +634,8 @@ global shortcut calls it.
   a Gatekeeper or SmartScreen warning.
 - Linux global shortcuts work on X11 only; on Wayland, bind `little-joan --toggle` instead.
 
-[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/memoliertorerr/LittleJoan/compare/v0.3.0-beta.1...HEAD
+[0.3.0-beta.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.3.0-beta.1
 [0.2.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.1
 [0.2.1-beta.1]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.1-beta.1
 [0.2.0]: https://github.com/memoliertorerr/LittleJoan/releases/tag/v0.2.0
