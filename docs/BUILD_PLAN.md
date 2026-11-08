@@ -138,8 +138,8 @@
 | LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
-| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ✅ done (phase 25, `lj/p25-more-extensions`; CI: see notes) |
-| LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ⬜ todo |
+| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ✅ done — phase 25, `lj/p25-more-extensions`: PR #44 (head 09939be, run 42437874330 green 18/18 on the first attempt) merged as c6f40c5; main's run 42440225060 green 18/18 |
+| LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | 🔄 in progress (phase 26, `lj/p26-v0.3-docs`) |
 | LJ58 | *(moved into v0.2.1 by the owner, 2026-10-30; was round 4)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step; the owner has the Developer account since 2026-10-30) | strong | auto | ⬜ todo — needs the owner's Apple secrets; v0.2.1 went out unsigned on the owner's word (2026-10-30), so signing lands in a later release |
 | LJ59 | *(round 4, after v0.3; owner, 2026-10-29)* Auto-update: tauri-plugin-updater, signed update manifests published with the GitHub releases | strong | review | ⬜ todo — needs the owner's updater signing key as a GitHub secret |
 | LJ60 | *(after round 4; owner, 2026-10-30)* A Mac App Store build: the App Sandbox and its entitlements, login through SMAppService, single-instance inside the container, no updater, Apple Distribution signing; App Review's questions answered before submitting | strong | review | ⬜ todo — needs the owner's App Store certificates, profile and app record |
@@ -320,7 +320,12 @@ all 18 jobs — its first attempt failed only Windows smoke's zoom keys, the kno
 and the re-run passed) merged by the coordinator as e7a0a24 on 2026-11-08; main's run 42434305132
 green on all 18 jobs, first attempt. **Phase 25 (LJ56, 2026-11-08)** is on `lj/p25-more-extensions`:
 a theme change reaches an open panel (`littleJoan.theme.onChange`) and `--extension <id>` opens a
-page action — `auto`, merged by its agent once every job is green.
+page action — `auto`, merged by its agent once every job is green. **Done:** PR #44 (4a1fcec lj-plan,
+09939be LJ56; run 42437874330 on 09939be green on all 18 jobs, first attempt) merged as c6f40c5;
+main's run 42440225060 green on all 18 jobs. **Phase 26 (LJ57, 2026-11-08)** is on
+`lj/p26-v0.3-docs`: v0.3's docs, screenshots from CI's macOS smoke and the owner's checklist — a
+`checkpoint`: merged by its agent once every job is green (docs only), then it STOPS for the owner's
+checklist; a `v0.3.0-beta.1` only on the owner's word.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -9896,6 +9901,13 @@ merge commit (Ground Rule 24), then stop and report.
   CHANGELOG ([Unreleased] → Added), the two Deferred follow-ups struck.
 - `npm run verify`: 879 TS tests, 537 Rust tests, clippy clean (macOS compiles here; the Windows and
   Linux paths only in CI).
+- **CI (recorded in phase 26's first commit):** run 42437874330 on 09939be green on all 18 jobs, the
+  first attempt. Both new checks passed on all nine smoke jobs: `bundled.themeFollow` (Snake told —
+  `panel-theme-changed snake`, then its own `ext-api snake theme ok`) and
+  `bundled.extensionPageAction` (QR code up over the smoke page, `pageInfo` answered). The
+  coordinator looked at `extension-page-action.png` on Windows, macOS and Linux. PR #44 (4a1fcec
+  lj-plan, 09939be LJ56) merged as c6f40c5; main's run 42440225060 green on all 18 jobs, first
+  attempt. This ended phase 25.
 
 ### LJ57 — v0.3: docs, screenshots, the owner's checklist · standard · checkpoint
 
