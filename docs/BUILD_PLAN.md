@@ -133,12 +133,12 @@
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 (head e7d13c8, run 42401453791 green 18/18) merged as 7f0edd2 by the coordinator after the review (Ground Rule 24); main's run 42404243947 green 18/18 |
 | LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; Linux's highlights fixed in `lj-step-49-fix`; PR #42 (head 0964ee6, run 42414060894 green 18/18 after one re-run of Windows smoke's lost-keys flake) merged as f335e62; main's run 42418522861 green 18/18) |
 | LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes; PR #42 merged as f335e62) |
-| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ✅ done (phase 24, `lj/p24-saved-logins`; CI: see notes) |
-| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ✅ done (phase 24; CI: see notes) — PR #43 ready, NOT merged by its agent: the independent security review comes next (Ground Rule 24) |
+| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ✅ done (phase 24, `lj/p24-saved-logins`; CI: see notes; PR #43 merged as e7a0a24) |
+| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ✅ done — the independent security review (approve with minor fixes; no Critical, High or Medium) and every finding fixed in `lj-step-52-fix2` (dbaf153); PR #43 (head dbaf153, run 42430047090 green 18/18 after one re-run of Windows smoke's lost-keys flake) merged as e7a0a24 by the coordinator after the review (Ground Rule 24); main's run 42434305132 green 18/18 |
 | LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
-| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ⬜ todo |
+| LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | 🔄 in progress (phase 25, `lj/p25-more-extensions`) |
 | LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ⬜ todo |
 | LJ58 | *(moved into v0.2.1 by the owner, 2026-10-30; was round 4)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step; the owner has the Developer account since 2026-10-30) | strong | auto | ⬜ todo — needs the owner's Apple secrets; v0.2.1 went out unsigned on the owner's word (2026-10-30), so signing lands in a later release |
 | LJ59 | *(round 4, after v0.3; owner, 2026-10-29)* Auto-update: tauri-plugin-updater, signed update manifests published with the GitHub releases | strong | review | ⬜ todo — needs the owner's updater signing key as a GitHub secret |
@@ -313,7 +313,14 @@ the top of the command bar — `auto`, merged by its agent once every job is gre
 known lost-keys flake, the re-run passed) merged as f335e62; main's run 42418522861 green on all 18
 jobs. **Phase 24 (LJ51 → LJ52, 2026-11-07)** is on `lj/p24-saved-logins`: Windows' own password
 saving and autofill as Privacy settings, removing them, and what each engine offers for passkeys —
-security-sensitive (`review`): the PR ends ready and green, NOT merged by its agent.
+security-sensitive (`review`): the PR ends ready and green, NOT merged by its agent. **Done:** the
+independent security review approved with minor fixes (no Critical, High or Medium; four Low and four
+notes, every one fixed in `lj-step-52-fix2`, dbaf153); PR #43 (head dbaf153, run 42430047090 green on
+all 18 jobs — its first attempt failed only Windows smoke's zoom keys, the known lost synthetic keys,
+and the re-run passed) merged by the coordinator as e7a0a24 on 2026-11-08; main's run 42434305132
+green on all 18 jobs, first attempt. **Phase 25 (LJ56, 2026-11-08)** is on `lj/p25-more-extensions`:
+a theme change reaches an open panel (`littleJoan.theme.onChange`) and `--extension <id>` opens a
+page action — `auto`, merged by its agent once every job is green.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -9632,6 +9639,13 @@ an independent security review comes next, and the owner decides.
     an entitlement Apple grants to browsers, and password AutoFill isn't dependable in an app's web
     view."; the colour-scheme Landmine says the profile is pinned to the system theme of the last
     webview built; the unused `Change::touches_logins` dropped.
+- **CI for `lj-step-52-fix` (head c692537, run 42425925778): green on all 18 jobs, first attempt.**
+- **CI for `lj-step-52-fix2` (head dbaf153, run 42430047090): green on all 18 jobs.** Its first
+  attempt failed only Windows smoke's zoom keys — the known lost synthetic keys (a key step timed
+  out while later key steps passed); the failed job's re-run passed. **Merged (2026-11-08):** PR #43
+  merged into `main` as e7a0a24 by the coordinator after the independent review (a merge commit;
+  Ground Rule 24, the owner's update of 2026-11-07); main's run 42434305132 green on all 18 jobs,
+  first attempt. Phase 25 starts from e7a0a24.
 
 ### LJ53 — More bundled extensions: Reading list and To-do · standard · auto
 
