@@ -43,6 +43,7 @@ fn main() {
             "reveal_download",
             "report_timing",
             "find",
+            "clear_saved_logins",
         ]),
     ))
     .expect("failed to run tauri-build");

@@ -6,6 +6,7 @@ import { sameTheme } from "./settings/appearance-logic.ts";
 import { sameSites, type BuiltInSite, type SiteMode } from "./settings/sites-logic.ts";
 import { sameOverrides, type ShortcutProblem } from "./settings/keyboard-logic.ts";
 import { glassSettingFrom, type GlassSetting } from "./settings/glass-logic.ts";
+import type { LoginsInput } from "./settings/logins-logic.ts";
 
 export interface Choice {
   id: string;
@@ -39,6 +40,10 @@ export interface Settings {
   glass: GlassSetting;
   /** Where pages are handed on (General's Browser, LJ46): a browser's id, or null for the system default. */
   mainBrowser: string | null;
+  /** Windows' web engine saves passwords (Privacy, LJ51; off by default). */
+  savePasswords: boolean;
+  /** Windows' web engine fills in forms (Privacy, LJ51; on by default). */
+  autofillForms: boolean;
 }
 
 /** "After closing" (LJ19.4, the owner's decision): the hidden window and the bar stay, for 15 minutes, or nothing. */
@@ -130,6 +135,9 @@ export interface SettingsInput {
   glass?: GlassSetting;
   /** General's main browser ("" = System default); left out (not read yet), Rust keeps the saved one. */
   mainBrowser?: string;
+  /** Privacy's switches for Windows' web engine (LJ51); left out (macOS, Linux), Rust keeps the saved ones. */
+  savePasswords?: boolean;
+  autofillForms?: boolean;
 }
 
 /** The Extensions tab's part of Save (settings/extensions-logic.ts's draft). */
@@ -199,6 +207,7 @@ export function toInput(
   afterClose?: AfterClose,
   glass?: GlassSetting,
   mainBrowser?: string,
+  logins?: LoginsInput,
 ): SettingsInput {
   return {
     shortcut,
@@ -214,6 +223,7 @@ export function toInput(
     ...(afterClose === undefined ? {} : { afterClose }),
     ...(glass === undefined ? {} : { glass }),
     ...(mainBrowser === undefined ? {} : { mainBrowser }),
+    ...(logins ?? {}),
   };
 }
 
@@ -239,7 +249,9 @@ export function isChanged(saved: Settings, input: SettingsInput): boolean {
     (input.keys !== undefined && !sameOverrides(saved.keys, input.keys)) ||
     (input.afterClose !== undefined && input.afterClose !== afterCloseFrom(saved.afterClose)) ||
     (input.glass !== undefined && input.glass !== glassSettingFrom(saved.glass)) ||
-    (input.mainBrowser !== undefined && input.mainBrowser !== (saved.mainBrowser ?? ""))
+    (input.mainBrowser !== undefined && input.mainBrowser !== (saved.mainBrowser ?? "")) ||
+    (input.savePasswords !== undefined && input.savePasswords !== saved.savePasswords) ||
+    (input.autofillForms !== undefined && input.autofillForms !== saved.autofillForms)
   );
 }
 
@@ -262,6 +274,8 @@ export function rebase(draft: Settings, oldSaved: Settings, newSaved: Settings):
     afterClose: follow("afterClose"),
     glass: follow("glass"),
     mainBrowser: follow("mainBrowser"),
+    savePasswords: follow("savePasswords"),
+    autofillForms: follow("autofillForms"),
     developerMode: follow("developerMode"),
     theme: follow("theme", sameTheme),
     disabledExtensions: follow("disabledExtensions", sameIds),

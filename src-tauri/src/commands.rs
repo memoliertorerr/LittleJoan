@@ -43,6 +43,8 @@ pub mod downloads;
 pub mod find;
 /// Little Joan's keys for Settings (LJ43): `keymap_info`.
 pub mod keys;
+/// Settings → Privacy's "Remove saved passwords and form data…" (LJ51): `clear_saved_logins`.
+pub mod logins;
 /// Quick commands in the command bar (LJ42): `quick_state`, `quick_command`.
 pub mod quick;
 /// Phone or desktop per site (LJ40): `site_mode_info`, `set_site_mode`.
@@ -332,6 +334,12 @@ pub struct SettingsInput {
     /// the system default. Left out, the saved one stays.
     #[serde(default)]
     main_browser: Option<String>,
+    /// Settings → Privacy's switches for Windows' web engine (LJ51): password saving and form
+    /// autofill. Left out (macOS and Linux show none), the saved ones stay.
+    #[serde(default)]
+    save_passwords: Option<bool>,
+    #[serde(default)]
+    autofill_forms: Option<bool>,
 }
 
 /// Validates and applies new settings: every part is checked first (settings::apply_change), the
@@ -363,6 +371,8 @@ pub async fn save_settings<R: Runtime>(
         main_browser: settings.main_browser,
         // Settings has no pins (the command bar's): they stay as they are.
         pin: None,
+        save_passwords: settings.save_passwords,
+        autofill_forms: settings.autofill_forms,
     };
     // A refused part changes nothing — not even the shortcut.
     let current = state::with(&app, |s| s.settings.clone());

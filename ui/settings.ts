@@ -19,6 +19,8 @@ import { extensionsTab } from "./settings/extensions.ts";
 import { sitesList } from "./settings/sites.ts";
 import { quitButton } from "./settings/quit.ts";
 import { browserSection } from "./settings/browser.ts";
+import { loginsSection } from "./settings/logins.ts";
+import { loginsFrom } from "./settings/logins-logic.ts";
 import { builtInsFrom, siteModesFrom } from "./settings/sites-logic.ts";
 import { sameTheme } from "./settings/appearance-logic.ts";
 import { BUILT_INS } from "./answers/index.ts";
@@ -110,6 +112,8 @@ const sites = sitesList(element<HTMLElement>("#site-modes"), element<HTMLElement
 const keyboard = keyboardTab(refresh, () => showTab("keyboard", true));
 // General's Browser section (LJ46): the system's browsers, read again when the window comes back.
 const browser = browserSection(element<HTMLElement>("#browser-section"), (command) => invoke(command), refresh, showError);
+// Privacy's saved passwords and form data (LJ51): Windows' web engine's switches, and removing.
+const logins = loginsSection(element<HTMLElement>("#logins-section"), (command) => invoke(command), refresh);
 
 let saved: Settings | null = null;
 /** What get_settings said of Liquid Glass here (no glass until it answered). */
@@ -179,6 +183,7 @@ function input(): SettingsInput {
     afterCloseFrom(afterClose.value),
     glass.draft(),
     browser.draft(),
+    logins.draft(),
   );
 }
 
@@ -201,6 +206,7 @@ function shownSettings(from: Settings): Settings {
     disabledExtensions: extensions.disabledExtensions,
     developerMode: extensions.developerMode,
     siteModes: sites.draft() ?? from.siteModes,
+    ...(logins.draft() ?? {}),
   };
 }
 
@@ -334,6 +340,7 @@ window.littleJoanSettings = {
     tray.checked = draft.showTrayIcon;
     afterClose.value = afterCloseFrom(draft.afterClose);
     drawAfterClose();
+    logins.load(platformName, loginsFrom(draft));
     if (!sameTheme(draft.theme, shown.theme)) {
       look.load(themeFrom(draft.theme));
     }
@@ -382,6 +389,7 @@ invoke<SettingsView>("get_settings")
     tray.checked = view.settings.showTrayIcon;
     trayLabel.textContent = trayLabelFor(view.platform);
     platformName = view.platform;
+    logins.load(view.platform, loginsFrom(view.settings));
     fill(afterClose, AFTER_CLOSE_CHOICES, afterCloseFrom(view.settings.afterClose));
     drawAfterClose();
     extensionsPanel.load({ disabledExtensions: view.settings.disabledExtensions, developerMode: view.settings.developerMode });

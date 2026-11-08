@@ -387,6 +387,13 @@ fn only_settings_may_read_browsers_and_open_default_apps() {
 }
 
 #[test]
+fn only_settings_may_remove_saved_logins() {
+    // Settings → Privacy's "Remove saved passwords and form data…" (LJ51): the settings window
+    // only — never the bar, never the page or a popup (which have no capability at all).
+    only_settings_grants(&["allow-clear-saved-logins"]);
+}
+
+#[test]
 fn only_the_bar_may_run_quick_commands() {
     // The command bar's quick commands (LJ42): the trusted bar only — never the page, never
     // Settings (which has its own Save).

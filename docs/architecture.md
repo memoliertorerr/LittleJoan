@@ -197,6 +197,11 @@ ui/settings/sites-logic.ts         General's "Phone or desktop per site": the us
 ui/settings/sites.ts               that list in the General tab; DOM glue only
 ui/settings/quit.ts                General's "Quit Little Joan" (LJ19.7): the button calls
                                    quit_from_settings once (unit-tested with a fake button)
+ui/settings/logins-logic.ts        Privacy's saved passwords and form data (LJ51): Windows only,
+                                   every text (where the data lives, why macOS and Linux have
+                                   none), the removal's question → answer steps (pure, unit-tested)
+ui/settings/logins.ts              that section: the two switches (a Save draft), "Remove saved
+                                   passwords and form data…" → clear_saved_logins; DOM glue only
 docs/extensions.md                 the extension authors' guide (experimental)
 docs/trademark-check.md            where to check that the name is free before a wider launch or a
                                    store listing (a note for the owner, not legal advice)
@@ -393,7 +398,19 @@ src-tauri/src/autostart.rs         start at login: tauri-plugin-autostart (Rust 
                                    macOS translocation guard (pure, tested)
 src-tauri/src/settings_window.rs   the settings window (on demand, destroyed on close): its tabs
                                    (`SettingsTab`, tested), open on a tab or switch an open one,
-                                   links to the main browser (browsers.rs)
+                                   links to the main browser (browsers.rs); the page's webview data
+                                   folder and saved autofill (`builder_input`, tested; LJ51)
+src-tauri/src/settings_window/logins_smoke.rs  smoke only: what the harness may have Privacy's
+                                   saved-passwords section do (remove, toggle-save) — only on a
+                                   throwaway data folder on a GitHub-hosted runner (pure, tested)
+src-tauri/src/logins.rs            Windows' own password saving and form autofill (LJ51): the saved
+                                   switches to the page and each popup after they are built, to
+                                   every webview of the profile after a Save; the smoke log's line;
+                                   tests that every builder passes the saved autofill and none sets
+                                   an environment option of its own
+src-tauri/src/commands/logins.rs   Settings: clear_saved_logins (Privacy's removal, LJ51)
+src-tauri/src/settings/logins.rs   the `savePasswords` (default off) and `autofillForms` (default
+                                   on) fields (tolerant, tested)
 src-tauri/src/smoke.rs             LITTLEJOAN_SMOKE_LOG event log for CI smoke tests
 src-tauri/src/summon_timing.rs     smoke mode only: a summon's marks from the request to the command
                                    bar on screen and its field taking keys, one `summon-timing` line
@@ -423,6 +440,10 @@ src-tauri/src/menu.rs              macOS app menu: Edit (copy/paste in WKWebView
 src-tauri/src/platform/mod.rs      installs the per-OS hooks on the bar and the page webviews
 src-tauri/src/platform/glass.rs    Liquid Glass's native side per OS: macOS 26+ only; elsewhere no
                                    support and nothing done (LJ19.9)
+src-tauri/src/platform/logins.rs   saved logins per engine (LJ51): win/logins.rs (ICoreWebView2Settings4's
+                                   two switches set and read back; the profile's path;
+                                   ICoreWebView2Profile2::ClearBrowsingData); nothing on macOS and
+                                   Linux
 src-tauri/src/platform/find.rs     find in page per engine (LJ49): win/find.rs (ICoreWebView2_28's
                                    ICoreWebView2Find, its count / active events), mac/find.rs
                                    (findString:withConfiguration:completionHandler:, a block2 block),
@@ -548,6 +569,9 @@ scripts/ci/smoke-runner.mts        CI: what the harness may change on its machin
 scripts/ci/smoke-handoff.mts       CI: the handoff run (LJ46) — a fake browser as the main one, a
                                    target=_blank click, Settings' Browser section, Linux's loop
                                    check with Little Joan the default (unit-tested)
+scripts/ci/smoke-logins.mts        CI: the logins runs (LJ51) — the switches read back from the page
+                                   and a popup, the settings window on the page's profile, the
+                                   removal while hibernating; settings-privacy-logins.png (unit-tested)
 scripts/ci/smoke-popups.mts        CI: the popups run (LJ47) — the fake provider on the server's
                                    second port in a sized popup (and a sized about:blank one) that
                                    posts back and closes; a popup open when the window closes; the
@@ -628,6 +652,9 @@ tests/smoke/signin.html            the popups run's fake provider (served on a s
                                    ?stay=1)
 tests/smoke/popup-logic.mjs        the smoke page's ?popup=oauth|blank|spoof|onblur and
                                    signin.html's logic (plain JS, unit-tested)
+tests/smoke/webauthn-logic.mjs     the smoke page's ?webauthn=1 (LJ52): what the engine offers for
+                                   passkeys — PublicKeyCredential, a platform authenticator,
+                                   passkey autofill —, availability only, no prompt (unit-tested)
 .github/workflows/ci.yml           verify on ubuntu-24.04, windows-latest, macos-latest; package; smoke
 .github/ISSUE_TEMPLATE/            issue forms: bug report, feature request; config.yml turns blank
                                    issues off and links private vulnerability reporting
@@ -874,6 +901,7 @@ anywhere; the only core permissions are the bar's `core:window:allow-start-dragg
 | `quit_app()` | the command bar's **Quit Little Joan** row (LJ41) | `joan::quit`, as the tray's Quit and `--quit`: history saved, on macOS the window closed first; logs `quit` |
 | `browsers_info()` | Settings → General's Browser section, on load and when the window comes back to the front (LJ46) | `{ platform, defaultKind: self \| other \| none, defaultName, browsers: [{ id, name }] (never Little Joan), mainBrowser, firstOther, canOpenSettings, candidate }` (`candidate` false for the AppImage — `$APPIMAGE` set —, which can't be chosen: Settings says so and hides the button), read from the OS now (read-only); logs `browsers-listed <n> default=<kind>`. Settings only (`capability_tests.rs`) |
 | `open_default_apps_settings()` | Settings → General's **Open default apps settings** (LJ46) | opens the OS's own settings and nothing else: macOS `x-apple.systempreferences:com.apple.Desktop-Settings.extension` (12: `…preference.general`), Windows `ms-settings:defaultapps?registeredAppUser=Little%20Joan`, Linux `gnome-control-center default-apps` or `systemsettings kcm_componentchooser`; `none` where there is nothing to open (Settings then names `xdg-settings` for the user to run). Logs `default-apps-settings <what>`. Settings only |
+| `clear_saved_logins()` | Settings → Privacy's **Remove saved passwords and form data…** (LJ51), after its question | Windows: `ICoreWebView2Profile2::ClearBrowsingData(PASSWORD_AUTOSAVE \| GENERAL_AUTOFILL)` on the settings window's own WebView2 profile — the page's (the same data folder) —, so it works while hibernating or resting; waits up to 15 s for the engine. Logs `saved-logins-cleared ok` or `… failed <reason>`; returns an error message on failure. macOS and Linux: an error (not available; Settings shows no button). Never reads what it removes. Settings only (`capability_tests.rs`) |
 | `quit_from_settings()` | Settings → General's **Quit Little Joan** (LJ19.7) | the same `joan::quit`; logs `settings-quit`, then `quit`. A command of its own so the settings window gets no bar command: `capability_tests.rs` allows it to the settings window's capability only (never the bar's, which keeps `quit_app`, never the page). What Settings hasn't saved goes with its window, as with Cancel |
 | `open_settings(tab?)` | the command bar's "Settings & extensions" row (tab `extensions`) and its **Settings** row (tab `general`) | open the settings window on `tab`, or focus an open one and switch it to `tab` (`settings_window::open`, the same path as `--settings`); no tab or an unknown one: a new window opens on General, an open one stays where it is |
 
@@ -915,11 +943,39 @@ sources):
 | `settings.json` | `%APPDATA%\io.github.memoliertorerr.littlejoan\` | `~/Library/Application Support/io.github.memoliertorerr.littlejoan/` | `~/.config/io.github.memoliertorerr.littlejoan/` |
 | Cookies and site data | `%LOCALAPPDATA%\io.github.memoliertorerr.littlejoan\` (the WebView2 user data folder, `EBWebView\` inside): Tauri forces `app_local_data_dir` when the app sets no `data_directory` | WebKit's `defaultDataStore`, keyed by the bundle id (under `~/Library/WebKit/` and `~/Library/HTTPStorages/`); `data_directory` does nothing there | `~/.local/share/io.github.memoliertorerr.littlejoan/` (Tauri forces `app_local_data_dir`); cookies are a text file, `cookies`, there |
 | Extension storage, developer extensions | `extension-data\<id>.json`, `extensions\<id>\` next to `settings.json` | the same, next to `settings.json` | the same, next to `settings.json` |
+| Saved passwords and form data (LJ51) | WebView2's own password saving and general autofill keep them in its profile inside the folder above (`EBWebView\Default\`); Little Joan only switches them (`savePasswords`, `autofillForms`) and asks the engine to remove them — it never opens those files | none: Little Joan saves no passwords (WKWebView's AutoFill for apps needs Apple's browser entitlement; LJ52) | none: WebKitGTK has no password manager |
+| Passkeys (LJ52) | WebView2's own WebAuthn, with Windows Hello: Windows keeps the keys (CI's `?webauthn=1`: `api=1`, passkey autofill `true`; no Hello on the runner) | none: WKWebView has `PublicKeyCredential` but offers an app without Apple's `com.apple.developer.web-browser.public-key-credential` (granted to browsers on request; needs signing with a profile — the plan's Later) no platform authenticator and no passkey autofill (CI: `api=1 platform=false conditional=false`) | none: WebKitGTK has no `PublicKeyCredential` (CI, 2.50.4 and 2.52.6: `api=0`) |
 | With `LITTLEJOAN_DATA_DIR` (dev builds, CI) | `<dir>\settings.json`, `<dir>\webview\` | `<dir>/settings.json`; site data stays in WebKit's default store | `<dir>/settings.json`, `<dir>/webview/` |
 
 Switching between a dev build and the installed app therefore looks like a logout on Windows and
-Linux. Both webviews of the window share one data folder (WebView2 requires it). Closing the
-window discards the page, not the store.
+Linux. Every webview — the window's bar and page, a sign-in popup, and (since LJ51) the settings
+window — uses one data folder, `AppState::webview_data_dir` (`None` in installed builds, where Tauri
+gives each the app's local data folder): WebView2 runs every environment on a folder in one browser
+process and refuses one whose options differ, so none of the builders sets browser arguments, a
+language, extensions, scroll bars, a proxy or a private profile (a test walks `src/`). On Windows
+that makes the settings window's WebView2 profile the page's, which is what lets Settings →
+Privacy's **Remove saved passwords and form data…** reach what the page saved while no page exists
+(CI logs both profiles' `ProfilePath` and compares them). Closing the window discards the page, not
+the store.
+
+**Saved passwords and form data (LJ51, Windows; Ground Rule 26).** WebView2 keeps
+`IsPasswordAutosaveEnabled` (off by default) and `IsGeneralAutofillEnabled` (on by default) per
+profile — every webview of it shares them — and wry sets general autofill on each webview it
+creates (on, unless told otherwise). So every builder on the profile passes the saved
+`autofillForms` (`general_autofill_enabled`; a test finds every webview constructor in `src/` and
+wants exactly the four, each passing it), and `logins.rs` sets both switches through
+`ICoreWebView2Settings4` on the page right after it is built and on each sign-in popup, reading
+them back into the smoke log (`logins password-autosave=<b> autofill=<b>
+webview=<page|popup|settings>`); a Save that changes them sets them on every webview of the profile
+there is, the settings window's included, so they take effect at once even while hibernating. The
+saved values are read when the main thread reaches the engine, not when the apply is queued, so a
+build's apply and a Save's can't leave a webview with the old ones. `clear_saved_logins` (Settings
+only) calls `ICoreWebView2Profile2::ClearBrowsingData(PASSWORD_AUTOSAVE | GENERAL_AUTOFILL)` on the
+settings window's own profile and waits for the engine's answer on a blocking thread of the async
+runtime (`saved-logins-cleared ok`); passkeys (Windows Hello's) are not touched. Uninstalling keeps
+the engine's data unless the uninstaller's **Delete the application data** box is ticked (Tauri
+2.12's NSIS template removes `%APPDATA%\<id>` and `%LOCALAPPDATA%\<id>` only then). Nothing in Little Joan reads, exports, logs or syncs a saved password
+or form entry. macOS and Linux: Settings → Privacy says it isn't available, and why.
 
 **Logins across close and quit** (proved per OS by the CI smoke test, LJ20):
 
@@ -999,7 +1055,7 @@ all fields, whichever tab they are on):
 | Keyboard | **Summon Little Joan** — the global shortcut's recorder (moved here from General; it pauses the shortcut while it listens, as before), Reset when it isn't the default; on a Linux Wayland session without the portal a note to bind `little-joan --toggle` instead; while the portal holds the shortcut (LJ17) the desktop's key as text instead of the recorder (no Reset, no problems: the desktop's key is never judged, so it can't block Save, and Reset all leaves the preferred trigger alone), with "Change it in your desktop's keyboard settings." — and General's line shows that key with the same note instead of **Change…** — then **Little Joan's keys**: every keymap action (`keymap_info`) with its key as a recorder button (the next key with a modifier, or an F-key; a letter is the one the key types in the user's layout; Esc cancels, Backspace means no key), **No key**, **Reset** when it isn't the default, its problems under it; **Reset all** at the bottom (every key and the summon shortcut). Problems (`keyboard-logic.ts`, the keymap's own rules): errors block Save and say why — "⌘L is already Open Location", "That's the shortcut that summons Little Joan", "Plain keys type text — add ⌘ or ⌃", "On macOS a key needs ⌘ or ⌃", the editing keys ("⌘C is used for editing in pages") —; warnings don't — the OSes' reserved shortcuts ("macOS uses ⌘Space for Spotlight", `reserved-shortcuts.ts`, curated from the OSes' documentation; `Super+*` on Windows and Linux), "Ctrl+Alt is AltGr on many keyboards". **On macOS the user's own changes refine the curated table** (decided by a CI runner's export, LJ44): Rust reads the `com.apple.symbolichotkeys` domain (NSUserDefaults, read-only; `system_shortcuts.rs`), which lists only entries that were written — an entry switched off (or moved to another key) drops that curated warning (curated macOS entries carry their domain id: Spotlight 64, input sources 60 / 61, screenshots 28 / 30 / 184, …), and an entry that is on with a key warns there (under the curated name when its id is known, else "one of its keyboard shortcuts"); entries without a key say nothing, so the curated defaults stay. A saved summon shortcut that isn't one shows as written and is an error until it is recorded again or Reset. On Windows a note says WebView2's own Ctrl+R, F5 and Alt+← / Alt+→ work beside these. The summon recorder gets the same rules (one of Little Joan's keys → error, a reserved one → warning). When the saved shortcut couldn't be registered at launch (`shortcut::settle` keeps `AppState::shortcut_problem`: what was wanted, what is active instead, `taken` or `invalid`; `get_settings` and `keymap_info` report it), Keyboard and General say so: "⌘⇧K couldn't be registered: another app or the system already uses it. Little Joan is using ⌘⇧Space instead." (or "…Little Joan has no shortcut now."); a Save whose shortcut registers clears it. Save sends `keys` only when they were edited |
 | Appearance | the theme editor: System / Light / Dark beside the heading; a live preview (a toolbar strip and a command bar card over the theme's gradient); preset swatches (each preset's own colors; the one the theme matches has a ring); up to three color pads — x = hue 0–360°, y = chroma from the muted maximum (0.12, top) to grey, drawn at OKLCH L 0.75 where every hue reaches it in sRGB — with a dot per color: drag it, or focus a pad and use the arrow keys (5° / 5 %, Shift 30° / 20 %); **+** adds a color 45° along from the last (up to 3), × on the selected pad removes it (down to 1); Intensity and Grain sliders; then **Liquid Glass — Off / Clear / Tinted** (LJ19.9, `glass`), only where `get_settings`'s `glassSupport` says this Mac has it (macOS 26+; never on Windows, Linux or older Macs), with a one-line note under it: what the choice does ("More transparent…" / "More opaque, more contrast…", no grain), or, while Reduce Transparency or Increase Contrast is on, that the theme shows solid; with the row shown the tab's other gaps close a little (`:has()`), so it still fits its window. Every edit re-themes this window and calls `preview_theme` (the glass choice with it: previewed in the open page window); Save sends the theme and the glass with the rest |
 | Extensions | "Experimental"; **Built-in** (the five quick answers, ids `builtin:<name>`), **Bundled** and **Developer** groups — each extension with its icon, name, version, author, description, its permissions in plain words, and a switch (`disabledExtensions`, saved with Save); **Developer mode** (`developerMode`) with its warning, the folder, **Open extensions folder**, **Reload extensions**, and what couldn't be loaded and why. Saving forgets the registry, so the next use reads it with the new switches |
-| Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only") |
+| Privacy | **Remember history** (`rememberHistory`, saved with Save); **Clear history** — a range (last hour, 24 hours, 7 days, everything), "Clear…", a question, then `history_clear` at once (not a setting, so Cancel doesn't undo it) and what went; **Saved passwords and forms** (LJ51) — on Windows **Offer to save passwords (kept by Windows' web engine, on this computer)** (`savePasswords`, off by default) and **Fill in forms (addresses and the like)** (`autofillForms`, on by default), saved with Save, each with a note on what off means (saving off doesn't forget what was saved), and **Remove saved passwords and form data…** — a question, then `clear_saved_logins` at once (not a setting) and its answer; on macOS and Linux "Saving passwords isn't available in Little Joan on this system yet." and one line why, no switch (`ui/settings/logins-logic.ts`, tested); **what is stored where** (`get_settings`'s `storage`, plus "session cookies in memory only" and where saved passwords and form data are) |
 | About | version, license, the repository link, "Inspired by Little Arc…" as plain text |
 
 A new window gets its first tab from an initialization script (`window.__littleJoanSettingsTab`)
@@ -2030,10 +2086,12 @@ The modules below hold every decision the app makes; the native glue only calls 
   already translated.
 - **settings** — `{version, shortcut, searchEngine, translateTo, windowWidth, windowHeight,
   mobileSites, rememberHistory, theme, developerMode, disabledExtensions, siteModes,
-  showTrayIcon, keys, afterClose, glass, mainBrowser, pinnedSites}` (camelCase
+  showTrayIcon, keys, afterClose, glass, mainBrowser, pinnedSites, savePasswords,
+  autofillForms}` (camelCase
   JSON; `disabledExtensions` keeps valid ids and `builtin:<name>`s, each once; `siteModes` keeps
   at most 500 valid `host: auto|phone|desktop` entries; `pinnedSites`, LJ50, at most 8 `{url,
-  title}` — http(s) without credentials, one per URL, a bad entry dropped alone). Each field falls back to its default on its own; sizes are clamped to
+  title}` — http(s) without credentials, one per URL, a bad entry dropped alone; `savePasswords`
+  (default false) and `autofillForms` (default true), LJ51, booleans or their default). Each field falls back to its default on its own; sizes are clamped to
   320–4096 × 300–4096; `theme` = `{mode, colors, intensity, grain}`, each part on its own too
   (bad colors dropped, 1–3 kept as `#rrggbb`, numbers clamped to 0–1); saves go through a temp
   file + rename.
@@ -2492,7 +2550,29 @@ and pushes to `main`:
   popup on `blur`, `visibilitychange` or `pagehide`), focused by a click, then `--hide`: nothing may
   open or be handed on (`new-window-dropped closing`). macOS runners may not deliver the click: a
   flow whose click asked for no new window is reported there, not failed (logs `smoke-popups.log`,
-  `summary.json`'s `popupsRun`). Last comes the
+  `summary.json`'s `popupsRun`). Then the **logins runs** (`smoke-logins.mts`, LJ51; two launches
+  of their own): one with the default switches and `"afterClose": "hibernate"` — `--show` on the
+  smoke page's `?webauthn=1` (LJ52: its title `LJ-WEBAUTHN api=<0|1> platform=<true|false|error>
+  conditional=<true|false|error> secure=<bool>` — `PublicKeyCredential`, a user-verifying platform
+  authenticator, passkey autofill, a secure context — goes into `summary.json`'s
+  `loginsRun.webauthn` on every OS, evidence and not a rule) must log (Windows) `logins
+  password-autosave=false autofill=true webview=page` as the
+  engine reads it back and `webview-profile page=<folder>`; `--hide` (it hibernates); `--settings
+  privacy` with `LITTLEJOAN_SMOKE_SETTINGS_SCROLL=logins` and `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=
+  remove` must log `webview-profile settings=<the same folder>`, scroll to the section for
+  `settings-privacy-logins.png` (every OS: the switches on Windows, the "isn't available" note on
+  macOS and Linux), and on Windows the smoke hooks click **Remove saved passwords and form data…**
+  and the question's Remove: `saved-logins-cleared ok`, with no page built since the window
+  hibernated (`settings-privacy-logins-removed.png`); one with `"savePasswords": true` — the page,
+  and a sign-in popup (`?popup=oauth`, clicked), must read back `password-autosave=true`; then, the
+  page still open, `--settings privacy` with `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=toggle-save`:
+  Settings reports what its engine says unset (`logins-seen …`, informational), and on Windows "Offer
+  to save passwords" is clicked off and Save clicked — the page and the settings window must read
+  back `password-autosave=false` and settings.json keep `"savePasswords": false`. The two drives
+  (`remove`, `toggle-save`) run only on a throwaway data folder on a GitHub-hosted runner
+  (`settings_window/logins_smoke.rs`); a refused one (`settings-logins-click refused …`) fails the
+  run. macOS and Linux must log no `logins` line and no removal. The smoke types no password (logs
+  `smoke-logins.log`, `smoke-logins-on.log`, `summary.json`'s `loginsRun`). Last comes the
   **first-launch check**: quit, launch on a new empty data folder (it must log `first-run`,
   `window-created`, `bar-loaded`, `welcome`; screenshot `welcome.png`), `--hide`, quit, relaunch
   on the same folder: `settings.json` must exist and no window may open within 5 s (the prewarm,

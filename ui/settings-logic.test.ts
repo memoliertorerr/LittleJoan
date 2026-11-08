@@ -39,6 +39,8 @@ const saved: Settings = {
   afterClose: "ready",
   glass: "off",
   mainBrowser: null,
+  savePasswords: false,
+  autofillForms: true,
 };
 
 const same = () => toInput(saved.shortcut, saved.searchEngine, saved.translateTo, saved.mobileSites, saved.rememberHistory);
@@ -362,5 +364,41 @@ describe("the Privacy tab's clear action", () => {
   it("picking another range drops a question that was showing", () => {
     const asking = clearStep(CLEAR_START, { kind: "ask" });
     expect(clearStep(asking, { kind: "pick", range: "day" })).toEqual({ range: "day", asking: false, busy: false, message: "" });
+  });
+});
+
+describe("saved passwords and form data (LJ51)", () => {
+  const withLogins = (logins?: { savePasswords: boolean; autofillForms: boolean }) =>
+    toInput(
+      saved.shortcut,
+      saved.searchEngine,
+      saved.translateTo,
+      saved.mobileSites,
+      saved.rememberHistory,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      logins,
+    );
+
+  it("counts either switch as a change, and leaves both out where there are none", () => {
+    expect(isChanged(saved, withLogins({ savePasswords: false, autofillForms: true }))).toBe(false);
+    expect(isChanged(saved, withLogins({ savePasswords: true, autofillForms: true }))).toBe(true);
+    expect(isChanged(saved, withLogins({ savePasswords: false, autofillForms: false }))).toBe(true);
+    expect(withLogins({ savePasswords: true, autofillForms: false })).toMatchObject({ savePasswords: true, autofillForms: false });
+    const none = withLogins(undefined);
+    expect("savePasswords" in none || "autofillForms" in none).toBe(false);
+    expect(isChanged({ ...saved, savePasswords: true }, none)).toBe(false);
+  });
+
+  it("follows a change made elsewhere unless the window edited it", () => {
+    const next = { ...saved, autofillForms: false };
+    expect(rebase(saved, saved, next).autofillForms).toBe(false);
+    expect(rebase({ ...saved, savePasswords: true }, saved, next)).toMatchObject({ savePasswords: true, autofillForms: false });
   });
 });

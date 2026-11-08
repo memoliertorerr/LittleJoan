@@ -61,6 +61,20 @@ as before. Report anything that gives a popup more than the above — IPC, an ex
 a download, a permission, a title that names a place that hasn't loaded, or a popup that outlives
 its window — or a page a permission it shouldn't get.
 
+Saved passwords and form data (since v0.3, Windows only) stay in the web engine: WebView2's own
+password saving (off unless you switch it on in Settings → Privacy) and form autofill (on, its
+default) keep what they save in the engine's own store inside Little Joan's site-data folder.
+Little Joan only switches those two features on every page and sign-in popup, and asks the engine
+to remove what it saved (Settings only — no page, popup or extension can ask). It never reads,
+exports, logs or syncs a password, a passkey or a form entry, and no code of Little Joan's opens
+the engine's stores. Report anything that lets a page, a popup or an extension reach saved
+passwords or form data through Little Joan, turn password saving on, or keep the engine's saved
+data after a removal reported success. macOS and Linux save no passwords in Little Joan yet.
+Passkeys are the engine's alone as well: on Windows WebView2 runs a site's WebAuthn requests with
+Windows Hello and Windows keeps the keys; on macOS WebKit offers an app without Apple's browser
+entitlement (which Little Joan doesn't have) no platform authenticator; WebKitGTK has no WebAuthn. Little Joan adds
+nothing to WebAuthn and handles no key.
+
 Extensions (experimental) have their own model — one origin each, a strict Content-Security-Policy,
 no IPC, and a small API that checks every request (see `docs/architecture.md`, "Extensions"). Also
 report anything that lets a web page call an extension's API, load its files or open it; lets an

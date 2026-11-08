@@ -49,7 +49,10 @@
 // "After closing" mode — what stays at rest, a pinging page stopping at the close, memory at rest,
 // keys typed right after the shortcut, the ready bar's web process killed), the links and handoff
 // runs (LJ45–LJ46), then the popups run (LJ47, smoke-popups.mts: the fake provider on the server's
-// second port opened in a sized popup that posts back and closes; popup.png), then check the logs
+// second port opened in a sized popup that posts back and closes; popup.png), then the logins runs
+// (LJ51, smoke-logins.mts: Windows' own password saving and autofill read back from the page and a
+// popup, the settings window on the page's profile, "Remove saved passwords and form data…" while
+// hibernating; settings-privacy-logins.png on every OS), then check the logs
 // (scripts/ci/smoke-log.mts, smoke-command.mts, smoke-theme.mts) and the webview helper processes.
 // The app runs on a fresh LITTLEJOAN_DATA_DIR that already holds the default settings.json, so it
 // starts at rest as every launch after the first does — since LJ19.4 that is "Stay ready", the
@@ -114,6 +117,7 @@ import { mayChangeThisMachine, runnerFailures, runnerLine, skippedChange } from 
 import { linksFailures, linksRun, linksSummary, type ExecOptions, type ExecResult, type LinksApp, type LinksDriver } from "./smoke-links.mts";
 import { handoffFailures, handoffRun, handoffSummary } from "./smoke-handoff.mts";
 import { popupsFailures, popupsRun, popupsSummary } from "./smoke-popups.mts";
+import { loginsFailures, loginsRun, loginsSummary } from "./smoke-logins.mts";
 import { HANG_PATH } from "../../tests/smoke/popup-logic.mjs";
 import {
   BROKEN_EXTENSION,
@@ -2130,6 +2134,17 @@ const popupsCheck = await popupsRun({
   pressInPopup,
 }, HISTORY_KEY);
 console.log(`popups: ${JSON.stringify(popupsSummary(popupsCheck, os, signinOrigin, smokePageUrl))}`);
+// The logins runs (LJ51, smoke-logins.mts): Windows' own password saving and autofill.
+const loginsCheck = await loginsRun({
+  os,
+  pageUrl: smokePageUrl,
+  signinOrigin,
+  launch: (name, settings, extra = {}) => fullscreenLaunch(name, settings, extra),
+  clickCentre,
+  screenshot,
+  sleep: (ms) => sleep(ms).then(() => undefined),
+});
+console.log(`logins: ${JSON.stringify(loginsSummary(loginsCheck, os))}`);
 const restMd = restTable(restRuns, os);
 writeFileSync(join(out, "rest.md"), restMd);
 console.log(restMd);
@@ -2255,6 +2270,8 @@ const summary = {
   handoffRun: handoffSummary(handoffCheck, os),
   // LJ47: sign-in popups.
   popupsRun: popupsSummary(popupsCheck, os, signinOrigin, smokePageUrl),
+  // LJ51: Windows' own password saving and autofill.
+  loginsRun: loginsSummary(loginsCheck, os),
   zoom: zoomSummary(zoomEvents, WIDE, os !== "darwin"),
   // LJ19.9: Liquid Glass — what the main run's launch said, and the glass runs (macOS 26+).
   glass: {
@@ -2342,6 +2359,7 @@ const failures = evaluate(
   .concat(linksFailures(linksCheck))
   .concat(handoffFailures(handoffCheck, os))
   .concat(popupsFailures(popupsCheck, os, signinOrigin, smokePageUrl))
+  .concat(loginsFailures(loginsCheck, os))
   .concat(runnerFailures(process.env))
   .concat(zoomFailures(zoomEvents, WIDE, { driven: os !== "darwin" }))
   .concat(firstRunFailures(firstRun));
@@ -2375,6 +2393,8 @@ if (failures.length > 0) {
     "handoff",
     "handoff-default",
     "popups",
+    "logins",
+    "logins-on",
   ].map((name) => join(out, `smoke-${name}.log`));
   for (const path of [logPath, afterQuitLogPath, historyOffLogPath, extensionLog, bundledLog, ...themeLogs, ...fullscreenLogs, ...trayLogs, firstLogPath, relaunchLogPath]) {
     console.log(`\n--- ${path} ---\n${existsSync(path) ? readFileSync(path, "utf8") : "(none)"}`);

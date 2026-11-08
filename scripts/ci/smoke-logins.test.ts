@@ -1,0 +1,150 @@
+import { describe, expect, it } from "vitest";
+import { parseLog } from "./smoke-log.mts";
+import { afterSave, loginsFailures, loginsSummary, profiles, switches, webauthnOf, type LoginsRun } from "./smoke-logins.mts";
+
+const log = (rows: string[]) => parseLog(rows.map((row, i) => `${1000 + i} ${row}`).join("\n") + "\n");
+const PROFILE = "C:\\Users\\runner\\AppData\\Local\\Temp\\lj\\logins\\webview\\EBWebView\\Default";
+
+const FIRST = [
+  "started",
+  "page-built",
+  "logins password-autosave=false autofill=true webview=page",
+  `webview-profile page=${PROFILE}`,
+  "logins-seen password-autosave=false autofill=true webview=page",
+  "title LJ-WEBAUTHN asking",
+  "title LJ-WEBAUTHN api=1 platform=false conditional=true secure=true",
+  "hibernated",
+  `webview-profile settings=${PROFILE}`,
+  "logins-seen password-autosave=false autofill=true webview=settings",
+  "settings-window privacy",
+  "settings-loaded",
+  "settings-scrolled logins",
+  "settings-logins-click remove",
+  "settings-logins-click confirm",
+  "saved-logins-cleared ok",
+];
+const ON = [
+  "started",
+  "page-built",
+  "logins password-autosave=true autofill=true webview=page",
+  "popup-opened http://127.0.0.1:5001",
+  "logins password-autosave=true autofill=true webview=popup",
+  "popup-closed by-page",
+  "logins-seen password-autosave=true autofill=true webview=settings",
+  "settings-window privacy",
+  "settings-loaded",
+  "settings-scrolled logins",
+  "settings-logins-click toggle",
+  "settings-logins-click save",
+  "logins password-autosave=false autofill=true webview=page",
+  "logins password-autosave=false autofill=true webview=settings",
+];
+
+function run(over: Partial<{ first: string[]; on: string[]; popupOpened: boolean; onSettings: Record<string, unknown> | null }> = {}): LoginsRun {
+  return {
+    first: log(over.first ?? FIRST),
+    on: log(over.on ?? ON),
+    popupOpened: over.popupOpened ?? true,
+    onSettings: "onSettings" in over ? (over.onSettings ?? null) : { savePasswords: false },
+  };
+}
+
+/** macOS and Linux: the same runs without anything of the engine's switches. */
+const MAC_FIRST = ["started", "page-built", "title LJ-SMOKE ready", "hibernated", "settings-window privacy", "settings-loaded", "settings-scrolled logins"];
+
+describe("the logins runs' rules (LJ51)", () => {
+  it("passes on Windows when the switches read back, the profile is shared and removing answered ok", () => {
+    expect(loginsFailures(run(), "win32")).toEqual([]);
+  });
+
+  it("wants the default page to read back saving off and autofill on", () => {
+    const on = run({ first: FIRST.map((row) => row.replace("logins password-autosave=false", "logins password-autosave=true")) });
+    expect(loginsFailures(on, "win32").join()).toContain('not "password-autosave=false autofill=true webview=page"');
+    const failed = run({ first: [...FIRST, "logins failed webview=page No such interface supported"] });
+    expect(loginsFailures(failed, "win32").join()).toContain("switching failed: failed webview=page");
+  });
+
+  it("stops on two profile folders: removing wouldn't reach what the page saved", () => {
+    const other = run({ first: FIRST.map((row) => (row.startsWith("webview-profile settings=") ? "webview-profile settings=C:\\elsewhere\\EBWebView\\Default" : row)) });
+    expect(loginsFailures(other, "win32").join()).toContain("isn't the page's");
+    const unknown = run({ first: FIRST.map((row) => (row.startsWith("webview-profile page=") ? "webview-profile page=unknown No such interface" : row)) });
+    expect(loginsFailures(unknown, "win32").join()).toContain("no profile folder for both");
+    const none = run({ first: FIRST.filter((row) => !row.startsWith("webview-profile settings=")) });
+    expect(loginsFailures(none, "win32").join()).toContain("no profile folder for both");
+  });
+
+  it("wants the removal to answer ok, after the window hibernated, with no page built", () => {
+    const failed = run({ first: FIRST.map((row) => (row === "saved-logins-cleared ok" ? "saved-logins-cleared failed Windows' web engine didn't answer." : row)) });
+    expect(loginsFailures(failed, "win32").join()).toContain("not ok");
+    const missing = run({ first: FIRST.filter((row) => !row.startsWith("saved-logins-cleared")) });
+    expect(loginsFailures(missing, "win32").join()).toContain("logged no saved-logins-cleared");
+    const withPage = run({ first: FIRST.flatMap((row) => (row === "settings-loaded" ? ["page-built", row] : [row])) });
+    expect(loginsFailures(withPage, "win32").join()).toContain("didn't happen while hibernating");
+    const noHibernate = run({ first: FIRST.filter((row) => row !== "hibernated") });
+    expect(loginsFailures(noHibernate, "win32").join()).toContain("didn't open after the window hibernated");
+  });
+
+  it("wants savePasswords to reach the page and the popup", () => {
+    const pageOff = run({ on: ON.map((row) => (row.endsWith("webview=page") ? "logins password-autosave=false autofill=true webview=page" : row)) });
+    expect(loginsFailures(pageOff, "win32").join()).toContain("with savePasswords the page read back");
+    const popupOff = run({ on: ON.filter((row) => !row.endsWith("webview=popup")) });
+    expect(loginsFailures(popupOff, "win32").join()).toContain("the popup read back");
+    expect(loginsFailures(run({ popupOpened: false }), "win32").join()).toContain("never opened");
+  });
+
+  it("wants nothing switched or removed on macOS and Linux, and the screenshot's scroll everywhere", () => {
+    const quiet = run({ first: MAC_FIRST, on: ["started", "page-built", "popup-opened http://127.0.0.1:5001", "settings-loaded"], popupOpened: false });
+    expect(loginsFailures(quiet, "darwin")).toEqual([]);
+    expect(loginsFailures(quiet, "linux")).toEqual([]);
+    expect(loginsFailures(run(), "linux").join()).toContain("has no switch");
+    const noScroll = run({ first: MAC_FIRST.filter((row) => row !== "settings-scrolled logins") });
+    expect(loginsFailures(noScroll, "darwin").join()).toContain("never scrolled");
+    expect(loginsFailures(run({ first: FIRST.filter((row) => row !== "settings-scrolled logins") }), "win32").join()).toContain("never scrolled");
+  });
+
+  it("reads the profile lines and the switches, and sums them up", () => {
+    expect(profiles(log(FIRST))).toEqual({ page: PROFILE, settings: PROFILE });
+    expect(profiles(log(["webview-profile page=a=b", "webview-profile nonsense"]))).toEqual({ page: "a=b" });
+    expect(switches(log(ON)).slice(0, 2)).toEqual(["password-autosave=true autofill=true webview=page", "password-autosave=true autofill=true webview=popup"]);
+    expect(switches(log(ON), "logins-seen")).toEqual(["password-autosave=true autofill=true webview=settings"]);
+    const summary = loginsSummary(run(), "win32");
+    expect(summary).toMatchObject({ sameProfile: true, cleared: "ok", popupOpened: true, rules: [] });
+    expect(summary.settingsSaw).toEqual(["password-autosave=true autofill=true webview=settings"]);
+    expect(loginsSummary(run({ first: MAC_FIRST }), "darwin")).toMatchObject({ sameProfile: false, cleared: null, profiles: {} });
+  });
+
+  it("records the page's passkey report as evidence, never as a rule (LJ52)", () => {
+    expect(webauthnOf(log(FIRST))).toBe("LJ-WEBAUTHN api=1 platform=false conditional=true secure=true");
+    expect(webauthnOf(log(["title LJ-WEBAUTHN asking"]))).toBeUndefined();
+    const reported = { ...run(), webauthn: "LJ-WEBAUTHN api=1 platform=error conditional=false secure=true" };
+    expect(loginsSummary(reported, "darwin").webauthn).toEqual({
+      title: "LJ-WEBAUTHN api=1 platform=error conditional=false secure=true",
+      report: { api: true, platform: "error", conditional: false, secure: true },
+    });
+    // No report changes no rule.
+    expect(loginsSummary(run(), "win32")).toMatchObject({ webauthn: { title: null, report: null }, rules: [] });
+  });
+
+  it("wants a Save with the page open to reach the page and the settings window (the security review)", () => {
+    expect(afterSave(log(ON))).toEqual(["password-autosave=false autofill=true webview=page", "password-autosave=false autofill=true webview=settings"]);
+    expect(afterSave(log(ON.filter((row) => row !== "settings-logins-click save")))).toBeUndefined();
+    const noSave = run({ on: ON.filter((row) => row !== "settings-logins-click save") });
+    expect(loginsFailures(noSave, "win32").join()).toContain("Save was never clicked");
+    const pageStale = run({ on: ON.filter((row, i) => !(row.endsWith("webview=page") && i > ON.indexOf("settings-logins-click save"))) });
+    expect(loginsFailures(pageStale, "win32").join()).toContain("after Save the page read back");
+    const settingsStale = run({ on: ON.filter((row) => row !== "logins password-autosave=false autofill=true webview=settings") });
+    expect(loginsFailures(settingsStale, "win32").join()).toContain("after Save the settings read back");
+    const closed = run({ on: ON.flatMap((row) => (row === "settings-window privacy" ? ["hibernated ready", row] : [row])) });
+    expect(loginsFailures(closed, "win32").join()).toContain("the page wasn't open when Settings saved");
+    expect(loginsFailures(run({ onSettings: { savePasswords: true } }), "win32").join()).toContain("savePasswords true after Save");
+    expect(loginsFailures(run({ onSettings: null }), "win32").join()).toContain("after Save, not false");
+    expect(loginsSummary(run(), "win32")).toMatchObject({ savePasswordsAfterSave: false, rules: [] });
+  });
+
+  it("fails when the smoke's clicks were refused — the runner gate kept them from running", () => {
+    const refused = run({ first: FIRST.map((row) => (row === "settings-logins-click remove" ? "settings-logins-click refused not-a-github-hosted-runner" : row)) });
+    expect(loginsFailures(refused, "win32").join()).toContain("refused on this runner (refused not-a-github-hosted-runner)");
+    const macRefused = run({ first: [...MAC_FIRST, "settings-logins-click refused no-temporary-data-folder"], on: ["started"], popupOpened: false });
+    expect(loginsFailures(macRefused, "darwin").join()).toContain("refused on this runner");
+  });
+});

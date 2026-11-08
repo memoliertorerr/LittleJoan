@@ -2,7 +2,11 @@
 //! of tabs (General, Keyboard, Appearance, Extensions, Privacy, About) — the "advanced settings" that sit
 //! where Little Arc has "Contact the Team" (the command bar's "Settings & extensions" row). It
 //! opens on a tab from `--settings [tab]`, `open_settings(tab)`, the tray and Cmd+,; an open
-//! window is focused and switched to the tab asked for.
+//! window is focused and switched to the tab asked for. Its webview uses the page window's webview
+//! data folder (LJ51): on Windows its WebView2 profile is the page's, so Privacy's "Remove saved
+//! passwords and form data…" reaches what the page saved, also while Little Joan hibernates.
+
+use std::path::PathBuf;
 
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
@@ -12,9 +16,29 @@ use crate::navigation;
 use crate::platform;
 use crate::shortcut;
 use crate::smoke;
-use crate::state;
+use crate::state::{self, AppState};
 
 pub const LABEL: &str = "settings";
+
+/// What the smoke harness may have Privacy's saved-passwords section do, and when (LJ51).
+mod logins_smoke;
+
+/// What the window's builder takes from the state (LJ51): the page window's webview data folder
+/// (`AppState::webview_data_dir`; `None` in installed builds, where Tauri gives every webview the
+/// app's local data folder) — one WebView2 profile with the page, whose environment options all
+/// keep wry's defaults (logins.rs) — and the saved form autofill, which that profile shares.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BuilderInput {
+    data_directory: Option<PathBuf>,
+    autofill_forms: bool,
+}
+
+fn builder_input(state: &AppState) -> BuilderInput {
+    BuilderInput {
+        data_directory: state.webview_data_dir.clone(),
+        autofill_forms: state.settings.autofill_forms,
+    }
+}
 
 /// The window's size in logical pixels: a sidebar on the left, the tab on the right.
 const SIZE: (f64, f64) = (600.0, 480.0);
@@ -86,40 +110,48 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, tab: Option<SettingsTab>) {
             return;
         }
         let tab = tab.unwrap_or_default();
-        let built = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("settings.html".into()))
-            .title("Little Joan Settings")
-            .inner_size(SIZE.0, SIZE.1)
-            .resizable(false)
-            .maximizable(false)
-            .minimizable(false)
-            .center()
-            // Shown below, once macOS knows it may join the Space the user is on (LJ19.2).
-            .visible(false)
-            .focused(true)
-            // The tab to open on, before the page's own script runs.
-            .initialization_script(format!(
-                "window.__littleJoanSettingsTab = \"{}\";",
-                tab.name()
-            ))
-            // A trusted window stays on the app's own pages; links (About's repository link)
-            // open in the main browser (web URLs only; browsers.rs).
-            .on_navigation(|url| may_navigate(url, &keys::app_origin()))
-            .on_new_window({
-                let app = app.clone();
-                move |url, _features| {
-                    if navigation::is_external_openable(&url) {
-                        crate::browsers::hand_off_new_window(
-                            &app,
-                            url,
-                            crate::browsers::NewWindowFrom::Settings,
-                        );
+        let input = state::with(&app, |s| builder_input(s));
+        let mut builder =
+            WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("settings.html".into()))
+                .title("Little Joan Settings")
+                .inner_size(SIZE.0, SIZE.1)
+                .resizable(false)
+                .maximizable(false)
+                .minimizable(false)
+                .center()
+                // Shown below, once macOS knows it may join the Space the user is on (LJ19.2).
+                .visible(false)
+                .focused(true)
+                .general_autofill_enabled(input.autofill_forms)
+                // The tab to open on, before the page's own script runs.
+                .initialization_script(format!(
+                    "window.__littleJoanSettingsTab = \"{}\";",
+                    tab.name()
+                ))
+                // A trusted window stays on the app's own pages; links (About's repository link)
+                // open in the main browser (web URLs only; browsers.rs).
+                .on_navigation(|url| may_navigate(url, &keys::app_origin()))
+                .on_new_window({
+                    let app = app.clone();
+                    move |url, _features| {
+                        if navigation::is_external_openable(&url) {
+                            crate::browsers::hand_off_new_window(
+                                &app,
+                                url,
+                                crate::browsers::NewWindowFrom::Settings,
+                            );
+                        }
+                        NewWindowResponse::Deny
                     }
-                    NewWindowResponse::Deny
-                }
-            })
-            .build();
-        match built {
+                });
+        // The page's profile (LJ51): Privacy's removal acts on what the page saved.
+        if let Some(dir) = input.data_directory {
+            builder = builder.data_directory(dir);
+        }
+        match builder.build() {
             Ok(window) => {
+                // Smoke log (Windows): its profile's folder, for CI to compare with the page's.
+                crate::logins::report(window.as_ref(), crate::logins::Place::Settings);
                 // Like the page window: on the current Space (macOS), then in front (LJ19.2).
                 let window = window.as_ref().window();
                 platform::join_active_space(&window);
@@ -203,31 +235,71 @@ pub fn smoke_click_quit<R: Runtime>(app: &AppHandle<R>) {
 /// How long after Settings loaded the smoke test's click comes (its screenshot is taken first).
 const SMOKE_QUIT_AFTER: std::time::Duration = std::time::Duration::from_secs(4);
 
-/// Smoke tests only (LJ46; `LITTLEJOAN_SMOKE_SETTINGS_SCROLL=browser`, ignored without the smoke
-/// log): 2 s after the settings page asked for its settings, General scrolls to its Browser section
-/// (below the fold) for the screenshot, and logs `settings-scrolled browser`.
+/// Smoke tests only (`LITTLEJOAN_SMOKE_SETTINGS_SCROLL=<section>`, ignored without the smoke log): 2 s
+/// after the settings page asked for its settings, the open tab scrolls to one of its sections below
+/// the fold for the screenshot — General's Browser (`browser`, LJ46) or Privacy's saved passwords
+/// (`logins`, LJ51) — and logs `settings-scrolled <section>`. With `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=
+/// remove|toggle-save` too (Windows), 4 s later Privacy's "Remove saved passwords and form data…"
+/// and the question's Remove — or "Offer to save passwords" and Save — are clicked: the page's own
+/// handlers run, as clicks would (`settings-logins-click <step>`). Only on a throwaway data folder
+/// on a GitHub-hosted runner (settings_window/logins_smoke.rs; otherwise `settings-logins-click
+/// refused <why>`). CI has no driver for the window's controls.
 pub fn smoke_scroll<R: Runtime>(app: &AppHandle<R>) {
-    if !smoke::enabled()
-        || std::env::var("LITTLEJOAN_SMOKE_SETTINGS_SCROLL")
-            .ok()
-            .as_deref()
-            != Some("browser")
-    {
+    if !smoke::enabled() {
         return;
     }
+    let Some((section, anchor)) = std::env::var("LITTLEJOAN_SMOKE_SETTINGS_SCROLL")
+        .ok()
+        .and_then(|wanted| SMOKE_SECTIONS.iter().find(|(name, _)| *name == wanted))
+        .copied()
+    else {
+        return;
+    };
+    let drive = if section == "logins" {
+        let env = |name: &str| std::env::var(name).ok();
+        let temp_data = state::with(app, |s| s.webview_data_dir.is_some());
+        let wanted = logins_smoke::wanted(
+            env("LITTLEJOAN_SMOKE_SETTINGS_LOGINS").as_deref(),
+            temp_data,
+            env("GITHUB_ACTIONS").as_deref(),
+            env("RUNNER_ENVIRONMENT").as_deref(),
+            crate::logins::AVAILABLE,
+        );
+        wanted.unwrap_or_else(|why| {
+            smoke::log("settings-logins-click", &format!("refused {why}"));
+            None
+        })
+    } else {
+        None
+    };
     let app = app.clone();
     let _ = std::thread::Builder::new()
         .name("little-joan-smoke-scroll".into())
         .spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(2));
-            if let Some(window) = app.get_webview_window(LABEL) {
-                let _ = window.eval(
-                    "document.getElementById(\"browser-label\")?.scrollIntoView({ block: \"start\" })",
-                );
-                smoke::log("settings-scrolled", "browser");
+            let Some(window) = app.get_webview_window(LABEL) else {
+                return;
+            };
+            // Ids of our own page (SMOKE_SECTIONS): safe in the script as they are.
+            let _ = window.eval(format!(
+                "document.getElementById(\"{anchor}\")?.scrollIntoView({{ block: \"start\" }})"
+            ));
+            smoke::log("settings-scrolled", section);
+            let Some(drive) = drive else {
+                return;
+            };
+            std::thread::sleep(std::time::Duration::from_secs(4));
+            for (step, script) in drive.steps() {
+                smoke::log("settings-logins-click", step);
+                let _ = window.eval(*script);
+                std::thread::sleep(std::time::Duration::from_millis(600));
             }
         });
 }
+
+/// The sections `smoke_scroll` may scroll to: its name in the environment, the element's id.
+const SMOKE_SECTIONS: [(&str, &str); 2] =
+    [("browser", "browser-label"), ("logins", "logins-label")];
 
 /// When the window closes: the shortcut it may have paused while recording comes back, and a
 /// theme (or Liquid Glass setting) it was previewing without saving (Cancel, or the close button)
@@ -310,6 +382,50 @@ mod tests {
             assert_eq!(SettingsTab::from_name(bad), None, "{bad}");
         }
         assert_eq!(SettingsTab::default(), SettingsTab::General);
+    }
+
+    #[test]
+    fn the_window_gets_the_pages_data_folder_and_the_saved_autofill() {
+        // LJ51: the settings window's WebView2 profile is the page's, so Privacy's removal reaches
+        // what the page saved — the folder the page's builder (bar/page.rs) takes from the state.
+        let mut state = AppState::for_tests();
+        let folder = std::env::temp_dir()
+            .join("little-joan-test-data")
+            .join("webview");
+        state.webview_data_dir = Some(folder.clone());
+        state.settings.autofill_forms = false;
+        assert_eq!(
+            builder_input(&state),
+            BuilderInput {
+                data_directory: Some(folder),
+                autofill_forms: false,
+            }
+        );
+        // Installed builds: no folder of ours — Tauri gives every webview the same one.
+        state.webview_data_dir = None;
+        assert_eq!(builder_input(&state).data_directory, None);
+        let page = include_str!("bar/page.rs");
+        assert!(page.contains("state::with(app, |s| s.webview_data_dir.clone())"));
+        let source = include_str!("settings_window.rs");
+        let code = source.split("#[cfg(test)]").next().unwrap_or(source);
+        let input = code
+            .find("let input = state::with(&app, |s| builder_input(s));")
+            .expect("open() reads the builder's input");
+        let folder = code
+            .find("builder = builder.data_directory(dir);")
+            .expect("the builder gets the folder");
+        assert!(input < folder);
+    }
+
+    #[test]
+    fn smoke_sections_are_ids_safe_in_a_script_string() {
+        for (name, id) in SMOKE_SECTIONS {
+            assert!(name.chars().all(|c| c.is_ascii_lowercase()), "{name}");
+            assert!(
+                id.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
+                "{id}"
+            );
+        }
     }
 
     #[test]

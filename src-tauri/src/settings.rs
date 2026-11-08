@@ -19,6 +19,7 @@ pub mod after_close;
 pub mod change;
 pub mod glass;
 pub mod keys;
+pub mod logins;
 pub mod main_browser;
 pub mod pinned;
 pub mod site_modes;
@@ -85,6 +86,12 @@ pub struct Settings {
     /// The sites that lead the command bar's empty state (LJ50, settings/pinned.rs): at most 8
     /// `{ url, title }`, http(s) only, one per URL, in the order pinned.
     pub pinned_sites: Vec<PinnedSite>,
+    /// Windows' web engine saves passwords and offers them again (LJ51, settings/logins.rs): off
+    /// by default, WebView2's own default. Little Joan only switches it (Ground Rule 26).
+    pub save_passwords: bool,
+    /// Windows' web engine fills in forms — addresses and the like (LJ51): on by default, WebView2's
+    /// own default.
+    pub autofill_forms: bool,
 }
 
 impl Default for Settings {
@@ -108,6 +115,8 @@ impl Default for Settings {
             glass: Glass::default(),
             main_browser: None,
             pinned_sites: Vec::new(),
+            save_passwords: logins::SAVE_PASSWORDS_DEFAULT,
+            autofill_forms: logins::AUTOFILL_FORMS_DEFAULT,
         }
     }
 }
@@ -190,6 +199,8 @@ pub fn parse(json: &str) -> Settings {
         glass: glass::parse(map.get("glass")),
         main_browser: main_browser::parse(map.get("mainBrowser")),
         pinned_sites: pinned::parse(map.get("pinnedSites")),
+        save_passwords: logins::flag(map.get("savePasswords"), defaults.save_passwords),
+        autofill_forms: logins::flag(map.get("autofillForms"), defaults.autofill_forms),
     }
 }
 

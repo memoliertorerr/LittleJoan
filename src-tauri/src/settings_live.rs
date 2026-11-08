@@ -2,7 +2,8 @@
 //! commands share. `settings::apply_change` decides what the settings become (pure, tested); this
 //! puts the result to work — AppState, a new theme in the bar, Liquid Glass on the window (LJ19.9),
 //! the tray icon's rule (LJ41), phone mode, the extensions' registry, what stays at rest after a
-//! close (LJ19.4) — and saves settings.json (atomically).
+//! close (LJ19.4), Windows' password saving and autofill (LJ51) — and saves settings.json
+//! (atomically).
 
 use tauri::{AppHandle, Runtime};
 
@@ -67,6 +68,12 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, change: &Change) -> Result<Settings
     }
     // "After closing": at once — a resting window goes, or a hibernating Little Joan prewarms.
     crate::joan::after_close_changed(app, before.after_close, updated.after_close);
+    if before.save_passwords != updated.save_passwords
+        || before.autofill_forms != updated.autofill_forms
+    {
+        // Windows' web engine: at once on every webview of the page's profile (LJ51).
+        crate::logins::apply_everywhere(app);
+    }
     settings::save(&dir, &updated)
         .map_err(|err| format!("The new settings work now, but couldn't be saved: {err}"))?;
     Ok(updated)

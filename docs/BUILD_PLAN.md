@@ -131,10 +131,10 @@
 | LJ46 | *(v0.3)* The main browser: handing pages on without loops; the default-apps button | strong | review | ✅ done — PR #40 (head c05ea86, run 41821630411 green 18/18) merged as 12e5024 after the independent security review (approve with minor fixes; all nine findings fixed in `lj-step-46-fix4` → `fix6`); main's run 42385385626 green 18/18 |
 | LJ47 | *(v0.3)* Sign-in popups in a small IPC-free window that shares the store and the opener | strong | auto | ✅ done (phase 22, `lj/p22-popups`; Linux's size fixed in `lj-step-47-fix` → `lj-step-48-fix`; run 42398526340 green 18/18) |
 | LJ48 | *(v0.3)* Popups close with their page; Ctrl/Cmd+W; docs | strong | review | ✅ done — the independent security review's findings (1 High, 2 Medium, 6 Low) fixed in `lj-step-48-fix` (e3a7d1a, run 42398526340 green 18/18); PR #41 (head e7d13c8, run 42401453791 green 18/18) merged as 7f0edd2 by the coordinator after the review (Ground Rule 24); main's run 42404243947 green 18/18 |
-| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; CI: see notes) |
-| LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes) |
-| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ⬜ todo |
-| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ⬜ todo |
+| LJ49 | *(v0.3)* Find in page: Ctrl/Cmd+F, the engines' own find, a find strip in the toolbar | strong | auto | ✅ done (phase 23, `lj/p23-find-pins`; Linux's highlights fixed in `lj-step-49-fix`; PR #42 (head 0964ee6, run 42414060894 green 18/18 after one re-run of Windows smoke's lost-keys flake) merged as f335e62; main's run 42418522861 green 18/18) |
+| LJ50 | *(v0.3)* Pinned sites at the top of the command bar | standard | auto | ✅ done (phase 23; CI: see notes; PR #42 merged as f335e62) |
+| LJ51 | *(v0.3)* Windows: WebView2's password saving and autofill as Privacy settings; removing them | strong | auto | ✅ done (phase 24, `lj/p24-saved-logins`; CI: see notes) |
+| LJ52 | *(v0.3)* Passkeys and saved logins: what each engine offers; docs; the macOS research | standard | review | ✅ done (phase 24; CI: see notes) — PR #43 ready, NOT merged by its agent: the independent security review comes next (Ground Rule 24) |
 | LJ53 | *(v0.3)* Bundled: Reading list, To-do | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
@@ -308,7 +308,12 @@ security review found one High (a title spoof), two Medium and six Low; all fixe
 e7d13c8, run 42401453791 green on all 18 jobs) was merged by the coordinator as 7f0edd2 on 2026-11-07;
 main's run 42404243947 green on all 18 jobs. **Phase 23 (LJ49 → LJ50, 2026-11-07)** is on
 `lj/p23-find-pins`: find in page (the engines' own find, a strip in the toolbar) and pinned sites at
-the top of the command bar — `auto`, merged by its agent once every job is green.
+the top of the command bar — `auto`, merged by its agent once every job is green. **Done:** PR #42
+(head 0964ee6, run 42414060894 green on all 18 jobs — its first attempt failed only Windows smoke's
+known lost-keys flake, the re-run passed) merged as f335e62; main's run 42418522861 green on all 18
+jobs. **Phase 24 (LJ51 → LJ52, 2026-11-07)** is on `lj/p24-saved-logins`: Windows' own password
+saving and autofill as Privacy settings, removing them, and what each engine offers for passkeys —
+security-sensitive (`review`): the PR ends ready and green, NOT merged by its agent.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -9315,6 +9320,13 @@ Look at find.png on every OS.
   WebKit's count unmarks every match once it has counted — it took the search's highlights away.
   Counted first now (GNOME Web's order); the count and the search reach the web process in that
   order. Recorded in Landmines.
+- **CI for `lj-step-49-fix` (head 0964ee6, run 42414060894): green on all 18 jobs.** Its first
+  attempt failed only Windows smoke, in the site-mode run's typing — the known lost synthetic keys
+  (a typing step timed out; 0964ee6 changed Linux code only); the failed job's re-run passed. The
+  Linux `find.png` now shows all three matches marked (the coordinator's look at the artifact).
+  **Merged (2026-11-07):** PR #42 merged into `main` as f335e62 (a merge commit, by its agent:
+  phase 23 is `auto`); main's run 42418522861 green on all 18 jobs, first attempt. Phase 24 starts
+  from f335e62.
 
 ### LJ50 — Pinned sites at the top of the command bar · standard · auto
 
@@ -9443,6 +9455,69 @@ into main as a draft, and watch CI until every job is green (Ground Rule 3; two 
 attempts, then stop). Look at the screenshots on every OS.
 ```
 
+**Implementation notes (2026-11-07; disk 11 GB free before and after, `.cache/target` 1.5 GB):**
+- **As designed**, in the files the prompt names plus the split the 400-line guideline asks for:
+  `settings/logins.rs` (the two fields, tolerant; tests), `settings/change.rs` (`save_passwords`,
+  `autofill_forms`; no quick command carries them), `logins.rs` (when: the page
+  and each popup right after they are built, every webview of the profile after a Save that changed
+  them), `platform/logins.rs` → `platform/win/logins.rs` (WebView2: `ICoreWebView2Settings4` set and
+  read back, `ICoreWebView2_13::Profile` → `ProfilePath`, `ICoreWebView2Profile2::ClearBrowsingData(
+  PASSWORD_AUTOSAVE | GENERAL_AUTOFILL)` waiting up to 15 s off the main thread), `commands/logins.rs`
+  (`clear_saved_logins`, through the settings window's own webview), `ui/settings/logins-logic.ts`
+  (+ test) and `logins.ts`, `scripts/ci/smoke-logins.mts` (+ test). The settings capability gained
+  only `allow-clear-saved-logins` (`only_settings_may_remove_saved_logins`); `joan-page` and popups
+  still have none; nothing is injected into a page.
+- **The settings window's data folder:** `builder_input` takes `AppState::webview_data_dir` (the
+  page's) and the saved `autofillForms`; a test on that input, and that `open()` hands the folder to
+  the builder. Installed builds are unchanged (both `None` → Tauri's `app_local_data_dir`); dev
+  builds and CI now match them — on Linux the settings window joins the page's WebKitGTK web context
+  as it already did in installed builds.
+- **The environment-options landmine, checked in the vendored sources:** wry gives every WebView2
+  environment the same options unless a builder sets them (browser arguments, the user's language,
+  extensions off, default scroll bars), and none of Little Joan's builders does — a test now walks
+  `src/` for `.additional_browser_args(`, `.browser_extensions_enabled(`, `.scroll_bar_style(`,
+  `.proxy_url(`, `.incognito(` and `.data_store_identifier(`. (Installed builds have given the
+  window and Settings one folder since v0.1: both took Tauri's default.)
+- **Beyond the prompt, for safety:** wry sets general autofill on every webview it creates (on by
+  default) and WebView2 keeps it per profile, so a settings window or popup built with wry's
+  default would switch autofill back on for the page: every builder on the profile passes the saved
+  value (`general_autofill_enabled`; a test checks the four). A Save also sets the switches on the
+  settings window's own webview, so they take effect at once while hibernating.
+- **Honest texts:** "Offer to save passwords" off stops new saving only — WebView2 still fills in
+  what it saved earlier — and the note says so; "Remove…" says cookies, site data and history stay
+  and that Little Joan never reads, exports or syncs what it removes. "What is stored where" gets a
+  row for saved passwords and form data.
+- **Smoke hooks:** `LITTLEJOAN_SMOKE_SETTINGS_SCROLL` now takes `browser` or `logins` (a fixed table
+  of element ids); with `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=remove` the section's button and the
+  question's Remove are clicked from Rust (as `smoke_click_quit` does), so the page's own handler
+  calls `clear_saved_logins`. Smoke log: `logins …` / `logins-seen …` (booleans only),
+  `webview-profile <place>=<path>`, `saved-logins-cleared ok|failed <reason>`.
+- `npm run verify`: 849 TS tests, 528 Rust tests, clippy clean (macOS compiles here; the WebView2
+  glue only in CI).
+- **CI (PR #43).** Run 42422695295 (head 01adbe0, LJ51): verify ×3 green — the WebView2 glue
+  compiled and passed clippy on `windows-latest` the first time — and package linux, windows,
+  linux-arm64 green, then cancelled by LJ52's push (the concurrency group; LJ52's run repeats every
+  LJ51 check). Run 42423088099 (head 80e3c0f, LJ51 + LJ52): **green on all 18 jobs, first attempt,
+  no re-runs.** The logins runs on Windows (WebView2 156.0.4314.58): the default page read back
+  `logins password-autosave=false autofill=true webview=page` (logged before `page-built`, ~120 ms
+  before the page's first title); `webview-profile page=D:\a\_temp\lj-logins-PyTytt\webview\EBWebView\Default`
+  and, after `hibernated`, `webview-profile settings=` **the same folder**; the two clicks →
+  `saved-logins-cleared ok` 5 ms after the confirm, with no page built since the hibernate. With
+  `"savePasswords": true`: `password-autosave=true autofill=true` from the page and from the sign-in
+  popup, and Settings — whose webview Little Joan never sets — read `logins-seen
+  password-autosave=true autofill=true webview=settings`: the switches are the profile's (as
+  WebView2's documentation says for `ICoreWebView2Settings4` / `ICoreWebView2Profile6`). macOS and
+  the seven Linux jobs logged no `logins` line and no removal. **Screenshots:**
+  `settings-privacy-logins.png` — Windows: the section at the top, "Offer to save passwords (kept by
+  Windows' web engine, on this computer)" unchecked, "Fill in forms (addresses and the like)"
+  checked, each with its note, the "Remove saved passwords and form data…" button and its note;
+  `settings-privacy-logins-removed.png` adds "Saved passwords and form data removed."; macOS and
+  Linux: "Saving passwords isn't available in Little Joan on this system yet." with "Apple lets only
+  browsers with a special entitlement use Passwords and passkeys." (reworded after the security
+  review: "Passkeys need an entitlement Apple grants to browsers, and password AutoFill isn't
+  dependable in an app's web view.") / "WebKitGTK has no password manager.", no switch, and the storage list's new row ("Nowhere: Little Joan saves no passwords or
+  form data on this system.").
+
 ### LJ52 — Passkeys and saved logins: what each engine offers; docs; the review · standard · review
 
 **Verify:** `npm run verify` green, including vitest tests for `tests/smoke/webauthn-logic.mjs`
@@ -9487,6 +9562,76 @@ it no longer does; on a site with passkeys (e.g. github.com) sign in with Window
 Privacy says it isn't available. Mark the PR ready once every job is green and STOP. Never merge it:
 an independent security review comes next, and the owner decides.
 ```
+
+**Implementation notes (2026-11-07; disk 11 GB free, `.cache/target` 1.5 GB):**
+- **The report:** `tests/smoke/webauthn-logic.mjs` (+ test) asks only availability —
+  `PublicKeyCredential`, `isUserVerifyingPlatformAuthenticatorAvailable()`,
+  `isConditionalMediationAvailable()` (5 s each, a throw / rejection / odd answer / hang is `error`,
+  a missing method `false`) — and never creates or asks for a credential, so no prompt shows. The
+  title adds `secure=<bool>` after the prompt's three fields (WebAuthn needs a secure context;
+  `http://127.0.0.1` is one), so an `api=0` can't be blamed on the page's address. The logins run's
+  first launch opens the smoke page at `?webauthn=1`; `summary.json`'s `loginsRun.webauthn` has the
+  title and its parse on every OS (no rule).
+- **Docs:** README (Privacy: saved passwords on Windows, passkeys per engine), SECURITY.md (saved
+  passwords, form data and passkeys stay in the engine), docs/architecture.md (Where data lives:
+  rows for saved passwords and passkeys). Later: the macOS row rewritten with Apple's entitlement
+  page (`com.apple.developer.web-browser.public-key-credential`, macOS 13.3+, any relying party;
+  only an **organization** account's Account Holder can request it; criteria: http/https in
+  `Info.plist`, a URL field at launch, navigating straight to a given URL; a managed capability, so
+  signing with a provisioning profile), and a Linux row.
+- **How "no code reads the engine's stores" was checked** (for the review's threat model): `git
+  grep` over `src-tauri/src`, `ui`, `scripts`, `extensions` and `tests` for the store files
+  (`Login Data`, `Web Data`, `EBWebView`), DevTools domains that reach credentials (`Autofill.*`,
+  `WebAuthn.*`, `Storage.*`), `CallDevToolsProtocolMethod`, `ICoreWebView2Profile*` and
+  `password` / `credential` / `passkey`: the only DevTools methods called are LJ40's
+  `Emulation.setUserAgentOverride` and `Page.getLayoutMetrics`; the profile is touched only for
+  `ProfilePath` and `ClearBrowsingData`; every other hit is a UI text, a test, the Random quick
+  answer's password generator, or URL credential stripping. The smoke log carries booleans and a
+  folder path only, and no smoke run types a password (the popups run's spoof page has a password
+  field nobody types into).
+- `npm run verify`: 855 TS tests, 528 Rust tests, clippy clean (after the review's fixes: 857 and 530).
+- **What each engine reported (CI run 42423088099, `summary.json`'s `loginsRun.webauthn`; every page
+  a secure context, `secure=true`):**
+
+  | OS (engine) | `api` | `platform` | `conditional` |
+  |---|---|---|---|
+  | Windows Server 2025 (WebView2 156.0.4314.58) | 1 | false — no Windows Hello set up on the runner | **true** (passkey autofill) |
+  | macOS 26 (WKWebView, ad-hoc signed, no entitlement) | 1 | **false** | **false** |
+  | Linux, all seven jobs (WebKitGTK 2.50.4 and 2.52.6, x86_64 and ARM64) | **0** | false | false |
+
+  WebView2 has WebAuthn and passkey autofill; whether Windows Hello makes a passkey is the owner's
+  check (a runner has no Hello). WKWebView exposes `PublicKeyCredential` but offers an app without
+  Apple's browser entitlement no platform authenticator and no passkey autofill — what the
+  research expects. WebKitGTK has no `PublicKeyCredential` at all.
+- **Merged into the docs:** the Later rows (macOS, Linux), README, SECURITY.md and
+  docs/architecture.md now cite these reports (`lj-step-52-fix`).
+- **The independent security review of PR #43 (2026-11-08): approve with minor fixes** — no
+  Critical, High or Medium; four Low and four notes, all handled in `lj-step-52-fix2`:
+  - **LOW-1** — the smoke hook that clicks Remove ran on the environment variables alone, so they
+    would wipe a real profile's saved passwords with no question. Now `remove` (and the new
+    `toggle-save`) needs a throwaway data folder (`LITTLEJOAN_DATA_DIR`) **and** a GitHub-hosted
+    runner (`GITHUB_ACTIONS=true`, `RUNNER_ENVIRONMENT=github-hosted`), else it logs
+    `settings-logins-click refused <why>` and clicks nothing (`settings_window/logins_smoke.rs`; test
+    `it_drives_the_section_only_on_a_throwaway_folder_on_a_github_hosted_runner`; a refusal in CI
+    fails the smoke).
+  - **LOW-2** — `clear_saved_logins` waited on a tokio worker: now on `spawn_blocking` (the
+    never-on-the-main-thread check stays). The same pattern in `win.rs`'s `devtools()` /
+    `set_mobile` is in Deferred follow-ups (not small).
+  - **LOW-3** — the autofill test knew four builders by name: it now finds every webview
+    constructor in `src/` and wants exactly those four, each passing the saved value.
+  - **LOW-4** — CI never drove a Save with a page open: the `logins-on` run now opens Settings over
+    the page and clicks "Offer to save passwords" off and Save; the page and the settings window
+    must read back `password-autosave=false`, settings.json must say `false`.
+  - **Notes** — the apply-vs-Save race closed (the switches are read when the main thread reaches
+    the engine) and `ensure_page`'s pre-existing fast path recorded (Deferred follow-ups); the
+    password switch possibly outliving a downgrade (Landmines, CHANGELOG); the Remove note and
+    README say passkeys stay (Windows Hello keeps them), and README / architecture.md that
+    uninstalling keeps the engine's data unless **Delete the application data** is ticked
+    (confirmed in Tauri CLI 2.12.3's NSIS template: it removes `$APPDATA\<id>` and
+    `$LOCALAPPDATA\<id>` only then, never while updating); the macOS line now reads "Passkeys need
+    an entitlement Apple grants to browsers, and password AutoFill isn't dependable in an app's web
+    view."; the colour-scheme Landmine says the profile is pinned to the system theme of the last
+    webview built; the unused `Change::touches_logins` dropped.
 
 ### LJ53 — More bundled extensions: Reading list and To-do · standard · auto
 
@@ -10269,6 +10414,22 @@ smoke run; nothing changed in the direct-download build.
   no tag, so a late count for an earlier query (typing debounced 120 ms) would be taken for the new
   one. Not seen in CI (each run's results were the needle's own); WKWebView's carry their find's
   number.
+- **Blocking waits for WebView2's DevTools answers** (phase 24's security review, LOW-2): `win.rs`'s
+  `devtools()` (`Page.getLayoutMetrics`) and `set_mobile` wait up to 2 s with `recv_timeout`, and
+  `phone_mode::apply` calls them from async commands (Save, the quick commands, the site-mode
+  pill) — a tokio worker held meanwhile. Moving them to `spawn_blocking` means making
+  `phone_mode::apply` (and its many callers) async or detaching its reload decision; not small,
+  so left as it is (it has run this way since LJ40). `clear_saved_logins` (LJ51) waits on a
+  blocking thread instead.
+- **A page navigation can reach a new page before its first settings** (phase 24's review,
+  NOTE-1; pre-existing): `bar::page::ensure_page` returns at once when the page webview exists, so
+  a navigation asked for while another thread is still in `build()` — after `add()`, before the
+  saved cookies, the agent and (LJ51) the logins switches are set — may be queued ahead of them.
+  For logins it changes nothing: wry sets general autofill while it builds the webview, and the
+  password switch lands on the main thread's next step, before a page could offer to save. The
+  apply-vs-Save race the review also noted is closed: `logins::apply` reads the saved switches when
+  the main thread reaches the engine, so whichever of a build's apply and a Save's runs last sets
+  what is saved by then.
 - *(Steps add to this list as they surface out-of-scope friction.)*
 
 ---
@@ -10503,11 +10664,32 @@ Populated from real friction, not speculation:
 - *(round 3 planning, vendored tauri 2.12.4)* **`RunEvent::Opened` exists only on macOS** (and
   iOS / Android): on Windows and Linux a link from another app arrives as a command-line argument,
   through single-instance. LJ45.
-- *(round 3 planning, read in the code)* **The settings window doesn't use the page's webview data
-  folder.** `settings_window.rs` sets no `data_directory`, so Tauri forces `app_local_data_dir`;
+- *(round 3 planning, read in the code)* **The settings window didn't use the page's webview data
+  folder.** `settings_window.rs` set no `data_directory`, so Tauri forced `app_local_data_dir`;
   the page uses `AppState::webview_data_dir` — the same folder in installed builds, but
   `<LITTLEJOAN_DATA_DIR>/webview` in dev builds and CI. Anything that acts on the page's profile
-  through the settings window (LJ51) must give it the same folder first.
+  through the settings window (LJ51) must give it the same folder first. *(Fixed by LJ51: the
+  settings window takes `AppState::webview_data_dir` too, and CI compares the two profiles' paths.)*
+- *(LJ51, vendored wry 0.57 / webview2-com-sys 0.39.1)* **WebView2's password autosave and general
+  autofill are the profile's, and wry sets autofill on every webview it creates.** wry calls
+  `SetIsGeneralAutofillEnabled(attributes.general_autofill_enabled)` (default `true`) when it builds
+  any webview (`webview2/mod.rs` 655–657), and WebView2 keeps both switches per profile (its
+  documentation for `ICoreWebView2Settings4` and `ICoreWebView2Profile6`: all webviews of a profile
+  share the value; CI run 42423088099: Settings, never set, read `password-autosave=true` after
+  the page set it). A
+  builder on the page's profile that doesn't pass the saved `autofillForms` would switch autofill
+  back on for the page — so all four (bar, page, popup, Settings) pass it (a test). And every
+  WebView2 environment on one user data folder must use the same options — additional browser
+  arguments (wry's default `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection
+  --autoplay-policy=no-user-gesture-required`), the language (the user's), extensions, scroll-bar
+  style (`webview2/mod.rs` 288–360) — or creating the second one fails; none of the builders sets
+  one (a test walks `src/`). Also the profile's: wry sets `PreferredColorScheme` on the profile
+  from each new webview's window theme (`set_theme`, 1915–1924; tauri passes Dark or Light, never
+  Auto) — harmless while no Little Joan window has a theme of its own (every one follows the
+  system), but a window given an explicit theme would change the page's `prefers-color-scheme`.
+  And because it is Dark or Light, never Auto, the profile is pinned to the system theme as it was
+  when the last webview was built: a page doesn't follow a later system switch until the next one
+  is built (true before LJ51 too; phase 24's security review).
 - *(round 3 planning, vendored tauri-utils 2.10.2)* **Tauri's desktop-file template offers only
   `categories`, `comment`, `exec`, `icon` and `name`;** `MimeType=` and `%u` go into the template's
   text (LJ45).
@@ -10723,6 +10905,18 @@ Populated from real friction, not speculation:
   there (the engine's processes, a 0.9 s stall), against ~0.3 s on Linux runners; the ceilings
   allow for it. Judge macOS changes by their before / after on the same runner kind, and the
   owner's Mac by `LITTLEJOAN_SMOKE_LOG=<file>` and its `summon-timing` lines.
+- *(LJ51, phase 24's security review)* **WebView2's password-saving switch may outlive Little Joan's
+  setting.** Chromium keeps it as a profile preference, so a profile where saving was switched on
+  may keep it on for a build that never sets it — v0.2.x, say, which has no switch: someone who
+  turns saving on and goes back to v0.2.x keeps saving with no way to turn it off there (the
+  CHANGELOG says to turn it off first). Every v0.3 build sets both switches on every page and popup
+  it builds, so within v0.3 the setting always wins.
+- *(LJ51, phase 24's security review)* **Smoke hooks that act for a person must not run on a real
+  profile.** `LITTLEJOAN_SMOKE_SETTINGS_LOGINS=remove` deletes every saved password without a
+  question: it (and `toggle-save`) runs only on a throwaway data folder (`LITTLEJOAN_DATA_DIR`) on a
+  GitHub-hosted runner (`GITHUB_ACTIONS=true`, `RUNNER_ENVIRONMENT=github-hosted`;
+  `settings_window/logins_smoke.rs`), never from the environment alone. New hooks like it get the
+  same gate.
 
 ---
 
@@ -10752,7 +10946,8 @@ or round 3 picked up point at their step and stay here for the record.
 | *(round 2)* **Extension gallery / signing** | A list of reviewed community extensions in the repository; signed bundles | Review process, a trust model |
 | *(round 2)* **Custom window chrome on Windows and Linux** | Frameless window with our own close / minimize, resize borders | Per-OS hit-testing; accessibility |
 | *(round 2)* **One user agent per signed-in site** | Remember the agent a site was signed in with and keep it across phone-mode switches | Per-host user agent at navigation time |
-| *(round 3, deferred by the owner)* **macOS saved passwords and passkeys** | Passkeys (WebAuthn) in an app's WKWebView that isn't Safari need Apple's restricted web-browser entitlement (`com.apple.developer.web-browser.public-key-credential`), which Apple grants on request to apps that are web browsers, and which needs Developer ID signing with a provisioning profile (LJ18 first); WKWebView's password AutoFill for embedding apps isn't dependable. LJ52 records what CI's `?webauthn=1` page showed | Apple's entitlement (a request to Apple), signing with a profile, then the engine's own UI — never a password store of Little Joan's own (Ground Rule 26) |
+| *(round 3, deferred by the owner)* **macOS saved passwords and passkeys** | **Passkeys:** WebAuthn in an app's WKWebView that isn't Safari needs Apple's managed entitlement `com.apple.developer.web-browser.public-key-credential` (macOS 13.3+): "registration and assertion requests for passkeys and security keys for any relying party identifier", for apps that can act as the user's web browser. Only the **Account Holder of an organization's** Apple Developer account can ask for it (the "macOS Browsers Passkeys" request form); Apple reviews it against fixed criteria — the http and https schemes in `Info.plist` (LJ45 has them), a field for a URL or search at launch (the command bar), navigating straight to a URL it is given — and adds it as a managed capability, so the app then needs Developer ID signing with a provisioning profile that carries it (LJ58's signing first; Little Joan is ad-hoc signed today). Without it, a WKWebView's WebAuthn requests are refused (Apple's developer forums: authorization errors until the entitlement was granted). **Saved passwords:** WKWebView's password AutoFill isn't dependable for an embedding app (round 3's research) — it isn't a browser's password manager —, and building Little Joan's own UI over the Keychain is what Ground Rule 26 rules out. **CI's `?webauthn=1` on macOS 26 (run 42423088099): `api=1 platform=false conditional=false secure=true`** — WKWebView has the API, but no platform authenticator and no passkey autofill for an app without the entitlement | The owner's decision; an organization account's Account Holder asks Apple for the entitlement; signing with a profile (LJ58, and LJ60's for the App Store); then WebKit's own passkey UI — never a password store of Little Joan's own (Ground Rule 26) |
+| *(LJ52)* **Linux saved passwords and passkeys** | WebKitGTK has no password manager and no WebAuthn; saving passwords would need libsecret and Little Joan's own UI (Ground Rule 26 rules that out). **CI's `?webauthn=1` (run 42423088099), WebKitGTK 2.50.4 and 2.52.6: `api=0`** — no `PublicKeyCredential` at all | Upstream WebKitGTK support first |
 | *(round 3)* **Saved logins on Linux** | WebKitGTK has no password manager; one would be Little Joan's own (libsecret + UI) | A new dependency and a credential store to secure — big; against Ground Rule 26's spirit |
 | *(round 3, the owner's decision)* **Measuring a page's width on macOS and Linux** | Skip a phone-mode reload when the page already fits the window, as Windows does with CDP's `Page.getLayoutMetrics` (LJ40) | A script in the page (an isolated world, still app code in a web page) — against Ground Rule 10 unless the owner decides otherwise |
 | *(round 3)* **Viewport emulation** | A mobile viewport for narrow windows (Windows: CDP `Emulation.setDeviceMetricsOverride { mobile: true }`) | Windows only — macOS has only private SPI; Little Arc doesn't do it, and phase 19 reflows instead |
