@@ -41,7 +41,8 @@
 > 7–11 (Linux fullscreen, downloads + zoom, the Wayland shortcut, macOS signing if the owner's
 > secrets exist, the v0.2.0 release). **v0.3:** Little Joan as the system's browser for links,
 > sign-in popups inside the app, find in page and pinned sites, saved logins on Windows, nine more
-> bundled extensions. **Not in round 3:** macOS saved passwords and passkeys (deferred by the
+> bundled extensions *(moved after v0.3 by the owner, 2026-10-29: v0.3's extension work is LJ56's
+> two touch-ups)*. **Not in round 3:** macOS saved passwords and passkeys (deferred by the
 > owner; Later has the research), Linux saved logins, Windows code signing (waiting on SignPath),
 > auto-update, tabs, keeping the page after close. **Round 3 must not disturb** the list above, nor
 > the command bar, toolbar, history, themes, logins surviving close and quit, or the extension
@@ -139,7 +140,7 @@
 | LJ54 | *(v0.3)* Bundled: Stopwatch & countdown, Breathing timer, Minesweeper | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ55 | *(v0.3)* Bundled: Password generator, Regex tester, Hash & Base64, Emoji picker | standard | auto | ⏸ moved after v0.3 (owner, 2026-10-29) |
 | LJ56 | *(v0.3)* Panels follow theme changes; `--extension` opens a page action (phase 25 on its own since 2026-10-29) | standard | auto | ✅ done — phase 25, `lj/p25-more-extensions`: PR #44 (head 09939be, run 42437874330 green 18/18 on the first attempt) merged as c6f40c5; main's run 42440225060 green 18/18 |
-| LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | 🔄 in progress (phase 26, `lj/p26-v0.3-docs`) |
+| LJ57 | *(v0.3)* Docs, screenshots, the owner's checklist; a v0.3 pre-release only on the owner's word | standard | checkpoint | ✅ done — waiting for the owner's checklist (phase 26, `lj/p26-v0.3-docs`; the checklist is in its PR) |
 | LJ58 | *(moved into v0.2.1 by the owner, 2026-10-30; was round 4)* macOS Developer ID signing and notarization: LJ18 run as written, once the owner adds the Apple secrets (LJ18's pre-step; the owner has the Developer account since 2026-10-30) | strong | auto | ⬜ todo — needs the owner's Apple secrets; v0.2.1 went out unsigned on the owner's word (2026-10-30), so signing lands in a later release |
 | LJ59 | *(round 4, after v0.3; owner, 2026-10-29)* Auto-update: tauri-plugin-updater, signed update manifests published with the GitHub releases | strong | review | ⬜ todo — needs the owner's updater signing key as a GitHub secret |
 | LJ60 | *(after round 4; owner, 2026-10-30)* A Mac App Store build: the App Sandbox and its entitlements, login through SMAppService, single-instance inside the container, no updater, Apple Distribution signing; App Review's questions answered before submitting | strong | review | ⬜ todo — needs the owner's App Store certificates, profile and app record |
@@ -325,7 +326,8 @@ page action — `auto`, merged by its agent once every job is green. **Done:** P
 main's run 42440225060 green on all 18 jobs. **Phase 26 (LJ57, 2026-11-08)** is on
 `lj/p26-v0.3-docs`: v0.3's docs, screenshots from CI's macOS smoke and the owner's checklist — a
 `checkpoint`: merged by its agent once every job is green (docs only), then it STOPS for the owner's
-checklist; a `v0.3.0-beta.1` only on the owner's word.
+checklist; a `v0.3.0-beta.1` only on the owner's word. **LJ57 is done — waiting for the owner's
+checklist** (in the phase-26 PR; LJ57's notes). Nothing starts until the owner says go.
 
 **LJ19.2 (added 2026-10-22, the owner's "show over fullscreen apps for sure")** is PR #33 on
 `lj/p11-fullscreen-spaces`, merged by the agent once every job is green (the standing exception).
@@ -9960,6 +9962,56 @@ and watch CI until every job is green (two honest fix attempts, then stop). This
 fill the PR with the checklist above, merge it when green, tell the owner exactly what to check
 and where, then stop.
 ```
+
+**Implementation notes (2026-11-08; disk 12 GB free at the start and after verify, `.cache/target`
+1.5 GB):**
+- **What v0.3 includes:** all of phases 21–25 — links from other apps and the main browser (PR #40,
+  12e5024), sign-in popups (PR #41, 7f0edd2), find and pinned sites (PR #42, f335e62), saved
+  logins on Windows (PR #43, e7a0a24), LJ56 (PR #44, c6f40c5) — and LJ19.9's Liquid Glass (PR #39),
+  which came after v0.2.1. The three `review` phases (21, 22, 24) were merged after their
+  independent reviews, so the checklist lists nothing as "not included". **No new bundled
+  extensions:** LJ53–LJ55 moved after v0.3 (the owner, 2026-10-29); the README's status, the
+  CHANGELOG's intro and the plan's header say so, and that v0.3's extension work is LJ56's two
+  touch-ups.
+- **README:** a "Coming in v0.3" paragraph in the status block (v0.2.1 stays the latest release);
+  "Using it" gained bullets for sign-in windows (under new-window links), links from other apps
+  with the main browser, and saved passwords on Windows (what macOS and Linux say), each pointing
+  at its section; find says where Ctrl/Cmd+F does nothing (the start page) and that it closes the
+  command bar; the Extensions bullet says an open panel follows the theme and `--extension qr`
+  opens over a page. Settings → General lists After closing, Browser and Quit; Settings → Keyboard
+  lists every key the keymap has (Zoom In / Out, Actual Size and Find were missing).
+- **Screenshots** (`docs/images/`, five new, 192 KB together; the folder 628 KB): from main's CI
+  run 42440225060 (smoke-macos, macOS 26 runner, scale 1) — `find.png` (the strip, "Found", the
+  smoke page's lj-needle highlighted), `pinned.png` (the pinned smoke page leading the command
+  bar), `popup.png` (the fake provider's sign-in popup titled with its host over the window),
+  `settings-browser.png` (Settings → General → Browser: not the default, Safari is, Main browser
+  System default) and `page-action.png` (`--extension qr` over the smoke page, dark theme after the
+  theme-follow run). Each is the window's box (`magick -fuzz 3% -trim` found it), corners cut with
+  a 16 px rounded mask (macOS 26's window radius at scale 1), 256 colors with dithering, like
+  LJ35's. Every image was looked at before committing: the smoke page, its sample data and the
+  runner's desktop only — nothing personal. **Not used:** `settings-privacy-logins.png` — on macOS
+  it shows only the "isn't available" note, and its "What is stored where" names the runner's temp
+  folder (`/Users/runner/work/_temp/…`), which would mislead readers about where their data lives;
+  the README says what macOS shows in words. `test-results/ci` deleted afterwards.
+- **CHANGELOG `[Unreleased]`** lists everything since **v0.2.1**, the latest release (the
+  coordinator's scope; this step's prompt says v0.2.0, whose and 0.2.1's own sections already hold
+  the rest): an intro (what v0.3 brings, no new bundled extensions), Added (reordered: links, main
+  browser, popups, find, pins, saved logins, Liquid Glass, the two extension touch-ups), **Changed**
+  (an extension panel's new windows need `openBrowser` and pass `openUrl`'s checks — phase 21's
+  review), **Fixed** (a non-Unicode argument no longer panics the launch — phase 21's review),
+  Security (phase 22's items, plus phase 21's: the new-window flood limit, Windows' browser launch
+  through its registered command and never an interpreter, `http://tauri.*` / `ipc.*` / `ljext.*`
+  refused by prefix) and **Known issues** (macOS / Linux save no passwords, the AppImage isn't a
+  browser candidate, Linux's mimeinfo.cache fallback, Windows frames, Ctrl+F in a Windows popup,
+  a popup's fullscreen on macOS — and 0.2.1's still-open ones).
+- **Docs:** `SECURITY.md` — supported versions (0.2.x and `main`, which becomes 0.3), the
+  flood limit, Windows' launch command, the internal-host prefixes, a panel's new windows, no
+  `ljext` answer while a popup is open, the theme-change event; `CONTRIBUTING.md` — popups get no
+  capability either, and v0.3's ground rules (links are untrusted input, no system defaults
+  changed, credentials stay in the engine, one keymap); `docs/extensions.md` — the security model
+  says nothing is served while a sign-in popup is open; `docs/architecture.md` — the process model
+  names popups and links, the file map's `docs/images/` names the new screenshots.
+- `npm run verify`: 879 TS tests, 537 Rust tests, clippy clean (docs only; no code changed).
 
 ---
 

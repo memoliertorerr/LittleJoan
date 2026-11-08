@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-Little Joan is young: only the latest version (currently 0.2.x, from the `main` branch) gets
-fixes.
+Little Joan is young: only the latest release (currently 0.2.x) and the `main` branch — which
+becomes 0.3, with links from other apps, sign-in popups and saved logins on Windows — get fixes.
 
 ## Reporting a vulnerability
 
@@ -32,8 +32,12 @@ system's default browser. Report anything that lets a link do more than open one
 a flag or command, change a setting, open a file or a non-web URL — or that changes a system
 default. Pages Little Joan hands on ("Open in browser", new-window links, extensions' `openUrl`
 to the browser) go to the user's main browser through one place, never to Little Joan itself —
-report anything that makes a page loop back, or that starts a browser through a shell or with
-arguments a page chose.
+report anything that makes a page loop back, that starts a browser through a shell, a script
+host or with arguments a page chose (on Windows a browser is started through the command it
+registered for web links, the address as one argument, never through an interpreter), or that
+lets a page hand on more than one window a second. Addresses that Windows' web engine would route
+to Little Joan itself (`http://tauri.…`, `http://ipc.…`, `http://ljext.…`) are refused as links
+and as navigations, on every system — report a way past that.
 
 Sign-in popups (since v0.3) are web pages with exactly the page's trust and less: a page's
 sign-in window — one that asks for a size, or a known sign-in flow — opens in a small window of
@@ -79,4 +83,9 @@ Extensions (experimental) have their own model — one origin each, a strict Con
 no IPC, and a small API that checks every request (see `docs/architecture.md`, "Extensions"). Also
 report anything that lets a web page call an extension's API, load its files or open it; lets an
 extension reach another extension's data, Little Joan's own screens or commands, files outside its
-folder, or the network beyond the hosts its manifest declares.
+folder, or the network beyond the hosts its manifest declares; or lets a panel hand a window to
+the browser without the `openBrowser` permission and `openUrl`'s checks. While a sign-in popup is
+open no extension file or API call is answered at all. The only script Little Joan runs in the
+page web view for extensions is the theme-change event for a panel that has loaded — a fixed
+`dispatchEvent(new Event("littlejoan:themechange"))` with no data (since v0.3); report anything
+that makes it carry data or run anything else.

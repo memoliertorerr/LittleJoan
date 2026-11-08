@@ -19,8 +19,12 @@ The plan and its decisions live in [BUILD_PLAN.md](BUILD_PLAN.md).
     (WebView2's `msedgewebview2.exe`, WebKit's `WebContent`/`WebKitWebProcess`), as before LJ19.4.
 
   In every mode **a close destroys the page webview**: no web page's scripts, media, network or
-  process survive it (Ground Rule 9 as the owner rewrote it). `tauri.conf.json` declares
-  `"windows": []`.
+  process survive it (Ground Rule 9 as the owner rewrote it) — and its sign-in popups first
+  (`joan-popup-<n>`, LJ47: small IPC-free windows that exist only while a page's sign-in is open,
+  "Sign-in popups" below). `tauri.conf.json` declares `"windows": []`.
+- **Other apps' links** (LJ45) reach the running app as `--link <url>` through the single-instance
+  plugin, or as macOS's `RunEvent::Opened`; they summon the window like `--show <url>` ("Links from
+  other apps" below). Pages Little Joan hands on go to the main browser (LJ46, "The main browser").
 - **Closing the last window never quits.** `RunEvent::ExitRequested` without an exit code is
   prevented; only Quit in the tray menu, the command bar's **Quit Little Joan** and `--quit` (all
   `joan::quit`), and Cmd+Q on macOS (the app menu's standard Quit item), exit.
@@ -209,7 +213,10 @@ docs/trademark-check.md            where to check that the name is free before a
 docs/upstream/                     reports drafted for other projects, for the owner to file:
                                    webkitgtk-2.50-fullscreen-abort.md (Ubuntu 22.04's WebKitGTK)
 docs/images/                       the README's screenshots, cropped from CI's macOS smoke run (its
-                                   test page and sample data only — nothing personal)
+                                   test page and sample data only — nothing personal): round 2's
+                                   six (run 39124661621) and v0.3's find, pinned, popup,
+                                   settings-browser and page-action (run 42440225060, LJ57) —
+                                   each window's box, corners transparent, 256 colors
 ui/settings.css                    the settings window's styles (style.css has the shared tokens)
 ui/style.css                       shared styles, all colors from the theme's --lj-* variables;
                                    `.themed` = the gradient with the grain on top

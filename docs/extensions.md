@@ -308,7 +308,10 @@ the nonce and the commit rule above, not this detour. Windows'
 that extension's panel loaded, so a refused or cancelled attempt can't put an extension's name
 over a web page. The one thing Little Joan runs in the page web view itself for extensions is the
 theme-change event — a fixed `dispatchEvent` with no data, sent only while the page shows a panel
-that has loaded; a web page that dispatched it on itself would learn nothing. Paths can't leave the
+that has loaded; a web page that dispatched it on itself would learn nothing. While a sign-in popup
+is open — a web page in a small window of its own, with no IPC — Little Joan serves no extension
+file and answers no API call at all (on macOS a popup's requests would carry the page web view's
+name, so none is trusted then). Paths can't leave the
 extension's folder (no `..`, absolute paths, percent-encoding or symlinks out). The details, and
 the test for each check, are in [architecture.md](architecture.md#extensions-experimental).
 
